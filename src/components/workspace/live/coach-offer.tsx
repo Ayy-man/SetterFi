@@ -64,6 +64,7 @@ import {
 import type { TestAgentTurnReceipt } from "@/lib/repositories/test-agent";
 
 import {
+  coachCadenceExportRows,
   coachCadenceSchedule,
   type CoachCadenceChannel,
   type CoachCadenceScheduleClass,
@@ -1768,6 +1769,7 @@ export function CoachOffer({
     .map((section) => TAB_LABELS[section]);
   const cadenceSchedule = coachCadenceSchedule(cadence.channels);
   const answers = sectionAnswers(form, cadenceSchedule);
+  const cadenceExportRows = coachCadenceExportRows(cadenceSchedule, form.cadencePurposes);
   const scheduledSlots = new Set(
     cadenceSchedule.flatMap((group) =>
       group.touches.map((touch) => `${group.channelClass}:${touch.touchNo}`),
@@ -2475,6 +2477,14 @@ export function CoachOffer({
           >
           <CadenceFace purposes={form.cadencePurposes} schedule={cadenceSchedule} />
                   <SettingsCard
+                    action={
+                      <ExportMenu
+                        filename="setterfi-followup-schedule"
+                        label="Export schedule"
+                        mode="local"
+                        rows={cadenceExportRows}
+                      />
+                    }
                     answer={answers.cadence}
                     description="We set which channels follow up, how many touches they get, and when each one fires. You choose what each touch is for. Every sequence stops the moment the lead replies or opts out."
                     title="When your agent follows up"
