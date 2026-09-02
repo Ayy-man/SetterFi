@@ -477,6 +477,113 @@ describe("AppShell", () => {
     expect(delivery).toHaveAttribute("aria-current", "page");
   });
 
+  it("marks one deepest destination current when overlapping siblings both match", () => {
+    // Siblings, not parent and child: the section landing and the page under it sit in the same
+    // group, so nesting cannot displace either one. Both prefix-match the active path, and both
+    // used to carry aria-current at once.
+    const overlappingNav: readonly NavGroup[] = [
+      {
+        label: "Run",
+        items: [
+          { label: "Run", href: "/admin/run" },
+          { label: "Support", href: "/admin/run/support" },
+        ],
+      },
+    ];
+
+    render(
+      <AppShell
+        activePath="/admin/run/support"
+        crumbs={[{ label: "Run", href: "/admin/run" }, { label: "Support" }]}
+        nav={overlappingNav}
+        role="admin"
+      >
+        <h1>Support</h1>
+      </AppShell>,
+    );
+
+    const currentLinks = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+    expect(currentLinks).toHaveLength(1);
+    expect(currentLinks[0]).toHaveAttribute("href", "/admin/run/support");
+  });
+
+  it("keeps a matchPaths alias from stealing current from a deeper destination", () => {
+    const aliasNav: readonly NavGroup[] = [
+      {
+        label: "Run",
+        items: [
+          { label: "Run", href: "/admin/run", matchPaths: ["/admin/run/support"] },
+          { label: "Support thread", href: "/admin/run/support/thread" },
+        ],
+      },
+    ];
+
+    render(
+      <AppShell
+        activePath="/admin/run/support/thread"
+        crumbs={[{ label: "Run", href: "/admin/run" }, { label: "Support thread" }]}
+        nav={aliasNav}
+        role="admin"
+      >
+        <h1>Support thread</h1>
+      </AppShell>,
+    );
+
+    const currentLinks = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+    expect(currentLinks).toHaveLength(1);
+    expect(currentLinks[0]).toHaveAttribute("href", "/admin/run/support/thread");
+  });
+
+  it("marks the ancestor of the current page without a second aria-current", () => {
+    render(
+      <AppShell
+        activePath="/admin/settings/notifications"
+        crumbs={[
+          { label: "Settings", href: "/admin/settings" },
+          { label: "Notifications" },
+        ]}
+        nav={nav}
+        role="admin"
+      >
+        <h1>Notifications</h1>
+      </AppShell>,
+    );
+
+    const settings = screen
+      .getAllByRole("link", { name: "Settings" })
+      .find((link) => link.getAttribute("href") === "/admin/settings");
+    expect(settings).toHaveAttribute("data-active-ancestor", "");
+    expect(settings).not.toHaveAttribute("aria-current");
+
+    // The ancestry mark never doubles the current page: still exactly one aria-current in the rail.
+    expect(
+      screen
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("aria-current") === "page"),
+    ).toHaveLength(1);
+  });
+
+  it("leaves the ancestry mark off rows the current page does not hang under", () => {
+    render(
+      <AppShell
+        activePath="/admin/inbox"
+        crumbs={[{ label: "Inbox" }]}
+        nav={nav}
+        role="admin"
+      >
+        <h1>Inbox</h1>
+      </AppShell>,
+    );
+
+    for (const link of screen.getAllByRole("link")) {
+      expect(link).not.toHaveAttribute("data-active-ancestor");
+    }
+  });
+
   it("offers the workspace's real destinations, not whatever nav it was handed", () => {
     const decoyNav: readonly NavGroup[] = [
       { label: "Decoy", items: [{ label: "Not a real page", href: "/admin/nowhere" }] },

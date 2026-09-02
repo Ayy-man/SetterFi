@@ -136,9 +136,20 @@ function JourneyAction({ action, primary }: { action: DataStateAction; primary: 
 function stepBadge(step: JourneyStep, previousTitle: string | null) {
   // Honest states: the badge names who is holding the step, never a bare "Current".
   if (step.state === "blocked") {
-    return previousTitle
-      ? { label: `After ${previousTitle.charAt(0).toLowerCase()}${previousTitle.slice(1)}`, tone: "neutral" as const, pulse: false }
-      : null
+    /*
+     * Blocked is a lifecycle state, so it takes the neutral lifecycle badge alongside the critical
+     * dot on the marker, which is what the visual contract asks for. It used to name only what the
+     * step is waiting behind, and the first blocked step in a journey has nothing in front of it,
+     * so that step drew the dot and no badge at all: a red mark on the marker with nothing saying
+     * what it meant. The word is the state; the previous step's title stays as the reason.
+     */
+    return {
+      label: previousTitle
+        ? `Blocked, after ${previousTitle.charAt(0).toLowerCase()}${previousTitle.slice(1)}`
+        : "Blocked",
+      tone: "neutral" as const,
+      pulse: false,
+    }
   }
   if (step.owner === "you") return { label: "Ready for you", tone: "neutral" as const, pulse: false }
   return {
@@ -239,7 +250,12 @@ export function StepJourney({ steps, className }: StepJourneyProps) {
               </h3>
 
               {step.state === "done" ? (
-                <p className="step__receipt text-faint text-[var(--faint)]">
+                /*
+                 * `text-faint` was never a registered utility, so it emitted no CSS and the
+                 * receipt line inherited 16px body type where the receipt role is the 12px badge.
+                 * The colour utility beside it always worked, which is why it read as styled.
+                 */
+                <p className="step__receipt text-badge font-normal text-[var(--faint)]">
                   {step.receipt.label}
                   {formattedReceiptTime ? `, ${formattedReceiptTime}` : null}
                 </p>

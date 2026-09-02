@@ -1,7 +1,7 @@
 // @vitest-environment node
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = process.cwd();
@@ -83,12 +83,39 @@ function undersizedDeclarations(source: string): string[] {
   });
 }
 
+/**
+ * Every stylesheet in the tree, found rather than listed.
+ *
+ * The floor used to be asserted against three sheets named by hand, which is how
+ * `src/app/onboarding/onboarding.css` came to carry 24 declarations under it, four of them at 8 to
+ * 8.5px, with a green type-floor test beside them. Both sheets that row named have since been
+ * deleted in the stylesheet fold, so the declarations are gone; what has to not come back is a new
+ * sheet arriving outside the list. Walking for them means a stylesheet is covered by existing.
+ */
+function stylesheets(directory: string): string[] {
+  return readdirSync(resolve(ROOT, directory), { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) return [];
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) return stylesheets(path);
+    return entry.name.endsWith(".css") ? [path] : [];
+  });
+}
+
+const SHEETS = stylesheets("src").map(
+  (path) => [relative("src", path), sheet(path)] as const,
+);
+
 describe("type floor", () => {
-  it.each([
-    ["globals.css", GLOBALS],
-    ["consumer.css", CONSUMER],
-    ["meet-your-agent.css", MEET_YOUR_AGENT],
-  ])("keeps every prose size in %s at 11px or above", (_name, source) => {
+  it("finds every stylesheet in the tree, so none is guarded only by being listed", () => {
+    const names = SHEETS.map(([name]) => name);
+    // The three the floor used to name by hand, which the walk has to still be reaching.
+    expect(names).toContain("app/globals.css");
+    expect(names).toContain("app/consumer/consumer.css");
+    expect(names).toContain("components/meet-your-agent.css");
+    expect(names.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(SHEETS)("keeps every prose size in %s at 11px or above", (_name, source) => {
     const undersized = undersizedDeclarations(source);
 
     expect(

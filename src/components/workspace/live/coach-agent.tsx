@@ -1,5 +1,6 @@
 import { DURABLE_TOUCHES, WINDOW_BOUND_TOUCHES } from "@/lib/followups/touch-lists";
-import type { OfferCadencePurpose } from "@/lib/offer/types";
+import { OFFER_CADENCE_PURPOSE_LABELS } from "@/lib/offer/types";
+import type { OfferCadenceChannel, OfferCadencePurpose } from "@/lib/offer/types";
 import type { ChannelCapability } from "@/lib/sends/channel-capabilities";
 import { resolvedCoachCadenceClass } from "./view-models";
 
@@ -94,4 +95,55 @@ export function coachCadenceSchedule(
       touches,
     };
   });
+}
+
+/**
+ * One exported row per rendered touch. The follow-up schedule is drawn as stacked rows rather
+ * than a DataTable, so its export is built from the same schedule and saved purposes the section
+ * renders instead of from a server resource: every table on a surface exports, and a hand-rolled
+ * one has to carry the rows itself.
+ */
+export type CoachCadenceExportRow = {
+  channelClass: CoachCadenceScheduleClass;
+  channel: string;
+  connected: boolean;
+  touchNo: number;
+  when: string;
+  purpose: OfferCadencePurpose;
+  purposeLabel: string;
+  /** Which side chose it, the same claim the rendered row makes under the select. */
+  purposeSource: "coach" | "platform";
+};
+
+export function coachCadenceExportRows(
+  schedule: readonly CoachCadenceScheduleGroup[],
+  /*
+   * A saved purpose row may carry the "none" class, which no group schedules, so the input is
+   * typed by the stored enum and those rows simply never match a rendered touch.
+   */
+  purposes: readonly {
+    channelClass: OfferCadenceChannel;
+    touchNo: number;
+    purpose: OfferCadencePurpose;
+  }[],
+): CoachCadenceExportRow[] {
+  return schedule.flatMap((group) =>
+    group.touches.map((touch) => {
+      const saved = purposes.find(
+        (row) =>
+          row.channelClass === group.channelClass && row.touchNo === touch.touchNo,
+      )?.purpose;
+      const purpose = saved ?? touch.defaultPurpose;
+      return {
+        channelClass: group.channelClass,
+        channel: group.channelLabel,
+        connected: group.connected,
+        touchNo: touch.touchNo,
+        when: touch.when,
+        purpose,
+        purposeLabel: OFFER_CADENCE_PURPOSE_LABELS[purpose],
+        purposeSource: saved ? ("coach" as const) : ("platform" as const),
+      };
+    }),
+  );
 }

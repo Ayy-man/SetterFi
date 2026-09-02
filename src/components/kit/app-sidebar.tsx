@@ -174,6 +174,55 @@ export function isNavItemActive(item: NavItem, activePath: string): boolean {
   );
 }
 
+/**
+ * The one destination the rail calls current, plus the items it hangs under.
+ *
+ * Each row used to answer "am I current?" on its own by prefix-matching its own paths, so two
+ * overlapping siblings -- a section landing at `/admin/run` beside a page at `/admin/run/support`
+ * -- both matched `/admin/run/support` and both carried `aria-current="page"`. Only a nested child
+ * displaced its parent, and siblings are not nested. Resolving once over the rendered tree makes
+ * current singular by construction: the deepest matching path wins, and a tie goes to whichever
+ * item the navigation declares first.
+ */
+export type NavCurrent = {
+  /** The href of the single current item. */
+  href: string;
+  /** Hrefs of the items it is nested under, outermost first. */
+  trail: readonly string[];
+};
+
+function matchDepth(item: NavItem, activePath: string) {
+  const matched = [item.href, ...(item.matchPaths ?? [])]
+    .filter((path) => pathMatches(path, activePath))
+    .map((path) => normalizePath(path).length);
+  return matched.length === 0 ? -1 : Math.max(...matched);
+}
+
+export function resolveCurrentNav(
+  groups: readonly NavGroup[],
+  activePath: string,
+): NavCurrent | null {
+  const matches: { depth: number; href: string; trail: readonly string[] }[] = [];
+
+  const walk = (items: readonly NavItem[], trail: readonly string[]) => {
+    for (const item of items) {
+      const depth = matchDepth(item, activePath);
+      if (depth >= 0) matches.push({ depth, href: item.href, trail });
+      if (item.children?.length) walk(item.children, [...trail, item.href]);
+    }
+  };
+
+  for (const group of groups) walk(group.items, []);
+
+  // Strictly deeper wins, so an equal-depth tie keeps the first declaration.
+  const best = matches.reduce<(typeof matches)[number] | null>(
+    (winner, candidate) =>
+      winner === null || candidate.depth > winner.depth ? candidate : winner,
+    null,
+  );
+  return best === null ? null : { href: best.href, trail: best.trail };
+}
+
 export function keepFocusInside(event: ReactKeyboardEvent<HTMLElement>) {
   if (event.key !== "Tab") return;
 
@@ -226,19 +275,25 @@ function ActiveNavPill({ reduced }: { reduced: boolean | null }) {
 }
 
 function NavLink({
-  activePath,
+  current,
   item,
   nested = false,
   onNavigate,
 }: {
-  activePath: string;
+  current: NavCurrent | null;
   item: NavItem;
   nested?: boolean;
   onNavigate?: () => void;
 }) {
-  const childIsActive =
-    item.children?.some((child) => isNavItemActive(child, activePath)) ?? false;
-  const active = isNavItemDirectlyActive(item, activePath) && !childIsActive;
+  const active = current?.href === item.href;
+  /*
+   * The collapsed rail hides every sub-list, so a top-level row whose descendant is current used
+   * to render exactly like a row nobody is on: 56px of monograms with nothing marked. This says
+   * "the current page lives under here" without a second `aria-current`, which would claim two
+   * current pages in one list. It is drawn only while the rail is collapsed, because the expanded
+   * rail already shows the current child itself.
+   */
+  const ancestor = !active && (current?.trail.includes(item.href) ?? false);
   const activeRef = useRef<HTMLAnchorElement | null>(null);
   const reduced = useReducedMotion();
 
@@ -302,7 +357,7 @@ function NavLink({
           <SidebarMenuSub className="border-[var(--line)]">
             {item.children.map((child) => (
               <NavLink
-                activePath={activePath}
+                current={current}
                 item={child}
                 key={child.href}
                 nested
@@ -319,9 +374,10 @@ function NavLink({
     <SidebarMenuItem>
       <SidebarMenuButton
         aria-current={active ? "page" : undefined}
-        className={`${NAV_LINK_BASE} group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:px-0`}
+        className={`${NAV_LINK_BASE} group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:px-0 data-[active-ancestor]:group-data-[collapsible=icon]:bg-[var(--quiet)] data-[active-ancestor]:group-data-[collapsible=icon]:font-medium data-[active-ancestor]:group-data-[collapsible=icon]:text-[var(--ink)]`}
         // The rail's outline for this destination. It is drawn as a ::before on this row, so it
         // adds no element and no text to the link's accessible name.
+        data-active-ancestor={ancestor ? "" : undefined}
         data-glyph={item.glyph ?? "square"}
         isActive={active}
         onClick={onNavigate}
@@ -348,7 +404,7 @@ function NavLink({
         <SidebarMenuSub className="border-[var(--line)] group-data-[collapsible=icon]:hidden">
           {item.children.map((child) => (
             <NavLink
-              activePath={activePath}
+              current={current}
               item={child}
               key={child.href}
               nested
@@ -362,6 +418,9 @@ function NavLink({
 }
 
 function NavigationGroups({ activePath, nav, onNavigate }: AppSidebarProps) {
+  // Resolved once for the whole rail, so exactly one row can be current no matter how the
+  // groups overlap.
+  const current = resolveCurrentNav(nav, activePath);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scrollShadows, setScrollShadows] = useState({ top: false, bottom: false });
 
@@ -418,7 +477,7 @@ function NavigationGroups({ activePath, nav, onNavigate }: AppSidebarProps) {
       >
         {nav.map((group, index) => (
           <NavigationGroup
-            activePath={activePath}
+            current={current}
             group={group}
             key={group.label || `group-${index}`}
             onContentResize={updateScrollShadows}
@@ -436,12 +495,12 @@ function NavigationGroups({ activePath, nav, onNavigate }: AppSidebarProps) {
 }
 
 function NavigationGroup({
-  activePath,
+  current,
   group,
   onContentResize,
   onNavigate,
 }: {
-  activePath: string;
+  current: NavCurrent | null;
   group: NavGroup;
   onContentResize: () => void;
   onNavigate?: () => void;
@@ -458,7 +517,7 @@ function NavigationGroup({
       <SidebarMenu>
         {group.items.map((item) => (
           <NavLink
-            activePath={activePath}
+            current={current}
             item={item}
             key={item.href}
             onNavigate={onNavigate}

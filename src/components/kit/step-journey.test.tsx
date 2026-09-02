@@ -51,6 +51,66 @@ describe("StepJourney", () => {
     expect(screen.getByRole("button", { name: "Connect calendar" })).toBeInTheDocument()
   })
 
+  it("sets the completed step's receipt in the registered badge type role", () => {
+    const { container } = render(<StepJourney steps={STEPS} />)
+
+    const receipt = container.querySelector(".step__receipt")
+    expect(receipt).not.toBeNull()
+    // `text-faint` was never a registered utility, so it emitted nothing and the receipt line
+    // inherited body type. The badge role is the one the receipt is specified in.
+    expect(receipt?.className).not.toContain("text-faint")
+    expect(receipt?.className).toContain("text-badge")
+    expect(receipt?.className).toContain("font-normal")
+    expect(receipt).toHaveTextContent("Workspace confirmed")
+  })
+
+  it("gives a blocked step the neutral lifecycle badge as well as the dot", () => {
+    const blocked: readonly JourneyStep[] = [
+      ...STEPS,
+      {
+        body: "Nothing sends until the carrier clears the registration.",
+        key: "go-live",
+        owner: "setterfi",
+        state: "blocked",
+        title: "Go live",
+      },
+    ]
+
+    const { container } = render(<StepJourney steps={blocked} />)
+
+    const step = container.querySelector('[data-state="blocked"]')
+    expect(step).not.toBeNull()
+
+    const badge = step?.querySelector('[data-slot="state-badge"]')
+    expect(badge).not.toBeNull()
+    expect(badge).toHaveAttribute("data-tone", "neutral")
+    expect(badge).toHaveTextContent("Blocked")
+
+    // The dot on the marker stays: the badge is in addition to it, not instead of it.
+    expect(step?.querySelector(".step__dot .bg-\\[var\\(--critical\\)\\]")).not.toBeNull()
+  })
+
+  it("names the blocked step's lifecycle even when nothing precedes it", () => {
+    const blockedFirst: readonly JourneyStep[] = [
+      {
+        body: "Nothing sends until the carrier clears the registration.",
+        key: "go-live",
+        owner: "setterfi",
+        state: "blocked",
+        title: "Go live",
+      },
+      ...STEPS.slice(1),
+    ]
+
+    const { container } = render(<StepJourney steps={blockedFirst} />)
+
+    const badge = container
+      .querySelector('[data-state="blocked"]')
+      ?.querySelector('[data-slot="state-badge"]')
+    expect(badge).toHaveTextContent("Blocked")
+    expect(badge).toHaveAttribute("data-tone", "neutral")
+  })
+
   it("rejects a done step without its provider receipt", () => {
     const invalid: readonly JourneyStep[] = [
       { ...STEPS[0], receipt: undefined },

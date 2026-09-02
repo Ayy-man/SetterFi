@@ -241,6 +241,7 @@
   --sidebar-w-collapsed: 56px;
   --topbar-h: 52px;
   --drawer-w: 480px;
+  --toast-w: 360px;
   --content-max: 1440px;
   --page-x: var(--s-8);
 

@@ -442,6 +442,22 @@ describe("CoachOffer", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("exports the follow-up schedule the section renders", async () => {
+    const draft = offer();
+
+    render(
+      <CoachOffer
+        cadence={{ enabled: true, channels: CADENCE_CHANNELS }}
+        initialState={{ draft, published: null }}
+      />,
+    );
+
+    // The schedule is hand-rolled rather than a DataTable, so it carries its own local export
+    // instead of inheriting one; the control has to be named because the page carries several.
+    const trigger = screen.getByRole("button", { name: "Export schedule" });
+    expect(trigger).toBeEnabled();
+  });
+
   it("saves a purpose against the platform touch the coach edited", async () => {
     const user = userEvent.setup();
     const draft = offer();
