@@ -51,3 +51,6 @@ yarn-error.log*
 .claude/RELEASE-NOTES.md
 .claude/RESUME.md
 .claude/scheduled_tasks.lock
+
+# GSD planning files stay local to this machine; never ship them to the client repo
+/.planning/
