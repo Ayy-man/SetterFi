@@ -46,7 +46,8 @@ export async function verifyPhase7Demo({
         (select count(*)::int from public.message_traces where tenant_id=$1) traces,
         (select count(*)::int from public.conversation_step_events
           where tenant_id=$1 and not ${FIXTURE_ONLY}) step_events,
-        (select count(*)::int from public.contact_identities where tenant_id=$1) identities,
+        (select count(*)::int from public.contact_identities
+          where tenant_id=$1 and not ${FIXTURE_ONLY}) identities,
         (select count(*)::int from public.followups where tenant_id=$1) followups,
         (select count(*)::int from public.appointments where tenant_id=$1 and not ${FIXTURE_ONLY}) appointments,
         (select count(*)::int from public.billable_events where tenant_id=$1) billables,

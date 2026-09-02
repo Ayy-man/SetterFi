@@ -27,6 +27,7 @@ import {
   DEMO_PHASE4_IDS,
   DEMO_VALUES,
   demoGhlIdentityBinding,
+  PHASE3_CONTACT_FIXTURES,
   resolveDemoTarget,
 } from "./seed-phase1-demo.mjs";
 
@@ -44,7 +45,25 @@ export const SHOWCASE_IDS = Object.freeze({
   identityBlock: 300,
 });
 
-export const SHOWCASE_ANCHOR = "2026-08-19T00:00:00.000Z";
+/**
+ * The anchor an unflagged run uses, and the reason it is not a date.
+ *
+ * It used to be the literal 2026-08-19, so every timestamp in this fixture froze on the day it was
+ * written. Two weeks later Sofia Patel's booking still read "Scheduled" for a date that had
+ * already passed, the demo's "upcoming" calls were all in the past, and coach home measured a
+ * window nothing fell inside. D-11 says the demo's dates are computed from the run's clock for
+ * exactly this reason: a demo that goes stale in eight weeks goes stale again.
+ *
+ * `--anchor=YYYY-MM-DD` still pins the whole fixture to a fixed day, which is what the visual
+ * baselines need in order to photograph the same rows twice. Two runs on the same UTC day still
+ * write byte-identical rows.
+ */
+export const SHOWCASE_ANCHOR = "run-date";
+
+function todayAnchorMs() {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
 
 function argumentValue(argumentsList, name) {
   const prefix = `${name}=`;
@@ -52,19 +71,20 @@ function argumentValue(argumentsList, name) {
 }
 
 /**
- * Every timestamp is a fixed offset from one anchor, so a re-run writes byte-identical rows and
- * bumping `--anchor=YYYY-MM-DD` moves the whole fixture forward without editing a single date.
+ * Every timestamp is a fixed offset from one anchor, so a re-run on the same day writes
+ * byte-identical rows and `--anchor=YYYY-MM-DD` pins the whole fixture to a chosen day without
+ * editing a single date.
  */
 export function resolveAnchor(argumentsList = []) {
   const raw = argumentValue(argumentsList, "--anchor");
-  if (!raw) return Date.parse(SHOWCASE_ANCHOR);
+  if (!raw) return todayAnchorMs();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) throw new Error("SHOWCASE_ANCHOR_INVALID");
   const parsed = Date.parse(`${raw}T00:00:00.000Z`);
   if (Number.isNaN(parsed)) throw new Error("SHOWCASE_ANCHOR_INVALID");
   return parsed;
 }
 
-const ANCHOR_MS = Date.parse(SHOWCASE_ANCHOR);
+const ANCHOR_MS = todayAnchorMs();
 const MINUTE = 60_000;
 const DAY = 1_440;
 
@@ -516,6 +536,30 @@ const CONTACT_SPECS = [
   },
 ];
 
+/**
+ * The columns the Phase 3 fixture owns, taken from it rather than restated here.
+ *
+ * These ten rows were being written twice under two different identities. `seed-phase1-demo.mjs`
+ * called contact 8 "Sofia Patel" at No show; this file called the same row "Bianca Ferreira" at
+ * Booked, and whichever seeder ran last decided which demo the client saw. `demo:seed` re-upserts
+ * its names on every run and `seed-platform-review-data.mjs` runs it again from the inside, so in
+ * practice the two fought over every column on every reseed.
+ *
+ * One fixture owns the identity and the stage. This file keeps the columns Phase 3 does not set:
+ * the credit band, the funding goal, the timeline, the timezone and the recency that gives the
+ * contacts list a real order. The comment on contact 6 below was the first sighting of this and
+ * fixed one column of one row; this fixes all five columns of all ten.
+ */
+const PHASE3_OWNED_COLUMNS = new Map(
+  PHASE3_CONTACT_FIXTURES.map((fixture, index) => [DEMO_PHASE3_IDS.contacts[index], {
+    name: fixture.name,
+    pipelineStage: fixture.pipelineStage,
+    outcome: fixture.outcome,
+    dqReason: fixture.dqReason,
+    businessContext: fixture.businessContext,
+  }]),
+);
+
 function buildContacts(anchorMs = ANCHOR_MS) {
   // `listContacts` orders on `last_seen_at` and falls back to `created_at`, and every row on this
   // tenant was created in the same second, so the list has no real recency until this is set. It
@@ -526,6 +570,7 @@ function buildContacts(anchorMs = ANCHOR_MS) {
   );
   return CONTACT_SPECS.map((spec) => ({
     ...spec,
+    ...(PHASE3_OWNED_COLUMNS.get(spec.id) ?? {}),
     lastSeenAt: threadEnd.get(spec.id) ?? at(spec.lastSeenOffset, anchorMs),
   }));
 }
@@ -575,13 +620,22 @@ const APPOINTMENT_SPECS = [
     timezone: "America/New_York",
   },
   {
+    /*
+     * The No show fixture's own booking. It used to be `scheduled` five days ahead, which is a
+     * state the product refuses to pair with that stage: `set_contact_pipeline_stage` raises
+     * PIPELINE_NO_SHOW_REQUIRES_LATEST_APPOINTMENT unless the latest appointment is itself marked
+     * no_show. Her thread reads as a lead who booked, so the booking now sits behind her and
+     * carries the coach's own no-show mark, and the thread, the stage and the calendar agree.
+     */
     sequence: 1,
     conversationId: DEMO_PHASE3_IDS.conversations[8],
     contactId: DEMO_PHASE3_IDS.contacts[8],
-    status: "scheduled",
-    startOffset: 5 * DAY + 15 * 60,
+    status: "no_show",
+    startOffset: -4 * DAY + 15 * 60,
     durationMinutes: 45,
     timezone: "America/New_York",
+    attendanceSource: "coach",
+    attendanceOffset: -4 * DAY + 16 * 60,
   },
   {
     sequence: 2,
@@ -613,6 +667,20 @@ const APPOINTMENT_SPECS = [
     timezone: "America/Denver",
     attendanceSource: "coach",
     attendanceOffset: -9 * DAY + 20 * 60,
+  },
+  {
+    /*
+     * The second Booked fixture. It carried the stage with no appointment anywhere in the tenant,
+     * which `set_contact_pipeline_stage` refuses with PIPELINE_BOOKED_REQUIRES_APPOINTMENT, so
+     * the row was a state the product cannot produce.
+     */
+    sequence: 6,
+    conversationId: DEMO_PHASE3_IDS.conversations[3],
+    contactId: DEMO_PHASE3_IDS.contacts[3],
+    status: "scheduled",
+    startOffset: 4 * DAY + 16 * 60,
+    durationMinutes: 45,
+    timezone: "America/New_York",
   },
   {
     sequence: 5,

@@ -186,6 +186,34 @@ export const DEMO_PERSON_NAMES = Object.freeze({
   referralSummit: "Alicia Fontaine (demo)",
 });
 
+/**
+ * The four demo login accounts, as people.
+ *
+ * `seed-staging-users.mjs` named them "Staging Owner", "Staging Admin", "Staging Coach" and
+ * "Staging Affiliate", and the workspace header prints the first whitespace token of a user's
+ * name, so the demo coach was greeted "Welcome back, Staging" and the account chip beside it read
+ * "SC Staging". That is the product introducing itself with a deployment environment's name.
+ *
+ * Each carries the `(demo)` marker like every other demo display value, and the greeting is
+ * unaffected because it takes the first token. The coach shares a surname with the tenant they own,
+ * "Reid Funding Group (demo)", which is what a real one-owner coaching business looks like.
+ */
+export const DEMO_STAFF_NAMES = Object.freeze({
+  owner: "Delia Hartman (demo)",
+  admin: "Theo Brightwell (demo)",
+  coach: "Reid Calloway (demo)",
+  affiliate: "Janelle Okonkwo (demo)",
+});
+
+/**
+ * The two demo tenants that are not coach workspaces. Both used to render without the `(demo)`
+ * marker in the admin clients table, beside real rows (GAPS F-11-REVIEW-TENANT-NAMES-UNLABELLED).
+ */
+export const DEMO_SUPPORT_TENANT_NAMES = Object.freeze({
+  affiliatePartner: "Affiliate Partner Workspace (demo)",
+  measurement: "Measurement Review Workspace (demo)",
+});
+
 export const DEMO_LEAD_NAMES = Object.freeze({
   moneyStory: "Rochelle Vance (demo)",
 });
@@ -324,5 +352,19 @@ export function assertUniqueDisplayNames(names, code = "DEMO_CONTACT_DISPLAY_NAM
   const normalized = names.map((name) => name.trim().toLocaleLowerCase("en-US"));
   if (normalized.some((name) => name.length === 0) || new Set(normalized).size !== names.length) {
     throw new Error(code);
+  }
+}
+
+// The four login accounts are people on screen, so they follow the same rules as every other demo
+// display value: distinct, non-empty, `(demo)` marked, and never colliding with a seeded lead.
+assertFixtureNames(Object.values(DEMO_STAFF_NAMES), 4, "DEMO_STAFF_NAME_FIXTURES_INVALID");
+if (Object.values(DEMO_STAFF_NAMES).some((name) => !name.endsWith(DEMO_TAG))
+  || Object.values(DEMO_SUPPORT_TENANT_NAMES).some((name) => !name.endsWith(DEMO_TAG))) {
+  throw new Error("DEMO_STAFF_NAME_MISSING_DEMO_TAG");
+}
+{
+  const taken = new Set([...LEAD_NAMES, ...COACH_NAMES].map((name) => name.toLocaleLowerCase("en-US")));
+  if (Object.values(DEMO_STAFF_NAMES).some((name) => taken.has(name.toLocaleLowerCase("en-US")))) {
+    throw new Error("DEMO_STAFF_NAME_COLLIDES_WITH_FIXTURE");
   }
 }

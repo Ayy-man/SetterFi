@@ -22,6 +22,7 @@ import {
   COACH_NAMES,
   DEMO_BILLING_COPY,
   DEMO_REVIEW_THREADS,
+  DEMO_SUPPORT_TENANT_NAMES,
   DEMO_TIER_LADDER,
   LEAD_NAMES,
   assertUniqueDisplayNames,
@@ -222,13 +223,19 @@ async function seedPlatformTenantNames(database, tenants) {
     );
     assert(updated.rowCount === 1, "PLATFORM_REVIEW_COACH_NAME_UPDATE_FAILED", coachTenants[index]);
   }
+  /*
+   * The two non-coach demo tenants, labelled. They rendered in the admin clients table beside real
+   * rows without the `(demo)` marker every other demo display value carries, which is
+   * F-11-REVIEW-TENANT-NAMES-UNLABELLED read from the other side: an unmarked demo tenant reads
+   * as a real client.
+   */
   await database.query(
-    "update public.tenants set name='Affiliate Partner Demo' where id=$1 and is_demo=true",
-    [tenants.phase6Affiliate.id],
+    "update public.tenants set name=$2 where id=$1 and is_demo=true",
+    [tenants.phase6Affiliate.id, DEMO_SUPPORT_TENANT_NAMES.affiliatePartner],
   );
   await database.query(
-    "update public.tenants set name='Measurement Review Workspace' where id=$1 and is_demo=true",
-    [tenants.phase7.id],
+    "update public.tenants set name=$2 where id=$1 and is_demo=true",
+    [tenants.phase7.id, DEMO_SUPPORT_TENANT_NAMES.measurement],
   );
   const lead = await database.query(
     `update public.contacts set name=$1,business_context=$2,last_channel='sms',
