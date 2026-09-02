@@ -158,4 +158,97 @@ describe("every seeded money row is priced from the ladder", () => {
     expect(phase6).toContain("DEMO_TIER_LADDER[0].priceCents, DEMO_TIER_LADDER[0].priceCents,");
     expect(phase6).toContain("[moneyTenantId, DEMO_TIER_LADDER[0].priceCents]");
   });
+  /**
+   * A subscription's tier is resolved by matching `tiers.stripe_price_id`
+   * (`src/lib/billing/allowances.ts`), so a seeded subscription carrying a price id no tier row
+   * holds is a tenant the platform cannot price. The suspended demo tenant carried exactly that,
+   * an invented `..._SUSPENDED_PRICE`, and the allowance job logged a failed read and skipped it
+   * on every run. Suspension is `tenants.status`, never a price.
+   *
+   * Every price id a seeder writes is derived from a rung, so this checks for the one thing that
+   * can reintroduce the defect: a price id spelled out by hand.
+   */
+  it("never writes a subscription price id that no rung derives", () => {
+    const seeders = ["scripts/seed-phase6-demo.mjs", "scripts/seed-demo-gaps.mjs"];
+    const invented = /"SETTERFI_DEMO_PLACEHOLDER_(?:SUSPENDED_)?PRICE[^"]*"/gu;
+
+    for (const path of seeders) {
+      const source = readFileSync(join(process.cwd(), path), "utf8");
+      const literals = [...source.matchAll(invented)]
+        // The prefix constant and the sentinel guard that releases stale ids are the definition
+        // and its check, not a subscription being written to a price.
+        .map((match) => match[0])
+        .filter((literal) => literal !== '"SETTERFI_DEMO_PLACEHOLDER_PRICE_"');
+      expect(literals, `${path} spells out a price id instead of deriving it`).toEqual([]);
+    }
+  });
+});
+
+/**
+ * Reseeding a database that already holds an older ladder is the whole point of these seeders on
+ * hosted, and it used to abort. `apply_billing_subscription_snapshot` rejects two different
+ * snapshots stamped the same instant with STRIPE_SUBSCRIPTION_TIMESTAMP_COLLISION, which is right
+ * for a provider webhook, and the seeder wrote one hard-coded stamp. Production held the old price
+ * under that stamp, so the reseed that was supposed to correct it stopped there instead.
+ */
+describe("the subscription snapshot stamp advances only when the snapshot changed", () => {
+  const desired = {
+    priceId: "SETTERFI_DEMO_PLACEHOLDER_PRICE_STARTER",
+    status: "active",
+    periodStart: "2026-08-01T00:00:00Z",
+    periodEnd: "2026-09-01T00:00:00Z",
+    cancelAtPeriodEnd: false,
+  };
+  const FIXED = "2026-08-01T00:00:01Z";
+  const stored = (overrides: Record<string, unknown>) => ({
+    query: async () => ({
+      rows: [{
+        stripe_price_id: desired.priceId,
+        status: desired.status,
+        current_period_start: new Date(desired.periodStart),
+        current_period_end: new Date(desired.periodEnd),
+        cancel_at_period_end: desired.cancelAtPeriodEnd,
+        provider_updated_at: new Date(FIXED),
+        ...overrides,
+      }],
+    }),
+  });
+
+  it("writes the fixed stamp when there is no subscription yet", async () => {
+    const { snapshotStampFor } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const empty = { query: async () => ({ rows: [] }) };
+
+    expect(await snapshotStampFor(empty, "t", desired, FIXED)).toBe(FIXED);
+  });
+
+  it("advances past the stored stamp when the price changed", async () => {
+    const { snapshotStampFor } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const database = stored({ stripe_price_id: "SETTERFI_DEMO_PLACEHOLDER_SUSPENDED_PRICE" });
+
+    expect(await snapshotStampFor(database, "t", desired, FIXED))
+      .toBe("2026-08-01T00:00:02.000Z");
+  });
+
+  it("advances past a stamp already later than the fixed one", async () => {
+    const { snapshotStampFor } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const database = stored({
+      stripe_price_id: "SETTERFI_DEMO_PLACEHOLDER_SUSPENDED_PRICE",
+      provider_updated_at: new Date("2026-08-25T00:00:00Z"),
+    });
+
+    expect(await snapshotStampFor(database, "t", desired, FIXED))
+      .toBe("2026-08-25T00:00:01.000Z");
+  });
+
+  /**
+   * The rerun case. Restating an agreeing snapshot under the fixed stamp is a stale snapshot the
+   * moment an earlier run advanced it, so the seeder would fail on its own output.
+   */
+  it("restates an unchanged snapshot under the stamp it already carries", async () => {
+    const { snapshotStampFor } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const database = stored({ provider_updated_at: new Date("2026-08-01T00:00:02Z") });
+
+    expect(await snapshotStampFor(database, "t", desired, FIXED))
+      .toBe("2026-08-01T00:00:02.000Z");
+  });
 });

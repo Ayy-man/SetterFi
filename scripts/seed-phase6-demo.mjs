@@ -102,6 +102,44 @@ export function demoTierPriceId(rung) {
 }
 
 /**
+ * The stamp to write a subscription snapshot under.
+ *
+ * `apply_billing_subscription_snapshot` treats two different snapshots stamped the same instant as
+ * a contradiction and raises STRIPE_SUBSCRIPTION_TIMESTAMP_COLLISION, which is right for a provider
+ * webhook and fatal for a seeder that writes one fixed stamp. A database seeded before the ladder
+ * changed holds the old price under this seeder's stamp, so reseeding it aborts the whole chain
+ * rather than converging, and that is what production hit.
+ *
+ * A provider that actually changed the subscription would send a later stamp, so this does too, and
+ * only then: when the stored snapshot already agrees, the fixed stamp is returned unchanged and the
+ * write stays a no-op. The bump is one second past whichever stamp is later, so it is a function of
+ * the database's own state rather than the wall clock, and rerunning converges instead of drifting.
+ */
+export async function snapshotStampFor(database, tenantId, desired, fixedStamp) {
+  const existing = (await database.query(
+    `select stripe_price_id, status::text as status, current_period_start, current_period_end,
+            cancel_at_period_end, provider_updated_at
+     from public.billing_subscriptions where tenant_id = $1`,
+    [tenantId],
+  )).rows[0];
+  if (!existing) return fixedStamp;
+  const agrees = existing.stripe_price_id === desired.priceId
+    && existing.status === desired.status
+    && existing.current_period_start.toISOString() === new Date(desired.periodStart).toISOString()
+    && existing.current_period_end.toISOString() === new Date(desired.periodEnd).toISOString()
+    && existing.cancel_at_period_end === desired.cancelAtPeriodEnd;
+  // Agreeing means there is nothing to say, so the snapshot is restated under the stamp it already
+  // carries. Restating it under the fixed one would be a stale snapshot the moment a previous run
+  // has bumped it, which is the same seeder failing on its own output.
+  if (agrees) return existing.provider_updated_at.toISOString();
+  const later = Math.max(
+    existing.provider_updated_at.getTime(),
+    new Date(fixedStamp).getTime(),
+  );
+  return new Date(later + 1000).toISOString();
+}
+
+/**
  * `tiers.stripe_price_id` is globally unique, and which ladder rung each frozen tier id carries has
  * changed over the life of these seeds — `tiers[1]` used to be Growth and is now Scale. On a
  * database that still holds the old mapping, writing the new price id onto one row while a stale row
@@ -418,7 +456,10 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
           $1, $2, $3, $4, 'active', '2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z', false,
           '2026-08-01T00:00:01Z'
         )`,
-        [moneyTenantId, PHASE6_DEMO_VALUES.customer, PHASE6_DEMO_VALUES.subscription, "SETTERFI_DEMO_PLACEHOLDER_PRICE_STARTER"],
+        // Derived from the rung, never written out: a literal here and a `demoTierPriceId` there
+        // are two spellings of one identity, and only one of them moves when the ladder does.
+        [moneyTenantId, PHASE6_DEMO_VALUES.customer, PHASE6_DEMO_VALUES.subscription,
+          demoTierPriceId(DEMO_TIER_LADDER[0])],
       );
       for (let index = 0; index < PHASE6_DEMO_VALUES.invoices.length; index += 1) {
         await database.query(
@@ -524,12 +565,36 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
       );
     }
 
+    /*
+     * The suspended tenant subscribes to a rung that exists.
+     *
+     * It carried `SETTERFI_DEMO_PLACEHOLDER_SUSPENDED_PRICE`, which no `tiers` row holds, and the
+     * allowance job resolves a subscription's tier by matching `tiers.stripe_price_id`
+     * (`src/lib/billing/allowances.ts`). That read came back empty for this tenant on every run,
+     * logged ALLOWANCE_CANDIDATE_READ_FAILED, and skipped it, so a suspended account was also an
+     * account the platform could not price. `tenants.tier_id` already says Starter, and this now
+     * agrees with it.
+     *
+     * Suspension is not a price. It is `tenants.status`, set by the
+     * `set_tenant_billing_status` call directly below, which is what the screens read.
+     */
+    const suspendedSnapshot = {
+      priceId: demoTierPriceId(DEMO_TIER_LADDER[0]),
+      status: "active",
+      periodStart: "2026-08-01T00:00:00Z",
+      periodEnd: "2026-09-01T00:00:00Z",
+      cancelAtPeriodEnd: false,
+    };
     await database.query(
       `select * from public.apply_billing_subscription_snapshot(
-        $1, $2, $3, 'SETTERFI_DEMO_PLACEHOLDER_SUSPENDED_PRICE', 'active',
-        '2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z', false, '2026-08-01T00:00:01Z'
+        $1, $2, $3, $4, 'active',
+        '2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z', false, $5::timestamptz
       )`,
-      [affiliateTenantId, PHASE6_DEMO_VALUES.suspendedCustomer, PHASE6_DEMO_VALUES.suspendedSubscription],
+      [affiliateTenantId, PHASE6_DEMO_VALUES.suspendedCustomer,
+        PHASE6_DEMO_VALUES.suspendedSubscription, suspendedSnapshot.priceId,
+        await snapshotStampFor(
+          database, affiliateTenantId, suspendedSnapshot, "2026-08-01T00:00:01Z",
+        )],
     );
     const affiliateStatus = (await database.query(
       `select status::text from public.tenants where id = $1`, [affiliateTenantId],
