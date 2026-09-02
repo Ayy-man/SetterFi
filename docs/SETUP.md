@@ -63,8 +63,10 @@ npm run dev
 - `npm run db:migrate` applies migrations (`supabase migration up --include-all`). Migrations live in
   `supabase/migrations/*.sql` and must be reproducible from a clean database. Never edit a shipped
   migration, always add a new one.
-- `npm run test:rls` runs the row-level-security suite against the database. A change that ships a
-  migration should run this before it is considered done.
+- `npm run test:rls:clean` resets the local database and runs the row-level-security suite against
+  it. A change that ships a migration should run this before it is considered done. `npm run
+  test:rls` runs the same suite without the reset, and residue from earlier seeds can fail it; a
+  red result there is only real if it reproduces after the reset.
 - `npm run build` runs the first-customer environment verifier and then `next build`.
 
 TypeScript is strict, and zod validates at every boundary: webhook payloads, API bodies, offer-layer
@@ -233,6 +235,50 @@ project lead in the loop. For Meta, use test app credentials; the production sys
 a contractor credential. For Notion, the sync pipeline gets a scoped integration token and is tested
 against seeded dummy documents rather than the client's real knowledge base. Stripe live keys are not
 handed out.
+
+### 1.7 Reseeding the demo data
+
+The demo is written by seeders only. Run them in this order, each one idempotent, against a local
+stack after `supabase db reset` or against the hosted project with `--confirm-hosted`:
+
+```bash
+node scripts/seed-phase1-demo.mjs
+node scripts/seed-phase2-demo.mjs
+node scripts/seed-phase5-demo.mjs
+node scripts/seed-phase6-demo.mjs --acknowledge-stale-rollups
+node scripts/seed-phase7-demo.mjs --acknowledge-stale-rollups
+node scripts/seed-phase8-demo.mjs --acknowledge-stale-rollups
+node scripts/seed-showcase-leads.mjs --confirm --acknowledge-stale-rollups
+node scripts/seed-staging-users.mjs          # --local for the local stack
+node scripts/seed-demo-gaps.mjs --confirm --acknowledge-stale-rollups
+node scripts/seed-platform-review-data.mjs --confirm --acknowledge-stale-rollups
+node scripts/seed-demo-complete.mjs --confirm --acknowledge-stale-rollups
+node scripts/run-phase7-demo.mjs --acknowledge-stale-rollups
+```
+
+Hosted runs need `SUPABASE_DB_PASSWORD` as well as the service-role key, because phases 5 to 8, the
+showcase and the platform-review seeders open a direct Postgres connection. Run them with the
+repository's `.env.local` and no stale shell exports (`env -u SUPABASE_SERVICE_ROLE_KEY node
+--env-file=.env.local ...`), since a service-role key for another project makes the target check fail
+in a confusing way.
+
+**Closed cost months are final.** `tenant_cost_rollups` is append-only and its write function refuses
+a differing replay, which is the product's guarantee that a computed month is never quietly
+restated. A seeder that finds a closed month holding figures other than the ones it would write
+therefore exits 1 and names the tenant, the period and both sets of figures, rolling back everything
+else it wrote. `--acknowledge-stale-rollups` downgrades only that check to a printed list; every
+other read-back still has to match exactly. On a freshly reset database the flag is inert. The
+hosted project holds four such months from before the plan ladder was corrected on 2026-09-02 (the
+money-story tenant's July 2026, and August 2026 for the three platform-review tenants); they show on
+the admin cost evidence screen at the old figures until a migration adds a way to supersede a closed
+month.
+
+**Do not run the reset scripts against populated data.** `reset-platform-review-data.mjs` deletes
+from a ledger a trigger makes append-only and stops with `BILLING_CORRECTION_REQUESTS_APPEND_ONLY`;
+`reset-phase6-demo.mjs` deletes tier rows that other tenants still reference, so the next phase 5 seed
+dies on `tenants_tier_id_fkey`; and `run-phase8-demo.mjs` calls both internally. On a local stack use
+`supabase db reset` and reseed. On the hosted project there is no reset; reseeding converges the
+existing rows.
 
 ---
 

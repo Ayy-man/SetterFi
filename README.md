@@ -34,7 +34,7 @@ or the Shadcn Blocks credential.
 
 ```bash
 npm run verify        # typecheck, lint, unit tests, UI tests
-npm run test:rls      # database contract suite; needs a local Supabase stack
+npm run test:rls:clean  # database contract suite on a freshly reset local Supabase stack
 npm run build
 ```
 

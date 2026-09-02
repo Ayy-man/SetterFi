@@ -13,7 +13,9 @@ SKIPPED.
 - The selector names are `SETTERFI_GHL_DRIVER`, `SETTERFI_OPENROUTER_DRIVER`, and
   `SETTERFI_META_DRIVER`. Missing selectors choose Mock. Explicit Real selection with an incomplete
   named configuration fails closed.
-- Hosted reset additionally requires `SUPABASE_DB_PASSWORD`; hosted seed/reset always require
+- The reset scripts are for a local stack that holds only this phase's fixture; against a populated
+  or hosted database use the seeder order in `docs/SETUP.md` section 1.7 instead. Hosted reset
+  additionally requires `SUPABASE_DB_PASSWORD`; hosted seed/reset always require
   `SUPABASE_SERVICE_ROLE_KEY`, `--confirm-hosted`, a standard Supabase project hostname, and an
   existing read-back of the deterministic tenant with `is_demo=true`.
 - GHL Real requires `GHL_CLIENT_ID`, `GHL_CLIENT_SECRET`, `GHL_WEBHOOK_PUBLIC_KEY`,

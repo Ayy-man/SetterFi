@@ -138,8 +138,8 @@ split:
 - UI conventions: amber is the only persistent status colour; honest states, nothing says done
   while anything is pending; every table exports; sentence case.
 - Tests are Vitest (`npm test`, plus `npm run test:ui` for the browser project and
-  `npm run test:rls` for the database contract suite). The API tests that exist are adversarial on
-  purpose; match that bar.
+  `npm run test:rls:clean` for the database contract suite on a reset database). The API tests
+  that exist are adversarial on purpose; match that bar.
 - Migrations are Supabase CLI SQL files under `supabase/migrations/`, reproducible from a clean
   database.
 
