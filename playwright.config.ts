@@ -4,10 +4,27 @@ import { defineConfig } from "@playwright/test";
 if (existsSync(".env.e2e")) {
   process.loadEnvFile(".env.e2e");
 }
+// The demo accounts and their password live in `.env.local`, and a run against a deployed URL has
+// no `next start` to load them for it. Read after `.env.e2e` so a purpose-made E2E credential still
+// wins: `process.loadEnvFile` leaves an already-set variable alone.
+if (existsSync(".env.local")) {
+  process.loadEnvFile(".env.local");
+}
 
 // Another local Next app can hold :3000; set E2E_PORT to run the suite beside it.
 export const E2E_PORT = process.env.E2E_PORT ?? "3000";
-export const E2E_BASE_URL = `http://localhost:${E2E_PORT}`;
+
+/**
+ * Where the suite points, and the one thing that decides whether it builds an app first.
+ *
+ * `E2E_BASE_URL=https://setter-fi.vercel.app npx playwright test` runs every spec against the
+ * deployment; unset, it builds and starts the local app as before. The server block is dropped
+ * rather than pointed at the hosted URL, because `webServer.url` is a readiness probe Playwright
+ * will also try to start a process for, and starting a local build to test a remote one is the
+ * confusion this variable exists to avoid.
+ */
+const hostedBaseUrl = process.env.E2E_BASE_URL?.trim();
+export const E2E_BASE_URL = hostedBaseUrl || `http://localhost:${E2E_PORT}`;
 
 const viewports = [
   { label: "1440", viewport: { width: 1440, height: 900 } },
@@ -58,12 +75,14 @@ export default defineConfig({
     baseURL: E2E_BASE_URL,
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: `npm run build && npm run start -- -p ${E2E_PORT}`,
-    url: E2E_BASE_URL,
-    reuseExistingServer: true,
-    timeout: 180_000,
-  },
+  ...(hostedBaseUrl ? {} : {
+    webServer: {
+      command: `npm run build && npm run start -- -p ${E2E_PORT}`,
+      url: E2E_BASE_URL,
+      reuseExistingServer: true,
+      timeout: 180_000,
+    },
+  }),
   projects: [
     {
       name: "setup",
@@ -91,6 +110,14 @@ export default defineConfig({
     {
       name: "login-1440",
       testMatch: "login.spec.ts",
+      use: { viewport: { width: 1440, height: 900 } },
+    },
+    {
+      // No `storageState`: every test in here is about arriving signed out and pressing a button
+      // that signs somebody in. Borrowing a role's session would make all four pass on a page they
+      // never reached.
+      name: "demo-logins-1440",
+      testMatch: "demo-logins.smoke.spec.ts",
       use: { viewport: { width: 1440, height: 900 } },
     },
     {
