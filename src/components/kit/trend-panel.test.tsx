@@ -61,12 +61,33 @@ describe("TrendPanel", () => {
     expect(container.querySelector("path")).toBeInTheDocument()
     const table = container.querySelector("table.sr-only")
     expect(table).toBeInTheDocument()
+    // One header row plus one row per point.
     expect(within(table as HTMLTableElement).getAllByRole("row")).toHaveLength(
-      readyData.points.length
+      readyData.points.length + 1
     )
     expect(within(table as HTMLTableElement).getByText("24")).toBeInTheDocument()
   })
 
+
+  it("names both columns of the screen-reader table", () => {
+    const { container } = render(
+      <TrendPanel
+        data={readyData}
+        emptyReason="Two monthly readings are required"
+        title="Qualification rate"
+      />
+    )
+
+    const table = container.querySelector("table.sr-only") as HTMLTableElement
+    const headers = within(table).getAllByRole("columnheader")
+    expect(headers.map((header) => header.textContent)).toEqual(["Period", "Value"])
+    for (const header of headers) expect(header).toHaveAttribute("scope", "col")
+
+    // Every figure still names its own period, so a cell is read as a value of a named row.
+    expect(within(table).getAllByRole("rowheader").map((cell) => cell.textContent)).toEqual(
+      readyData.points.map((point) => point.at)
+    )
+  })
 
   it("scrolls the period axis with the plot rather than beside it", () => {
     const { container } = render(

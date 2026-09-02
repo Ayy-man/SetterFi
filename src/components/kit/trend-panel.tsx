@@ -276,6 +276,13 @@ function TrendChart({
       </div>
       <table className="sr-only">
         <caption>{`${title}, ${data.periodLabel}`}</caption>
+        {/* Named columns: the row header alone left every figure as an unlabelled number. */}
+        <thead>
+          <tr>
+            <th scope="col">Period</th>
+            <th scope="col">Value</th>
+          </tr>
+        </thead>
         <tbody>
           {data.points.map((point, index) => (
             <tr key={`${point.at}-${index}`}>
