@@ -1,10 +1,38 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { READINESS_KEYS, type ReadinessKey } from "@/lib/onboarding/contracts";
+
 import OnboardingPage from "./page";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: "a" }));
+
+/**
+ * The readiness the page reads, as the go-live endpoint would judge it. A live channel and a
+ * published offer, the safe test and the subscription still to do: two strip boxes ticked, and
+ * two checks the button would still refuse on, one of which has no box in the strip at all.
+ */
+const UNMET: ReadinessKey[] = ["test_passed", "subscription_ready"];
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: async () => ({
+    auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } }, error: null }) },
+  }),
+}));
+vi.mock("@/lib/auth/claims", () => ({ parseAppClaims: () => ({ tenantId: "tenant-1" }) }));
+vi.mock("@/app/api/onboarding/readiness/handler", () => ({ createReadinessEvidence: () => ({}) }));
+vi.mock("@/lib/onboarding/readiness", () => ({
+  evaluateReadiness: async () => ({
+    ready: false,
+    checks: READINESS_KEYS.map((key) => ({
+      key,
+      ready: !UNMET.includes(key),
+      code: "ok",
+      evidenceAt: null,
+      blamingParty: "coach",
+    })),
+  }),
+}));
 
 /**
  * The go-live headline against the strip standing directly above it.
@@ -67,7 +95,9 @@ describe("the go-live headline against its own setup strip", () => {
     const steps = Array.from(document.querySelectorAll('[data-slot="setup-step"]'));
     expect(steps.length, "the strip did not render, so there was nothing to compare").toBe(4);
     expect(steps.some((step) => (step.textContent ?? "").includes("still to do"))).toBe(true);
-    expect(steps.some((step) => (step.textContent ?? "").includes("done"))).toBe(false);
+    // The two checks the readiness above proves are the two boxes the strip ticks, and no other.
+    const done = steps.filter((step) => step.getAttribute("data-state") === "done");
+    expect(done.map((step) => step.getAttribute("data-key") ?? step.textContent)).toHaveLength(2);
   });
 
   /**
@@ -94,17 +124,15 @@ describe("the go-live headline against its own setup strip", () => {
    * and one step out read the same line, so the headline stopped being a position readout the
    * moment it stopped claiming readiness.
    */
-  it("says how many steps stand between the coach and the button", async () => {
+  it("counts every check the button would refuse on, not only the boxes the strip has", async () => {
     render(await OnboardingPage());
 
     const steps = Array.from(document.querySelectorAll('[data-slot="setup-step"]'));
-    // Everything unticked except the final action is what the headline has to count.
-    const remaining = steps
-      .slice(0, 3)
-      .filter((step) => step.getAttribute("data-state") !== "done").length;
-    expect(remaining, "nothing was outstanding, so there was no count to check").toBeGreaterThan(0);
-
-    const words = ["", "One step left", "Two steps", "Three steps"];
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(words[remaining]);
+    const unticked = steps.slice(0, 3).filter((step) => step.getAttribute("data-state") !== "done");
+    // One box is unticked (Meet your agent), but two checks are outstanding, because the
+    // subscription has no box. The headline must say two, or it is the undercount that shipped.
+    expect(unticked).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 1 }).textContent)
+      .toBe("Two things left before your agent answers");
   });
 });

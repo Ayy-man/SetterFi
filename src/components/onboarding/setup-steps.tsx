@@ -21,6 +21,8 @@ import { TONE_LINE, TONE_TEXT, TONE_WASH } from "@/components/kit/atomics";
  * which is what this is.
  */
 
+import type { ReadinessCheck, ReadinessKey } from "@/lib/onboarding/contracts";
+
 export const SETUP_STEP_KEYS = ["connect", "offer", "meet", "go_live"] as const;
 export type SetupStepKey = (typeof SETUP_STEP_KEYS)[number];
 
@@ -58,24 +60,74 @@ export function setupStepsRemaining(completed: readonly SetupStepKey[]): SetupSt
   return SETUP_STEP_KEYS.filter((key) => key !== "go_live" && !done.has(key));
 }
 
-/** Small enough to spell. The list is four long, so the count before `go_live` never exceeds three. */
-const REMAINING_IN_WORDS: Record<number, string> = { 2: "Two", 3: "Three" };
+/**
+ * Which strip step each go-live readiness check belongs to.
+ *
+ * The strip draws four anchors and the go-live endpoint judges seven checks, so a step is proved
+ * only when every check standing behind it is. The two checks with no box of their own, the
+ * platform's Brain and the subscription, still block the button, so they are counted by the
+ * headline even though the strip has nowhere to tick them: `platform_brain_published` sits with
+ * the offer it is compiled against, and `subscription_ready` with the final action, which the
+ * strip never ticks in advance anyway.
+ */
+const STEP_FOR_CHECK: Record<ReadinessKey, SetupStepKey> = {
+  tenant_active: "connect",
+  messaging_channel_live: "connect",
+  primary_calendar_healthy: "connect",
+  published_offer_ready: "offer",
+  platform_brain_published: "offer",
+  test_passed: "meet",
+  subscription_ready: "go_live",
+};
+
+export type SetupProgress = {
+  /** Strip steps whose every check is ready. Never `go_live`: it is the action, not a proof. */
+  readonly completed: readonly SetupStepKey[];
+  /** Every check the go-live endpoint would still refuse on, whichever step it belongs to. */
+  readonly outstanding: number;
+};
 
 /**
- * The headline the go-live screen is entitled to, from the same evidence the strip is drawn from.
+ * The strip and the headline from one readiness result, the same one the go-live endpoint uses.
+ *
+ * Reading only the two checks the page could fetch cheaply let the headline say "One step left"
+ * to a coach whose safe test and subscription were both still to do, because neither check had a
+ * box to be counted in. Counting the checks themselves closes that: the headline cannot claim fewer
+ * things left than the button will refuse on.
+ */
+export function setupProgress(checks: readonly ReadinessCheck[]): SetupProgress {
+  const unmetSteps = new Set(checks.filter((check) => !check.ready).map((check) => STEP_FOR_CHECK[check.key]));
+  return {
+    completed: SETUP_STEP_KEYS.filter((key) => key !== "go_live" && !unmetSteps.has(key)),
+    outstanding: checks.filter((check) => !check.ready).length,
+  };
+}
+
+/** Small enough to spell: the go-live endpoint judges seven checks, so the count never exceeds seven. */
+const OUTSTANDING_IN_WORDS: Record<number, string> = {
+  2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven",
+};
+
+/**
+ * The headline the go-live screen is entitled to, counted from the readiness checks the strip is
+ * drawn from.
  *
  * The page shipped the artboard's "You are one button away from your agent answering" over a strip
  * whose first three boxes said "(still to do)", and the first repair only replaced it with a
  * cautious "Your agent is not answering yet" -- true, but it told a coach nothing about how far off
  * they were, which is the question the sentence is standing in the place of. So the sentence counts
- * instead: the reader learns their position from the headline and the strip at once, and the
- * readiness line is reachable only when the count reaches zero.
+ * instead, and it counts every unmet check rather than only the boxes the strip has room for: a
+ * coach with the safe test and the subscription still to do reads "Two things left", not "One step
+ * left". The readiness line is reachable only when nothing at all is outstanding.
+ *
+ * `null` is the honest answer when readiness could not be read: a count over evidence the page
+ * does not have would be an invention in either direction.
  */
-export function setupHeadline(completed: readonly SetupStepKey[]): string {
-  const remaining = setupStepsRemaining(completed).length;
-  if (remaining === 0) return "You are one button away from your agent answering";
-  if (remaining === 1) return "One step left before your agent answers";
-  return `${REMAINING_IN_WORDS[remaining] ?? String(remaining)} steps before your agent answers`;
+export function setupHeadline(outstanding: number | null): string {
+  if (outstanding === null) return "Your agent is not answering yet";
+  if (outstanding === 0) return "You are one button away from your agent answering";
+  if (outstanding === 1) return "One thing left before your agent answers";
+  return `${OUTSTANDING_IN_WORDS[outstanding] ?? String(outstanding)} things left before your agent answers`;
 }
 
 export type SetupStepsProps = {

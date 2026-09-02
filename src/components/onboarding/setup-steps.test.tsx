@@ -1,10 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { READINESS_KEYS, type ReadinessCheck, type ReadinessKey } from "@/lib/onboarding/contracts";
+
 import {
   currentSetupStep,
   SETUP_STEP_KEYS,
   setupHeadline,
+  setupProgress,
   SetupSteps,
   setupStepsRemaining,
 } from "@/components/onboarding/setup-steps";
@@ -109,36 +112,74 @@ describe("setupStepsRemaining", () => {
   });
 });
 
+function checks(unmet: readonly ReadinessKey[]): ReadinessCheck[] {
+  return READINESS_KEYS.map((key) => ({
+    key,
+    ready: !unmet.includes(key),
+    code: unmet.includes(key) ? `READINESS_${key.toUpperCase()}_MISSING` : "ok",
+    evidenceAt: null,
+    blamingParty: "coach" as const,
+  }));
+}
+
+describe("setupProgress", () => {
+  it("ticks a step only when every check standing behind it is ready", () => {
+    expect(setupProgress(checks([])).completed).toEqual(["connect", "offer", "meet"]);
+    expect(setupProgress(checks(["primary_calendar_healthy"])).completed).toEqual(["offer", "meet"]);
+    expect(setupProgress(checks(["platform_brain_published"])).completed).toEqual(["connect", "meet"]);
+    expect(setupProgress(checks(["test_passed"])).completed).toEqual(["connect", "offer"]);
+  });
+
+  it("never ticks the final action in advance, even with every check ready", () => {
+    expect(setupProgress(checks([])).completed).not.toContain("go_live");
+    expect(setupProgress(checks(["subscription_ready"])).completed).toEqual(["connect", "offer", "meet"]);
+  });
+
+  it("counts the checks with no box of their own, so the headline cannot undercount", () => {
+    // A live channel and a published offer, with the safe test and the subscription still to do:
+    // the strip has two boxes ticked and one unticked, and the button would refuse on two checks.
+    const progress = setupProgress(checks(["test_passed", "subscription_ready"]));
+    expect(progress.completed).toEqual(["connect", "offer"]);
+    expect(progress.outstanding).toBe(2);
+    expect(setupHeadline(progress.outstanding)).toBe("Two things left before your agent answers");
+  });
+});
+
 describe("setupHeadline", () => {
-  it("says how many steps are left rather than only that something is", () => {
-    expect(setupHeadline([])).toBe("Three steps before your agent answers");
-    expect(setupHeadline(["connect"])).toBe("Two steps before your agent answers");
-    expect(setupHeadline(["connect", "offer"])).toBe("One step left before your agent answers");
+  it("says how many things are left rather than only that something is", () => {
+    expect(setupHeadline(7)).toBe("Seven things left before your agent answers");
+    expect(setupHeadline(3)).toBe("Three things left before your agent answers");
+    expect(setupHeadline(2)).toBe("Two things left before your agent answers");
+    expect(setupHeadline(1)).toBe("One thing left before your agent answers");
   });
 
   it("claims the agent is one press away only once nothing is left to do first", () => {
-    expect(setupHeadline(["connect", "offer", "meet"]))
-      .toBe("You are one button away from your agent answering");
+    expect(setupHeadline(0)).toBe("You are one button away from your agent answering");
   });
 
-  it("makes no readiness claim while any step is unproved", () => {
-    for (const completed of [[], ["connect"], ["connect", "offer"], ["offer", "meet"]] as const) {
-      expect(setupHeadline(completed)).not.toMatch(/one button away|ready|all set|live/iu);
+  it("makes no readiness claim while anything is outstanding or unknown", () => {
+    for (const outstanding of [1, 2, 3, 7, null]) {
+      expect(setupHeadline(outstanding)).not.toMatch(/one button away|ready|all set|live/iu);
     }
   });
 
-  it("counts only steps the strip has left unticked", () => {
-    // The pairing rather than either sentence alone. Two authors can write agreeing words once;
-    // this fails the moment the headline counts a step the strip is drawing as done.
-    const completed = ["connect"] as const;
-    render(<SetupSteps completed={completed} current={currentSetupStep(completed)} />);
+  it("makes no count when readiness could not be read", () => {
+    expect(setupHeadline(null)).toBe("Your agent is not answering yet");
+    expect(setupHeadline(null)).not.toMatch(/\d|one |two |three /iu);
+  });
+
+  it("counts at least every step the strip has left unticked", () => {
+    // The pairing rather than either sentence alone: the headline may count more than the strip
+    // shows (checks with no box), but it can never count fewer than the boxes left unticked.
+    const progress = setupProgress(checks(["messaging_channel_live", "test_passed"]));
+    render(<SetupSteps completed={progress.completed} current={currentSetupStep(progress.completed)} />);
     const states = screen.getAllByRole("listitem").map((node) => node.dataset.state);
     const byKey = new Map(SETUP_STEP_KEYS.map((key, index) => [key, states[index]]));
 
-    const remaining = setupStepsRemaining(completed);
+    const remaining = setupStepsRemaining(progress.completed);
     expect(remaining, "nothing was left to count, so the pairing was not tested").not.toHaveLength(0);
     for (const key of remaining) expect(byKey.get(key)).not.toBe("done");
-    expect(setupHeadline(completed)).toContain("Two steps");
-    expect(remaining).toHaveLength(2);
+    expect(progress.outstanding).toBeGreaterThanOrEqual(remaining.length);
+    expect(setupHeadline(progress.outstanding)).toContain("Two things");
   });
 });
