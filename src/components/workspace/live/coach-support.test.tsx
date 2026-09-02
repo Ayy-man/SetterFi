@@ -68,6 +68,55 @@ describe("CoachSupport", () => {
  * the page spends exactly one accent fill and it follows the live action, and prose stays inside
  * the Line Length rule instead of running the width of the pane.
  */
+describe("CoachSupport at one pane per screen", () => {
+  /**
+   * At 390px the request list and the conversation stacked on one page, so opening a request meant
+   * scrolling past the whole composer and the list to reach it, with nothing to get back with.
+   * The wide layout still shows both columns; only the narrow one hides a pane, so these assert
+   * the container-query class that does the hiding rather than a viewport width jsdom has no
+   * layout for.
+   */
+  function panes(container: HTMLElement) {
+    const list = container.querySelector("#new-support-request")?.closest("div.flex");
+    const detail = list?.nextElementSibling;
+    return { detail: detail as HTMLElement, list: list as HTMLElement };
+  }
+
+  it("opens on the request list with neither pane hidden until a request is picked", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
+
+    const { container } = render(<CoachSupport enabled />);
+    await screen.findByRole("feed", { name: "Support messages" });
+
+    const { detail, list } = panes(container);
+    expect(list.className).not.toContain("@max-4xl/help:hidden");
+    expect(detail.className).toContain("@max-4xl/help:hidden");
+  });
+
+  it("shows the conversation alone with a back control once a request is picked", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
+
+    const { container } = render(<CoachSupport enabled />);
+    await screen.findByRole("feed", { name: "Support messages" });
+
+    await user.click(screen.getByRole("button", { name: /Calendar setup question/ }));
+
+    const opened = panes(container);
+    expect(opened.list.className).toContain("@max-4xl/help:hidden");
+    expect(opened.detail.className).not.toContain("@max-4xl/help:hidden");
+
+    // The back control is the narrow layout's only way out, and the wide layout hides it.
+    const back = screen.getByRole("button", { name: "Back to requests" });
+    expect(back.className).toContain("@4xl/help:hidden");
+
+    await user.click(back);
+    const closed = panes(container);
+    expect(closed.list.className).not.toContain("@max-4xl/help:hidden");
+    expect(closed.detail.className).toContain("@max-4xl/help:hidden");
+  });
+});
+
 describe("CoachSupport reply append", () => {
   /**
    * The coach composer must survive a refused write the same way the admin one does: the draft

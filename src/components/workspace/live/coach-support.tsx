@@ -6,6 +6,7 @@ import { ACCENT_FILL_SHADOW_CLASS } from "@/components/kit/atomics/button-class"
 import { Callout } from "@/components/kit/callout";
 import { DataState } from "@/components/kit/data-state";
 import { DeckPanel } from "@/components/kit/deck-panel";
+import { ArrowLeft } from "@/components/kit/icons";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { Field } from "@/components/kit/field";
 import { Prose, STATE_TONE_TO_TONE, Status } from "@/components/kit/atomics";
@@ -181,6 +182,13 @@ export function CoachSupport({ enabled }: CoachSupportProps) {
   const [body, setBody] = useState("");
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
+  /*
+   * Which of the two panes a narrow screen is showing. At 390px both columns used to stack, so a
+   * coach opening a request scrolled past the whole composer and the request list to reach the
+   * conversation, with nothing to get back with. The wide layout is unaffected: it shows both, and
+   * this only decides which one a narrow screen hides.
+   */
+  const [narrowPane, setNarrowPane] = useState<"list" | "detail">("list");
   const [feedback, setFeedback] = useState<{ kind: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
@@ -311,7 +319,9 @@ export function CoachSupport({ enabled }: CoachSupportProps) {
              */
             <div className="@container/help min-w-0">
               <div className="grid min-w-0 items-start gap-[16px] @4xl/help:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-                <div className="flex min-w-0 flex-col gap-[16px]">
+                <div
+                  className={`flex min-w-0 flex-col gap-[16px]${narrowPane === "detail" ? " @max-4xl/help:hidden" : ""}`}
+                >
                   <DeckPanel
                     eyebrow="Reach a person"
                     headingId="new-support-request"
@@ -369,7 +379,10 @@ export function CoachSupport({ enabled }: CoachSupportProps) {
                           return (
                             <RequestRow
                               key={view.id}
-                              onSelect={() => setSelectedId(view.id)}
+                              onSelect={() => {
+                                setSelectedId(view.id);
+                                setNarrowPane("detail");
+                              }}
                               selected={selectedView?.id === view.id}
                               view={view}
                             />
@@ -380,7 +393,17 @@ export function CoachSupport({ enabled }: CoachSupportProps) {
                   ) : null}
                 </div>
 
-                <div className="min-w-0">
+                <div
+                  className={`min-w-0${narrowPane === "list" ? " @max-4xl/help:hidden" : ""}`}
+                >
+                  <button
+                    className="mb-[16px] inline-flex items-center gap-[8px] rounded-[10px] border border-[var(--line)] bg-[var(--well)] px-[14px] py-[10px] text-[15px] leading-none font-medium text-[color:var(--body)] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] @4xl/help:hidden"
+                    onClick={() => setNarrowPane("list")}
+                    type="button"
+                  >
+                    <ArrowLeft aria-hidden className="size-[var(--s-4)]" />
+                    Back to requests
+                  </button>
                   {state.kind === "loading" ? <DataState kind="loading" rows={4} /> : null}
                   {state.kind === "error" ? (
                     <DataState
