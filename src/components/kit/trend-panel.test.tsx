@@ -67,6 +67,45 @@ describe("TrendPanel", () => {
     expect(within(table as HTMLTableElement).getByText("24")).toBeInTheDocument()
   })
 
+
+  it("scrolls the period axis with the plot rather than beside it", () => {
+    const { container } = render(
+      <TrendPanel
+        data={readyData}
+        emptyReason="Two monthly readings are required"
+        title="Qualification rate"
+      />
+    )
+
+    const scroller = container.querySelector<HTMLElement>(".trend__chart")
+    const axis = container.querySelector<HTMLElement>(".trend__axis")
+    expect(scroller).not.toBeNull()
+    expect(axis).not.toBeNull()
+    // One scroller holds both, so a label cannot part company with the marker above it.
+    expect(scroller?.contains(axis as Node)).toBe(true)
+    expect(scroller?.contains(container.querySelector("svg") as Node)).toBe(true)
+  })
+
+  it("places each period label at its own point rather than spreading them evenly", () => {
+    const { container } = render(
+      <TrendPanel
+        data={readyData}
+        emptyReason="Two monthly readings are required"
+        title="Qualification rate"
+      />
+    )
+
+    const dots = Array.from(container.querySelectorAll("circle.dot"), (dot) =>
+      Number(dot.getAttribute("cx"))
+    )
+    const labels = Array.from(
+      container.querySelectorAll<HTMLElement>(".trend__axis span"),
+      (label) => Number.parseFloat(label.style.left)
+    )
+
+    expect(labels).toEqual(dots)
+  })
+
   it("keeps zero bars at zero height in a mixed series and emphasizes the endpoint", () => {
     const mixedData: TrendData = {
       ...readyData,

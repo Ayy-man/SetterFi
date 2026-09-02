@@ -135,6 +135,7 @@ function TrendChart({
   titleId: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const plotRef = useRef<HTMLDivElement>(null)
   const [isScrollable, setIsScrollable] = useState(false)
   const [size, setSize] = useState<ChartSize>({ width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT })
   const minWidth = data.points.length * POINT_SLOT
@@ -150,7 +151,9 @@ function TrendChart({
 
     const measure = () => {
       const clientWidth = container.clientWidth
-      const clientHeight = container.clientHeight
+      // The plot, not the scroller: the scroller now also holds the axis, so its height is the
+      // pair rather than the drawing area the chart geometry is computed against.
+      const clientHeight = (plotRef.current ?? container).clientHeight
       if (clientWidth > 0 && clientHeight > 0) {
         const width = Math.max(clientWidth, minWidth)
         setSize((current) =>
@@ -177,26 +180,34 @@ function TrendChart({
 
   return (
     <>
+      {/*
+        One scroller for the plot and the axis together. They used to be siblings, the plot
+        scrolling and the axis fixed, so on any panel narrow enough to scroll every period label
+        sat under a point it did not belong to. Inside one scroller they move as one drawing, and
+        each label is placed at its own point's x rather than distributed evenly, so a tick names
+        the marker directly above it at any width.
+      */}
       <div
         aria-labelledby={isScrollable ? titleId : undefined}
-        className={cn(
-          "trend__chart",
-          "h-[calc(var(--s-12)*2+var(--s-6))]",
-          isScrollable && "overflow-x-auto"
-        )}
+        className={cn("trend__chart", isScrollable && "overflow-x-auto")}
         ref={containerRef}
         role={isScrollable ? "region" : undefined}
-        style={{
-          ...(height === undefined ? {} : { height }),
-          ...(isScrollable ? { overscrollBehaviorX: "contain" } : {}),
-        }}
+        style={isScrollable ? { overscrollBehaviorX: "contain" } : undefined}
         tabIndex={isScrollable ? 0 : undefined}
       >
+        <div
+          className="flex flex-col gap-[var(--s-2)]"
+          style={{ minWidth, width: size.width }}
+        >
+        <div
+          className="trend__plot h-[calc(var(--s-12)*2+var(--s-6))]"
+          ref={plotRef}
+          style={height === undefined ? undefined : { height }}
+        >
         <svg
           aria-hidden="true"
-          className="block h-full overflow-visible"
+          className="block h-full w-full overflow-visible"
           focusable="false"
-          style={{ minWidth, width: size.width }}
           viewBox={`0 0 ${size.width} ${size.height}`}
         >
           <g className="grid" stroke="var(--line)" strokeWidth="1">
@@ -246,14 +257,22 @@ function TrendChart({
             />
           ))}
         </svg>
-      </div>
-      <div
-        aria-hidden="true"
-        className="trend__axis text-over flex justify-between gap-[var(--s-3)] text-[var(--faint)]"
-      >
-        {data.points.map((point, index) => (
-          <span key={`${point.at}-${index}`}>{formatPeriod(point.at, periodFormat)}</span>
-        ))}
+        </div>
+        <div
+          aria-hidden="true"
+          className="trend__axis text-over relative h-[var(--s-4)] text-[var(--faint)]"
+        >
+          {points.map((point, index) => (
+            <span
+              className="absolute top-0 -translate-x-1/2 whitespace-nowrap"
+              key={`${point.at}-${index}`}
+              style={{ left: point.x }}
+            >
+              {formatPeriod(point.at, periodFormat)}
+            </span>
+          ))}
+        </div>
+        </div>
       </div>
       <table className="sr-only">
         <caption>{`${title}, ${data.periodLabel}`}</caption>
