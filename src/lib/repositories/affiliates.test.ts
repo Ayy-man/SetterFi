@@ -302,3 +302,48 @@ describe("affiliate repository", () => {
     })).rejects.toBeInstanceOf(AffiliateRepositoryError);
   });
 });
+
+/**
+ * The shape of the production 503 of 2026-09-01, kept as a fixture.
+ *
+ * The allowlist moved to four account states while the hosted `affiliate_referral_projection` was
+ * still the two-state version, and a deploy does not run migrations, so every row the function
+ * returned was `active` or `inactive` and the parser refused the first one. This asserts the
+ * refusal itself, because the refusal is correct: the alternative to failing here is reading an
+ * unknown status as something it is not, in front of the person whose income depends on it.
+ * `affiliate-account-states.test.ts` is what stops the two copies drifting in the first place.
+ */
+describe("the superseded two-state projection", () => {
+  it("refuses a stalled-account status the deployed allowlist no longer knows", async () => {
+    for (const account_status of ["active", "inactive"]) {
+      const stale = createAffiliateRepository(dependencies({
+        projectReferrals: async () => [{
+          business_name: "Northstar Funding",
+          account_status,
+          commission_earned_cents: 1_250,
+        }],
+      }));
+
+      await expect(stale.listOwnReferrals())
+        .rejects.toThrow("AFFILIATE_PROJECTION_RECEIPT_INVALID");
+    }
+  });
+
+  /**
+   * A `tenant_status` the migration's `case` does not name arrives as null, which is the same
+   * refusal by design: the `case` has no `else` arm precisely so an unmapped status cannot be read
+   * as "Paying".
+   */
+  it("refuses an unmapped status rather than reading it as paying", async () => {
+    const unmapped = createAffiliateRepository(dependencies({
+      projectReferrals: async () => [{
+        business_name: "Northstar Funding",
+        account_status: null,
+        commission_earned_cents: 1_250,
+      }],
+    }));
+
+    await expect(unmapped.listOwnReferrals())
+      .rejects.toThrow("AFFILIATE_PROJECTION_RECEIPT_INVALID");
+  });
+});

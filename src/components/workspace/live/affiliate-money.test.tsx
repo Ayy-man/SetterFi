@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AffiliateMoney } from "@/components/workspace/live/affiliate-money";
@@ -299,5 +300,81 @@ describe("AffiliateMoney", () => {
     const head = view.container.querySelector("[data-page-head=\"affiliate\"]")?.textContent ?? "";
     expect(head).toContain("Nobody has signed up through your link yet");
     expect(head).not.toMatch(/\b0 coaches\b/);
+  });
+});
+
+/**
+ * The 503 an affiliate actually met on 2026-09-01, and the two things the portal owes them once it
+ * has one: a way back, and copy that does not hand them an internal identifier.
+ *
+ * That production 503 was permanent for as long as it lasted, so Retry mattered more than usual.
+ * It is wired to the same `load` the first effect calls rather than to a router refresh, which is
+ * what makes a retry a new request against the same route instead of a re-render of the failed
+ * state, and it is why the button clears the error before it starts.
+ */
+describe("AffiliateMoney after a failed load", () => {
+  it("re-runs the fetch when Retry is pressed and recovers on the next answer", async () => {
+    const user = userEvent.setup();
+    // A fresh Response per call: a body can only be read once, so a shared instance would make
+    // the recovered load fail on a spent stream rather than on anything this test is about.
+    const requested: string[] = [];
+    let attempts = 0;
+    const fetcher = vi.fn(async (input: string) => {
+      requested.push(input);
+      attempts += 1;
+      return attempts === 1
+        ? new Response(
+          JSON.stringify({ error: "Affiliate referrals are temporarily unavailable." }),
+          { headers: { "Content-Type": "application/json" }, status: 503 },
+        )
+        : new Response(
+          // The whole route contract, `referral` included: `parseAffiliateReferralCode` throws
+          // without it, so a partial fixture would land back in the error state and this test
+          // would pass for the wrong reason.
+          JSON.stringify({
+            referral: {
+              code: "SF-AFFILIATE",
+              link: "https://setterfi.test/signup?ref=SF-AFFILIATE",
+            },
+            referrals,
+            payouts,
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 },
+        );
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<AffiliateMoney enabled termsCopy={null} />);
+    expect(await screen.findByText("Partner earnings could not load")).toBeVisible();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: /retry/iu }));
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(requested).toEqual(["/api/affiliate/referrals", "/api/affiliate/referrals"]);
+    expect(await screen.findByText("Total")).toBeVisible();
+    expect(screen.getAllByText("Northstar Coaching")).toHaveLength(2);
+    expect(screen.queryByText("Partner earnings could not load")).not.toBeInTheDocument();
+  });
+
+  /**
+   * The route answers one generic sentence by design, and the surface must not undo that by
+   * printing the code it caught. `humanError` has no entry for the affiliate codes, so they fall
+   * to the shared generic body, and this asserts the absence rather than the wording: a reader
+   * must never see `AFFILIATE_PROJECTION_RECEIPT_INVALID` or the states that produced it.
+   */
+  it("shows generic copy and never an internal code, whatever the failure was", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("AFFILIATE_PROJECTION_RECEIPT_INVALID");
+    }));
+
+    render(<AffiliateMoney enabled termsCopy={null} />);
+
+    expect(await screen.findByText("Partner earnings could not load")).toBeVisible();
+    const body = document.body.textContent ?? "";
+    expect(body).toContain("Nothing changed.");
+    expect(body).not.toContain("AFFILIATE_");
+    expect(body).not.toContain("RECEIPT_INVALID");
+    expect(body).not.toContain("affiliate_referral_projection");
   });
 });

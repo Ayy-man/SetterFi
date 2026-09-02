@@ -20,6 +20,7 @@
     "generate:handover": "node --experimental-strip-types scripts/generate-phase8-handover.mjs",
     "test:rls": "vitest run --config vitest.rls.config.mts",
     "verify:measurement-hosted": "node scripts/verify-measurement-hosted.mjs",
+    "verify:affiliate-hosted": "node scripts/verify-affiliate-hosted.mjs",
     "db:migrate": "supabase migration up --include-all",
     "demo:env-check": "node scripts/verify-env-contract.mjs",
     "verify:env:first-customer": "node scripts/verify-env-contract.mjs --profile=first-customer",
