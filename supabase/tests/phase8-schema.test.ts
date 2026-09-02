@@ -234,6 +234,57 @@ describe("Phase 8 catalog contract", () => {
     }]);
   });
 
+  /**
+   * The five rules the client asked for, checked as a coach would actually reach them.
+   *
+   * All five exist and all five have emitters, and the existing suites pin both: the rows are in
+   * `ALERT_KEYS` in phase1-schema, and the bindings are in `source-contract.test.ts`. What neither
+   * asserts is the three columns that decide whether a coach ever sees one. The coach preferences
+   * reader filters on `scope = 'tenant'` and excludes `category = 'demo'`
+   * (`src/app/api/notification-preferences/handler.ts`), so a rule seeded at platform scope, or
+   * into the demo category, would exist, emit, pass every current test, and be invisible on the
+   * screen the client is asking about.
+   *
+   * `default_enabled` is here for the same reason from the other direction: a rule a coach has to
+   * discover and switch on has not been delivered to them.
+   */
+  it("puts the five requested alert rules where a coach can actually reach them", async () => {
+    const requested = await db.query<{
+      event_key: string;
+      scope: string;
+      category: string;
+      default_enabled: boolean;
+      covers_coach: boolean;
+      has_name: boolean;
+    }>(`
+      select event_key, scope::text as scope, category, default_enabled,
+        'coach' = any(audience_roles::text[]) as covers_coach,
+        char_length(btrim(name)) > 0 and char_length(btrim(description)) > 0 as has_name
+      from public.alert_rules
+      where event_key = any($1::text[])
+      order by event_key
+    `, [[
+      "agent.inactive_72h",
+      "billing.payment_completed",
+      "billing.tier_upgraded",
+      "channel.disconnected",
+      "onboarding.a2p_cleared",
+    ]]);
+
+    expect(requested.rows.map((rule) => rule.event_key)).toEqual([
+      "agent.inactive_72h",
+      "billing.payment_completed",
+      "billing.tier_upgraded",
+      "channel.disconnected",
+      "onboarding.a2p_cleared",
+    ]);
+    expect(requested.rows.every((rule) => rule.scope === "tenant")).toBe(true);
+    expect(requested.rows.every((rule) => rule.covers_coach)).toBe(true);
+    expect(requested.rows.every((rule) => rule.category !== "demo")).toBe(true);
+    expect(requested.rows.every((rule) => rule.default_enabled)).toBe(true);
+    expect(requested.rows.every((rule) => rule.has_name)).toBe(true);
+  });
+
   it("makes the alert catalog exactly the emitted union with no exceptions", async () => {
     const catalog = await db.query<{ key: string }>(`
       select event_key || ':' || scope::text as key from public.alert_rules
