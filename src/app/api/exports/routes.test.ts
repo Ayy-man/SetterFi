@@ -31,7 +31,10 @@ import {
   phase7MeasurementExportRows,
   phase7PlatformExportRows,
   phase8ExportRow,
+  EXPORT_ACTOR_JOINS,
+  exportAuditActorLabel,
   exportOwnerLabel,
+  exportSupportAuthorLabel,
   type ExportCursor,
 } from "@/app/api/exports/[resource]/handler";
 import type { UserRole } from "@/lib/auth/claims";
@@ -1714,6 +1717,61 @@ describe("Phase 8 export route", () => {
       exportOwnerLabel("99999999-0000-4000-8000-000000000009", names),
     ]) {
       expect(label, "an owner uuid reached a client-visible export column").not.toMatch(/[0-9a-f]{8}-/u);
+    }
+  });
+
+  /**
+   * F-11-AUDIT-ACTOR-NAMES, on the surface the screen's own join does not reach.
+   *
+   * The audit feed resolves `actor_id` through `users` and reads out a name; the CSV of the same
+   * rows read out the uuid, so one event had two answers to "who did this" depending on whether
+   * you were looking at the page or at the file attached to a compliance request. The three
+   * fallbacks are the feed's three, in the feed's words.
+   */
+  it("names the actor in an exported audit row, in the words the feed uses", () => {
+    const actorId = "88000000-0000-4000-8000-000000000001";
+    const names = new Map([[actorId, "Priya Natarajan"]]);
+
+    expect(exportAuditActorLabel(actorId, "brain.published", names)).toBe("Priya Natarajan");
+    // An id no users row answers to. Neutral, never the id itself.
+    expect(exportAuditActorLabel("99999999-0000-4000-8000-000000000009", "brain.published", names))
+      .toBe("Operator");
+    // No actor at all: the platform for something it did itself, explicit absence otherwise.
+    expect(exportAuditActorLabel(null, "appointment.created", names)).toBe("SetterFi");
+    expect(exportAuditActorLabel(null, "brain.published", names)).toBe("Actor unavailable");
+    expect(exportSupportAuthorLabel(actorId, names)).toBe("Priya Natarajan");
+    expect(exportSupportAuthorLabel("someone-else", names)).toBe("Support team");
+
+    for (const label of [
+      exportAuditActorLabel(actorId, "brain.published", names),
+      exportAuditActorLabel("99999999-0000-4000-8000-000000000009", "x.y", names),
+      exportAuditActorLabel(null, "brain.published", names),
+      exportSupportAuthorLabel("someone-else", names),
+    ]) {
+      expect(label, "an actor uuid reached an export column").not.toMatch(/[0-9a-f]{8}-/u);
+    }
+  });
+
+  /**
+   * The "everywhere" half of the same gap: any export whose query pulls an actor, author or owner
+   * id has to resolve it, or the leak simply moves to the next resource somebody adds.
+   */
+  it("resolves the actor on every export whose query reads one", () => {
+    const source = readFileSync(new URL("./[resource]/handler.ts", import.meta.url), "utf8");
+    const specs = [...source.matchAll(
+      /"([a-z0-9-]+)":\s*\{\s*\n\s*table:[^\n]*\n\s*select: "([^"]*)"/gu,
+    )].map((match) => ({ resource: match[1], select: match[2].split(",") }));
+    // A positive control: a regex that matched nothing would make every assertion below vacuous.
+    expect(specs.length).toBeGreaterThan(10);
+
+    const carriesAnActor = specs.filter((spec) => ["actor_id", "author_id", "success_owner"]
+      .some((column) => spec.select.includes(column)));
+    expect(carriesAnActor.length).toBeGreaterThan(0);
+    for (const spec of carriesAnActor) {
+      expect(
+        EXPORT_ACTOR_JOINS[spec.resource],
+        `the ${spec.resource} export reads an actor id and never names it`,
+      ).toBeDefined();
     }
   });
 

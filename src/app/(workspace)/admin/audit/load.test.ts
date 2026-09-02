@@ -18,6 +18,7 @@ type RecordedQuery = {
   or: string[];
   eq: [string, unknown][];
   gte: [string, unknown][];
+  in: [string, readonly unknown[]][];
 };
 
 const auditRow = (id: number, action: string) => ({
@@ -43,11 +44,12 @@ const auditRow = (id: number, action: string) => ({
 function recordingClient(input: {
   rows?: Record<string, unknown>[];
   countFor?: (query: RecordedQuery) => number;
+  users?: { id: string; full_name: string | null; email: string | null }[];
 }) {
   const queries: RecordedQuery[] = [];
   const client = {
     from(table: string) {
-      const query: RecordedQuery = { table, head: false, or: [], eq: [], gte: [] };
+      const query: RecordedQuery = { table, head: false, or: [], eq: [], gte: [], in: [] };
       queries.push(query);
       const chain = {
         select(_columns: string, options?: { head?: boolean }) {
@@ -57,7 +59,7 @@ function recordingClient(input: {
         or(filter: string) { query.or.push(filter); return chain; },
         eq(column: string, value: unknown) { query.eq.push([column, value]); return chain; },
         gte(column: string, value: unknown) { query.gte.push([column, value]); return chain; },
-        in() { return chain; },
+        in(column: string, values: readonly unknown[]) { query.in.push([column, values]); return chain; },
         order() { return chain; },
         limit() { return chain; },
         then(resolve: (value: unknown) => void) {
@@ -71,6 +73,10 @@ function recordingClient(input: {
           }
           if (table === "audit_log") {
             resolve({ data: input.rows ?? [], error: null });
+            return;
+          }
+          if (table === "users") {
+            resolve({ data: input.users ?? [], error: null });
             return;
           }
           resolve({ data: [], error: null });
@@ -151,6 +157,32 @@ describe("the audit loader's saved views", () => {
     // The three named views are still counted, because their segments still show a number.
     expect(counts(queries).filter((query) => kindClause(query).length === 0)).toHaveLength(1);
     expect(counts(queries).filter((query) => kindClause(query).length === 1)).toHaveLength(3);
+  });
+
+  /**
+   * F-11-AUDIT-ACTOR-NAMES: the feed says who acted, so the loader resolves the actor id through
+   * `users` before the rows leave the server. An id the read cannot name stays unnamed here and
+   * the screen prints its neutral word for it; nothing invents a person.
+   */
+  it("names the actor on every row it hands the feed", async () => {
+    const queries = recordingClient({
+      rows: [
+        { ...auditRow(1, "brain.published"), actor_id: "user-1" },
+        { ...auditRow(2, "brain.published"), actor_id: "user-2" },
+        auditRow(3, "conversation.escalated"),
+      ],
+      users: [{ id: "user-1", full_name: "Priya Natarajan", email: null }],
+    });
+
+    const result = await loadAuditRows(requestedQuery({}));
+
+    // One keyed read for the whole page, not one per row.
+    const userReads = queries.filter((query) => query.table === "users");
+    expect(userReads).toHaveLength(1);
+    expect(userReads[0]!.in).toEqual([["id", ["user-1", "user-2"]]]);
+    expect(result.rows.map((row) => row.actorName))
+      .toEqual(["Priya Natarajan", null, null]);
+    expect(result.rows[2]!.actor).toBe("Actor unavailable");
   });
 
   it("keeps the view when the reader pages, rather than dropping back to Everything", async () => {

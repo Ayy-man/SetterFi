@@ -1,3 +1,4 @@
+import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { canAccessWorkspace, type UserRole } from "@/lib/auth/claims";
 import {
   listContacts,
@@ -427,7 +428,7 @@ export const RESOURCE_COLUMNS = {
     "webhookSubscribedAt", "signedRoundTripAt", "updatedAt", "dataLabel",
   ],
   "merge-history": [
-    "auditId", "action", "targetType", "targetId", "reason", "actorId", "createdAt",
+    "auditId", "action", "targetType", "targetId", "reason", "actor", "createdAt",
   ],
   // Phase 5
   "provisioning-steps": [
@@ -1838,7 +1839,8 @@ const PHASE4_EXPORT_SPECS: Record<(typeof PHASE4_EXPORT_RESOURCES)[number], Phas
       targetType: "target_type",
       targetId: "target_id",
       reason: "reason",
-      actorId: "actor_id",
+      // Named `actor` rather than `actorId`, because the value written here is the person's name.
+      actor: "actor_id",
       createdAt: "created_at",
     }),
   },
@@ -1881,10 +1883,9 @@ async function openPhase4Cursor(input: {
         .order(spec.orderColumn, { ascending: false })
         .range(offset, offset + input.pageSize - 1);
       if (error) throw new Error(`EXPORT_PAGE_READ_FAILED:${error.message}`);
-      const rows = (data ?? []).map((row) => phase4ExportRow(
-        input.resource,
-        row as unknown as Record<string, unknown>,
-      ));
+      const raw = (data ?? []) as unknown as Record<string, unknown>[];
+      const rows = raw.map((row) => phase4ExportRow(input.resource, row));
+      await nameExportActors({ client, resource: input.resource, raw, rows });
       offset += rows.length;
       exhausted = rows.length < input.pageSize;
       return rows;
@@ -2228,6 +2229,79 @@ export function exportOwnerLabel(id: unknown, names: ReadonlyMap<string, string>
   return names.get(id) ?? "Assigned owner";
 }
 
+/**
+ * Who acted, for an exported audit row, in the words the audit feed puts on screen for the same
+ * event.
+ *
+ * The feed resolves `actor_id` through `users` and falls back through three states: the platform
+ * itself for a system action with no actor, an explicit unavailable for a human action with none,
+ * and the neutral "Operator" for an id no `users` row answers to. A spreadsheet of the same rows
+ * printed the uuid instead, so the same event read one way on screen and another in the file
+ * somebody attached to a compliance request.
+ */
+export function exportAuditActorLabel(
+  actorId: unknown,
+  action: unknown,
+  names: ReadonlyMap<string, string>,
+): string {
+  const key = typeof action === "string" && Object.prototype.hasOwnProperty.call(AUDIT_ACTIONS, action)
+    ? action as keyof typeof AUDIT_ACTIONS
+    : null;
+  const system = key !== null && AUDIT_ACTIONS[key].actorKind === "system";
+  if (typeof actorId !== "string" || !actorId.trim()) {
+    return system ? "SetterFi" : "Actor unavailable";
+  }
+  return names.get(actorId) ?? "Operator";
+}
+
+/** The transcript's own fallback: an author with no name on their account is the support team. */
+export function exportSupportAuthorLabel(
+  authorId: unknown,
+  names: ReadonlyMap<string, string>,
+): string {
+  if (typeof authorId !== "string" || !authorId.trim()) return "Support team";
+  return names.get(authorId) ?? "Support team";
+}
+
+/** The id column each resource resolves against `users`, and the row key the name is written to. */
+export const EXPORT_ACTOR_JOINS: Record<string, { column: string; key: string }> = {
+  "audit-log": { column: "actor_id", key: "actor" },
+  "coach-support-messages": { column: "author_id", key: "author" },
+  "support-messages": { column: "author_id", key: "author" },
+  "merge-history": { column: "actor_id", key: "actor" },
+  "success-client-book": { column: "success_owner", key: "successOwner" },
+};
+
+/**
+ * One keyed `users` read per page, and the name written over the id the projection carried.
+ *
+ * Per page rather than per row: an export streams thousands of rows and a read each would be a
+ * read each. The label for a given resource is the one its own screen uses, so a reader comparing
+ * the file to the surface sees one vocabulary rather than two.
+ */
+async function nameExportActors(input: {
+  client: ReturnType<typeof createSupabaseServiceClient>;
+  resource: string;
+  raw: readonly Record<string, unknown>[];
+  rows: ExportRow[];
+}) {
+  const join = EXPORT_ACTOR_JOINS[input.resource];
+  if (!join) return;
+  const ids = [...new Set(input.raw.flatMap((row) => {
+    const value = row[join.column];
+    return typeof value === "string" && value.trim() ? [value] : [];
+  }))];
+  const names = await loadExportOwnerNames(input.client, ids);
+  for (const [index, row] of input.rows.entries()) {
+    const id = input.raw[index][join.column];
+    row[join.key] = input.resource === "success-client-book"
+      ? exportOwnerLabel(id, names)
+      : join.column === "author_id"
+        ? exportSupportAuthorLabel(id, names)
+        : exportAuditActorLabel(id, input.raw[index].action, names);
+  }
+}
+
 async function loadRealTenantIds() {
   const client = createSupabaseServiceClient();
   const { data, error } = await client.from("analytics_tenants").select("tenant_id")
@@ -2311,14 +2385,7 @@ async function openPhase8Cursor(input: {
       if (error) throw new Error(`EXPORT_PAGE_READ_FAILED:${error.message}`);
       const raw = (data ?? []) as unknown as Record<string, unknown>[];
       const rows = raw.map((row) => phase8ExportRow(input.resource, row));
-      if (input.resource === "success-client-book") {
-        const ownerIds = [...new Set(raw.flatMap((row) => (typeof row.success_owner === "string"
-          && row.success_owner.trim() ? [row.success_owner] : [])))];
-        const ownerNames = await loadExportOwnerNames(client, ownerIds);
-        for (const [index, row] of rows.entries()) {
-          row.successOwner = exportOwnerLabel(raw[index].success_owner, ownerNames);
-        }
-      }
+      await nameExportActors({ client, resource: input.resource, raw, rows });
       offset += rows.length;
       exhausted = rows.length < input.pageSize;
       return rows;
