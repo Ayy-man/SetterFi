@@ -490,7 +490,13 @@ export function AppTopbar({
                   */
                   isCoach && "data-[popup-open]:border-[var(--accent-edge)]",
                 )}
-                size="icon"
+                /*
+                  A named chip is a content-sized control, not a 32px square: `size="icon"` is
+                  `size-8`, which fixes the width and truncated the first name to nothing while the
+                  chevron squeezed against the initials (reported 2026-09-03). The unnamed fallback
+                  keeps the square it always had.
+                */
+                size={account?.firstName ? "default" : "icon"}
                 variant="outline"
               />
             }

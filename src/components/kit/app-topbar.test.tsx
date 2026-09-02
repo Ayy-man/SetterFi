@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import { AppTopbar } from "@/components/kit/app-topbar";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { WorkspaceEnvProvider } from "@/components/workspace/workspace-env";
+import { demoViewTargets } from "@/lib/workspace-navigation";
 
 /**
  * The account menu is the one piece of coach chrome that renders outside the coach shell.
@@ -121,5 +123,46 @@ describe("the coach's account menu", () => {
     // The artboard's panel width and row height, which are what the console's defaults got wrong.
     expect(css).toMatch(/\.coach-account-menu\s*\{[^}]*width:\s*340px/u);
     expect(css).toMatch(/min-height:\s*48px/u);
+  });
+});
+
+describe("the named account chip", () => {
+  /*
+   * Reported 2026-09-03 from a screenshot: the chip showed the initials and the chevron with
+   * nothing between them. The trigger was a `size="icon"` Button, which is `size-8` -- a fixed
+   * 32px square. The named variants override the height but a width they never set, so the
+   * first name truncated to zero and the chevron was pressed against the initials. jsdom cannot
+   * measure that, so this pins the cause: a chip with a name must not carry the square variant.
+   */
+  for (const role of ["coach", "admin"] as const) {
+    it(`sizes the ${role} chip to its content once a first name is known`, () => {
+      render(
+        <WorkspaceEnvProvider
+          account={{ fullName: "Dana Hart", firstName: "Dana", business: null }}
+          demoAccountSwitching={false}
+          demoViews={demoViewTargets}
+          mode="supabase"
+        >
+          <SidebarProvider>
+            <AppTopbar {...TOPBAR_PROPS} nav={COACH_NAV} role={role} />
+          </SidebarProvider>
+        </WorkspaceEnvProvider>,
+      );
+      const chip = screen.getByRole("button", { name: role === "coach" ? "Coach account" : "Admin account" });
+      expect(chip.textContent).toContain("Dana");
+      expect(chip.textContent).toContain("DH");
+      expect(chip.className.split(/\s+/u)).not.toContain("size-8");
+    });
+  }
+
+  it("keeps the square when nobody is named", () => {
+    render(
+      <SidebarProvider>
+        <AppTopbar {...TOPBAR_PROPS} nav={COACH_NAV} role="coach" />
+      </SidebarProvider>,
+    );
+    const chip = screen.getByRole("button", { name: "Coach account" });
+    expect(chip.textContent).not.toContain("Dana");
+    expect(chip.className.split(/\s+/u)).toContain("size-[46px]");
   });
 });
