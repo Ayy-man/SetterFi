@@ -2200,6 +2200,34 @@ export function phase8ExportRow(
   return PHASE8_EXPORT_SPECS[resource].row(value);
 }
 
+/**
+ * The success owner's name for an exported client-book row.
+ *
+ * The projection column is `tenants.success_owner`, a uuid, and a spreadsheet is the one surface a
+ * reader cannot hover to resolve it. So the export runs the same keyed `users` read the screen
+ * runs, per page, and never falls back to the id: an owner the join could not name is still an
+ * owned client and says so, an empty column is nobody's.
+ */
+async function loadExportOwnerNames(
+  client: ReturnType<typeof createSupabaseServiceClient>,
+  ownerIds: readonly string[],
+): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>();
+  if (ownerIds.length === 0) return resolved;
+  const { data, error } = await client.from("users").select("id,full_name,email").in("id", [...ownerIds]);
+  if (error || !data) return resolved;
+  for (const user of data as { id: string; full_name: string | null; email: string | null }[]) {
+    const name = user.full_name?.trim() || user.email?.trim();
+    if (name) resolved.set(String(user.id), name);
+  }
+  return resolved;
+}
+
+export function exportOwnerLabel(id: unknown, names: ReadonlyMap<string, string>): string {
+  if (typeof id !== "string" || !id.trim()) return "Unassigned";
+  return names.get(id) ?? "Assigned owner";
+}
+
 async function loadRealTenantIds() {
   const client = createSupabaseServiceClient();
   const { data, error } = await client.from("analytics_tenants").select("tenant_id")
@@ -2281,10 +2309,16 @@ async function openPhase8Cursor(input: {
         .order(spec.secondaryOrderColumn, { ascending: input.filter.order === "event_asc" })
         .range(offset, offset + input.pageSize - 1);
       if (error) throw new Error(`EXPORT_PAGE_READ_FAILED:${error.message}`);
-      const rows = (data ?? []).map((row) => phase8ExportRow(
-        input.resource,
-        row as unknown as Record<string, unknown>,
-      ));
+      const raw = (data ?? []) as unknown as Record<string, unknown>[];
+      const rows = raw.map((row) => phase8ExportRow(input.resource, row));
+      if (input.resource === "success-client-book") {
+        const ownerIds = [...new Set(raw.flatMap((row) => (typeof row.success_owner === "string"
+          && row.success_owner.trim() ? [row.success_owner] : [])))];
+        const ownerNames = await loadExportOwnerNames(client, ownerIds);
+        for (const [index, row] of rows.entries()) {
+          row.successOwner = exportOwnerLabel(raw[index].success_owner, ownerNames);
+        }
+      }
       offset += rows.length;
       exhausted = rows.length < input.pageSize;
       return rows;

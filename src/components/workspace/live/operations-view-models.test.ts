@@ -8,6 +8,7 @@ import {
   clientBookView,
   reassignmentReceiptView,
   successOwnerCandidates,
+  successOwnerDisplayLabel,
 } from "./operations-view-models";
 
 const client: SuccessClientBookRead = {
@@ -28,6 +29,30 @@ describe("operations view models", () => {
       planDisplayLabel: "No plan",
       dataLabel: "Demo",
     });
+  });
+
+  it("never prints the stored success-owner id where a person's name belongs", () => {
+    const owner = { id: "88000000-0000-4000-8000-000000000001", name: null };
+    const view = clientBookView({ ...client, successOwner: owner });
+
+    expect(view.successOwnerLabel).toBe("Assigned owner");
+    expect(
+      view.successOwnerLabel,
+      "an owner uuid under an assignee heading reads as a person's name",
+    ).not.toContain(owner.id);
+    expect(successOwnerDisplayLabel({ ...owner, name: "  Priya Natarajan  " }))
+      .toBe("Priya Natarajan");
+    // Owned but unnamed is not the same claim as unowned, and only the second one is a queue entry.
+    expect(successOwnerDisplayLabel(null)).toBe("Unassigned");
+  });
+
+  it("offers no assignee option that would have to be labelled with an id", () => {
+    const owner = { id: "88000000-0000-4000-8000-000000000001", name: null };
+    expect(successOwnerCandidates({
+      rows: [{ ...client, successOwner: owner }],
+      actorId: "admin-1",
+      actorRole: "admin",
+    })).toEqual([]);
   });
 
   it("shows the persisted plan label when a tenant has a tier assigned", () => {

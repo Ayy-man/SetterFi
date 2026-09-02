@@ -64,7 +64,7 @@ import type {
 import { useQueryState } from "@/lib/query-state";
 import type { SuccessClientBookRead, SupportBook } from "@/lib/repositories/support";
 import { withWorkspaceNavCounts, workspaceNavigationFor } from "@/lib/workspace-navigation";
-import { reassignmentReceiptView } from "./operations-view-models";
+import { reassignmentReceiptView, successOwnerDisplayLabel } from "./operations-view-models";
 
 type SuccessClientBookProps = {
   actorId: string;
@@ -251,9 +251,12 @@ function supportState(row: SuccessClientBookRead): { label: string; tone: Tone }
   return row.supportStatus ? SUPPORT_STATE[row.supportStatus] : null;
 }
 
+/**
+ * One definition of the owner's name for the book, the drawer and the export alike, so a screen
+ * cannot start printing the stored uuid again by spelling the fallback its own way.
+ */
 function successOwnerLabel(row: SuccessClientBookRead) {
-  return row.successOwner?.name?.trim()
-    || (row.successOwner ? "Assigned owner" : "Unassigned");
+  return successOwnerDisplayLabel(row.successOwner);
 }
 
 function planLabel(row: SuccessClientBookRead) {

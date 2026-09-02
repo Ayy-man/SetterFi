@@ -31,6 +31,7 @@ import {
   phase7MeasurementExportRows,
   phase7PlatformExportRows,
   phase8ExportRow,
+  exportOwnerLabel,
   type ExportCursor,
 } from "@/app/api/exports/[resource]/handler";
 import type { UserRole } from "@/lib/auth/claims";
@@ -1693,6 +1694,27 @@ describe("Phase 8 export route", () => {
       createdAt: "2026-08-18T00:00:00.000Z", testData: false,
     });
     expect(projected).not.toHaveProperty("internal");
+  });
+
+  /**
+   * A spreadsheet is the one surface a reader cannot hover to resolve an id on, so the client-book
+   * export resolves `tenants.success_owner` through `users` before the column is written. The
+   * three cases are the three the loader can hand it, and none of them is the uuid.
+   */
+  it("writes a success owner's name into the client-book export, never the stored id", () => {
+    const ownerId = "88000000-0000-4000-8000-000000000001";
+    const names = new Map([[ownerId, "Priya Natarajan"]]);
+
+    expect(exportOwnerLabel(ownerId, names)).toBe("Priya Natarajan");
+    expect(exportOwnerLabel("99999999-0000-4000-8000-000000000009", names)).toBe("Assigned owner");
+    expect(exportOwnerLabel(null, names)).toBe("Unassigned");
+    expect(exportOwnerLabel("   ", names)).toBe("Unassigned");
+    for (const label of [
+      exportOwnerLabel(ownerId, names),
+      exportOwnerLabel("99999999-0000-4000-8000-000000000009", names),
+    ]) {
+      expect(label, "an owner uuid reached a client-visible export column").not.toMatch(/[0-9a-f]{8}-/u);
+    }
   });
 
   it("pins every Phase 7 platform arm and exclusion view while Phase 8 is added", () => {

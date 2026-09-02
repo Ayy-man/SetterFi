@@ -563,6 +563,34 @@ describe("SuccessClientBook surface", () => {
     });
   });
 
+  /**
+   * The defect this covers put `88000000-0000-4000-8000-000000000001` under ASSIGNEE in the
+   * drawer. The row is the one the join cannot resolve -- an owner id with no `users.full_name`
+   * behind it -- which is the only shape that ever reached the fallback.
+   */
+  it("names the success owner rather than printing the id it is stored as", async () => {
+    const user = userEvent.setup();
+    const ownerId = "88000000-0000-4000-8000-000000000001";
+    stubFetch([{ ...rows[0], successOwner: { id: ownerId, name: null } }]);
+    renderBook();
+
+    await screen.findByText("Northstar Funding");
+    expect(document.body.textContent ?? "").not.toContain(ownerId);
+    expect(book().getAllByText("Assigned owner").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByText("Northstar Funding"));
+    await screen.findByRole("button", { name: "Reassign owner" });
+
+    expect(
+      document.body.textContent ?? "",
+      "the drawer printed the stored owner id at the reader",
+    ).not.toContain(ownerId);
+    // Nothing to assign to, because naming an option would mean labelling it with that id.
+    expect(screen.getByText(
+      "The client book did not supply a named success owner, so there is nobody to assign to yet.",
+    )).toBeInTheDocument();
+  });
+
   it("asks the server for the chosen book when the view switches", async () => {
     const user = userEvent.setup();
     renderBook();
