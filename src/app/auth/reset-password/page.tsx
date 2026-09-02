@@ -6,6 +6,7 @@ import { Field } from "@/components/kit/field";
 import { COACH_READING_CLASS } from "@/components/workspace/live/coach-type";
 import { internalRedirectPath } from "@/lib/auth/internal-redirect";
 import { PASSWORD_RESET_DONE_COOKIE, type ResetPasswordOutcome } from "@/lib/auth/recovery";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "Reset password",
@@ -18,6 +19,29 @@ type ResetPasswordPageProps = {
 
 /** The outcomes that report on a password that has already changed, and so need the receipt. */
 const AFTER_THE_CHANGE = new Set<ResetPasswordOutcome>(["sessions-live", "not-recorded"]);
+
+/**
+ * Can this reader actually complete a reset, or are they just looking at the URL?
+ *
+ * The recovery link does not land here carrying a token: `/auth/recovery` spends the `code` or the
+ * `token_hash` on a session and then redirects to this path with nothing but `next`, so what
+ * authorises the form is the session in the cookie and never anything in the query string. Reading
+ * the query for a token instead would refuse every reader who arrived the intended way.
+ *
+ * This is the same read `/api/auth/password-reset/complete` authorises the POST with, deliberately:
+ * the form is drawn exactly when submitting it would be accepted. A failed or empty read is treated
+ * as no session for the same reason that route treats it that way -- `getClaims` resolves a null
+ * payload without reporting an error, so an absent payload has to be checked on its own.
+ */
+async function canChangePassword() {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.auth.getClaims();
+    return !error && Boolean(data?.claims);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * This intentionally small credential form is the endpoint of the email recovery flow.
@@ -77,6 +101,44 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
           {/* Signing in is the only thing left to do, so it takes the page's one fill. */}
           <a className={kitButtonClass({ size: "lg", variant: "primary" })} href={internalRedirectPath("/login", "/")}>
             Sign in
+          </a>
+        </Surface>
+      </AuthStage>
+    );
+  }
+
+  /*
+   * Everything below draws a form that posts a new password. Without a recovery session there is
+   * nothing for it to post against: the reader typed the path, kept an old tab, or followed a link
+   * that had already expired, and the page answered all three by drawing a password box that could
+   * only fail on submit. It says what is missing and where to get it instead.
+   */
+  if (!(await canChangePassword())) {
+    return (
+      <AuthStage>
+        <AuthHeader
+          eyebrow="Password reset"
+          subline="Password resets start from the link we email you. Open this page from that email and you can choose a new password here."
+          title="Open this from your email link"
+        />
+
+        {/* An expired or already-spent link arrives here with no session, so the reason it failed
+            is said before the instruction to ask for another one. */}
+        {outcome === "invalid-link" ? (
+          <AuthNotice role="alert" tone="failure">
+            This reset link is invalid or has expired.
+          </AuthNotice>
+        ) : null}
+
+        <Surface className="flex flex-col items-start gap-[var(--s-3)]">
+          <Prose className={`${COACH_READING_CLASS} text-[color:var(--muted)]`}>
+            No password was changed. Ask for a new link and open the one in the email.
+          </Prose>
+          <a
+            className={kitButtonClass({ size: "lg", variant: "primary" })}
+            href="/auth/forgot-password"
+          >
+            Request a reset link
           </a>
         </Surface>
       </AuthStage>
