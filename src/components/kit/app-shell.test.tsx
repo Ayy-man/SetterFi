@@ -538,6 +538,52 @@ describe("AppShell", () => {
     expect(currentLinks[0]).toHaveAttribute("href", "/admin/run/support/thread");
   });
 
+  it("marks the ancestor of the current page without a second aria-current", () => {
+    render(
+      <AppShell
+        activePath="/admin/settings/notifications"
+        crumbs={[
+          { label: "Settings", href: "/admin/settings" },
+          { label: "Notifications" },
+        ]}
+        nav={nav}
+        role="admin"
+      >
+        <h1>Notifications</h1>
+      </AppShell>,
+    );
+
+    const settings = screen
+      .getAllByRole("link", { name: "Settings" })
+      .find((link) => link.getAttribute("href") === "/admin/settings");
+    expect(settings).toHaveAttribute("data-active-ancestor", "");
+    expect(settings).not.toHaveAttribute("aria-current");
+
+    // The ancestry mark never doubles the current page: still exactly one aria-current in the rail.
+    expect(
+      screen
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("aria-current") === "page"),
+    ).toHaveLength(1);
+  });
+
+  it("leaves the ancestry mark off rows the current page does not hang under", () => {
+    render(
+      <AppShell
+        activePath="/admin/inbox"
+        crumbs={[{ label: "Inbox" }]}
+        nav={nav}
+        role="admin"
+      >
+        <h1>Inbox</h1>
+      </AppShell>,
+    );
+
+    for (const link of screen.getAllByRole("link")) {
+      expect(link).not.toHaveAttribute("data-active-ancestor");
+    }
+  });
+
   it("offers the workspace's real destinations, not whatever nav it was handed", () => {
     const decoyNav: readonly NavGroup[] = [
       { label: "Decoy", items: [{ label: "Not a real page", href: "/admin/nowhere" }] },

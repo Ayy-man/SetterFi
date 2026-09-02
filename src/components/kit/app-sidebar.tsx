@@ -286,6 +286,14 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const active = current?.href === item.href;
+  /*
+   * The collapsed rail hides every sub-list, so a top-level row whose descendant is current used
+   * to render exactly like a row nobody is on: 56px of monograms with nothing marked. This says
+   * "the current page lives under here" without a second `aria-current`, which would claim two
+   * current pages in one list. It is drawn only while the rail is collapsed, because the expanded
+   * rail already shows the current child itself.
+   */
+  const ancestor = !active && (current?.trail.includes(item.href) ?? false);
   const activeRef = useRef<HTMLAnchorElement | null>(null);
   const reduced = useReducedMotion();
 
@@ -366,9 +374,10 @@ function NavLink({
     <SidebarMenuItem>
       <SidebarMenuButton
         aria-current={active ? "page" : undefined}
-        className={`${NAV_LINK_BASE} group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:px-0`}
+        className={`${NAV_LINK_BASE} group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:px-0 data-[active-ancestor]:group-data-[collapsible=icon]:bg-[var(--quiet)] data-[active-ancestor]:group-data-[collapsible=icon]:font-medium data-[active-ancestor]:group-data-[collapsible=icon]:text-[var(--ink)]`}
         // The rail's outline for this destination. It is drawn as a ::before on this row, so it
         // adds no element and no text to the link's accessible name.
+        data-active-ancestor={ancestor ? "" : undefined}
         data-glyph={item.glyph ?? "square"}
         isActive={active}
         onClick={onNavigate}
