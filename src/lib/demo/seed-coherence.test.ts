@@ -187,9 +187,23 @@ describe("one fixture owns each demo contact", () => {
 describe("the phase 7 verifier counts the fixture, not the tenant", () => {
   const verifier = readFileSync(join(process.cwd(), "scripts/run-phase7-demo.mjs"), "utf8");
 
-  it("finds the fixture's test session through the turn the seed wrote", () => {
-    expect(verifier).toContain("DEMO_MEASUREMENT_COPY.testAgentResponse");
-    expect(verifier).toContain("PHASE7_DEMO_TEST_SESSION_NOT_UNIQUE");
+  /**
+   * Provenance, not copy. Matching the agent line the seed writes made a coach who pastes that
+   * sentence into the test agent into a second match, which aborted the next reseed. The eval case
+   * this seed promotes records the turn's contact, conversation and message, and its notes are a
+   * value only this seed writes, so it names exactly one turn however anyone types.
+   */
+  it("finds the fixture's test session through the eval case promoted from it", () => {
+    expect(verifier).toContain("from public.eval_cases");
+    expect(verifier).toContain("PHASE7_DEMO_VALUES.promotionNotes");
+    expect(verifier).toContain("source_contact_id");
+    expect(verifier).toContain("PHASE7_DEMO_PROMOTED_CASE_NOT_UNIQUE");
+    expect(verifier).toContain("PHASE7_DEMO_PROMOTED_CASE_PROVENANCE_SEVERED");
+  });
+
+  it("never identifies the fixture by the words in a message", () => {
+    expect(verifier).not.toContain("testAgentResponse");
+    expect(verifier).not.toContain("DEMO_MEASUREMENT_COPY");
   });
 
   it("scopes every count a real test run can inflate", () => {

@@ -7,7 +7,6 @@ import pg from "pg";
 import { resolveDemoTarget } from "./seed-phase1-demo.mjs";
 import { PHASE7_DEMO_IDS, PHASE7_DEMO_VALUES } from "./seed-phase7-demo.mjs";
 import { SHOWCASE_LEADS_SQL_PATTERN } from "./fixtures/showcase-leads-namespace.mjs";
-import { DEMO_MEASUREMENT_COPY } from "./fixtures/names.mjs";
 
 function assert(condition, code, detail) {
   if (!condition) throw new Error(detail ? `${code}:${JSON.stringify(detail)}` : code);
@@ -57,21 +56,32 @@ export async function verifyPhase7Demo({
     "PHASE7_DEMO_TENANT_ANCESTRY_REFUSED", tenant);
 
     /*
-     * The fixture's session, found through the turn it wrote: its contact carries the session, and
-     * that contact's conversation holds the agent line this seed puts there. A session no fixture
-     * message hangs off is somebody's real test run and is not counted.
+     * The fixture's session, found through the eval case this seed promotes out of it.
+     *
+     * It used to be found by matching the agent line the seed writes, which is copy: a coach who
+     * pastes that sentence into the test agent creates a second match and aborts the next reseed,
+     * which is the same class of defect as counting the tenant's totals. `promote_eval_case`
+     * records the turn's contact, conversation and message on the case it creates, so the case is
+     * durable provenance for exactly one turn, and its notes are a value only this seed writes.
+     *
+     * If the case is gone, or its provenance has been severed, the fixture's turn cannot be
+     * identified and the counts below are not verifiable. That fails loudly rather than quietly
+     * counting somebody else's rows.
      */
-    const fixtureSession = (await database.query(
-      `select session.id from public.test_agent_sessions session
-       where session.tenant_id = $1 and exists (
-         select 1 from public.contacts contact
-         join public.conversations conversation on conversation.contact_id = contact.id
-         join public.messages message on message.conversation_id = conversation.id
-         where contact.test_session_id = session.id and message.body = $2)`,
-      [PHASE7_DEMO_IDS.tenant, DEMO_MEASUREMENT_COPY.testAgentResponse],
+    const promotedCase = (await database.query(
+      `select source_contact_id, source_conversation_id, source_message_id, provenance_severed
+       from public.eval_cases
+       where source_tenant_id = $1 and notes = $2 and suite = 'qualification_accuracy'`,
+      [PHASE7_DEMO_IDS.tenant, PHASE7_DEMO_VALUES.promotionNotes],
     )).rows;
-    assert(fixtureSession.length <= 1, "PHASE7_DEMO_TEST_SESSION_NOT_UNIQUE", fixtureSession);
-    const sessionId = fixtureSession[0]?.id ?? null;
+    assert(promotedCase.length <= 1, "PHASE7_DEMO_PROMOTED_CASE_NOT_UNIQUE", promotedCase);
+    const provenance = promotedCase[0] ?? null;
+    assert(provenance === null || provenance.provenance_severed === false,
+      "PHASE7_DEMO_PROMOTED_CASE_PROVENANCE_SEVERED", provenance);
+    const sessionId = provenance === null ? null : (await database.query(
+      "select test_session_id from public.contacts where id = $1",
+      [provenance.source_contact_id],
+    )).rows[0]?.test_session_id ?? null;
 
     const counts = (await database.query(
       `select
