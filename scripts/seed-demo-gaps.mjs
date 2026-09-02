@@ -127,7 +127,19 @@ export function periodCovers(subscription, now) {
  * `affiliate_referral_projection`'s coarse mapping, so the portal shows the status column doing
  * real work rather than one repeated value.
  */
+/**
+ * The three referred businesses, and the monthly invoices the affiliate earns commission on.
+ *
+ * The invoice amounts used to be $1,800, $960 and $640, which were three numbers nobody could
+ * point at a source for. Every one of these businesses signs up on the rung `ensureTier` writes,
+ * so a paid month is that rung's price and nothing else. An affiliate reading a $180 commission
+ * against a coach the admin tier screen prices at $597 has been shown two different products.
+ *
+ * The variety on the affiliate portal comes from how many months each business has paid and from
+ * `finalStatus`, which are facts about the referral rather than invented prices.
+ */
 export function referredBusinessFixtures() {
+  const monthlyCents = DEMO_TIER_LADDER[1].priceCents;
   return [
     {
       slug: "setterfi-demo-placeholder-referral-north",
@@ -135,7 +147,7 @@ export function referredBusinessFixtures() {
       owner: DEMO_PERSON_NAMES.referralNorth,
       email: "demo-referral-north@example.invalid",
       finalStatus: "active",
-      invoiceCents: [180_000, 180_000],
+      invoiceCents: [monthlyCents, monthlyCents, monthlyCents],
     },
     {
       slug: "setterfi-demo-placeholder-referral-harbor",
@@ -143,7 +155,7 @@ export function referredBusinessFixtures() {
       owner: DEMO_PERSON_NAMES.referralHarbor,
       email: "demo-referral-harbor@example.invalid",
       finalStatus: "active",
-      invoiceCents: [96_000],
+      invoiceCents: [monthlyCents, monthlyCents],
     },
     {
       slug: "setterfi-demo-placeholder-referral-summit",
@@ -151,7 +163,7 @@ export function referredBusinessFixtures() {
       owner: DEMO_PERSON_NAMES.referralSummit,
       email: "demo-referral-summit@example.invalid",
       finalStatus: "churned",
-      invoiceCents: [64_000],
+      invoiceCents: [monthlyCents],
     },
   ];
 }
@@ -283,11 +295,23 @@ async function seedBillingSurface(client, now) {
     "DEMO_GAPS_TENANT_TIER_UPDATE_FAILED",
     client.from("tenants").update({ tier_id: tierId }).eq("id", DEMO_IDS.tenant),
   );
-  return ensureSubscription(client, DEMO_IDS.tenant, {
+  const subscription = await ensureSubscription(client, DEMO_IDS.tenant, {
     customer: DEMO_GAPS_VALUES.customer,
     subscription: DEMO_GAPS_VALUES.subscription,
     now,
   });
+  /*
+   * The affiliate surface signs its three referred businesses up to a tier, and it has to be this
+   * one. It used to be handed `DEMO_GAPS_IDS.tier`, the rung this seeder minted for itself before
+   * the ladder collapsed onto the client's three contracted tiers. `ensureTier` now writes the
+   * ladder row and deactivates that old id, so on any database seeded after the collapse the old
+   * id names no row at all and `signup_intents_tier_id_fkey` rejected the first referred business,
+   * which aborted the whole gaps seed. On a database seeded before it, the three referrals, their
+   * invoices and every commission accrual hung off the retired $497 rung while the coach's own
+   * billing screen read the contracted $597 one. Returning the id the billing surface actually
+   * wrote leaves one source for both.
+   */
+  return { ...subscription, tierId };
 }
 
 /**
@@ -615,7 +639,7 @@ export async function seedDemoGaps({ argumentsList = process.argv.slice(2), now 
   await requireKnownDemoTenant(client);
   const billing = await seedBillingSurface(client, now);
   const onboarding = await seedOnboardingEvidence(client, now);
-  const affiliate = await seedAffiliateSurface(client, now, DEMO_GAPS_IDS.tier);
+  const affiliate = await seedAffiliateSurface(client, now, billing.tierId);
   const verified = await readBack(client);
 
   console.log(

@@ -111,3 +111,51 @@ describe("the seeded plan ladder is the client's contracted price list", () => {
     expect(ids.has(RETIRED_DEMO_TIER_IDS.gaps)).toBe(false);
   });
 });
+
+/**
+ * The ladder is only half the fix. Every money row a screen renders has to be a figure from it,
+ * because a coach reading $597 on Plans and pricing and a $180 affiliate commission on the same
+ * subscription has been shown two different products.
+ *
+ * These read the seeders rather than restating the numbers, for the same reason the block above
+ * reads the intake: a test that restated them would be another copy agreeing with the last one.
+ */
+describe("every seeded money row is priced from the ladder", () => {
+  it("invoices each referred business at the rung it is signed up to", async () => {
+    const seeder = await import("../../../scripts/seed-demo-gaps.mjs");
+    const rung = ladder[1]!;
+    const fixtures = seeder.referredBusinessFixtures() as Array<{ invoiceCents: number[] }>;
+
+    expect(fixtures.every((fixture) => fixture.invoiceCents.length > 0)).toBe(true);
+    expect(fixtures.flatMap((fixture) => fixture.invoiceCents)
+      .every((cents) => cents === rung.priceCents)).toBe(true);
+    // The portfolio still varies, by paid months rather than by invented prices.
+    expect(new Set(fixtures.map((fixture) => fixture.invoiceCents.length)).size)
+      .toBeGreaterThan(1);
+  });
+
+  /**
+   * The affiliate surface used to be handed `DEMO_GAPS_IDS.tier`, the rung this seeder minted
+   * before the ladder collapsed. `ensureTier` deactivates that id, so on a fresh database it named
+   * no row and `signup_intents_tier_id_fkey` aborted the whole gaps seed at the first referral.
+   */
+  it("signs referred businesses up to the tier the billing surface actually wrote", () => {
+    const seed = readFileSync(join(process.cwd(), "scripts/seed-demo-gaps.mjs"), "utf8");
+
+    expect(seed).toContain("seedAffiliateSurface(client, now, billing.tierId)");
+    expect(seed).not.toContain("seedAffiliateSurface(client, now, DEMO_GAPS_IDS.tier)");
+  });
+
+  it("recognises the same subscription price as revenue in the cost evidence", () => {
+    const review = readFileSync(join(process.cwd(), "scripts/seed-platform-review-data.mjs"), "utf8");
+    const phase6 = readFileSync(join(process.cwd(), "scripts/seed-phase6-demo.mjs"), "utf8");
+
+    expect(review).toContain("const REVIEW_SUBSCRIPTION_CENTS = DEMO_TIER_LADDER[1].priceCents;");
+    // Three rollups, all recognising that one figure; the spread lives in the costs.
+    expect(review.match(/revenueCents: REVIEW_SUBSCRIPTION_CENTS,/gu)).toHaveLength(3);
+    expect(review).not.toMatch(/revenueCents: \d/u);
+    // The money tenant's paid month is its own rung, and its unpaid one stays at zero.
+    expect(phase6).toContain("DEMO_TIER_LADDER[0].priceCents, DEMO_TIER_LADDER[0].priceCents,");
+    expect(phase6).toContain("[moneyTenantId, DEMO_TIER_LADDER[0].priceCents]");
+  });
+});
