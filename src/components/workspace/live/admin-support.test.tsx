@@ -284,6 +284,117 @@ describe("AdminSupport queue shape", () => {
   });
 });
 
+describe("AdminSupport message append", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * A refused append used to rethrow out of `appendMessage` into a `void ...then(...)` chain with
+   * no catch, so the browser received an unhandled rejection and the surface reported nothing
+   * useful. The refusal now has to reach the alert and leave the draft where the writer left it.
+   */
+  it("keeps the draft and reports a refused append without an unhandled rejection", async () => {
+    const user = userEvent.setup();
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+    process.on("unhandledRejection", onRejection);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => {
+      if ((init?.method ?? "GET") === "GET") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ threads: [thread()] }), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "Refused." }), {
+          headers: { "content-type": "application/json" },
+          status: 500,
+        }),
+      );
+    });
+
+    try {
+      renderSupport();
+
+      const identity = await screen.findByRole("cell", {
+        name: /Ascend Credit Collective/,
+      });
+      await user.click(within(identity).getByRole("button"));
+
+      const sheet = await screen.findByRole("dialog");
+      const draft = within(sheet).getByPlaceholderText(
+        "Write a reply to the coach",
+      );
+      await user.type(draft, "Checking the calendar now.");
+      await user.click(within(sheet).getByRole("button", { name: "Send reply" }));
+
+      await screen.findByRole("alert");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "The message was not saved. The thread is unchanged.",
+      );
+      expect(draft).toHaveValue("Checking the calendar now.");
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
+  });
+
+  it("clears the draft once the append is read back", async () => {
+    const user = userEvent.setup();
+    const saved = thread({
+      messages: [
+        {
+          id: "m1",
+          authorId: "owner-1",
+          authorName: "Dana Whitfield",
+          body: "Checking the calendar now.",
+          internal: false,
+          isTest: false,
+          createdAt: "2026-08-24T09:40:00.000Z",
+        },
+      ],
+    });
+
+    vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => {
+      if ((init?.method ?? "GET") === "GET") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ threads: [thread()] }), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ thread: saved }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+      );
+    });
+
+    renderSupport();
+
+    const identity = await screen.findByRole("cell", {
+      name: /Ascend Credit Collective/,
+    });
+    await user.click(within(identity).getByRole("button"));
+
+    const sheet = await screen.findByRole("dialog");
+    const draft = within(sheet).getByPlaceholderText("Write a reply to the coach");
+    await user.type(draft, "Checking the calendar now.");
+    await user.click(within(sheet).getByRole("button", { name: "Send reply" }));
+
+    await waitFor(() => expect(draft).toHaveValue(""));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
 describe("AdminSupport nav count", () => {
   beforeEach(() => {
     navigation.pathname = "/admin/attention";

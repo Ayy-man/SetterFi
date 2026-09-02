@@ -192,6 +192,14 @@ function successOwnerLabel(thread: PlatformSupportThreadRead) {
     || (thread.successOwner ? "Assigned owner" : "Unassigned");
 }
 
+/**
+ * A refused append is an outcome the composer renders, never a rejected promise: the failure has
+ * to land beside the draft that is still in the box, inside the modal the writer is looking at.
+ */
+type AppendResult = { ok: true } | { ok: false; message: string };
+
+const APPEND_FAILED_MESSAGE = "The message was not saved. The thread is unchanged.";
+
 async function payload(response: Response): Promise<Record<string, unknown>> {
   const value: unknown = await response.json();
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("INVALID_RESPONSE");
@@ -231,12 +239,14 @@ function ThreadConversation({
   actorId: string;
   busy: boolean;
   messageKind: "reply" | "internal_note";
-  onAppendMessage: (body: string) => Promise<void>;
+  /** Resolves ok when the message was saved; a refusal carries the sentence to show. */
+  onAppendMessage: (body: string) => Promise<AppendResult>;
   onMessageKindChange: (value: "reply" | "internal_note") => void;
   selected: PlatformSupportThreadRead;
 }) {
   const view = platformSupportThreadView(selected);
   const [draft, setDraft] = useState("");
+  const [appendError, setAppendError] = useState<string | null>(null);
 
   return (
     <div className="flex min-w-0 flex-col gap-[var(--s-4)]">
@@ -261,7 +271,20 @@ function ThreadConversation({
           event.preventDefault();
           const body = draft.trim();
           if (!body) return;
-          void onAppendMessage(body).then(() => setDraft(""));
+          /*
+           * The append used to reject on a refused write, and nothing here caught it, so a failed
+           * reply reached the browser as an unhandled rejection while the only error line the page
+           * drew sat outside this modal, where the writer could not read it. The refusal is now a
+           * resolved result, reported beside the composer, and the draft survives it.
+           */
+          setAppendError(null);
+          void onAppendMessage(body).then((result) => {
+            if (result.ok) {
+              setDraft("");
+              return;
+            }
+            setAppendError(result.message);
+          });
         }}
       >
         <Select
@@ -283,6 +306,9 @@ function ThreadConversation({
             value={draft}
           />
         </label>
+        {appendError ? (
+          <p className="text-body text-[var(--critical)]" role="alert">{appendError}</p>
+        ) : null}
         <Button className="self-start" disabled={busy || !draft.trim()} type="submit">
           {busy ? "Saving..." : messageKind === "internal_note" ? "Add internal note" : "Send reply"}
         </Button>
@@ -375,7 +401,6 @@ export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps)
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"reply" | "internal_note">("reply");
   const [assigneeChoice, setAssigneeChoice] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReassignmentReceipt | null>(null);
@@ -516,10 +541,9 @@ export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps)
     },
   ], [now]);
 
-  async function appendMessage(body: string) {
-    if (!selected) return;
+  async function appendMessage(body: string): Promise<AppendResult> {
+    if (!selected) return { ok: false, message: APPEND_FAILED_MESSAGE };
     setBusy(true);
-    setActionError(null);
     try {
       const response = await fetch(`/api/platform/support/threads/${selected.id}`, {
         method: "POST",
@@ -530,9 +554,10 @@ export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps)
       if (!response.ok || !value.thread) throw new Error("SUPPORT_WRITE_FAILED");
       const thread = value.thread as PlatformSupportThreadRead;
       setThreads((current) => current.map((row) => row.id === thread.id ? thread : row));
+      return { ok: true };
     } catch {
-      setActionError("The message was not saved. The thread is unchanged.");
-      throw new Error("SUPPORT_WRITE_FAILED");
+      // Reported back to the composer rather than rethrown into an uncaught promise.
+      return { ok: false, message: APPEND_FAILED_MESSAGE };
     } finally {
       setBusy(false);
     }
@@ -751,10 +776,6 @@ export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps)
           />
         )}
       </ListPage>
-
-      {actionError ? (
-        <p className="mt-[var(--s-3)] text-body text-[var(--critical)]" role="alert">{actionError}</p>
-      ) : null}
 
       <RecordSheet
         created={selectedView

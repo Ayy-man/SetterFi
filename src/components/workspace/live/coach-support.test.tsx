@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CoachSupport } from "@/components/workspace/live/coach-support";
@@ -67,6 +68,49 @@ describe("CoachSupport", () => {
  * the page spends exactly one accent fill and it follows the live action, and prose stays inside
  * the Line Length rule instead of running the width of the pane.
  */
+describe("CoachSupport reply append", () => {
+  /**
+   * The coach composer must survive a refused write the same way the admin one does: the draft
+   * stays put, the refusal is stated, and nothing rejects into the browser.
+   */
+  it("keeps the draft and reports a refused reply without an unhandled rejection", async () => {
+    const user = userEvent.setup();
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+    process.on("unhandledRejection", onRejection);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if ((init?.method ?? "GET") === "GET") return jsonResponse({ threads: [thread] });
+        return new Response(JSON.stringify({ error: "Refused." }), {
+          headers: { "Content-Type": "application/json" },
+          status: 500,
+        });
+      }),
+    );
+
+    try {
+      render(<CoachSupport enabled />);
+
+      const draft = await screen.findByPlaceholderText("Write a reply");
+      await user.type(draft, "Any update on this?");
+      await user.click(screen.getByRole("button", { name: "Send reply" }));
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(
+        "The reply could not be confirmed. The thread is unchanged.",
+      );
+      expect(draft).toHaveValue("Any update on this?");
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
+  });
+});
+
 describe("CoachSupport, redesign invariants", () => {
   it("spends exactly one accent fill, on the reply when a request is open", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
