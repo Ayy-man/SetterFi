@@ -124,18 +124,55 @@ function flattenNavItems(items: readonly WorkspaceNavItem[]): WorkspaceNavItem[]
   return items.flatMap((item) => [item, ...flattenNavItems(item.children ?? [])])
 }
 
+/**
+ * One shape for every path the gates below compare.
+ *
+ * The workspace and money checks were raw `startsWith` calls against whatever string a caller
+ * handed in, so `/admin/Billing`, `/admin/billing/`, and `/admin/billing?tenant=t1` each read as a
+ * different destination from `/admin/billing` -- and the first of those let a money row past a
+ * role that may not see money. Worse, `/admin/clients/../billing` passed the money gate outright
+ * and still resolved to `/admin/billing` once the router walked it. Query and fragment carry no
+ * routing decision, a trailing slash and a doubled slash name the same route, dot segments are
+ * resolved before anything is routed, and app routes are lowercase, so all of it collapses here
+ * before a decision is made. Anything that is not an internal absolute path returns null and is
+ * refused rather than guessed at.
+ */
+export function canonicalInternalPath(href: string): string | null {
+  const trimmed = href.trim()
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return null
+
+  const raw = trimmed.split(/[?#]/u)[0].toLowerCase()
+  const resolved: string[] = []
+  for (const segment of raw.split("/")) {
+    if (segment === "" || segment === ".") continue
+    // A `..` above the root is dropped rather than escaping it, which is what the router does.
+    if (segment === "..") {
+      resolved.pop()
+      continue
+    }
+    resolved.push(segment)
+  }
+  return resolved.length === 0 ? "/" : `/${resolved.join("/")}`
+}
+
 function isMoneyDestination(href: string) {
-  return MONEY_DESTINATION_PREFIXES.some((prefix) => href.startsWith(prefix))
+  const path = canonicalInternalPath(href)
+  return path !== null && MONEY_DESTINATION_PREFIXES.some((prefix) => path.startsWith(prefix))
 }
 
 function destinationWorkspace(href: string) {
-  if (href === "/admin" || href.startsWith("/admin/")) return "admin"
-  if (href === "/coach" || href.startsWith("/coach/")) return "coach"
-  if (href === "/affiliate" || href.startsWith("/affiliate/")) return "affiliate"
+  const path = canonicalInternalPath(href)
+  if (path === null) return null
+  if (path === "/admin" || path.startsWith("/admin/")) return "admin"
+  if (path === "/coach" || path.startsWith("/coach/")) return "coach"
+  if (path === "/affiliate" || path.startsWith("/affiliate/")) return "affiliate"
   return null
 }
 
 function canRoleSeeHref(role: UserRole, href: string) {
+  // A path that does not canonicalize names no workspace, so it is refused rather than compared
+  // against a role that happens to have no workspace of its own.
+  if (canonicalInternalPath(href) === null) return false
   if (destinationWorkspace(href) !== workspaceForRole(role)) return false
   if (role !== "owner" && role !== "admin" && isMoneyDestination(href)) return false
   return true
@@ -261,8 +298,11 @@ function CommandPalette({
   ) {
     const Icon = item.icon
     const navigationItem = goTo.find((destination) => destination.href === item.href)
-    const active = Boolean(activePath) && navigationItem
-      ? isWorkspaceNavItemActive(navigationItem, activePath)
+    // The rail's matcher compares whole path segments, so it needs the canonical reading of the
+    // route the reader is on: `/admin/billing/` and `/admin/billing?tab=costs` are that route.
+    const canonicalActivePath = canonicalInternalPath(activePath)
+    const active = canonicalActivePath !== null && navigationItem
+      ? isWorkspaceNavItemActive(navigationItem, canonicalActivePath)
       : false
 
     return (

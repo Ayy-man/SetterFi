@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest"
 
 import {
   CommandPalette,
+  canonicalInternalPath,
   MONEY_DESTINATION_PREFIXES,
   type CommandPaletteDestination,
   type PaletteClient,
@@ -80,6 +81,69 @@ describe("CommandPalette", () => {
         MONEY_DESTINATION_PREFIXES.some((prefix) => href.startsWith(prefix))
       ).toBe(false)
     }
+  })
+
+  /**
+   * A money row used to reach a role that may not see money whenever its href was spelled with a
+   * different case, a trailing slash, a doubled slash, or a query, because every gate compared raw
+   * strings. These are the same four destinations in every spelling the router accepts.
+   */
+  it("does not list money destinations dressed up as a different path", () => {
+    const disguises = MONEY_DESTINATION_PREFIXES.flatMap((href) => [
+      `${href}/`,
+      `${href}?tenant=t1`,
+      `${href}#costs`,
+      href.toUpperCase(),
+      href.replace("/admin/", "/admin//"),
+      href.replace("/admin/", "/admin/clients/../"),
+    ])
+
+    render(
+      <CommandPalette
+        defaultOpen
+        recent={disguises.map((href) => ({
+          allowedRoles: ["success" as const],
+          href,
+          label: `Recent ${href}`,
+        }))}
+        role="success"
+      />
+    )
+
+    for (const href of disguises) {
+      expect(screen.queryByText(`Recent ${href}`)).not.toBeInTheDocument()
+    }
+  })
+
+  it("keeps a workspace gate on a path dressed up as a different path", () => {
+    render(
+      <CommandPalette
+        defaultOpen
+        recent={[
+          {
+            allowedRoles: ["affiliate"],
+            href: "/ADMIN//system/private/",
+            label: "Admin recent",
+          },
+        ]}
+        role="affiliate"
+      />
+    )
+
+    expect(screen.queryByText("Admin recent")).not.toBeInTheDocument()
+  })
+
+  it("canonicalizes an internal path and refuses anything that is not one", () => {
+    expect(canonicalInternalPath("/admin/billing/")).toBe("/admin/billing")
+    expect(canonicalInternalPath("/admin//billing")).toBe("/admin/billing")
+    expect(canonicalInternalPath("/Admin/Billing?tab=costs#top")).toBe("/admin/billing")
+    expect(canonicalInternalPath("/admin/clients/../billing")).toBe("/admin/billing")
+    expect(canonicalInternalPath("/admin/./billing")).toBe("/admin/billing")
+    expect(canonicalInternalPath("/../../admin/billing")).toBe("/admin/billing")
+    expect(canonicalInternalPath("/")).toBe("/")
+    expect(canonicalInternalPath("https://example.test/admin/billing")).toBeNull()
+    expect(canonicalInternalPath("//example.test/admin/billing")).toBeNull()
+    expect(canonicalInternalPath("admin/billing")).toBeNull()
   })
 
   it("denies recent destinations without role metadata", () => {
