@@ -563,6 +563,34 @@ describe("SuccessClientBook surface", () => {
     });
   });
 
+  /**
+   * The defect this covers put `88000000-0000-4000-8000-000000000001` under ASSIGNEE in the
+   * drawer. The row is the one the join cannot resolve -- an owner id with no `users.full_name`
+   * behind it -- which is the only shape that ever reached the fallback.
+   */
+  it("names the success owner rather than printing the id it is stored as", async () => {
+    const user = userEvent.setup();
+    const ownerId = "88000000-0000-4000-8000-000000000001";
+    stubFetch([{ ...rows[0], successOwner: { id: ownerId, name: null } }]);
+    renderBook();
+
+    await screen.findByText("Northstar Funding");
+    expect(document.body.textContent ?? "").not.toContain(ownerId);
+    expect(book().getAllByText("Assigned owner").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByText("Northstar Funding"));
+    await screen.findByRole("button", { name: "Reassign owner" });
+
+    expect(
+      document.body.textContent ?? "",
+      "the drawer printed the stored owner id at the reader",
+    ).not.toContain(ownerId);
+    // Nothing to assign to, because naming an option would mean labelling it with that id.
+    expect(screen.getByText(
+      "The client book did not supply a named success owner, so there is nobody to assign to yet.",
+    )).toBeInTheDocument();
+  });
+
   it("asks the server for the chosen book when the view switches", async () => {
     const user = userEvent.setup();
     renderBook();
@@ -573,6 +601,106 @@ describe("SuccessClientBook surface", () => {
     await waitFor(() => {
       expect(navigation.replace).toHaveBeenCalled();
     });
+  });
+});
+
+/**
+ * The loader against the one thing it was not keyed on: who the page is for.
+ *
+ * A cross-role redirect swaps the session under a book that is already mounted. The effect was
+ * keyed on the chosen book alone, so nothing re-fired, and the table -- which had no reading state
+ * of its own -- told the new actor their book was empty until they reloaded the page.
+ */
+describe("SuccessClientBook across an actor change", () => {
+  const otherActorRows: SuccessClientBookRead[] = [
+    {
+      client: { id: "client-9", name: "Cedar Row Capital", isDemo: false },
+      status: "active",
+      successOwner: { id: "success-user-3", name: "Marcus Reid" },
+      supportStatus: null,
+      planId: "tier-growth",
+      planLabel: "Growth",
+      updatedAt: "2026-08-29T08:00:00.000Z",
+    },
+  ];
+
+  beforeEach(() => {
+    navigation.searchParams = new URLSearchParams();
+    navigation.replace.mockReset();
+  });
+
+  it("reads the book again when the session actor changes under a mounted page", async () => {
+    const fetcher = stubFetch();
+    const { rerender } = render(
+      <SuccessClientBook actorId="admin-1" actorRole="admin" enabled />,
+    );
+
+    await screen.findByText("Northstar Funding");
+    const before = fetcher.mock.calls.filter(([url]) =>
+      String(url).startsWith("/api/platform/clients?book=")).length;
+
+    stubFetch(otherActorRows);
+    rerender(<SuccessClientBook actorId="admin-2" actorRole="admin" enabled />);
+
+    await screen.findByText("Cedar Row Capital");
+    expect(screen.queryByText("Northstar Funding")).not.toBeInTheDocument();
+    expect(before).toBeGreaterThan(0);
+  });
+
+  it("says it is reading rather than telling the new actor their book is empty", async () => {
+    const gate: { release: (() => void) | null } = { release: null };
+    const held = new Promise<void>((resolve) => { gate.release = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!url.startsWith("/api/platform/clients?book=")) throw new Error(`Unexpected fetch: ${url}`);
+      await held;
+      return new Response(JSON.stringify({ clients: otherActorRows }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }));
+
+    render(<SuccessClientBook actorId="admin-2" actorRole="admin" enabled />);
+
+    // The empty state is a claim about the book. Nothing has answered, so it must not be made.
+    await waitFor(() => {
+      expect(document.querySelector('[data-slot="grid-table"]')).toBeInTheDocument();
+    });
+    expect(screen.queryByText("No clients match this view")).not.toBeInTheDocument();
+
+    gate.release?.();
+    await screen.findByText("Cedar Row Capital");
+    expect(screen.queryByText("No clients match this view")).not.toBeInTheDocument();
+  });
+
+  it("ignores a read that lands after the actor it was made for has gone", async () => {
+    const gate: { release: (() => void) | null } = { release: null };
+    const firstRead = new Promise<void>((resolve) => { gate.release = resolve; });
+    let call = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!url.startsWith("/api/platform/clients?book=")) throw new Error(`Unexpected fetch: ${url}`);
+      call += 1;
+      const body = call === 1 ? rows : otherActorRows;
+      if (call === 1) await firstRead;
+      return new Response(JSON.stringify({ clients: body }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }));
+
+    const { rerender } = render(
+      <SuccessClientBook actorId="admin-1" actorRole="admin" enabled />,
+    );
+    rerender(<SuccessClientBook actorId="admin-2" actorRole="admin" enabled />);
+
+    await screen.findByText("Cedar Row Capital");
+    // The first actor's read resolves last and must not be allowed to write over the second's.
+    gate.release?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(screen.getByText("Cedar Row Capital")).toBeInTheDocument();
+    expect(screen.queryByText("Northstar Funding")).not.toBeInTheDocument();
   });
 });
 

@@ -16,10 +16,26 @@ export type ClientBookView = SuccessClientBookRead & {
   dataLabel: "Demo" | null;
 };
 
+/**
+ * Who owns this client, in words a reader can act on.
+ *
+ * The projection carries the owner's `users.full_name` when the loader resolved one, and the id is
+ * never a fallback for it: a uuid under an ASSIGNEE heading reads as a person to whoever is
+ * scanning the drawer, and there is nothing they can do with it. An owner row whose name the join
+ * could not resolve is still an owned client, so it says so rather than borrowing the unassigned
+ * word and quietly moving the client into the queue of things nobody is holding.
+ */
+export function successOwnerDisplayLabel(
+  owner: SuccessClientBookRead["successOwner"],
+): string {
+  if (!owner) return "Unassigned";
+  return owner.name?.trim() || "Assigned owner";
+}
+
 export function clientBookView(row: SuccessClientBookRead): ClientBookView {
   return {
     ...row,
-    successOwnerLabel: row.successOwner?.name ?? row.successOwner?.id ?? "Unassigned",
+    successOwnerLabel: successOwnerDisplayLabel(row.successOwner),
     supportStatusLabel: row.supportStatus
       ? row.supportStatus.replaceAll("_", " ")
       : "No support request",
@@ -35,11 +51,13 @@ export function successOwnerCandidates(input: {
   actorId: string;
   actorRole: Extract<UserRole, "owner" | "admin" | "success">;
 }): SuccessOwnerCandidate[] {
+  // Only owners the join actually named. An unnamed owner is not a choosable assignee: the option
+  // would have to print the stored id at the reader, and picking "Assigned owner" twice over would
+  // be two different people wearing one label.
   const candidates = new Map<string, string>();
   for (const row of input.rows) {
-    if (row.successOwner) {
-      candidates.set(row.successOwner.id, row.successOwner.name ?? row.successOwner.id);
-    }
+    const name = row.successOwner?.name?.trim();
+    if (row.successOwner && name) candidates.set(row.successOwner.id, name);
   }
   if (input.actorRole === "success") candidates.set(input.actorId, "You");
   return [...candidates].map(([id, label]) => ({ id, label }));

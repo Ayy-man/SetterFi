@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { CellQuiet } from "@/components/kit/cell-quiet";
@@ -64,7 +64,7 @@ import type {
 import { useQueryState } from "@/lib/query-state";
 import type { SuccessClientBookRead, SupportBook } from "@/lib/repositories/support";
 import { withWorkspaceNavCounts, workspaceNavigationFor } from "@/lib/workspace-navigation";
-import { reassignmentReceiptView } from "./operations-view-models";
+import { reassignmentReceiptView, successOwnerDisplayLabel } from "./operations-view-models";
 
 type SuccessClientBookProps = {
   actorId: string;
@@ -189,6 +189,9 @@ function needsAttention(row: SuccessClientBookRead) {
 
 const REASSIGN_MICROCOPY = AUDIT_ACTIONS["tenant.success_owner.reassigned"].microcopy;
 
+/** A stable identity, so "no answer yet" does not re-run every memo on the page each render. */
+const EMPTY_ROWS: readonly SuccessClientBookRead[] = [];
+
 /**
  * Support state reaches the screen as a sentence, never as the stored enum. Every value in
  * `SUPPORT_STATUSES` has a line here, and the tone is the tone contract's own claim about who the
@@ -251,9 +254,12 @@ function supportState(row: SuccessClientBookRead): { label: string; tone: Tone }
   return row.supportStatus ? SUPPORT_STATE[row.supportStatus] : null;
 }
 
+/**
+ * One definition of the owner's name for the book, the drawer and the export alike, so a screen
+ * cannot start printing the stored uuid again by spelling the fallback its own way.
+ */
 function successOwnerLabel(row: SuccessClientBookRead) {
-  return row.successOwner?.name?.trim()
-    || (row.successOwner ? "Assigned owner" : "Unassigned");
+  return successOwnerDisplayLabel(row.successOwner);
 }
 
 function planLabel(row: SuccessClientBookRead) {
@@ -655,7 +661,16 @@ export function SuccessClientBook({ actorId, actorRole, enabled }: SuccessClient
   const density: Density = isDensity(requestedDensity) ? requestedDensity : "comfortable";
   const book: SupportBook = BOOK_VIEWS.find((entry) => entry.key === view)?.book ?? "all";
   const setQueryValue = query.set;
-  const [rows, setRows] = useState<SuccessClientBookRead[]>([]);
+  /*
+   * Which read the rows on screen came from: the actor the page is rendering for, and the book
+   * they chose. Both halves matter. A cross-role redirect swaps the session under a book that is
+   * already mounted, and a loader keyed on the book alone never fires again -- so the page either
+   * kept the previous actor's clients or, when the redirect aborted the first read in flight, sat
+   * on an empty table that only a full reload could fill.
+   */
+  const readKey = `${actorRole}:${actorId}|${book}`;
+  const [loadedRows, setLoadedRows] = useState<SuccessClientBookRead[]>([]);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [assigneeChoice, setAssigneeChoice] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
@@ -669,7 +684,18 @@ export function SuccessClientBook({ actorId, actorRole, enabled }: SuccessClient
   // Age is measured from the read that produced the rows, so a row never ages while nothing moves.
   const [now, setNow] = useState<number | null>(null);
 
+  /*
+   * Every read takes a ticket, and only the newest one is allowed to write. Aborting the previous
+   * request is not enough on its own: the manual reload the drawer's commands run carries no
+   * signal at all, and a response that has already resolved is past the point an abort can reach
+   * it. Without the ticket the loser of that race decides what the reader sees.
+   */
+  const requestRef = useRef(0);
+
   const loadRows = useCallback(async (signal?: AbortSignal) => {
+    const ticket = requestRef.current + 1;
+    requestRef.current = ticket;
+    const superseded = () => requestRef.current !== ticket || Boolean(signal?.aborted);
     setLoading(true);
     setError(null);
     setAssigneeChoice(null);
@@ -680,28 +706,45 @@ export function SuccessClientBook({ actorId, actorRole, enabled }: SuccessClient
       });
       const value = await payload(response);
       if (!response.ok || !Array.isArray(value.clients)) throw new Error("CLIENT_BOOK_READ_FAILED");
-      if (signal?.aborted) return null;
+      if (superseded()) return null;
       const next = value.clients as SuccessClientBookRead[];
-      setRows(next);
+      setLoadedRows(next);
+      setLoadedKey(readKey);
       setNow(Date.now());
       setOpenId((current) => current && next.some((row) => row.client.id === current)
         ? current
         : null);
       return next;
     } catch {
-      if (!signal?.aborted) setError("The client book could not be read.");
+      if (!superseded()) setError("The client book could not be read.");
       return null;
     } finally {
-      if (!signal?.aborted) setLoading(false);
+      if (!superseded()) setLoading(false);
     }
-  }, [book]);
+  }, [book, readKey]);
 
+  // Keyed on the read, so a change of actor re-fires it exactly the way a change of book does.
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
     void Promise.resolve().then(() => loadRows(controller.signal));
     return () => controller.abort();
   }, [enabled, loadRows]);
+
+  /*
+   * The rows belong to whoever the page was rendering for when they landed, so until the read for
+   * the current actor lands the page has no answer for them. Nothing is cleared on the way: the
+   * open drawer, the chosen assignee and the reassignment receipt all hang off a row, and with no
+   * rows there is nothing for any of them to render against. The read that lands then decides
+   * whether the open client survived it.
+   */
+  const answered = loadedKey === readKey;
+  /*
+   * One gate for every figure, filter, palette entry and drawer on the page. Deriving the rows
+   * rather than clearing them on a change of actor keeps the two facts in one place: the rows are
+   * the answer to a specific read, and nothing on screen may outlive the read it came from.
+   */
+  const rows = answered ? loadedRows : EMPTY_ROWS;
 
   /**
    * Health is read per client, on open, from the route that already exists for exactly this
@@ -773,7 +816,7 @@ export function SuccessClientBook({ actorId, actorRole, enabled }: SuccessClient
   // Four figures, each one a reason to open a different row: who is still landing, how much of
   // the book is healthy, how much is waiting on a person, and how much nobody owns. The size of
   // the book is not one of them -- the table footer already counts the rows.
-  const read = !loading || rows.length > 0;
+  const read = answered && (!loading || rows.length > 0);
   const count = (predicate: (row: SuccessClientBookRead) => boolean) => rows.filter(predicate).length;
   const onboarding = count((row) => row.status.toLocaleLowerCase() === "onboarding");
   const live = count((row) => row.status.toLocaleLowerCase() === "active");
@@ -1176,13 +1219,18 @@ export function SuccessClientBook({ actorId, actorRole, enabled }: SuccessClient
                     <GridTableHead className="bg-transparent px-0" columns={headerColumns} />
                     {visibleRows.length === 0 ? (
                       <div className="py-[var(--s-6)]">
-                        <DataState
-                          body={view === "attention"
-                            ? "Every client in this book has an owner and no open request."
-                            : "Change the view, the support filter, or the search to see another part of the book."}
-                          kind="empty"
-                          title={view === "attention" ? "Nothing is waiting on the team" : "No clients match this view"}
-                        />
+                        {/* An unanswered read is not an empty book. Telling a reader their book has
+                            no clients in it while the request for it is still in flight is the one
+                            wrong answer here, and it is the answer a bare empty state gives. */}
+                        {answered ? (
+                          <DataState
+                            body={view === "attention"
+                              ? "Every client in this book has an owner and no open request."
+                              : "Change the view, the support filter, or the search to see another part of the book."}
+                            kind="empty"
+                            title={view === "attention" ? "Nothing is waiting on the team" : "No clients match this view"}
+                          />
+                        ) : <DataState kind="loading" rows={4} />}
                       </div>
                     ) : null}
                     {visibleRows.map((row, index) => {
