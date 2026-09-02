@@ -35,8 +35,15 @@ export const TOASTER_PRESET = {
         "text-[length:var(--t-badge)] font-[var(--t-body-w)] leading-[var(--t-body-lh)] text-[var(--muted)]",
       icon: "mt-[calc(var(--s-1)/4)] shrink-0 text-[var(--muted)]",
       title: "text-body font-[var(--t-row-w)] text-[var(--ink)]",
+      /*
+       * The approved toast is a fixed 360px card with a 10px gap and 12/12/12/14 padding: the
+       * extra 2px on the left is what keeps the icon off the edge without pushing the title in.
+       * Unstyled sonner drew neither, so the toast took whatever width its longest line asked
+       * for and every stacked toast was a different size. `--toast-w` is the width, and the
+       * viewport cap keeps it inside a narrow screen with its own offset either side.
+       */
       toast:
-        "flex items-start gap-[var(--s-3)] rounded-[var(--r-card)] bg-[var(--raised)] p-[var(--s-3)] text-body text-[var(--body)] shadow-[var(--shadow-toast)] !transition-[transform,opacity] !duration-[var(--toast-close)] !ease-[var(--toast-ease)] motion-reduce:!transition-none",
+        "flex w-[var(--toast-w)] max-w-[calc(100vw-var(--s-6)*2)] items-start gap-[calc(var(--s-2)+var(--s-1)/2)] rounded-[var(--r-card)] bg-[var(--raised)] py-[var(--s-3)] pr-[var(--s-3)] pl-[calc(var(--s-3)+var(--s-1)/2)] text-body text-[var(--body)] shadow-[var(--shadow-toast)] !transition-[transform,opacity] !duration-[var(--toast-close)] !ease-[var(--toast-ease)] motion-reduce:!transition-none",
     },
     unstyled: true,
   },
