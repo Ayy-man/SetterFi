@@ -4,9 +4,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type AffiliateReferralIdentity = { referralCode: string };
 
+/** Same contract as `AffiliateRepositoryError`: the repository code, plus PostgREST's own code
+ * for the failure under it, so a 503 on the affiliate portal names a failure kind in the log while
+ * the response body stays the one generic sentence. */
 export class AffiliateReferralIdentityError extends Error {
-  constructor(readonly code: string) {
-    super(code);
+  constructor(readonly code: string, readonly databaseCode?: string) {
+    super(databaseCode ? `${code} (${databaseCode})` : code);
+    this.name = "AffiliateReferralIdentityError";
   }
 }
 
@@ -21,7 +25,12 @@ async function liveDependencies(): Promise<AffiliateReferralIdentityDependencies
       const { data, error } = await client.from("affiliates")
         .select("referral_code")
         .maybeSingle();
-      if (error) throw new AffiliateReferralIdentityError("AFFILIATE_REFERRAL_IDENTITY_FAILED");
+      if (error) {
+        throw new AffiliateReferralIdentityError(
+          "AFFILIATE_REFERRAL_IDENTITY_FAILED",
+          error.code,
+        );
+      }
       return data;
     },
   };

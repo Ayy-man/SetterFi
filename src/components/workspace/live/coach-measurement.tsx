@@ -104,6 +104,26 @@ type CoachMeasurementProps = {
   customTo?: string | null;
   impersonation?: { sessionId: string; tenantId: string } | null;
   /**
+   * The billing period `/coach/billing` is showing, from the same repository read that page uses,
+   * or null when that read has no current period either.
+   *
+   * Coach home derives its allowance from `read_coach_measurement_for_actor`, which reports the
+   * allowance available only when it finds BOTH a current period and a tier call allowance
+   * (`20260823000001_phase7_measurement.sql:1309-1327`): the period comes from
+   * `analytics_billing_subscriptions` and the limit from a `tiers` left join on that row's
+   * `tier_id`. `/coach/billing` reads `billing_subscriptions` through `coach_billing_projection`
+   * instead. So a tenant whose analytics mirror is empty, or whose subscription maps to no tier,
+   * has a period on one page and "There is no active billing period" on the other, which is the
+   * page calling a record absent when the record exists. On the hosted project today the mirror
+   * holds no rows at all while `billing_subscriptions` holds six, so the two never agree there.
+   *
+   * Passing the projection in lets the footer separate the two claims it had been merging: whether
+   * a period exists, which this answers, and whether an allowance can be counted against it, which
+   * only the RPC can. Optional because every unit fixture predates it, and a caller that has not
+   * plumbed the read gets the same absent state as a caller whose read found nothing.
+   */
+  billingPeriod?: { periodStart: string; periodEnd: string } | null;
+  /**
    * What the coach has already set, or `null` when nothing is published and there is therefore
    * nothing of theirs running. Optional so the surface still renders under a caller that has not
    * plumbed the offer read, which is the state every unit fixture is in.
@@ -545,6 +565,7 @@ function deckFooter(
   measurement: CoachMeasurement,
   attention: CoachAttention,
   asOf: string,
+  billingPeriod: { periodStart: string; periodEnd: string } | null,
 ): {
   stats: readonly DeckStat[];
   note?: string;
@@ -575,11 +596,24 @@ function deckFooter(
         meter: allowance.limit > 0 ? allowance.used / allowance.limit : null,
         note: `Counted over your billing period, ${dateLabel(allowance.periodStart)} to ${dateLabel(allowance.periodEnd)}, not the window above.`,
       }
-      : {
-        layout: "caption" as const,
-        stats: [{ label: "Monthly plan progress", value: null }],
-        note: "There is no active billing period to count an allowance against.",
-      };
+      : billingPeriod
+        ? {
+          /*
+           * A period exists and the allowance does not. Saying "no active billing period" here
+           * contradicted the period `/coach/billing` was printing for the same tenant on the same
+           * day, so the two claims are separated: the period is named because it is a record that
+           * exists, and the count is withheld because no plan allowance is mapped to count it
+           * against. No meter, because there is still no denominator to divide by.
+           */
+          layout: "caption" as const,
+          stats: [{ label: "Monthly plan progress", value: null }],
+          note: `Your billing period runs ${dateLabel(billingPeriod.periodStart)} to ${dateLabel(billingPeriod.periodEnd)}, but no plan allowance is recorded to count against it.`,
+        }
+        : {
+          layout: "caption" as const,
+          stats: [{ label: "Monthly plan progress", value: null }],
+          note: "There is no active billing period to count an allowance against.",
+        };
   }
 
   if (key === "coach.disqualified_leads") {
@@ -677,11 +711,12 @@ function deckItems(
   measurement: CoachMeasurement,
   attention: CoachAttention,
   asOf: string,
+  billingPeriod: { periodStart: string; periodEnd: string } | null,
 ): CoachDeckItem[] {
   const when = WINDOW_PHRASE[measurement.window];
   return DECK_KEYS.map((key, index) => {
     const copy = DECK_COPY[key];
-    const footer = deckFooter(key, measurement, attention, asOf);
+    const footer = deckFooter(key, measurement, attention, asOf, billingPeriod);
     return {
       availability: metricAvailability(
         measurement.metrics.find((metric) => metric.metricKey === key),
@@ -1290,6 +1325,7 @@ export function CoachMeasurementSurface({
   impersonation = null,
   greeting = null,
   channelStatus = null,
+  billingPeriod = null,
 }: CoachMeasurementProps) {
   const [keywordKpiMode, setKeywordKpiMode] = useState<"count" | "percent">("count");
   const keywordOptInDenominator = measurement.keywords.reduce(
@@ -1398,7 +1434,7 @@ export function CoachMeasurementSurface({
         <h2 className="sr-only" id="coach-outcomes-heading">
           Your numbers
         </h2>
-        <CoachDeck items={deckItems(measurement, attention, composition.asOf)} />
+        <CoachDeck items={deckItems(measurement, attention, composition.asOf, billingPeriod)} />
         <MonoMeta className="block">{windowCaption}</MonoMeta>
       </section>
 

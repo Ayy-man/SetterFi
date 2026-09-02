@@ -13,6 +13,7 @@ import {
   type MetricKey,
   type MetricState,
 } from "@/lib/analytics/metric-definitions";
+import { metricDescriptorText } from "@/lib/analytics/metric-descriptor";
 import type { UserRole } from "@/lib/auth/claims";
 import { utcTimestampLabel } from "@/lib/format/datetime";
 import type { PlatformMeasurement } from "@/lib/repositories/platform-analytics";
@@ -67,48 +68,8 @@ export function platformMetricDisplay(
   return view.value ?? view.absenceLabel ?? "Unavailable";
 }
 
-/**
- * The parameter name every platform metric writes its window against, and what a reader gets
- * instead.
- *
- * `metric-definitions.ts` is the measurement vocabulary, written for whoever has to reconcile a
- * number against the query that produced it, so its windows say "Trailing 30 days ending at asOf"
- * -- `asOf` being the argument the RPC takes. That is the right sentence in that file and a leaked
- * identifier the moment it reaches a screen, which is where it had been going: `/admin/agent-
- * performance` printed "Window: Trailing 30 days ending at asOf" under its heading, and the
- * methodology note on every KPI tile printed it again.
- *
- * Substituting at the projection rather than at either surface is deliberate. There are two
- * renderers of these strings and twenty-one definitions carrying the token, so a fix at a surface
- * fixes one of them and leaves the identifier on the other -- and the next surface to read a
- * descriptor inherits the leak. Here, a metric cannot be rendered without the substitution having
- * happened. The instant is the snapshot's own `asOf`, so the sentence names the moment the numbers
- * beside it were measured at rather than a re-read of the clock, and it is printed in UTC because
- * every definition carrying the token also declares `clock: "UTC."`.
- *
- * A snapshot whose `asOf` will not parse leaves the token unsubstituted rather than printing
- * "Invalid Date" or a silently wrong instant. That is the one case where the identifier can still
- * reach a screen, and it is the right trade: an unparseable measurement instant is a fault worth
- * seeing, and inventing a date to cover it would put a wrong number under a heading that claims to
- * say what was measured when.
- */
-const AS_OF_TOKEN = /\basOf\b/gu;
-
-function withAsOf(text: string, asOfLabel: string | null) {
-  return asOfLabel ? text.replaceAll(AS_OF_TOKEN, asOfLabel) : text;
-}
-
 function descriptorFor(key: MetricKey, asOfLabel: string | null): PlatformMetricDescriptorView {
-  const definition = metricDefinition(key);
-  const denominator = withAsOf(definition.denominator, asOfLabel);
-  const window = withAsOf(definition.window, asOfLabel);
-  const clock = withAsOf(definition.clock, asOfLabel);
-  return {
-    denominator,
-    window,
-    clock,
-    text: `Denominator: ${denominator} Window: ${window} Clock: ${clock}`,
-  };
+  return metricDescriptorText(key, asOfLabel);
 }
 
 function absenceLabel(state: MetricState | "missing") {

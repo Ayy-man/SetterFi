@@ -141,9 +141,21 @@ export type AffiliateRepositoryDependencies = {
   } | null>;
 };
 
+/**
+ * The repository code, plus the database's own code for the failure underneath it.
+ *
+ * The route logs `cause.message` and answers a body that never varies, which is right: an
+ * affiliate must not learn from a 503 which of three reads broke, and no failure here may hint at
+ * another tenant's data. But the message was the repository constant alone, so a 503 said which
+ * read failed and never why, and the production 503 this closes could be narrowed no further than
+ * "the projection call returned an error". PostgREST's `code` is the missing half: `42883` is a
+ * function the deployment does not have, `42501` is a permission the caller lacks, `PGRST202` is a
+ * signature that does not match the arguments sent. It is a fixed enumeration of failure kinds
+ * with no row content in it, so carrying it into the log costs nothing an affiliate could read.
+ */
 export class AffiliateRepositoryError extends Error {
-  constructor(readonly code: string) {
-    super(code);
+  constructor(readonly code: string, readonly databaseCode?: string) {
+    super(databaseCode ? `${code} (${databaseCode})` : code);
     this.name = "AffiliateRepositoryError";
   }
 }
@@ -280,34 +292,56 @@ function parseSent(data: unknown): SentRpcRow {
   };
 }
 
+/**
+ * Two clients, each built by the operations that actually use it.
+ *
+ * The affiliate portal's only fetch reads `affiliate_referral_projection` and
+ * `affiliate_payout_history_projection`, both RLS-scoped user reads that never touch the service
+ * client. Building one anyway, up front, coupled an affiliate's own money page to a platform
+ * secret it does not use: `createSupabaseServiceClient` throws when
+ * `SUPABASE_SERVICE_ROLE_KEY` is absent or names a different Supabase project than the configured
+ * URL, and that throw lands inside the route's `try`, so the portal answers 503 on the first load
+ * and on every Retry after it, over a read the database would have answered. Nothing about a
+ * commission an affiliate has already earned should depend on a credential that exists to bypass
+ * RLS for someone else's writes.
+ *
+ * Each half is memoised per repository call so the accrual and payout operations, which read back
+ * through the service client after their RPC, still open one connection rather than three.
+ */
 async function liveDependencies(): Promise<AffiliateRepositoryDependencies> {
-  const userClient = await createSupabaseServerClient();
-  const serviceClient = createSupabaseServiceClient();
+  let userClientPromise: Promise<Awaited<ReturnType<typeof createSupabaseServerClient>>> | null =
+    null;
+  const userClient = () => (userClientPromise ??= createSupabaseServerClient());
+  let cachedServiceClient: ReturnType<typeof createSupabaseServiceClient> | null = null;
+  const serviceClient = () => (cachedServiceClient ??= createSupabaseServiceClient());
   return {
     projectReferrals: async () => {
-      const { data, error } = await userClient.rpc("affiliate_referral_projection");
-      if (error) throw new AffiliateRepositoryError("AFFILIATE_PROJECTION_FAILED");
+      const { data, error } = await (await userClient()).rpc("affiliate_referral_projection");
+      if (error) throw new AffiliateRepositoryError("AFFILIATE_PROJECTION_FAILED", error.code);
       return data;
     },
     projectPayouts: async () => {
-      const { data, error } = await userClient.rpc("affiliate_payout_history_projection");
-      if (error) throw new AffiliateRepositoryError("AFFILIATE_PAYOUT_PROJECTION_FAILED");
+      const { data, error } = await (await userClient())
+        .rpc("affiliate_payout_history_projection");
+      if (error) {
+        throw new AffiliateRepositoryError("AFFILIATE_PAYOUT_PROJECTION_FAILED", error.code);
+      }
       return data;
     },
     callAccrual: async (args) => {
-      const { data, error } = await serviceClient.rpc("accrue_invoice_commission", args);
+      const { data, error } = await serviceClient().rpc("accrue_invoice_commission", args);
       if (error) throw new AffiliateRepositoryError("COMMISSION_ACCRUAL_FAILED");
       return data;
     },
     readAccrual: async (ledgerId, referralId) => {
       const [ledgerResult, windowResult] = await Promise.all([
-        serviceClient
+        serviceClient()
           .from("commission_ledger")
           .select("id,referral_id,commission_cents,entry_kind,stripe_invoice_id")
           .eq("id", ledgerId)
           .eq("referral_id", referralId)
           .maybeSingle(),
-        serviceClient
+        serviceClient()
           .from("referral_commission_windows")
           .select("referral_id,first_invoice_id,started_at,expires_at")
           .eq("referral_id", referralId)
@@ -333,12 +367,12 @@ async function liveDependencies(): Promise<AffiliateRepositoryDependencies> {
       };
     },
     callAdjustment: async (args) => {
-      const { data, error } = await serviceClient.rpc("reverse_invoice_commission", args);
+      const { data, error } = await serviceClient().rpc("reverse_invoice_commission", args);
       if (error) throw new AffiliateRepositoryError("COMMISSION_ADJUSTMENT_FAILED");
       return data;
     },
     readAdjustment: async (ledgerId) => {
-      const { data, error } = await serviceClient
+      const { data, error } = await serviceClient()
         .from("commission_ledger")
         .select("id,commission_cents,entry_kind")
         .eq("id", ledgerId)
@@ -351,20 +385,20 @@ async function liveDependencies(): Promise<AffiliateRepositoryDependencies> {
       } : null;
     },
     callApprovePayout: async (args) => {
-      const { data, error } = await serviceClient.rpc("approve_commission_payout", args);
+      const { data, error } = await serviceClient().rpc("approve_commission_payout", args);
       if (error) throw new AffiliateRepositoryError("PAYOUT_APPROVAL_FAILED");
       return data;
     },
     readApprovedPayout: async (payoutId, eventId, auditId) => {
       const [payoutResult, eventResult, auditResult] = await Promise.all([
-        serviceClient.from("commission_payouts").select("id").eq("id", payoutId).maybeSingle(),
-        serviceClient
+        serviceClient().from("commission_payouts").select("id").eq("id", payoutId).maybeSingle(),
+        serviceClient()
           .from("commission_payout_events")
           .select("id,payout_id,kind,audit_id")
           .eq("id", eventId)
           .eq("payout_id", payoutId)
           .maybeSingle(),
-        serviceClient.from("audit_log").select("id,action").eq("id", auditId).maybeSingle(),
+        serviceClient().from("audit_log").select("id,action").eq("id", auditId).maybeSingle(),
       ]);
       if (payoutResult.error || eventResult.error || auditResult.error) {
         throw new AffiliateRepositoryError("PAYOUT_APPROVAL_READBACK_FAILED");
@@ -379,19 +413,19 @@ async function liveDependencies(): Promise<AffiliateRepositoryDependencies> {
       };
     },
     callRecordSent: async (args) => {
-      const { data, error } = await serviceClient.rpc("record_commission_payout_sent", args);
+      const { data, error } = await serviceClient().rpc("record_commission_payout_sent", args);
       if (error) throw new AffiliateRepositoryError("PAYOUT_SENT_FAILED");
       return data;
     },
     readSentPayout: async (payoutId, eventId, auditId) => {
       const [eventResult, auditResult] = await Promise.all([
-        serviceClient
+        serviceClient()
           .from("commission_payout_events")
           .select("id,payout_id,kind,audit_id,reference,paid_on")
           .eq("id", eventId)
           .eq("payout_id", payoutId)
           .maybeSingle(),
-        serviceClient.from("audit_log").select("id,action").eq("id", auditId).maybeSingle(),
+        serviceClient().from("audit_log").select("id,action").eq("id", auditId).maybeSingle(),
       ]);
       if (eventResult.error || auditResult.error) {
         throw new AffiliateRepositoryError("PAYOUT_SENT_READBACK_FAILED");

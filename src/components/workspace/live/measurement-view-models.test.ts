@@ -8,6 +8,8 @@ import {
   metricDefinition,
   type MetricKey,
 } from "@/lib/analytics/metric-definitions";
+import { metricDescriptorText, withAsOfLabel } from "@/lib/analytics/metric-descriptor";
+import { utcTimestampLabel } from "@/lib/format/datetime";
 import type {
   CoachLeadComposition,
   CoachMeasurement,
@@ -49,6 +51,7 @@ function snapshot(): CoachMeasurement {
   return {
     tenantId: "tenant-synthetic",
     window: "1m",
+    windowEnd: WINDOW_END,
     metrics: COACH_METRIC_KEYS.map(metric),
     funnel: [
       { stepKey: "entered", stepLabel: "Entered", enteredContacts: 10, completedContacts: 10 },
@@ -374,5 +377,64 @@ describe("coach top objections view model", () => {
     expect(rows.map((row) => row.conversationCount)).toEqual([4, 12]);
     // The raw state string, not the rendered label: the CSV is read by machines.
     expect(JSON.stringify(rows)).not.toContain("Booked rate awaiting definition");
+  });
+});
+
+/**
+ * The methodology sentence names an instant, never the RPC argument that carries it.
+ *
+ * `metric-definitions.ts` writes trailing windows as "ending at asOf", which is the right sentence
+ * in the measurement vocabulary and a leaked identifier once it reaches a coach. The admin
+ * projection substituted that token from the day the leak was found on `/admin/agent-performance`;
+ * this projection never did, so a coach definition growing the token would have reached every
+ * methodology note through `MethodologyNote`. Only `coach.objection.conversations` carries it
+ * today and nothing renders its descriptor, so this is a guard rather than a live repair: both
+ * projections now build descriptors through one function, and this pins the coach half so a
+ * renderer cannot quietly drop the substitution again.
+ */
+describe("coach methodology descriptors", () => {
+  function allDescriptors(source: CoachMeasurement) {
+    const view = coachMeasurementView(source);
+    const pipeline = coachPipelineView(source);
+    return [
+      ...view.metrics.map((metric) => metric.descriptor),
+      view.allowance.descriptor,
+      view.descriptors.funnel,
+      view.descriptors.responses,
+      view.descriptors.keywords,
+      pipeline.pipelineWin.descriptor,
+      pipeline.agentWin.descriptor,
+    ];
+  }
+
+  it("never prints the parameter name in a descriptor a coach can read", () => {
+    const descriptors = allDescriptors(snapshot());
+
+    expect(descriptors.length).toBeGreaterThan(0);
+    for (const descriptor of descriptors) {
+      expect(descriptor.text).not.toContain("asOf");
+      expect(descriptor.denominator).not.toContain("asOf");
+      expect(descriptor.window).not.toContain("asOf");
+      expect(descriptor.clock).not.toContain("asOf");
+    }
+  });
+
+  it("anchors the substitution to the snapshot instant rather than the render clock", () => {
+    const later = { ...snapshot(), windowEnd: "2026-09-02T09:30:00.000Z" };
+
+    expect(metricDescriptorText("coach.objection.conversations", null).window)
+      .toContain("asOf");
+    expect(
+      withAsOfLabel(
+        metricDefinition("coach.objection.conversations").window,
+        utcTimestampLabel(later.windowEnd),
+      ),
+    ).toContain("Sep 2, 2026, 9:30 AM UTC");
+  });
+
+  it("leaves the token in place rather than inventing a date when the instant will not parse", () => {
+    expect(utcTimestampLabel("not-a-timestamp")).toBeNull();
+    expect(metricDescriptorText("coach.objection.conversations", null).window)
+      .not.toContain("Invalid Date");
   });
 });
