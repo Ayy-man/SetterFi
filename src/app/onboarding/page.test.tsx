@@ -69,4 +69,42 @@ describe("the go-live headline against its own setup strip", () => {
     expect(steps.some((step) => (step.textContent ?? "").includes("still to do"))).toBe(true);
     expect(steps.some((step) => (step.textContent ?? "").includes("done"))).toBe(false);
   });
+
+  /**
+   * The rail's other half. It read `current="go_live"` from the route rather than from the
+   * evidence, so step four said "you are here" while steps one to three said "still to do" -- the
+   * strip reporting the coach at the end of a path it was simultaneously saying they had not
+   * walked.
+   */
+  it("stands the reader on the first step nobody has proved, not on the last one", async () => {
+    render(await OnboardingPage());
+
+    const steps = Array.from(document.querySelectorAll('[data-slot="setup-step"]'));
+    expect(steps.length, "the strip did not render, so there was nothing to place").toBe(4);
+    const current = steps.filter((step) => step.getAttribute("data-state") === "current");
+    expect(current, "exactly one step is the reader's position").toHaveLength(1);
+    // The step standing as current must be the earliest one carrying no tick.
+    const firstUnticked = steps.find((step) => step.getAttribute("data-state") !== "done");
+    expect(current[0]).toBe(firstUnticked);
+    expect(current[0]?.textContent).toContain("you are here");
+  });
+
+  /**
+   * The count. "Your agent is not answering yet" was true and told a coach nothing: three steps out
+   * and one step out read the same line, so the headline stopped being a position readout the
+   * moment it stopped claiming readiness.
+   */
+  it("says how many steps stand between the coach and the button", async () => {
+    render(await OnboardingPage());
+
+    const steps = Array.from(document.querySelectorAll('[data-slot="setup-step"]'));
+    // Everything unticked except the final action is what the headline has to count.
+    const remaining = steps
+      .slice(0, 3)
+      .filter((step) => step.getAttribute("data-state") !== "done").length;
+    expect(remaining, "nothing was outstanding, so there was no count to check").toBeGreaterThan(0);
+
+    const words = ["", "One step left", "Two steps", "Three steps"];
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(words[remaining]);
+  });
 });

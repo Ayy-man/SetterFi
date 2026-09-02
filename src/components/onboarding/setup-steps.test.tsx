@@ -1,7 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { outstandingSetupSteps, SetupSteps } from "@/components/onboarding/setup-steps";
+import {
+  currentSetupStep,
+  SETUP_STEP_KEYS,
+  setupHeadline,
+  SetupSteps,
+  setupStepsRemaining,
+} from "@/components/onboarding/setup-steps";
 
 function states() {
   return screen.getAllByRole("listitem").map((node) => ({
@@ -67,27 +73,72 @@ describe("SetupSteps", () => {
 });
 
 /**
- * The function a page's headline branches on, tested from both sides.
+ * The three derivations a page draws its rail and its headline from, tested from both sides.
  *
- * One side is the bug it exists for -- a page must be able to see that it is still waiting on
- * something -- and the other is the arm that lets a page say so when it genuinely is finished. A
- * function that always reported outstanding work would satisfy the first alone, and the go-live
- * headline would then be stuck on its cautious sentence forever without anybody noticing.
+ * One side is the bug they exist for -- a page must be able to see that it is still waiting on
+ * something, and say how much. The other is the arm that lets a page speak when it genuinely is
+ * finished: a set of functions that always reported outstanding work would satisfy the first alone,
+ * and the go-live headline would be stuck on a cautious sentence forever without anybody noticing.
  */
-describe("outstandingSetupSteps", () => {
-  it("counts every step with no evidence, wherever it sits relative to the current one", () => {
-    expect(outstandingSetupSteps([], "go_live")).toEqual(["connect", "offer", "meet"]);
-    expect(outstandingSetupSteps(["connect"], "go_live")).toEqual(["offer", "meet"]);
-    // Position proves nothing: `go_live` is not ticked by standing on `offer`, and it is not
-    // outstanding there either, because a coach on step two is not waiting on step four.
-    expect(outstandingSetupSteps(["connect"], "offer")).toEqual(["meet", "go_live"]);
+describe("currentSetupStep", () => {
+  it("stands the reader on the first step nobody has proved", () => {
+    expect(currentSetupStep([])).toBe("connect");
+    expect(currentSetupStep(["connect"])).toBe("offer");
+    expect(currentSetupStep(["connect", "offer"])).toBe("meet");
   });
 
-  it("reports nothing outstanding once every other step is proved", () => {
-    expect(outstandingSetupSteps(["connect", "offer", "meet"], "go_live")).toEqual([]);
+  it("does not skip an unproved step because a later one is proved", () => {
+    expect(currentSetupStep(["offer", "meet"])).toBe("connect");
   });
 
-  it("does not count the step the reader is standing on", () => {
-    expect(outstandingSetupSteps(["connect", "offer", "meet"], "go_live")).not.toContain("go_live");
+  it("reaches the final action only once every earlier step is proved", () => {
+    expect(currentSetupStep(["connect", "offer", "meet"])).toBe("go_live");
+  });
+});
+
+describe("setupStepsRemaining", () => {
+  it("counts every unproved step before the button, and never the button", () => {
+    expect(setupStepsRemaining([])).toEqual(["connect", "offer", "meet"]);
+    expect(setupStepsRemaining(["offer"])).toEqual(["connect", "meet"]);
+    expect(setupStepsRemaining(["connect", "offer", "meet"])).toEqual([]);
+  });
+
+  it("does not count go_live as something to do first, proved or not", () => {
+    expect(setupStepsRemaining(["go_live"])).toEqual(["connect", "offer", "meet"]);
+    expect(setupStepsRemaining([])).not.toContain("go_live");
+  });
+});
+
+describe("setupHeadline", () => {
+  it("says how many steps are left rather than only that something is", () => {
+    expect(setupHeadline([])).toBe("Three steps before your agent answers");
+    expect(setupHeadline(["connect"])).toBe("Two steps before your agent answers");
+    expect(setupHeadline(["connect", "offer"])).toBe("One step left before your agent answers");
+  });
+
+  it("claims the agent is one press away only once nothing is left to do first", () => {
+    expect(setupHeadline(["connect", "offer", "meet"]))
+      .toBe("You are one button away from your agent answering");
+  });
+
+  it("makes no readiness claim while any step is unproved", () => {
+    for (const completed of [[], ["connect"], ["connect", "offer"], ["offer", "meet"]] as const) {
+      expect(setupHeadline(completed)).not.toMatch(/one button away|ready|all set|live/iu);
+    }
+  });
+
+  it("counts only steps the strip has left unticked", () => {
+    // The pairing rather than either sentence alone. Two authors can write agreeing words once;
+    // this fails the moment the headline counts a step the strip is drawing as done.
+    const completed = ["connect"] as const;
+    render(<SetupSteps completed={completed} current={currentSetupStep(completed)} />);
+    const states = screen.getAllByRole("listitem").map((node) => node.dataset.state);
+    const byKey = new Map(SETUP_STEP_KEYS.map((key, index) => [key, states[index]]));
+
+    const remaining = setupStepsRemaining(completed);
+    expect(remaining, "nothing was left to count, so the pairing was not tested").not.toHaveLength(0);
+    for (const key of remaining) expect(byKey.get(key)).not.toBe("done");
+    expect(setupHeadline(completed)).toContain("Two steps");
+    expect(remaining).toHaveLength(2);
   });
 });

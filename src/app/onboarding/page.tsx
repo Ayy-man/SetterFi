@@ -5,7 +5,8 @@ import { connectStepComplete } from "@/components/onboarding/connect-view-models
 import { OnboardingExperience } from "@/components/onboarding/onboarding-experience";
 import { OnboardingStage } from "@/components/onboarding/onboarding-stage";
 import {
-  outstandingSetupSteps,
+  currentSetupStep,
+  setupHeadline,
   SetupSteps,
   type SetupStepKey,
 } from "@/components/onboarding/setup-steps";
@@ -76,53 +77,43 @@ export const metadata: Metadata = {
 const LEAD = "Your agent answers Instagram DMs and Facebook page messages in your voice, using the prices and rules you set. It will not touch anyone already in a conversation with you, and you can pause it from your Agent screen at any time.";
 
 /**
- * Two titles, and which one is drawn is decided by the same evidence the strip above it is drawn
- * from.
+ * One title, counted from the same evidence the strip above it is drawn from.
  *
  * The artboard's sentence claims the coach is one press from being answered, and it shipped
- * unconditionally over a strip whose earlier boxes said "(still to do)" -- a headline and a rail
- * on one screen disagreeing about the same fact, which is exactly what the honest-states rule in
+ * unconditionally over a strip whose earlier boxes said "(still to do)" -- a headline and a rail on
+ * one screen disagreeing about the same fact, which is exactly what the honest-states rule in
  * `CLAUDE.md` forbids. Rewording it would have been the same bug in quieter words: any fixed
- * sentence is right or wrong depending on evidence it cannot see. So the branch is on
- * `outstandingSetupSteps`, the strip's own function, and the readiness claim is unreachable by
- * construction while any box is still to do.
+ * sentence is right or wrong depending on evidence it cannot see. The first repair branched onto a
+ * cautious "Your agent is not answering yet", which is true and says nothing -- a coach three steps
+ * out and a coach one step out read the identical line.
  *
- * They are two separate `title=` literals rather than one ternary because a reader -- human, or
- * the artboard conformance check next door -- sees each sentence next to the condition that earns
- * it, instead of two claims sharing one expression as though both could be on screen at once.
+ * So the sentence is counted rather than chosen, by `setupHeadline`, off the same `completed` list
+ * that decides which boxes the strip ticks. The readiness claim is unreachable by construction
+ * while any step is unproved, and the number in the headline cannot disagree with the boxes,
+ * because there is only one place either of them can come from.
  *
- * **Today the readiness arm is unreachable, and that is honest rather than dead.** `provenSteps`
- * deliberately cannot prove `meet` (see its docblock: the `test_passed` check is fetched by the
- * client component, not by this render), so `meet` is always outstanding and the strip always
- * says so. The day that read moves server-side, both the strip and this headline start telling
- * the truth about it on the same commit, which is the whole point of deriving one from the other.
+ * The rail's "you are here" is derived too. It was pinned to `go_live` by the route, so step four
+ * read as the coach's position while steps one to three read as not done; `currentSetupStep` puts
+ * it on the first step nobody has proved instead.
+ *
+ * **Today `meet` can never be proved here, and that is honest rather than dead.** `provenSteps`
+ * deliberately cannot read it (see its docblock: the `test_passed` check is fetched by the client
+ * component, not by this render), so the count never reaches zero and the readiness line never
+ * draws. The day that read moves server-side, the strip, the count and the headline start telling
+ * the truth about it on the same commit, which is the whole point of deriving all three from one
+ * list.
  */
 export default async function OnboardingPage() {
   const completed = phase5Live() ? await provenSteps() : [];
-  const outstanding = outstandingSetupSteps(completed, "go_live");
-  const steps = <SetupSteps completed={completed} current="go_live" />;
   const body = phase5Live()
     ? <CoachOnboarding />
     : <OnboardingExperience meetAgentEnabled={phase7MeetAgentLive()} />;
 
-  if (outstanding.length > 0) {
-    return (
-      <OnboardingStage
-        steps={steps}
-        lead={LEAD}
-        title="Your agent is not answering yet"
-        width="wide"
-      >
-        {body}
-      </OnboardingStage>
-    );
-  }
-
   return (
     <OnboardingStage
-      steps={steps}
+      steps={<SetupSteps completed={completed} current={currentSetupStep(completed)} />}
       lead={LEAD}
-      title="You are one button away from your agent answering"
+      title={setupHeadline(completed)}
       width="wide"
     >
       {body}

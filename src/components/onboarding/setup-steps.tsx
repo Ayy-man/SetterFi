@@ -32,26 +32,50 @@ const SETUP_STEP_LABELS: Record<SetupStepKey, string> = {
 };
 
 /**
- * The steps this strip will render as still-to-do, given the evidence its caller holds.
+ * The step the reader is standing on, derived from the evidence rather than from the route.
  *
- * It exists so a page's headline and its strip cannot disagree. The go-live screen carried the
- * artboard's "You are one button away from your agent answering" over a strip whose first three
- * boxes read "(still to do)", which is the completion theatre `CLAUDE.md` forbids in the one place
- * a coach is most likely to believe it -- and it could not have been caught by rewording, because
- * a softer sentence goes stale the same way the moment the evidence moves. Deriving the sentence
- * from this function means the only way the headline can claim readiness is for the strip to have
- * stopped saying otherwise.
+ * The go-live screen passed a hard-coded `current="go_live"`, so the strip drew "you are here" on
+ * step four while steps one to three read "(still to do)" -- a rail claiming the coach had walked
+ * a path it was simultaneously saying they had not walked. Position in the flow is not evidence of
+ * progress through it, and the only honest reading of a strip is the first step nobody has proved.
  *
- * The current step is excluded because the reader is standing on it: a page cannot be waiting on
- * the thing it is. Everything else with no evidence counts, whether it sits before or after,
- * because the wizard is not linear in the data and position proves nothing.
+ * `go_live` is the fallback because it is the last step: once every earlier step is proved, the
+ * final action is genuinely where the reader is.
  */
-export function outstandingSetupSteps(
-  completed: readonly SetupStepKey[],
-  current: SetupStepKey,
-): SetupStepKey[] {
+export function currentSetupStep(completed: readonly SetupStepKey[]): SetupStepKey {
   const done = new Set(completed);
-  return SETUP_STEP_KEYS.filter((key) => key !== current && !done.has(key));
+  return SETUP_STEP_KEYS.find((key) => !done.has(key)) ?? "go_live";
+}
+
+/**
+ * The steps standing between the coach and the button, which is every unproved step except the
+ * button itself. `go_live` is excluded because it is the action, not a thing to do first: counting
+ * it would make "one step left" mean "nothing left but the press", which is the one sentence this
+ * page already has a different line for.
+ */
+export function setupStepsRemaining(completed: readonly SetupStepKey[]): SetupStepKey[] {
+  const done = new Set(completed);
+  return SETUP_STEP_KEYS.filter((key) => key !== "go_live" && !done.has(key));
+}
+
+/** Small enough to spell. The list is four long, so the count before `go_live` never exceeds three. */
+const REMAINING_IN_WORDS: Record<number, string> = { 2: "Two", 3: "Three" };
+
+/**
+ * The headline the go-live screen is entitled to, from the same evidence the strip is drawn from.
+ *
+ * The page shipped the artboard's "You are one button away from your agent answering" over a strip
+ * whose first three boxes said "(still to do)", and the first repair only replaced it with a
+ * cautious "Your agent is not answering yet" -- true, but it told a coach nothing about how far off
+ * they were, which is the question the sentence is standing in the place of. So the sentence counts
+ * instead: the reader learns their position from the headline and the strip at once, and the
+ * readiness line is reachable only when the count reaches zero.
+ */
+export function setupHeadline(completed: readonly SetupStepKey[]): string {
+  const remaining = setupStepsRemaining(completed).length;
+  if (remaining === 0) return "You are one button away from your agent answering";
+  if (remaining === 1) return "One step left before your agent answers";
+  return `${REMAINING_IN_WORDS[remaining] ?? String(remaining)} steps before your agent answers`;
 }
 
 export type SetupStepsProps = {
