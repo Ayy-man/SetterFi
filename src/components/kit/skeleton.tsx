@@ -32,19 +32,28 @@ function SkeletonRow({ className, ...props }: ComponentProps<"div">) {
       aria-label={props["aria-label"] ?? "Loading row"}
       role={props.role ?? "status"}
       className={cn(
-        "grid h-[var(--row-h)] grid-cols-[var(--s-6)_2fr_1fr_1fr_calc(var(--s-12)+var(--s-2))]",
+        // The approved row: a 28px identity track, three text tracks, and an 80px action track.
+        // The 24px and 56px this used to draw were narrower than the row that arrives, so the
+        // identity column and the action cell both jumped sideways at the swap, which is the
+        // opposite of what a skeleton is for. Both are token expressions, not literals.
+        "grid h-[var(--row-h)]",
+        "grid-cols-[calc(var(--s-6)+var(--s-1))_2fr_1fr_1fr_calc(var(--s-12)+var(--s-8))]",
         "items-center gap-[var(--s-3)] border-b border-[var(--line)] px-[var(--cell-x)]",
         className
       )}
       {...props}
     >
-      <Skeleton aria-hidden className="size-[var(--s-6)] rounded-[var(--r-full)]" />
+      {/* 22px of avatar inside the 28px track, so the round bone sits off both hairlines. */}
+      <Skeleton
+        aria-hidden
+        className="size-[calc(var(--s-6)-var(--s-1)/2)] justify-self-center rounded-[var(--r-full)]"
+      />
       <Skeleton aria-hidden className="w-3/4" />
       <Skeleton aria-hidden className="w-3/5" />
       <Skeleton aria-hidden className="w-1/2" />
       <Skeleton
         aria-hidden
-        className="h-[var(--s-5)] w-[calc(var(--s-12)+var(--s-2))] justify-self-end rounded-[var(--r-input)]"
+        className="h-[var(--s-5)] w-full justify-self-end rounded-[var(--r-input)]"
       />
     </div>
   )
