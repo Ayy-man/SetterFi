@@ -409,7 +409,7 @@ function CarrierStepBody({ body, nowIso, since }: { body: string; nowIso: string
         `globals.css` -- an unlayered sheet, so it beats any Tailwind utility whatever the
         specificity, because v4 emits utilities into `@layer utilities`. And `acc`, `acc--quiet`,
         `acc__head` and `acc__chev` are defined nowhere in `src/`: they belong to the round-3
-        stylesheets under `.planning/phases/11-ui-rebuild/design/`, deleted rather than superseded.
+        rebuild's stylesheets, which were deleted rather than superseded.
         The chevron still turns because its rotation is an inline `style`.
 
         The recipe went with them, and the ruling is that this is a call site wearing the wrong

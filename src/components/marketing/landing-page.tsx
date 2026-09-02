@@ -17,8 +17,8 @@ import { kitButtonClass, Prose } from "@/components/kit/atomics";
  *
  * ONE DRENCHED PANEL, the proof band. `docs/REDESIGN-CANVAS.md` sets the ceiling at two per
  * screen and this page spends one of them: the middle pricing card used to take the second, and
- * `docs/DECISIONS.md` DEC12 names picking the middle row as manufacturing a recommendation nobody
- * made, so the three plans are three plain cards. Everything else on the page is a plain deck panel,
+ * picking the middle row is manufacturing a recommendation nobody made, so the three plans are
+ * three plain cards. Everything else on the page is a plain deck panel,
  * and there is exactly one accent fill face -- "Start your setup" -- repeated as the same action
  * rather than as three competing ones.
  *
@@ -191,10 +191,11 @@ export type LandingPlan = {
  * as its name, its price and its allowance, which is a complete true card rather than one wearing
  * another plan's promises.
  *
- * Two things the artboard draws are deliberately not here, both `docs/DECISIONS.md`: the per-call
- * overage rate ("then $34 each"), which no column, contract field or env value in this product
- * records, and the "Most coaches start here" recommendation, which the catalogue has no
- * recommended flag to support. Keying either off a plan's name would be the page manufacturing it.
+ * Two things the artboard draws are deliberately not here, and both are open commercial calls the
+ * build side may not make: the per-call overage rate ("then $34 each"), which no column, contract
+ * field or env value in this product records, and the "Most coaches start here" recommendation,
+ * which the catalogue has no recommended flag to support. Keying either off a plan's name would be
+ * the page manufacturing it.
  */
 const PLAN_COPY: Record<string, { eyebrow: string; features: readonly string[] }> = {
   starter: {
@@ -458,13 +459,12 @@ export function LandingPage({ plans }: { plans: readonly LandingPlan[] }) {
             /*
              * No plan is singled out, by a pill or by a fill.
              *
-             * This card was `plan.name === "Growth"` wearing a "Most picked" pill, which is
-             * `docs/DECISIONS.md` DEC12's recommendation under another name: the catalogue returns
-             * operator-chosen labels with no recommended flag, so nothing in this product knows
-             * which plan most coaches pick. The pill went, and the fill moved to the middle
-             * position on the reasoning that a position asserts nothing -- but DEC12 names that
-             * move specifically, alongside matching `/growth/i`, as the page manufacturing a
-             * recommendation nobody made. A filled middle card in a row of three is the standard
+             * This card was `plan.name === "Growth"` wearing a "Most picked" pill, which is a
+             * recommendation under another name: the catalogue returns operator-chosen labels with
+             * no recommended flag, so nothing in this product knows which plan most coaches pick.
+             * The pill went, and the fill moved to the middle position on the reasoning that a
+             * position asserts nothing -- but that move, alongside matching `/growth/i`, is the
+             * page manufacturing a recommendation nobody made. A filled middle card in a row of three is the standard
              * way a pricing page says "this one", which is exactly why the artboard drenched
              * Growth; the reader takes the claim whether or not the code writes a word.
              *
@@ -581,7 +581,7 @@ export function LandingPage({ plans }: { plans: readonly LandingPlan[] }) {
           job is converting strangers was bounced to `/login` with no partner page to come back to.
           A 200 that answers a different question is a worse dead end than a 404, because the
           reader blames themselves for it. `/partners` is the page that belongs here and it is
-          blocked on approved commission terms and an enrolment endpoint (`docs/GAPS.md`), so the
+          blocked on approved commission terms and an enrolment endpoint, so the
           footer states the product and stops rather than sending anyone somewhere it cannot serve.
         */}
       </footer>

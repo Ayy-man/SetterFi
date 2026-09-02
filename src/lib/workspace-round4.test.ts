@@ -132,14 +132,14 @@ describe("R4-20: Proof and case studies live inside the Marketing assets tab", (
   /*
    * Rewritten for the four-card page, and deliberately not deleted.
    *
-   * The ruling this guards is `docs/ROUND-4-LEDGER.md` R4-20: Proof stops being a destination of
-   * its own and renders inside Marketing assets, with nothing about it deleted in the move. The
+   * The ruling this guards: proof stops being a destination of its own and renders inside
+   * Marketing assets, with nothing about it deleted in the move. The
    * old assertions read a `ChipTabs` options array and a `tab === "assets"` conditional, which is
    * the mechanism that carried the ruling and not the ruling itself; the canvas pass replaced the
    * six chips with four open cards and demoted "Your program" and "Marketing assets" into a shut
    * drawer, so both anchors are gone while every fact the ledger recorded still has to hold. What
-   * the entry actually names is what is asserted here: six subjects and none of them proof, one
-   * destination carrying Alec's word "Marketing assets", the proof editor sitting inside that
+   * the ruling actually names is what is asserted here: six subjects and none of them proof, one
+   * destination carrying the owner's word "Marketing assets", the proof editor sitting inside that
    * destination's group rather than beside it, every proof control moved across intact, and
    * exactly one proof editor in the tree.
    */

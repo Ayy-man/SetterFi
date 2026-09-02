@@ -49,11 +49,11 @@ describe("the public marketing page", () => {
    * two saturated panels; this page spends one, and the one it does not spend is the point.
    *
    * The second used to sit on the middle pricing card. That started as `plan.name === "Growth"`
-   * with a "Most picked" pill, which is `docs/DECISIONS.md` DEC12's recommendation under another
-   * name: the catalogue returns operator-chosen labels with no recommended flag, so nothing in
-   * this product knows which plan most coaches pick. The pill was removed and the fill was moved
-   * to the middle position on the reasoning that a position asserts nothing, and DEC12 names that
-   * move specifically: a filled middle card in a row of three is how a pricing page says "this
+   * with a "Most picked" pill, which is a recommendation under another name: the catalogue
+   * returns operator-chosen labels with no recommended flag, so nothing in this product knows
+   * which plan most coaches pick. The pill was removed and the fill was moved to the middle
+   * position on the reasoning that a position asserts nothing, and that move is named
+   * specifically: a filled middle card in a row of three is how a pricing page says "this
    * one", which is exactly why the artboard drenched Growth. The reader takes the claim whether
    * or not the code writes a word, so the honest shape is three identical cards.
    *
@@ -167,8 +167,9 @@ describe("the public marketing page", () => {
   });
 
   /**
-   * `docs/DECISIONS.md` DEC11 and DEC12, both of which are absences with a reason. No per-call
-   * overage rate is recorded in any column, contract field or env value in this product, and the
+   * The overage rate and the recommendation, both of which are absences with a reason. No
+   * per-call overage rate is recorded in any column, contract field or env value in this product,
+   * and the
    * catalogue returns operator-chosen labels with no recommended flag -- so a page that stated
    * either would be manufacturing a commercial term a customer could hold us to.
    */

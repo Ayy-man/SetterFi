@@ -285,7 +285,7 @@ export function evaluateAgentMessage(message: string, options: EvaluateOptions):
     // coach's agent. Deliberately not gated on `version` — gating it there would
     // mean publishing a change stopped affecting the published agent.
     //
-    // The trust problem is real, sits one layer up, and stays recorded in GAPS.md:
+    // The trust problem is real and sits one layer up:
     // the overrides arrive on the wire, so the caller rather than the server is
     // asserting what "published" means. Rule ids and outcome values are allowlisted
     // in normalizeBrainOutcomeOverrides, the lead-facing /api/consumer-agent never
