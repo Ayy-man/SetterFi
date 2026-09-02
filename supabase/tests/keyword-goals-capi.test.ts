@@ -54,7 +54,7 @@ describe("Phase 13 schema custody", () => {
 
   it("keeps all writes RPC-only and the outbox service-only", async () => {
     const grants = await db.query<{ grantee: string; table_name: string; privileges: string[] }>(`
-      select grantee, table_name, array_agg(privilege_type order by privilege_type) privileges
+      select grantee, table_name, array_agg(privilege_type::text order by privilege_type::text) privileges
       from information_schema.role_table_grants
       where table_schema = 'public'
         and table_name = any($1::text[])
@@ -75,21 +75,27 @@ describe("Phase 13 schema custody", () => {
         (tenant_id, keyword, goal, resource_url, created_by, updated_by)
       values ('${TENANT_A}', ' Funding ', 'resource', 'https://example.com/guide', '${COACH_A}', '${COACH_A}')
     `);
+    await db.query("savepoint duplicate_keyword");
     await expect(db.query(`
       insert into public.keyword_goals
         (tenant_id, keyword, goal, resource_url, created_by, updated_by)
       values ('${TENANT_A}', 'funding', 'resource', 'https://example.com/other', '${COACH_A}', '${COACH_A}')
     `)).rejects.toThrow(/keyword_goals_tenant_normalized_keyword_key/);
+    await db.query("rollback to savepoint duplicate_keyword");
+    await db.query("savepoint missing_resource_link");
     await expect(db.query(`
       insert into public.keyword_goals
         (tenant_id, keyword, goal, created_by, updated_by)
       values ('${TENANT_A}', 'missing-link', 'resource', '${COACH_A}', '${COACH_A}')
     `)).rejects.toThrow(/keyword_goals_goal_shape_chk/);
+    await db.query("rollback to savepoint missing_resource_link");
+    await db.query("savepoint unsafe_post_booking_link");
     await expect(db.query(`
       insert into public.keyword_goals
         (tenant_id, keyword, goal, post_booking_url, created_by, updated_by)
       values ('${TENANT_A}', 'unsafe-link', 'book', 'http://example.com', '${COACH_A}', '${COACH_A}')
     `)).rejects.toThrow(/keyword_goals_post_booking_url_chk/);
+    await db.query("rollback to savepoint unsafe_post_booking_link");
   });
 
   it("accepts only fixed events and coherent retry, value, and test/demo shapes", async () => {
@@ -101,24 +107,30 @@ describe("Phase 13 schema custody", () => {
       insert into public.conversations (tenant_id, contact_id, channel)
       values ('${TENANT_A}', '${contact.rows[0].id}', 'messenger') returning id
     `);
+    await db.query("savepoint unknown_event_name");
     await expect(db.query(`
       insert into public.capi_events
         (tenant_id, conversation_id, channel, event_name, dedup_key, event_time)
       values ('${TENANT_A}', '${conversation.rows[0].id}', 'messenger', 'Schedule',
         '${conversation.rows[0].id}:Schedule', now())
     `)).rejects.toThrow(/capi_events_event_name_chk/);
+    await db.query("rollback to savepoint unknown_event_name");
+    await db.query("savepoint currency_without_value");
     await expect(db.query(`
       insert into public.capi_events
         (tenant_id, conversation_id, channel, event_name, dedup_key, event_time, currency)
       values ('${TENANT_A}', '${conversation.rows[0].id}', 'messenger', 'QualifiedLead',
         '${conversation.rows[0].id}:QualifiedLead', now(), 'USD')
     `)).rejects.toThrow(/capi_events_value_shape_chk/);
+    await db.query("rollback to savepoint currency_without_value");
+    await db.query("savepoint test_event_left_sendable");
     await expect(db.query(`
       insert into public.capi_events
         (tenant_id, conversation_id, channel, event_name, dedup_key, event_time, is_test, status)
       values ('${TENANT_A}', '${conversation.rows[0].id}', 'messenger', 'QualifiedLead',
         '${conversation.rows[0].id}:QualifiedLead', now(), true, 'pending')
     `)).rejects.toThrow(/capi_events_test_demo_status_chk/);
+    await db.query("rollback to savepoint test_event_left_sendable");
   });
 
   it("counts exact attributed conversations and their first fixed-event enqueues only", async () => {
@@ -164,13 +176,13 @@ describe("Phase 13 schema custody", () => {
       insert into public.capi_events
         (tenant_id, conversation_id, channel, event_name, dedup_key, event_time)
       values
-        ($1, $2, 'messenger', 'QualifiedLead', $2::text || ':QualifiedLead', now()),
-        ($1, $3, 'messenger', 'QualifiedLead', $3::text || ':QualifiedLead', now())
+        ($1, $2::uuid, 'messenger', 'QualifiedLead', $2::uuid::text || ':QualifiedLead', now()),
+        ($1, $3::uuid, 'messenger', 'QualifiedLead', $3::uuid::text || ':QualifiedLead', now())
     `, [TENANT_A, qualifiedAndBooked.conversationId, unattributed.conversationId]);
     await db.query(`
       insert into public.capi_events
         (tenant_id, conversation_id, channel, appointment_id, event_name, dedup_key, event_time)
-      values ($1, $2, 'messenger', $3, 'Purchase', $2::text || ':Purchase', now())
+      values ($1, $2::uuid, 'messenger', $3, 'Purchase', $2::uuid::text || ':Purchase', now())
     `, [TENANT_A, qualifiedAndBooked.conversationId, appointment.rows[0].id]);
 
     // Editing configuration must not rewrite the immutable first-touch label on old conversations.
@@ -263,18 +275,22 @@ describe("Phase 13 schema custody", () => {
       )
     `, [TENANT_A, COACH_A, connection.rows[0].id, JSON.stringify(receipt)]);
     expect(replay.rows[0].dataset_row_id).toBe(provisioned.rows[0].dataset_row_id);
+    await db.query("savepoint real_downgrade");
     await expect(db.query(`
       select * from public.provision_capi_dataset(
         $1, $2, 'messenger', $3, 'page-1', 'mock-dataset', $4::jsonb, true, now()
       )
     `, [TENANT_A, COACH_A, connection.rows[0].id, JSON.stringify({ ...receipt, mode: "mock" })]))
       .rejects.toThrow(/CAPI_DATASET_REAL_DOWNGRADE_REFUSED/);
+    await db.query("rollback to savepoint real_downgrade");
+    await db.query("savepoint cross_tenant_connection");
     await expect(db.query(`
       select * from public.provision_capi_dataset(
         $1, $2, 'messenger', $3, 'page-1', 'dataset-2', $4::jsonb, false, now()
       )
     `, [TENANT_B, COACH_B, connection.rows[0].id, JSON.stringify(receipt)]))
       .rejects.toThrow(/CAPI_DATASET_CONNECTION_MISMATCH/);
+    await db.query("rollback to savepoint cross_tenant_connection");
   });
 });
 

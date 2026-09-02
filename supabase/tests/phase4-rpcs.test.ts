@@ -129,6 +129,7 @@ describe("Phase 4 RPC catalog", () => {
     ]]);
     expect(result.rows.map((row) => row.signature)).toEqual([
       "merge_contacts(uuid,uuid,uuid,text,text,uuid,text,text)",
+      "persist_inbound_message(uuid,channel_provider,messaging_channel,text,text,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text,text,text,text,jsonb,text)",
       "persist_inbound_message(uuid,channel_provider,messaging_channel,text,text,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text)",
       "persist_inbound_message(uuid,channel_provider,messaging_channel,text,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text)",
       "submit_message_template(uuid,messaging_channel,channel_provider,text,text,text,text,text,jsonb,uuid,text)",

@@ -563,6 +563,11 @@ describe("catalog contract", () => {
         auth_exec: false,
         service_exec: true,
       },
+      {
+        signature: "persist_inbound_message(uuid,channel_provider,messaging_channel,text,text,text,text,text,text,text,timestamp with time zone,timestamp with time zone,text,text,text,text,jsonb,text)",
+        auth_exec: false,
+        service_exec: true,
+      },
     ]);
   });
 
