@@ -80,7 +80,9 @@ const LEAD = "Your agent answers Instagram DMs and Facebook page messages in you
  * "you are here" is the first step nobody has proved, so none of the three can disagree.
  */
 export default async function OnboardingPage() {
-  const progress = await readinessProgress();
+  // Read only while the go-live flow itself is on: with it off the body below offers no button,
+  // so a headline counting the coach down to one would be counting towards nothing.
+  const progress = phase5Live() ? await readinessProgress() : null;
   const completed = progress?.completed ?? [];
   const body = phase5Live()
     ? <CoachOnboarding />

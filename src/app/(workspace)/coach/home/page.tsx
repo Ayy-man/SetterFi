@@ -410,12 +410,13 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
      * `isCurrentBillingPeriod` predicate with it, so a period that has ended without being
      * replaced is null here exactly as it is there.
      *
-     * A failure is not allowed to take the dashboard down with it. Home's job is the measurement
-     * deck; the billing period only decides which of two honest sentences one footer prints, and
-     * falling back to the more cautious one costs a coach nothing they cannot get from
-     * `/coach/billing` itself.
+     * A failure is not allowed to take the dashboard down with it, and it is not allowed to pass
+     * as an answer either: a read that failed is "unavailable", never the null that means a
+     * successful read found no current period, so the footer can say the period could not be
+     * loaded rather than telling a paying coach they have none.
      */
-    createBillingRepository().loadOwnBilling(context.tenantId, new Date(asOf)).catch(() => null),
+    createBillingRepository().loadOwnBilling(context.tenantId, new Date(asOf))
+      .catch((): "unavailable" => "unavailable"),
   ]);
   // One read of the connection list, shared by the two things that reason about it. The blocked
   // channel is the negative -- one connection that used to work and stopped -- and the status line
@@ -436,7 +437,11 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
       <CoachMeasurementSurface
         {...query}
         attention={attention}
-        billingPeriod={billing ? { periodStart: billing.periodStart, periodEnd: billing.periodEnd } : null}
+        billingPeriod={billing === "unavailable"
+          ? "unavailable"
+          : billing
+            ? { periodStart: billing.periodStart, periodEnd: billing.periodEnd }
+            : null}
         blockedChannel={blockedChannel}
         channelStatus={channelStatus}
         composition={composition}

@@ -6,6 +6,7 @@ import { READINESS_KEYS, type ReadinessCheck, type ReadinessKey } from "@/lib/on
 import {
   currentSetupStep,
   SETUP_STEP_KEYS,
+  readinessCheckUnreadable,
   setupHeadline,
   setupProgress,
   SetupSteps,
@@ -142,6 +143,29 @@ describe("setupProgress", () => {
     expect(progress.completed).toEqual(["connect", "offer"]);
     expect(progress.outstanding).toBe(2);
     expect(setupHeadline(progress.outstanding)).toBe("Two things left before your agent answers");
+  });
+});
+
+describe("setupProgress with unreadable evidence", () => {
+  it("makes no count when any unmet check is one the evaluator could not read", () => {
+    const unreadable = checks(["test_passed", "subscription_ready"]).map((check) =>
+      check.key === "subscription_ready" ? { ...check, code: "subscription_contract_unavailable" } : check,
+    );
+    const progress = setupProgress(unreadable);
+    expect(progress.outstanding).toBeNull();
+    expect(progress.completed).toEqual(["connect", "offer"]);
+    expect(setupHeadline(progress.outstanding)).toBe("Your agent is not answering yet");
+  });
+
+  it("treats every evaluator failure code as unreadable, and a plain refusal as countable", () => {
+    for (const code of [
+      "unavailable", "tenant_readiness_unavailable", "messaging_readiness_unavailable",
+      "calendar_readiness_unavailable", "offer_review_contract_unavailable",
+      "brain_readiness_unavailable", "test_readiness_unavailable", "subscription_contract_unavailable",
+    ]) {
+      expect(readinessCheckUnreadable({ ...checks([])[0], ready: false, code }), code).toBe(true);
+    }
+    expect(readinessCheckUnreadable({ ...checks([])[0], ready: false, code: "held" })).toBe(false);
   });
 });
 

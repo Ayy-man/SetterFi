@@ -110,7 +110,7 @@ function renderSurface({
   measurementValue = measurement(),
 }: {
   attentionValue?: Attention;
-  billingPeriodValue?: { periodStart: string; periodEnd: string } | null;
+  billingPeriodValue?: { periodStart: string; periodEnd: string } | null | "unavailable";
   blockedChannelValue?: Blocked;
   compositionValue?: CoachLeadComposition;
   measurementValue?: CoachMeasurement;
@@ -1260,6 +1260,17 @@ describe("coach home allowance footer against the billing page", () => {
       },
     };
   }
+
+  it("says the period could not be loaded when the billing read failed, never that there is none", () => {
+    const { container } = renderSurface({
+      billingPeriodValue: "unavailable",
+      measurementValue: withoutAllowance(),
+    });
+    const booked = panel(container, "Booked");
+
+    expect(booked.textContent).not.toContain("There is no active billing period");
+    expect(booked.textContent).toContain("could not be loaded just now");
+  });
 
   it("names the period the billing page is showing instead of denying it exists", () => {
     const { container } = renderSurface({

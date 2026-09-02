@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { READINESS_KEYS, type ReadinessKey } from "@/lib/onboarding/contracts";
 
@@ -14,6 +14,14 @@ vi.mock("next/link", () => ({ default: "a" }));
  * two checks the button would still refuse on, one of which has no box in the strip at all.
  */
 const UNMET: ReadinessKey[] = ["test_passed", "subscription_ready"];
+/** Mutable per test: the code the unmet checks carry, and whether the go-live flow is on. */
+const scenario = { unmetCode: "READINESS_CHECK_MISSING", phase5Live: true };
+vi.mock("@/lib/env-contract", () => ({
+  phase5Live: () => scenario.phase5Live,
+  phase7MeetAgentLive: () => false,
+}));
+// The body is the client component's business; this file is about the strip and the heading.
+vi.mock("@/components/onboarding/coach-onboarding", () => ({ CoachOnboarding: () => null }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({
     auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } }, error: null }) },
@@ -27,7 +35,7 @@ vi.mock("@/lib/onboarding/readiness", () => ({
     checks: READINESS_KEYS.map((key) => ({
       key,
       ready: !UNMET.includes(key),
-      code: "ok",
+      code: UNMET.includes(key) ? scenario.unmetCode : "ok",
       evidenceAt: null,
       blamingParty: "coach",
     })),
@@ -62,6 +70,11 @@ function drawnReadinessTitle() {
 }
 
 describe("the go-live headline against its own setup strip", () => {
+  beforeEach(() => {
+    scenario.unmetCode = "READINESS_CHECK_MISSING";
+    scenario.phase5Live = true;
+  });
+
   it("does not claim the agent is one press away while any setup step is still to do", async () => {
     render(await OnboardingPage());
 
@@ -134,5 +147,34 @@ describe("the go-live headline against its own setup strip", () => {
     expect(unticked).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 }).textContent)
       .toBe("Two things left before your agent answers");
+  });
+
+  /**
+   * A check the evaluator could not read is reported as not ready so the button stays refused,
+   * but it is not one more thing for the coach to do. Counting it printed "One thing left" over a
+   * database timeout; the honest headline over evidence the page does not have makes no count.
+   */
+  it("makes no count when any readiness check could not be read", async () => {
+    scenario.unmetCode = "subscription_contract_unavailable";
+    render(await OnboardingPage());
+
+    const heading = screen.getByRole("heading", { level: 1 }).textContent ?? "";
+    expect(heading).toBe("Your agent is not answering yet");
+    expect(heading).not.toMatch(/\bone\b|\btwo\b|\d/iu);
+    // The strip still ticks only what was positively proved.
+    const done = document.querySelectorAll('[data-slot="setup-step"][data-state="done"]');
+    expect(done).toHaveLength(2);
+  });
+
+  /**
+   * With the go-live flow off the body offers no button, so a headline counting the coach down
+   * towards one would be counting towards nothing. The page then reads no readiness at all.
+   */
+  it("makes no count while the go-live flow is off", async () => {
+    scenario.phase5Live = false;
+    render(await OnboardingPage());
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Your agent is not answering yet");
+    expect(document.querySelectorAll('[data-slot="setup-step"][data-state="done"]')).toHaveLength(0);
   });
 });

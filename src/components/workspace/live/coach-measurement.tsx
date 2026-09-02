@@ -122,7 +122,8 @@ type CoachMeasurementProps = {
    * only the RPC can. Optional because every unit fixture predates it, and a caller that has not
    * plumbed the read gets the same absent state as a caller whose read found nothing.
    */
-  billingPeriod?: { periodStart: string; periodEnd: string } | null;
+  /** The current billing period; `null` when a successful read found none, `"unavailable"` when the read failed. */
+  billingPeriod?: { periodStart: string; periodEnd: string } | null | "unavailable";
   /**
    * What the coach has already set, or `null` when nothing is published and there is therefore
    * nothing of theirs running. Optional so the surface still renders under a caller that has not
@@ -565,7 +566,7 @@ function deckFooter(
   measurement: CoachMeasurement,
   attention: CoachAttention,
   asOf: string,
-  billingPeriod: { periodStart: string; periodEnd: string } | null,
+  billingPeriod: { periodStart: string; periodEnd: string } | null | "unavailable",
 ): {
   stats: readonly DeckStat[];
   note?: string;
@@ -596,6 +597,16 @@ function deckFooter(
         meter: allowance.limit > 0 ? allowance.used / allowance.limit : null,
         note: `Counted over your billing period, ${dateLabel(allowance.periodStart)} to ${dateLabel(allowance.periodEnd)}, not the window above.`,
       }
+      : billingPeriod === "unavailable"
+        ? {
+          /*
+           * The read failed. That is not "no period": a paying coach whose billing query timed
+           * out has a period, and the footer must not tell them otherwise.
+           */
+          layout: "caption" as const,
+          stats: [{ label: "Monthly plan progress", value: null }],
+          note: "Your billing period could not be loaded just now. Your Billing page has it.",
+        }
       : billingPeriod
         ? {
           /*
@@ -711,7 +722,7 @@ function deckItems(
   measurement: CoachMeasurement,
   attention: CoachAttention,
   asOf: string,
-  billingPeriod: { periodStart: string; periodEnd: string } | null,
+  billingPeriod: { periodStart: string; periodEnd: string } | null | "unavailable",
 ): CoachDeckItem[] {
   const when = WINDOW_PHRASE[measurement.window];
   return DECK_KEYS.map((key, index) => {

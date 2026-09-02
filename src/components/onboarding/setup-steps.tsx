@@ -83,9 +83,22 @@ const STEP_FOR_CHECK: Record<ReadinessKey, SetupStepKey> = {
 export type SetupProgress = {
   /** Strip steps whose every check is ready. Never `go_live`: it is the action, not a proof. */
   readonly completed: readonly SetupStepKey[];
-  /** Every check the go-live endpoint would still refuse on, whichever step it belongs to. */
-  readonly outstanding: number;
+  /**
+   * Every check the go-live endpoint would still refuse on, whichever step it belongs to; `null`
+   * when any check could not be read, because a count over evidence the page does not have is an
+   * invention in either direction.
+   */
+  readonly outstanding: number | null;
 };
+
+/**
+ * A check the evaluator could not read. It reports such a check as not ready so the button stays
+ * refused, which is right for the button, but for a count it is not "one more thing to do": it is
+ * a thing nobody knows about. The evaluator marks them with an `unavailable` code, and only those.
+ */
+export function readinessCheckUnreadable(check: ReadinessCheck): boolean {
+  return check.code === "unavailable" || check.code.endsWith("_unavailable");
+}
 
 /**
  * The strip and the headline from one readiness result, the same one the go-live endpoint uses.
@@ -96,10 +109,11 @@ export type SetupProgress = {
  * things left than the button will refuse on.
  */
 export function setupProgress(checks: readonly ReadinessCheck[]): SetupProgress {
-  const unmetSteps = new Set(checks.filter((check) => !check.ready).map((check) => STEP_FOR_CHECK[check.key]));
+  const unmet = checks.filter((check) => !check.ready);
+  const unmetSteps = new Set(unmet.map((check) => STEP_FOR_CHECK[check.key]));
   return {
     completed: SETUP_STEP_KEYS.filter((key) => key !== "go_live" && !unmetSteps.has(key)),
-    outstanding: checks.filter((check) => !check.ready).length,
+    outstanding: unmet.some(readinessCheckUnreadable) ? null : unmet.length,
   };
 }
 
@@ -120,8 +134,8 @@ const OUTSTANDING_IN_WORDS: Record<number, string> = {
  * coach with the safe test and the subscription still to do reads "Two things left", not "One step
  * left". The readiness line is reachable only when nothing at all is outstanding.
  *
- * `null` is the honest answer when readiness could not be read: a count over evidence the page
- * does not have would be an invention in either direction.
+ * `null` is the honest answer when readiness, or any one check of it, could not be read: a count
+ * over evidence the page does not have would be an invention in either direction.
  */
 export function setupHeadline(outstanding: number | null): string {
   if (outstanding === null) return "Your agent is not answering yet";
