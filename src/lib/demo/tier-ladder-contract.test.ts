@@ -267,65 +267,146 @@ describe("a cost rollup is written once and never restated", () => {
   const rollup = {
     tenantId: "t", windowStart: "2026-07-01T00:00:00Z", windowEnd: "2026-08-01T00:00:00Z",
     revenueCents: 29_700, modelCents: 7_300, messagingCents: 2_800, embeddingCents: 600,
-    evidence: "SETTERFI_DEMO_PLACEHOLDER_COMPLETE",
+    missingSources: [], evidence: "SETTERFI_DEMO_PLACEHOLDER_COMPLETE",
   };
-  const stored = (overrides: Record<string, unknown>) => {
+  const row = (overrides: Record<string, unknown>) => ({
+    recognized_subscription_cents: 29_700, model_cents: 7_300, messaging_cents: 2_800,
+    embedding_cents: 600, missing_sources: [],
+    source_evidence: { source: "SETTERFI_DEMO_PLACEHOLDER_COMPLETE" },
+    ...overrides,
+  });
+  const database = (rows: Record<string, unknown>[]) => {
     const calls: string[] = [];
     return {
       calls,
       query: async (text: string) => {
         calls.push(text);
-        return calls.length === 1
-          ? {
-            rows: [{
-              recognized_subscription_cents: 29_700, model_cents: 7_300,
-              messaging_cents: 2_800, embedding_cents: 600, ...overrides,
-            }],
-          }
-          : { rows: [] };
+        return { rows: text.includes("write_tenant_cost_rollup") ? [] : rows };
       },
     };
   };
 
   it("writes a window nothing has computed yet", async () => {
     const { writeCostRollupOnce } = await import("../../../scripts/seed-phase6-demo.mjs");
-    const calls: string[] = [];
-    const empty = {
-      query: async (text: string) => { calls.push(text); return { rows: [] }; },
-    };
+    const empty = database([]);
 
     expect(await writeCostRollupOnce(empty, rollup)).toBe("written");
-    expect(calls[1]).toContain("write_tenant_cost_rollup");
+    expect(empty.calls[1]).toContain("write_tenant_cost_rollup");
   });
 
-  it("leaves a window that already holds these figures alone", async () => {
+  it("never writes over a window that already holds a computed month", async () => {
     const { writeCostRollupOnce } = await import("../../../scripts/seed-phase6-demo.mjs");
-    const database = stored({});
+    const held = database([row({ recognized_subscription_cents: 19_700 })]);
 
-    expect(await writeCostRollupOnce(database, rollup)).toBe("unchanged");
-    // The read, and nothing after it.
-    expect(database.calls).toHaveLength(1);
+    expect(await writeCostRollupOnce(held, rollup)).toBe("present");
+    expect(held.calls).toHaveLength(1);
+  });
+
+  it("passes a window holding exactly these figures", async () => {
+    const { verifyCostRollups } = await import("../../../scripts/seed-phase6-demo.mjs");
+
+    expect(await verifyCostRollups(database([row({})]), [rollup])).toEqual([]);
   });
 
   /**
-   * The production case. The old ladder's $197 sits in a closed month, and the seeder can neither
-   * rewrite it nor delete it, so it says so and carries on rather than stopping the whole reseed
-   * over a month it has no power to correct.
+   * The production case: the old ladder's $197 sits in a closed month the seeder can neither
+   * rewrite nor delete. Reporting a successful reseed there leaves the admin margin figures wrong,
+   * so it is a mismatch and it is named.
    */
-  it("reports a window it cannot correct instead of raising", async () => {
-    const { writeCostRollupOnce } = await import("../../../scripts/seed-phase6-demo.mjs");
-    const database = stored({ recognized_subscription_cents: 19_700 });
+  it("catches a month left at the old price", async () => {
+    const { verifyCostRollups } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const stale = await verifyCostRollups(
+      database([row({ recognized_subscription_cents: 19_700 })]), [rollup],
+    );
 
-    expect(await writeCostRollupOnce(database, rollup)).toBe("stale");
-    expect(database.calls).toHaveLength(1);
+    expect(stale).toHaveLength(1);
+    expect(stale[0].stored?.recognized_subscription_cents).toBe(19_700);
+    expect(stale[0].expected.recognized_subscription_cents).toBe(29_700);
   });
 
-  it("treats a null cost source as equal to a null one, not as a difference", async () => {
-    const { writeCostRollupOnce } = await import("../../../scripts/seed-phase6-demo.mjs");
-    const database = stored({ messaging_cents: null, embedding_cents: null });
+  /** Amounts are not the only way a month can be wrong, so all six columns are judged. */
+  it("catches a month whose evidence or missing sources disagree", async () => {
+    const { verifyCostRollups } = await import("../../../scripts/seed-phase6-demo.mjs");
 
-    expect(await writeCostRollupOnce(database, {
-      ...rollup, messagingCents: null, embeddingCents: null,
-    })).toBe("unchanged");
+    expect(await verifyCostRollups(
+      database([row({ source_evidence: { source: "SOMETHING_ELSE" } })]), [rollup],
+    )).toHaveLength(1);
+    expect(await verifyCostRollups(
+      database([row({ missing_sources: ["model"] })]), [rollup],
+    )).toHaveLength(1);
+  });
+
+  it("catches a window with no rollup at all", async () => {
+    const { verifyCostRollups } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const stale = await verifyCostRollups(database([]), [rollup]);
+
+    expect(stale).toHaveLength(1);
+    expect(stale[0].stored).toBeNull();
+  });
+});
+
+/**
+ * A month the seeder could not correct has to stop the reseed. Returning quietly let a hosted
+ * database carrying the old tier price report a successful reseed while the admin margin figures
+ * stayed wrong, which is worse than failing.
+ */
+describe("a stale cost month fails the reseed unless it is acknowledged", () => {
+  const stale = [{
+    rollup: {
+      tenantId: "8f000000-0000-4000-8000-000000000001",
+      windowStart: "2026-07-01T00:00:00Z", windowEnd: "2026-08-01T00:00:00Z",
+    },
+    stored: { recognized_subscription_cents: 19_700 },
+    expected: { recognized_subscription_cents: 29_700 },
+  }];
+
+  it("passes silently when every month is current", async () => {
+    const { assertCostRollupsCurrent } = await import("../../../scripts/seed-phase6-demo.mjs");
+
+    expect(assertCostRollupsCurrent([], [], "CODE")).toBe(0);
+  });
+
+  it("throws by default, naming the tenant, the period and both figures", async () => {
+    const { assertCostRollupsCurrent } = await import("../../../scripts/seed-phase6-demo.mjs");
+
+    try {
+      assertCostRollupsCurrent(stale, [], "PHASE6_DEMO_COST_ROLLUP_STALE");
+      expect.unreachable("a stale month has to stop the reseed");
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("PHASE6_DEMO_COST_ROLLUP_STALE");
+      expect(message).toContain("8f000000-0000-4000-8000-000000000001");
+      expect(message).toContain("2026-07-01T00:00:00Z to 2026-08-01T00:00:00Z");
+      expect(message).toContain("19700");
+      expect(message).toContain("29700");
+    }
+  });
+
+  /** The flag is a decision to live with those months, so it has to print them in full. */
+  it("downgrades to a printed list under the acknowledgement flag", async () => {
+    const { ACKNOWLEDGE_STALE_ROLLUPS, assertCostRollupsCurrent } =
+      await import("../../../scripts/seed-phase6-demo.mjs");
+    const warned: string[] = [];
+    const restore = console.warn;
+    console.warn = (message: string) => { warned.push(message); };
+
+    try {
+      expect(assertCostRollupsCurrent(stale, [ACKNOWLEDGE_STALE_ROLLUPS], "CODE")).toBe(1);
+    } finally {
+      console.warn = restore;
+    }
+    expect(warned.join("\n")).toContain("19700");
+    expect(warned.join("\n")).toContain("29700");
+  });
+
+  /**
+   * The flag must not become a way past anything else. The read-back equality is asserted before
+   * the flag is ever consulted, so a count that drifted still fails with the flag set.
+   */
+  it("is consulted only after the read-back equality has already been asserted", () => {
+    const seed = readFileSync(join(process.cwd(), "scripts/seed-phase6-demo.mjs"), "utf8");
+
+    expect(seed.indexOf("PHASE6_DEMO_READBACK_INVALID"))
+      .toBeLessThan(seed.indexOf("assertCostRollupsCurrent(\n"));
   });
 });
