@@ -396,39 +396,64 @@ describe("AdminAuditLog craft", () => {
   });
 
   /*
-   * The segmented control in 1h. Every count renders from the loaded rows, per the named rule in
-   * docs/DESIGN.md: three hardcoded counts have already shipped wrong on this product.
+   * The segmented control in 1h, and the count on each segment is the loader's count for the whole
+   * window rather than a tally of the fifty rows in hand. Counting the page answered a different
+   * question from the one the label asks, and the answer moved as the reader paged. The counts
+   * here deliberately disagree with what these five rows would tally to: only a page-derived count
+   * could produce the old numbers.
    */
-  it("counts each event kind from the loaded rows", () => {
-    renderAudit();
+  it("shows each view's count for the window, not a tally of the loaded page", () => {
+    renderAudit({ viewCounts: { all: 212, publish: 34, takeover: 9, pause: 17 } });
 
     for (const [label, count] of [
-      ["Everything", "5"],
-      ["Publishes", "1"],
-      ["Takeovers", "1"],
-      ["Pauses", "1"],
+      ["Everything", "212"],
+      ["Publishes", "34"],
+      ["Takeovers", "9"],
+      ["Pauses", "17"],
     ]) {
       expect(
         screen.getByRole("button", { name: new RegExp(`^${label}`) }),
       ).toHaveTextContent(count);
     }
+    // The five loaded rows would have tallied one publish, one takeover and one pause.
+    expect(screen.getByRole("button", { name: /^Publishes/ })).not.toHaveTextContent("1");
   });
 
-  it("shows only the kind a segment maps to, and says so when the page holds none", () => {
+  it("carries no number at all on a segment whose count could not be read", () => {
+    renderAudit({ viewCounts: null });
+
+    for (const label of ["Everything", "Publishes", "Takeovers", "Pauses"]) {
+      const segment = screen.getByRole("button", { name: new RegExp(`^${label}`) });
+      expect(segment).toBeInTheDocument();
+      expect(
+        segment.textContent ?? "",
+        "a segment invented a count the loader could not give it",
+      ).not.toMatch(/\d/u);
+    }
+  });
+
+  /*
+   * The rows arrive already filtered to the view, so the page renders what it was handed. It must
+   * not re-run the rule: two spellings of one filter drift, and the failure mode is a page that
+   * silently shows nothing while the count beside it says otherwise.
+   */
+  it("renders the view's rows as handed over, without filtering them again", () => {
     navigation.searchParams = new URLSearchParams("view=publish");
-    const view = renderAudit();
+    renderAudit({
+      rows: [rows[0]!, rows[2]!],
+      viewCounts: { all: 5, publish: 2, takeover: 0, pause: 0 },
+    });
 
-    expect(screen.getAllByTestId("feed-row-sentence")).toHaveLength(1);
-    expect(screen.getAllByTestId("feed-row-sentence")[0]).toHaveTextContent(
-      "a new version of the Brain",
-    );
+    expect(screen.getAllByTestId("feed-row-sentence")).toHaveLength(2);
+  });
 
+  it("reads an empty saved view as the window's answer, not as this page's", () => {
     navigation.searchParams = new URLSearchParams("view=takeover");
-    view.rerender(
-      <AdminAuditLog enabled pagination={pagination} rows={[rows[2]!]} />,
-    );
+    renderAudit({ rows: [], viewCounts: { all: 5, publish: 1, takeover: 0, pause: 1 } });
 
-    expect(screen.getByText("No takeovers on this page")).toBeInTheDocument();
+    expect(screen.getByText("No takeovers in this window")).toBeInTheDocument();
+    // Telling a reader to page on for events the query already established are not there.
+    expect(screen.queryByText(/Move through the pages/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("feed-row-sentence")).not.toBeInTheDocument();
   });
 
@@ -862,7 +887,7 @@ describe("AdminAuditLog table language", () => {
    */
   it("applies the range inside the shared filter, so the total counts the same window", () => {
     const source = readFileSync(
-      resolve(process.cwd(), "src/app/(workspace)/admin/audit/page.tsx"),
+      resolve(process.cwd(), "src/app/(workspace)/admin/audit/load.ts"),
       "utf8",
     );
 

@@ -51,6 +51,12 @@ import {
   AUDIT_ACTIONS,
   type AuditActionKey,
 } from "@/lib/audit/actions";
+import {
+  AUDIT_VIEWS,
+  auditCategoryOf,
+  type AuditViewKey,
+  type EventCategoryKey,
+} from "@/lib/audit/views";
 import { auditActionLabel } from "@/lib/copy/audit-labels";
 import {
   WORKSPACE_DISPLAY_TIMEZONE,
@@ -98,6 +104,15 @@ type AdminAuditLogProps = {
    * log does not record that, and a number labelled "now" is the only honest one available.
    */
   liveWorkspaceCount?: number | null;
+  /**
+   * How many events each saved view holds in the window the reader chose, counted by the loader.
+   *
+   * Not derived from `rows`. A count taken from the loaded page answers "how many pauses landed on
+   * page one", which is a different question from the one a reader asks a segment labelled Pauses,
+   * and it changed under them as they paged. `null` means the counts could not be read, and the
+   * segments then carry no number rather than a wrong one.
+   */
+  viewCounts?: Record<AuditViewKey, number> | null;
   /**
    * The oldest instant this page's query would return, or null when the range is "All".
    *
@@ -263,65 +278,15 @@ const EVENT_CATEGORIES = {
   pause: { label: "pause", tone: "failure" },
   automatic: { label: "automatic", tone: "waiting" },
   change: { label: "change", tone: "neutral" },
-} as const satisfies Record<string, { label: string; tone: Tone }>;
+  // Keyed by the shared union, so a category added to the rule cannot reach a row without a chip.
+} as const satisfies Record<EventCategoryKey, { label: string; tone: Tone }>;
 
-type EventCategoryKey = keyof typeof EVENT_CATEGORIES;
-
-/** A person stepped into a live conversation the agent was holding. */
-const TAKEOVER_KEYS = new Set<string>([
-  "conversation.escalated",
-  "conversation.message.sent.human",
-  "conversation.takeover.claimed",
-  "conversation.takeover.released",
-  "followup.claimed",
-]);
-
-/**
- * The agent stopped talking. Every key here is an event after which some lead did not get an
- * answer: a channel or calendar came off, a subscription was suspended, registration was blocked,
- * a provisioning step failed, or a specific reply was refused at the guardrail.
+/*
+ * The categories, the four saved views and the rule that maps an action key onto one of them all
+ * live in `@/lib/audit/views`, because the loader applies the same rule in the query. This screen
+ * no longer decides which rows are in the view: it is handed the view's rows and the view's count.
  */
-const PAUSE_KEYS = new Set<string>([
-  "billing.tenant.suspended",
-  "calendar.disconnected",
-  "channel.disconnected",
-  "conversation.scope_blocked",
-  "conversation.tripwire.refused",
-  "onboarding.a2p_blocked_permanent",
-  "onboarding.step_failed",
-  "send.refused.no_consent",
-  "send.refused.suppressed",
-  "send.refused.window_expired",
-]);
 
-/** A publish changes what an agent says next, so it outranks every other reading of the key. */
-function categoryOf(action: string): EventCategoryKey {
-  if (action.endsWith(".published")
-    || action === "brain.rolled_back"
-    || action === "brain.import.accepted") return "publish";
-  if (TAKEOVER_KEYS.has(action)) return "takeover";
-  if (PAUSE_KEYS.has(action)) return "pause";
-  if (isSystemAction(action)) return "automatic";
-  return "change";
-}
-
-/**
- * The segmented control from 1h: Everything, then the three families the screen is named after.
- * `automatic` and `change` have no segment of their own because the artifact gives them none;
- * they stay reachable through Everything, the Action filter, and search.
- */
-const AUDIT_VIEWS = [
-  { key: "all", label: "Everything", category: null },
-  { key: "publish", label: "Publishes", category: "publish" },
-  { key: "takeover", label: "Takeovers", category: "takeover" },
-  { key: "pause", label: "Pauses", category: "pause" },
-] as const satisfies readonly { key: string; label: string; category: EventCategoryKey | null }[];
-
-type AuditViewKey = (typeof AUDIT_VIEWS)[number]["key"];
-
-function inView(row: AdminAuditRow, category: EventCategoryKey | null) {
-  return category === null || categoryOf(row.action) === category;
-}
 
 /**
  * The 180px column in 1h: which workspaces the change landed on. The registry's own `scope` field
@@ -715,7 +680,7 @@ function AuditFeedRow({
   const actor = actorFor(row);
   const phrase = eventPhrase(row.action);
   const scope = scopeOf(row);
-  const category = EVENT_CATEGORIES[categoryOf(row.action)];
+  const category = EVENT_CATEGORIES[auditCategoryOf(row.action)];
 
   return (
     <button
@@ -1174,6 +1139,7 @@ export function AdminAuditLog({
   rows,
   pagination,
   unavailableReason = null,
+  viewCounts = null,
 }: AdminAuditLogProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -1190,7 +1156,9 @@ export function AdminAuditLog({
   // The range is a server-side filter like search and action, so it joins the signature that
   // resets paging. Leaving it out would keep a page-4 cursor pointing into a window that no longer
   // has four pages, and the reader would land on an empty page for a range that has events in it.
-  const filterSignature = `${searchParams.get("q") ?? ""}|${searchParams.get("action") ?? ""}|${searchParams.get("range") ?? ""}`;
+  // The view is a server-side filter now, so it joins the signature that resets paging: a page-4
+  // cursor into Everything points nowhere in a Pauses window with one page in it.
+  const filterSignature = `${searchParams.get("q") ?? ""}|${searchParams.get("action") ?? ""}|${searchParams.get("range") ?? ""}|${searchParams.get("view") ?? ""}`;
   const previousFilterSignature = useRef(filterSignature);
   const activeAction = searchParams.get("action");
   const activeSearch = (searchParams.get("q") ?? "").trim().slice(0, 120);
@@ -1209,12 +1177,16 @@ export function AdminAuditLog({
   const activeActorRole = searchParams.get("actorRole");
   const activeClient = searchParams.get("client");
 
+  /*
+   * Only the three facets are applied here. The view is not: the loader already ran it in the
+   * query, so every row in hand belongs to the active view, and filtering again would mean the
+   * page quietly showing nothing the moment the two spellings of the rule drifted apart.
+   */
   const visibleRows = useMemo(
-    () => rows.filter((row) => inView(row, activeViewDefinition.category)
-      && (!activeOutcome || outcomeOf(row.action).label === activeOutcome)
+    () => rows.filter((row) => (!activeOutcome || outcomeOf(row.action).label === activeOutcome)
       && (!activeActorRole || actorRoleOf(row).label === activeActorRole)
       && (!activeClient || scopeOf(row).label === activeClient)),
-    [activeActorRole, activeClient, activeOutcome, activeViewDefinition, rows],
+    [activeActorRole, activeClient, activeOutcome, rows],
   );
 
   // The disclosure is about what is on screen, not about what was loaded: a reader filtered down
@@ -1226,9 +1198,9 @@ export function AdminAuditLog({
     () => AUDIT_VIEWS.map((view) => ({
       key: view.key,
       label: view.label,
-      count: rows.filter((row) => inView(row, view.category)).length,
+      count: viewCounts ? viewCounts[view.key] : null,
     })),
-    [rows],
+    [viewCounts],
   );
 
   /*
@@ -1396,7 +1368,7 @@ export function AdminAuditLog({
       cell: ({ row }) => (
         <CellTwoLine
           primary={eventLabel(row.original.action)}
-          subline={EVENT_CATEGORIES[categoryOf(row.original.action)].label.toLocaleLowerCase()}
+          subline={EVENT_CATEGORIES[auditCategoryOf(row.original.action)].label.toLocaleLowerCase()}
         />
       ),
       enableSorting: false,
@@ -1418,7 +1390,7 @@ export function AdminAuditLog({
     {
       // The feed's category pill. Hidden by default because Outcome already occupies the table's
       // one state column, and two coloured pills per row is a row that reads as two states.
-      accessorFn: (row) => EVENT_CATEGORIES[categoryOf(row.action)].label,
+      accessorFn: (row) => EVENT_CATEGORIES[auditCategoryOf(row.action)].label,
       enableSorting: false,
       filterFn: "arrIncludesSome",
       header: "Kind",
@@ -1573,8 +1545,10 @@ export function AdminAuditLog({
    * spends the tab shape on a record's sections and this shape on a list's scope, and a page that
    * uses the same object for both stops telling the reader which is which.
    *
-   * Every count comes from the loaded rows. The segment stays visible at zero, because "no pauses
-   * on this page" is a fact worth reading, and the body then says so in words.
+   * Every count comes from the loader, over the whole window the range and the filters describe,
+   * so a segment reads the same on page four as on page one. The segment stays visible at zero,
+   * because "no pauses in this window" is a fact worth reading, and the body then says so in
+   * words. A window whose counts could not be read shows the segments with no number on them.
    */
   const scopeSwitch = (
     <Segmented
@@ -1584,23 +1558,33 @@ export function AdminAuditLog({
       options={views.map((view) => ({
         key: view.key,
         label: view.label,
-        count: workspaceCountFormat.format(view.count),
+        ...(view.count === null ? {} : { count: workspaceCountFormat.format(view.count) }),
       }))}
       value={activeView}
     />
   );
 
+  /*
+   * Two different emptinesses, and the view is now on the server side of the line between them.
+   * An empty page in a saved view is the whole window's answer, so it no longer tells the reader
+   * to page on in the hope of finding one -- there are none to find. Rows in hand and nothing
+   * visible is the facets, which are the only filters still applied in the browser.
+   */
   const noRows = rows.length === 0 ? (
     <DataState
-      body="Change or clear the filters to see recorded activity."
+      body={activeView === "all"
+        ? "Change or clear the filters to see recorded activity."
+        : `Nothing in this window is ${activeViewDefinition.label.toLocaleLowerCase()}. Widen the range, or pick Everything.`}
       kind="empty"
-      title="No audit events match this view"
+      title={activeView === "all"
+        ? "No audit events match this view"
+        : `No ${activeViewDefinition.label.toLocaleLowerCase()} in this window`}
     />
   ) : visibleRows.length === 0 ? (
     <DataState
-      body="Later pages may still hold events in this family. Move through the pages, or pick Everything."
+      body="Later pages may still hold events these facets keep. Move through the pages, or clear them."
       kind="empty"
-      title={`No ${activeViewDefinition.label.toLocaleLowerCase()} on this page`}
+      title="No events on this page match the outcome, actor and client facets"
     />
   ) : null;
 
@@ -1684,7 +1668,11 @@ export function AdminAuditLog({
               onPrevious={() => navigate("previous")}
               pagination={pagination}
               shownRows={rows.length}
-              viewNote={activeView === "all" && !activeClient
+              /*
+               * The total beside this is the active view's own total now, so the note is only
+               * about the three facets, which are the only narrowing the browser still does.
+               */
+              viewNote={visibleRows.length === rows.length
                 ? null
                 : `${workspaceCountFormat.format(visibleRows.length)} of them on this page`}
             />
