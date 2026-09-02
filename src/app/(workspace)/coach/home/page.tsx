@@ -387,14 +387,16 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
   const [
     { CoachMeasurementSurface },
     { loadCoachLeadComposition, loadCoachMeasurement },
+    { createBillingRepository },
   ] = await Promise.all([
     import("@/components/workspace/live/coach-measurement"),
     import("@/lib/repositories/analytics"),
+    import("@/lib/repositories/billing"),
   ]);
   // One clock reading for both reads, so the aggregate and the monthly bars cannot land on
   // opposite sides of a month boundary and disagree about which month is still filling.
   const asOf = new Date().toISOString();
-  const [measurement, composition] = await Promise.all([
+  const [measurement, composition, billing] = await Promise.all([
     loadCoachMeasurement(context.actorId, context.tenantId, {
       window: query.window,
       customFrom: query.customFrom,
@@ -402,6 +404,18 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
       asOf,
     }),
     loadCoachLeadComposition(context.actorId, context.tenantId, asOf),
+    /*
+     * The same read `/coach/billing` makes, at the same instant as the measurement beside it, so
+     * the two pages cannot disagree about whether this coach has a billing period. It carries the
+     * `isCurrentBillingPeriod` predicate with it, so a period that has ended without being
+     * replaced is null here exactly as it is there.
+     *
+     * A failure is not allowed to take the dashboard down with it. Home's job is the measurement
+     * deck; the billing period only decides which of two honest sentences one footer prints, and
+     * falling back to the more cautious one costs a coach nothing they cannot get from
+     * `/coach/billing` itself.
+     */
+    createBillingRepository().loadOwnBilling(context.tenantId, new Date(asOf)).catch(() => null),
   ]);
   // One read of the connection list, shared by the two things that reason about it. The blocked
   // channel is the negative -- one connection that used to work and stopped -- and the status line
@@ -422,6 +436,7 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
       <CoachMeasurementSurface
         {...query}
         attention={attention}
+        billingPeriod={billing ? { periodStart: billing.periodStart, periodEnd: billing.periodEnd } : null}
         blockedChannel={blockedChannel}
         channelStatus={channelStatus}
         composition={composition}

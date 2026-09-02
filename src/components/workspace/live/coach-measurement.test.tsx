@@ -104,11 +104,13 @@ type Blocked = Parameters<typeof CoachMeasurementSurface>[0]["blockedChannel"];
 
 function renderSurface({
   attentionValue = ATTENTION,
+  billingPeriodValue = null,
   blockedChannelValue = null,
   compositionValue = composition(),
   measurementValue = measurement(),
 }: {
   attentionValue?: Attention;
+  billingPeriodValue?: { periodStart: string; periodEnd: string } | null;
   blockedChannelValue?: Blocked;
   compositionValue?: CoachLeadComposition;
   measurementValue?: CoachMeasurement;
@@ -116,6 +118,7 @@ function renderSurface({
   return render(
     <CoachMeasurementSurface
       attention={attentionValue}
+      billingPeriod={billingPeriodValue}
       blockedChannel={blockedChannelValue}
       composition={compositionValue}
       measurement={measurementValue}
@@ -1224,5 +1227,88 @@ describe("the attention card is one component rather than three rows of differen
   it("carries no uppercase mono NEEDS YOU badge beside the title", () => {
     const { container } = renderSurface();
     expect(container.textContent).not.toContain("NEEDS YOU");
+  });
+});
+
+/**
+ * Coach home and `/coach/billing` answering the same question about the same tenant.
+ *
+ * The allowance footer used to read the measurement RPC alone. That RPC reports the allowance
+ * available only when it finds a current period in `analytics_billing_subscriptions` AND a
+ * `tiers.call_allowance` behind that row's `tier_id`, so it says `unavailable` for two different
+ * reasons and the footer printed the same sentence for both: "There is no active billing period to
+ * count an allowance against." On the hosted project that sentence is false for every tenant with
+ * a subscription, because the analytics mirror holds no rows while `billing_subscriptions` holds
+ * six, so `/coach/billing` prints a period the dashboard denies exists.
+ *
+ * The page now takes the period from the same repository read `/coach/billing` makes, which
+ * carries `isCurrentBillingPeriod` with it, and the footer separates the two claims: the period is
+ * named when a record exists, and the count is withheld when nothing maps an allowance to it. The
+ * honest absent sentence survives for the case it was written for, which is neither read finding a
+ * period.
+ */
+describe("coach home allowance footer against the billing page", () => {
+  function withoutAllowance() {
+    return {
+      ...measurement(),
+      allowance: {
+        limit: null,
+        periodEnd: null,
+        periodStart: null,
+        state: "unavailable" as const,
+        used: null,
+      },
+    };
+  }
+
+  it("names the period the billing page is showing instead of denying it exists", () => {
+    const { container } = renderSurface({
+      billingPeriodValue: {
+        periodStart: "2026-08-01T00:00:00.000Z",
+        periodEnd: "2026-09-01T00:00:00.000Z",
+      },
+      measurementValue: withoutAllowance(),
+    });
+    const booked = panel(container, "Booked");
+
+    expect(booked.textContent).not.toContain("There is no active billing period");
+    expect(booked.textContent).toContain("no plan allowance is recorded");
+    expect(booked.textContent).toContain("Monthly plan progress");
+  });
+
+  it("withholds the count rather than drawing a bar it has no denominator for", () => {
+    const { container } = renderSurface({
+      billingPeriodValue: {
+        periodStart: "2026-08-01T00:00:00.000Z",
+        periodEnd: "2026-09-01T00:00:00.000Z",
+      },
+      measurementValue: withoutAllowance(),
+    });
+    const booked = panel(container, "Booked");
+
+    expect(booked.querySelector('[data-slot="meter"]')).toBeNull();
+    expect(booked.textContent).not.toContain("0 / 0");
+  });
+
+  it("keeps the absent sentence when neither read found a period", () => {
+    const { container } = renderSurface({ measurementValue: withoutAllowance() });
+    const booked = panel(container, "Booked");
+
+    expect(booked.textContent).toContain("There is no active billing period to count an allowance against.");
+    expect(booked.querySelector('[data-slot="meter"]')).toBeNull();
+  });
+
+  it("prefers the measured allowance over the projection when the RPC has one", () => {
+    const { container } = renderSurface({
+      billingPeriodValue: {
+        periodStart: "2020-01-01T00:00:00.000Z",
+        periodEnd: "2020-02-01T00:00:00.000Z",
+      },
+    });
+    const booked = panel(container, "Booked");
+
+    expect(booked.textContent).toContain("Counted over your billing period");
+    expect(booked.textContent).not.toContain("no plan allowance is recorded");
+    expect(booked.textContent).not.toContain("2020");
   });
 });
