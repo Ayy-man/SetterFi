@@ -757,7 +757,12 @@ describe("Phase 6 demo contract", () => {
   it("keeps demo rows labelled and outside the real Stripe arm", () => {
     expect(seed).toContain("is_test, adjusts_event_id");
     expect(seed).toContain("values ($1, $2, -1");
-    expect(seed).toContain('source":"SETTERFI_DEMO_PLACEHOLDER_COMPLETE');
+    // The cost rollup's source evidence still names itself a demo placeholder. It moved out of an
+    // inline jsonb literal and into a bound parameter when the seeder started reading a window
+    // before writing it, so the label is asserted where it now lives.
+    expect(seed).toContain('evidence: "SETTERFI_DEMO_PLACEHOLDER_COMPLETE"');
+    expect(seed).toContain('evidence: "SETTERFI_DEMO_PLACEHOLDER_INCOMPLETE"');
+    expect(seed).toContain("jsonb_build_object('source', $9::text)");
     expect(seed).not.toContain("createRealStripeDriver");
   });
 });
