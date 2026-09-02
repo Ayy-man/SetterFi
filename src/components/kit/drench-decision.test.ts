@@ -61,8 +61,7 @@ const KNOWN: Record<string, string> = {
   //
   // Latent rather than live: `divided` is passed by no caller and no caller gives `TitlePanel` a
   // `drench`, so the combination does not render today. It ships silently the first time somebody
-  // writes both. `deck-panel.tsx` is fenced for this wave, so it is logged in `docs/GAPS.md` and
-  // held here rather than fixed.
+  // writes both. `deck-panel.tsx` is fenced for this wave, so it is held here rather than fixed.
   "src/components/kit/deck-panel.tsx  --line-soft": "fenced-file",
 };
 

@@ -1,8 +1,8 @@
 /**
  * The atomics: the primitives the redesigned admin screens are transcribed from.
  *
- * The authority for every value here is the extracted artifact markup in
- * `.planning/design/screens/`, read against the named rules in `docs/DESIGN.md` and the token
+ * The authority for every value here is the extracted artifact markup of the drawn screens, read
+ * against the named rules in `docs/DESIGN.md` and the token
  * contract in `src/app/tokens.css`. `/design` renders every variant of every one of these,
  * including the failure and waiting states, so the system can be audited in one place.
  *

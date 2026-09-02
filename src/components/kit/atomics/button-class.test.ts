@@ -62,7 +62,7 @@ describe("the accent fill's shadow", () => {
   /*
    * The sites this lane does not own. They are listed rather than silently excluded, and the test
    * below fails if one of them is fixed -- an exception list nobody has to maintain is one that
-   * quietly grows. docs/GAPS.md names the constant they should adopt.
+   * quietly grows. Each should adopt the shared accent-shadow constant this file guards.
    */
   const NOT_YET_ADOPTED = [
     "components/workspace/live/coach-offer.tsx",

@@ -141,10 +141,10 @@ const ROLE_RAIL_WIDTH = {
  * nav data declares per destination -- a route spelled out in a selector here would break the day
  * that route moved, with no test to catch it.
  *
- * Values come from `.planning/design/ARTIFACT-SPEC.md` §2, §3 and §5. Two of them were written as
- * the dark palette's periwinkle at a hand-picked alpha -- the rail's right edge at .12 and the
- * attention card's border at .15 -- on the argument that §8's contract declared no token at either
- * number. That argument was about arithmetic and the tokens are about roles, and the arithmetic is
+ * Values come from the design artifact spec's rail, nav and attention-card sections. Two of them
+ * were written as the dark palette's periwinkle at a hand-picked alpha -- the rail's right edge at
+ * .12 and the attention card's border at .15 -- on the argument that the token contract declared
+ * no token at either number. That argument was about arithmetic and the tokens are about roles, and the arithmetic is
  * what fails: the light palette solves its hairlines as `rgba(60, 90, 150, ...)`, so re-solving
  * `tokens.css` left both of these behind as a dark-era slate drawn on a near-white rail. The rail's
  * right edge separates two surfaces, which is `--line`; the attention card's border is an outline

@@ -18,8 +18,8 @@ vi.mock("@/components/kit/app-shell", () => ({
 }));
 
 /**
- * The table language extracted from the drawn Inbox (`.planning/design/screens-r2/1a.html` and
- * `.planning/design/screens-r4/5a.html`). Each test below pins the part of the drawing that a
+ * The table language extracted from the drawn Inbox, across its round-2 and round-4 drawings.
+ * Each test below pins the part of the drawing that a
  * hand-rolled table keeps losing: the annotation on a group band, the sentence under the count,
  * the second line of a cell, and the single toned figure in the strip.
  */
@@ -324,7 +324,7 @@ describe("stat strip emphasis", () => {
 });
 
 /**
- * The two round-5 treatments (`.planning/design/screens-r5/6ab-table-anatomy-screenshot.png`).
+ * The two round-5 treatments, from the table-anatomy drawing.
  * `ledger` puts a dense admin table on the card face; `quiet` keeps a one-answer list on the
  * canvas and states its affordance once, at the end of the row.
  */

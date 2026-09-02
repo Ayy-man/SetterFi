@@ -151,8 +151,9 @@ export function ListPage({
             because no token holds that role: `--t-row` is 14px, but it is the *row* role at weight
             500, and binding to it because the number matches is the value-versus-role mistake this
             codebase refuses by name. The token this wants is a `--t-page-lede` declared shared and
-            restated in `console.css`; that is `docs/GAPS.md` 2026-09-01, deferred for contention
-            on `console.css` rather than rejected. A literal is safe here in a way it would not be
+            restated in `console.css`; that is outstanding work, deferred since 2026-09-01 for
+            contention on `console.css` rather than rejected. A literal is safe here in a way it
+            would not be
             in a shared atomic: every one of `ListPage`'s seventeen mounts is console.
 
             **`--measure-wide` (72ch)**, not `--measure-prose` (68ch), and not the 76ch drawn:
