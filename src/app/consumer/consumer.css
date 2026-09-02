@@ -1,0 +1,1355 @@
+/*
+ * The lead's surface, ported onto the coach side's scale.
+ *
+ * WHY THIS SHEET DECLARES ITS OWN TYPE ROLES rather than reaching for `--t-*`: the `--t-*` scale in
+ * `tokens.css` is the owner console's and its sizes are absolute px, so `--t-body` is 13px wherever
+ * it is written. This page is a phone conversation with a stranger who is not a SetterFi user, has
+ * never seen the product, and may well be reading it one-handed outdoors, and it had thirteen
+ * sentences set at the console's 13px. `docs/REDESIGN-CANVAS.md` puts the consumer surface in the
+ * same 16px / 44px density as the coach side for exactly that reason, and the roles below are what
+ * the canvas actually draws. They are local variables rather than redefinitions of `--t-*` so the
+ * change stops at `.consumer-shell` and cannot reach a console screen.
+ *
+ * WHAT MOVED LAST: the 9.5px uppercase mono overline on the day divider, the suggested-replies
+ * label, the context eyebrow and the booking card's lead-in. It is now the 12px sentence-case
+ * eyebrow, with the recipe rewritten in place further down this file. `docs/DESIGN.md` scopes the
+ * overline to the owner console, and `src/app/overline-size.test.ts` pins its absence here.
+ */
+.consumer-shell {
+  /* Artifact .avatar is 28px in the log and 36px in .chathead. */
+  --consumer-avatar-sm: calc(var(--s-8) - var(--s-1));
+  /*
+   * 42px, a literal, because the canvas states it three times and the spacing scale cannot.
+   *
+   * This was `var(--s-10)` -- 40px -- which is the nearest step on a scale built for padding and
+   * gaps, and binding a *drawn object's* size to it looked like discipline while quietly costing
+   * two pixels. All three consumer artboards draw this mark at `42px` with a `12px` radius and no
+   * disagreement between them (`Consumer.dc.html:66`, `ConsumerOptOut.dc.html:66`,
+   * `ConsumerBooked.dc.html:65`), so the value has an authority and the scale is not it. The
+   * Design-Token Discipline rule binds a class to a token *on role*; a mark is not a spacing step,
+   * and a value coinciding with one is not the same as sharing its meaning.
+   *
+   * `.consumer-closed-state__mark` reads this on purpose -- its own rule says it wants "the same
+   * weight as the avatar tiles" -- so the opt-out's padlock moves with it and the two stay one
+   * size, which is the whole reason it was named rather than retyped.
+   */
+  --consumer-avatar-lg: 42px;
+
+  /*
+   * The four type roles this surface actually has. Body is the sentence a lead reads; meta is the
+   * caption beside or beneath one; fine is the two disclaimers that are genuinely secondary; name
+   * is a heading -- the business, the booking, the closed state.
+   *
+   * `--consumer-fine` IS THE FLOOR FOR LANGUAGE, and saying so here is the point of this
+   * paragraph. Every rule in this file that sets type a lead reads as words takes one of these
+   * four, and nothing reads smaller -- four labels sat at a literal 12px for four audits precisely
+   * because that claim was implied by the list and stated nowhere, so no rule was wrong to point
+   * at and no reader knew there was a floor to check against.
+   *
+   * What the floor does not govern is a mark: the mono monogram inside `.consumer-avatar`
+   * (`:13px` in the narrow media query below) and any glyph in a tile are drawn objects sized to
+   * their container, not sentences, and a floor written for reading distance has nothing to say
+   * about them. The two figures -- the confirmed time at 40px, and `--t-mono-meta` on timestamps
+   * -- are likewise their own roles and argue themselves where they are set. Stating the boundary
+   * is what keeps this from being a rule wider than its own subject.
+   */
+  --consumer-body: 16px;
+  --consumer-meta: 15px;
+  --consumer-fine: 14px;
+  --consumer-name: 20px;
+
+  /*
+   * 44px is the floor for anything a lead presses, with no exceptions, and the one control that
+   * commits them to a call gets 60px. This is a thumb on a phone, which is the least precise
+   * pointer in the product.
+   */
+  --consumer-target: 44px;
+  --consumer-target-primary: 60px;
+
+  /* The deck panel's asymmetric radius, larger on top. Hero for the one panel that leads. */
+  --consumer-panel-radius: 24px 24px 17px 17px;
+  --consumer-panel-radius-hero: 30px 30px 17px 17px;
+
+  /*
+   * The drench, at `coach.css`'s exact value. The surface spends one of the two allowed, on the
+   * confirmed booking -- the thing that actually happened, and the only panel on the screen the
+   * lead came away with. Note it is a gradient of raw `oklch`, not the accent: the accent budget in
+   * `consumer-accent.test.ts` is spent on the human button and the Confirm fill, and a drench is
+   * emphasis of a different kind that does not compete with either.
+   */
+  --consumer-drench-live: linear-gradient(158deg, oklch(0.28 0.08 262), oklch(0.17 0.04 265));
+  --consumer-on-drench-sub: rgba(255, 255, 255, 0.85);
+  /* Artifact .chatlog .msg__text: the bubble reads one step above the product reading
+     size, because this surface is a conversation and nothing else. It is its own role,
+     not the 600-weight --t-section heading size borrowed for its number. */
+  --consumer-bubble: 16px;
+  /* Artifact .transcript--sided narrows the bubble to 60ch. That is the transcript's own
+     measure, not a prose measure: a chat bubble that ran to --measure-prose would out-run the
+     avatar gutter and stop reading as a turn. Named here so the four places that need it cannot
+     drift apart, which is the point of the Line Length rule even where the token does not fit. */
+  --consumer-bubble-measure: 60ch;
+
+  display: grid;
+  height: 100dvh;
+  min-height: calc(var(--s-12) * 10);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--quiet);
+  color: var(--ink);
+  color-scheme: light dark;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--consumer-body);
+  line-height: 1.55;
+}
+
+.consumer-shell *,
+.consumer-shell *::before,
+.consumer-shell *::after {
+  box-sizing: border-box;
+}
+
+.consumer-shell button,
+.consumer-shell textarea {
+  font: inherit;
+}
+
+.consumer-shell button:not(:disabled) {
+  cursor: pointer;
+}
+
+.consumer-shell :where(a, button, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.consumer-shell button:disabled {
+  cursor: not-allowed;
+  color: var(--faint);
+  opacity: 0.65;
+}
+
+/*
+ * The floor, stated once rather than per control.
+ *
+ * `:where()` keeps the specificity at zero, so a control that genuinely has to opt out can, without
+ * an `!important` arms race -- the skip link is the one that does, because it is positioned off
+ * screen until focused and a 44px box would be 44px of invisible fixed element. Every other
+ * pressable thing on the page clears the floor from here, which is why the rules below only set the
+ * two sizes that are *larger* than it.
+ */
+.consumer-shell :where(a[href], button, [role="button"], input, select, textarea):not(
+  .consumer-skip-link
+) {
+  min-height: var(--consumer-target);
+}
+
+.consumer-skip-link {
+  position: fixed;
+  top: var(--s-2);
+  left: var(--s-2);
+  z-index: var(--z-popover);
+  transform: translateY(calc(-100% - var(--s-4)));
+  border-radius: var(--r-input);
+  background: var(--ink);
+  color: var(--on-accent);
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--t-body);
+  font-weight: var(--t-row-w);
+  text-decoration: none;
+  transition: transform var(--duration-quick) var(--ease-out);
+}
+
+.consumer-skip-link:focus {
+  transform: translateY(0);
+}
+
+.consumer-preview-ribbon {
+  display: flex;
+  grid-column: 1;
+  grid-row: 1;
+  min-height: var(--s-10);
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  background: var(--card);
+  color: var(--muted);
+  padding: var(--s-2) var(--s-4);
+  font-size: var(--consumer-meta);
+  line-height: 1.45;
+  text-align: center;
+}
+
+.consumer-preview-ribbon strong {
+  color: var(--ink);
+  font-weight: var(--t-row-w);
+}
+
+.consumer-stage {
+  display: grid;
+  width: min(100%, calc(var(--content-max) - (var(--s-12) * 5) - var(--s-5)));
+  min-height: 0;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--s-6);
+  margin: 0 auto;
+  padding: var(--s-6) 0;
+}
+
+.consumer-frame {
+  display: contents;
+}
+
+.consumer-chat-body {
+  display: flex;
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0 0 17px 17px;
+  background: var(--canvas);
+  box-shadow: var(--shadow-card);
+}
+
+.consumer-header {
+  display: flex;
+  flex: none;
+  min-width: 0;
+  align-items: center;
+  gap: var(--s-3);
+  border-bottom: 1px solid var(--line);
+  padding: var(--s-4) var(--s-5);
+}
+
+/* Artifact .avatar: circle, quiet fill, line border, body-colour initials. The ink
+   fill belongs to the coach variant only (.avatar--coach). */
+.consumer-avatar,
+.consumer-message__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--quiet);
+  color: var(--body);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* The canvas draws the business's mark as a rounded square, which is what a lead sees in every
+   other messaging app; the circle stays on the per-turn avatars, where it reads as a person. */
+.consumer-avatar {
+  width: var(--consumer-avatar-lg);
+  height: var(--consumer-avatar-lg);
+  border-radius: 12px;
+  font-size: var(--consumer-meta);
+}
+
+.consumer-identity {
+  min-width: 0;
+}
+
+/*
+ * The coach's business name, and the reason it wraps rather than ellipsizes.
+ *
+ * It shared a flex line with the "talk to a human" control and was `nowrap` with an ellipsis, so
+ * at 390px a name any longer than "Reid Funding Group" arrived as "Reid Fund...". That is the
+ * coach's brand, on the one screen in the whole product a lead ever sees, cut in half -- and it is
+ * the same defect the coach inbox shipped when a `shrink-0` timestamp squeezed every lead's name
+ * down to "Jo...". `truncate` is invisible to jsdom, so nothing goes red for it; the fix is to stop
+ * asking a name to fit on one line at all.
+ *
+ * `overflow-wrap: anywhere` is the second half: a business name can be one unbroken token, and a
+ * wrapping rule that cannot break inside a word just overflows the pane instead of clipping it.
+ */
+.consumer-identity h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: var(--consumer-name);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+/*
+ * The status line under the name is metadata, and metadata is what may be cut when the room runs
+ * out. It keeps its single line for exactly that reason: the name above it now takes as many lines
+ * as it needs, so this is the thing that gives way.
+ *
+ * It carries one of two strings, not one -- "Your call is confirmed" once an appointment is
+ * confirmed, "Appointment assistant" otherwise -- and the branch is in `ConsumerExperience`, where
+ * the state lives, rather than named here. This comment used to quote whichever single string was
+ * current, and got it wrong twice: it said "usually replies right away" long after the identity
+ * fix removed it, and would now be wrong again in the booked state. A stylesheet rule about how a
+ * line behaves when it runs out of room does not need to know what the line says, and quoting the
+ * copy is what kept putting this note one edit behind the screen.
+ */
+.consumer-identity p {
+  overflow: hidden;
+  margin: var(--s-1) 0 0;
+  color: var(--muted);
+  font-size: var(--consumer-meta);
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consumer-human-action {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin-left: auto;
+  text-align: right;
+}
+
+.consumer-human-button {
+  display: inline-flex;
+  min-height: var(--consumer-target);
+  align-items: center;
+  gap: var(--s-2);
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent-text);
+  padding: var(--s-1) var(--s-3);
+  font-size: var(--consumer-body);
+  font-weight: 500;
+}
+
+.consumer-human-button:not(:disabled):hover {
+  background: var(--row-hover);
+  color: var(--accent-hover);
+}
+
+.consumer-human-button svg,
+.consumer-inline-state button svg,
+.consumer-closed-state button svg,
+.consumer-context__promises svg {
+  width: var(--s-4);
+  height: var(--s-4);
+}
+
+.consumer-human-button__short,
+.consumer-human-window-short {
+  display: none;
+}
+
+.consumer-human-action > span {
+  color: var(--faint);
+  font-size: var(--consumer-fine);
+  line-height: 1.45;
+}
+
+.consumer-human-action > small,
+.consumer-booking__copy small,
+.consumer-system-event small {
+  /* Artifact .chathead__eta: a faint sentence-case caption carrying a full sentence. It moved off
+     the console's 12px with the rest of the page -- it is a sentence, so it takes a sentence size. */
+  color: var(--faint);
+  font-size: var(--consumer-fine);
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.consumer-disclosure {
+  flex: none;
+  border-bottom: 1px solid var(--line);
+  background: var(--quiet);
+  color: var(--muted);
+  padding: var(--s-3) var(--s-5);
+  font-size: var(--consumer-meta);
+  line-height: 1.45;
+  text-align: center;
+}
+
+/* A link by its underline rather than its hue. The page's two accent spends are the human
+   button and the Confirm fill, and a compliance link is not allowed to be the third -- nor to
+   be told apart from the sentence around it by colour alone. */
+.consumer-disclosure a {
+  display: inline-flex;
+  align-items: center;
+  color: var(--body);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: var(--s-1);
+}
+
+.consumer-disclosure a:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
+
+.consumer-conversation {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--s-5);
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+/*
+ * The eyebrow, and there is no overline on this surface any more.
+ *
+ * These four labels -- the day divider, the suggested-replies label, the brand panel's eyebrow and
+ * the booking card's lead-in -- were the console's 9.5px uppercase mono overline. That role now
+ * governs the owner console and only the owner console: `docs/DESIGN.md`'s Hierarchy section says
+ * so, and `src/app/overline-size.test.ts` pins the absence here rather than the size.
+ *
+ * What replaces it is sentence case at `--consumer-fine`, `--muted`. The change is larger than the
+ * numbers suggest. An uppercase micro-label at 9.5px is the single worst reading case in a product
+ * read by people over 55, and this is the one surface in it read by a stranger on a phone who has
+ * no reason to persist -- so it is the last place a label should be something to decipher rather
+ * than something to read. Sentence case matters as much as the size: uppercase removes the word
+ * shapes a reader recognises without looking.
+ *
+ * THE SIZE IS A ROLE, NOT A NUMBER, and that is what changed here. This rule carried a literal
+ * `12px` while the sheet's own roles at the top of this file declare `--consumer-fine: 14px` as
+ * the smallest thing on the surface -- so four labels, one of them heading the offered
+ * appointment, sat below a floor this file states for itself. The old comment argued the case
+ * against *uppercase* and never mentioned size, which is how a 12px literal read as deliberate for
+ * four audits: a rule whose justification answers a different question than the one it decides.
+ * Either 12px was a fifth role and should have been declared with the other four, or it was drift.
+ * It was drift, so these labels take the role that already existed.
+ */
+.consumer-day-label,
+.consumer-starters > span,
+.consumer-context__eyebrow,
+.consumer-booking__copy > span {
+  color: var(--muted);
+  font-size: var(--consumer-fine);
+  line-height: 1.4;
+}
+
+.consumer-day-label {
+  display: block;
+  margin-bottom: var(--s-4);
+  text-align: center;
+}
+
+.consumer-message-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.consumer-message {
+  display: grid;
+  width: 100%;
+  grid-template-columns: var(--consumer-avatar-sm) minmax(0, 1fr);
+  align-items: end;
+  gap: var(--s-3);
+}
+
+/* Artifact .transcript--sided: the lead's own turns sit right, avatar column and all. */
+.consumer-message[data-author="lead"] {
+  grid-template-columns: minmax(0, 1fr) var(--consumer-avatar-sm);
+}
+
+.consumer-message[data-author="lead"] .consumer-message__body {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.consumer-message[data-author="lead"] .consumer-message__avatar {
+  grid-row: 1;
+  grid-column: 2;
+  color: var(--muted);
+}
+
+/*
+ * No `font-size` here, and its absence is the point.
+ *
+ * This carried `font-size: 11px` for the two letters it used to hold. It holds none: every arm of
+ * `ConsumerMessageRow` renders an `<svg>` and nothing else (`consumer-experience.tsx:442-446`),
+ * because a circle reads as a person and initials inside one are a claim about who wrote the turn.
+ * The declaration outlived the initials and styled nothing, which is worse than harmless -- it was
+ * the fourth-smallest number in the sheet and the next person auditing sizes had to work out that
+ * no glyph was set at it. The rule that sizes the icon is the one below.
+ */
+.consumer-message__avatar {
+  width: var(--consumer-avatar-sm);
+  height: var(--consumer-avatar-sm);
+}
+
+.consumer-message__avatar svg {
+  width: var(--s-3);
+  height: var(--s-3);
+}
+
+/* Artifact .avatar--coach: the one ink-filled avatar, for the person who took over. */
+.consumer-message[data-author="human"] .consumer-message__avatar {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--canvas);
+}
+
+.consumer-message__body {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.consumer-message[data-author="lead"] .consumer-message__body {
+  align-items: flex-end;
+}
+
+/* Artifact .chatlog .msg__text is 16px / 1.5; .transcript--sided narrows the measure to
+   60ch, and this transcript is sided, so 60ch is the one that applies.
+
+   The radius is the canvas's sided bubble: round on three corners and nearly square on the one
+   nearest its own avatar, which is what makes a column of turns read as alternating sides without
+   needing a colour to say so. The lead's own turn mirrors it below. */
+.consumer-message__body > p {
+  max-width: var(--consumer-bubble-measure);
+  margin: 0;
+  border-radius: 18px 18px 18px 6px;
+  background: var(--quiet);
+  color: var(--body);
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--consumer-bubble);
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.consumer-message[data-author="lead"] .consumer-message__body > p {
+  border: 1px solid var(--line);
+  border-radius: 18px 18px 6px 18px;
+  background: var(--card);
+  color: var(--ink);
+}
+
+.consumer-message[data-author="human"] .consumer-message__body > p {
+  border: 1px solid var(--line-strong);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.consumer-message__assistant-author,
+.consumer-message__lead-author,
+.consumer-message__human-author {
+  /* Artifact .msg__who / .msg__meta: sentence case, never overline treatment. */
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  color: var(--muted);
+  font-size: var(--consumer-fine);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.consumer-message__human-author {
+  color: var(--muted);
+}
+
+.consumer-message__assistant-author time,
+.consumer-message__lead-author time,
+.consumer-message__human-author time,
+.consumer-handoff-divider time,
+.consumer-system-event time {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--t-mono-meta);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: var(--t-mono-meta-w);
+  line-height: var(--t-mono-meta-lh);
+}
+
+.consumer-handoff-divider,
+.consumer-system-event {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(var(--s-8), 1fr) auto minmax(var(--s-8), 1fr);
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--faint);
+  text-align: center;
+}
+
+.consumer-handoff-divider > span:first-child,
+.consumer-handoff-divider > span:last-child,
+.consumer-system-event > span {
+  border-top: 1px solid var(--line);
+}
+
+.consumer-handoff-divider > span:nth-child(2),
+.consumer-system-event > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--s-2);
+}
+
+.consumer-system-event > div {
+  display: grid;
+  max-width: var(--measure-tight);
+  gap: var(--s-1);
+}
+
+.consumer-system-event > div > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--s-2);
+  font-size: var(--consumer-meta);
+}
+
+.consumer-handoff-divider strong,
+.consumer-system-event strong {
+  color: var(--muted);
+  font-size: var(--consumer-meta);
+  font-weight: 500;
+}
+
+.consumer-system-event p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--consumer-meta);
+  line-height: 1.45;
+}
+
+.consumer-typing {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-3);
+}
+
+.consumer-typing > span:last-child {
+  display: flex;
+  gap: var(--s-1);
+  border-radius: 18px 18px 18px 6px;
+  background: var(--quiet);
+  padding: var(--s-3) var(--s-4);
+}
+
+.consumer-typing i {
+  width: var(--distance-small);
+  height: var(--distance-small);
+  border-radius: var(--r-full);
+  background: var(--muted);
+  animation: consumer-typing var(--duration-fast) var(--ease-out) infinite alternate;
+}
+
+.consumer-typing i:nth-child(2) {
+  animation-delay: var(--duration-stagger);
+}
+
+.consumer-typing i:nth-child(3) {
+  animation-delay: calc(var(--duration-stagger) * 2);
+}
+
+@keyframes consumer-typing {
+  from { opacity: 0.45; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(calc(-1 * var(--distance-micro))); }
+}
+
+/* The deck panel's shape: asymmetric radius, larger on top, on a card face rather than the flat
+   fill these carried. They are indented past the avatar gutter so they read as belonging to the
+   assistant's side of the transcript rather than as page furniture. */
+.consumer-booking,
+.consumer-inline-state {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-left: calc(var(--consumer-avatar-sm) + var(--s-3));
+  border: 1px solid var(--line);
+  border-radius: var(--consumer-panel-radius);
+  background: linear-gradient(180deg, var(--card-top), var(--card));
+  box-shadow: var(--shadow-card);
+  padding: var(--s-5);
+}
+
+/* Artifact .bookcard: line border on card fill, plain ink title, one accent (the button). */
+.consumer-booking {
+  max-width: calc(var(--s-10) * 11);
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--s-4);
+  border-radius: var(--consumer-panel-radius-hero);
+}
+
+.consumer-booking__copy {
+  width: 100%;
+  min-width: 0;
+  flex: none;
+}
+
+.consumer-booking__copy > span {
+  display: block;
+}
+
+.consumer-booking h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-2) 0 var(--s-1);
+  color: var(--ink);
+  font-size: var(--consumer-name);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+.consumer-booking h2 svg {
+  width: var(--s-5);
+  height: var(--s-5);
+  flex: none;
+  color: var(--muted);
+}
+
+.consumer-booking p,
+.consumer-inline-state span {
+  margin: 0;
+  color: var(--body);
+  font-size: var(--consumer-meta);
+  line-height: 1.5;
+}
+
+
+.consumer-primary-button,
+.consumer-inline-state button,
+.consumer-closed-state button {
+  display: inline-flex;
+  min-height: var(--consumer-target);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  border: 0;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--on-accent);
+  padding: var(--s-2) var(--s-5);
+  font-size: var(--consumer-body);
+  font-weight: 500;
+  transition: opacity var(--duration-quick) var(--ease-out), transform var(--duration-quick) var(--ease-out);
+}
+
+/* Artifact .btn--primary: the single accent fill on the consumer screen, and the one control that
+   commits the lead to a call -- so it is the one that takes the 60px primary target rather than the
+   44px floor. Everything else on the page is the floor. */
+.consumer-primary-button {
+  min-height: var(--consumer-target-primary);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  font-weight: 600;
+}
+
+.consumer-primary-button:not(:disabled):hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.consumer-primary-button:not(:disabled):active,
+.consumer-inline-state button:not(:disabled):active,
+.consumer-closed-state button:not(:disabled):active {
+  transform: scale(var(--scale-small));
+}
+
+.consumer-inline-state[data-tone="error"] {
+  border-color: var(--failure-line);
+  background: var(--failure-wash);
+}
+
+.consumer-inline-state[data-tone="error"] strong {
+  color: var(--failure-text);
+}
+
+.consumer-inline-state[data-tone="error"] span {
+  color: var(--failure-body);
+}
+
+.consumer-inline-state strong,
+.consumer-inline-state span {
+  display: block;
+}
+
+.consumer-inline-state strong {
+  color: var(--ink);
+  font-size: var(--consumer-body);
+  font-weight: 500;
+}
+
+.consumer-composer-shell {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--s-2);
+  border-top: 1px solid var(--line);
+  background: var(--canvas);
+  padding: var(--s-4) var(--s-5) max(var(--s-4), env(safe-area-inset-bottom));
+}
+
+.consumer-starters {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.consumer-starters > span {
+  flex: none;
+}
+
+/* Artifact .qr: a pill, line-strong border on card fill. It is at the 44px floor now rather than
+   the artifact's 36px -- these are the three things a lead is most likely to tap first, and they
+   sit in a horizontally scrolling row, which is the worst case for a thumb. */
+.consumer-starters button {
+  min-height: var(--consumer-target);
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--card);
+  color: var(--ink);
+  padding: 0 var(--s-4);
+  font-size: var(--consumer-meta);
+  font-weight: 500;
+  transition: border-color var(--duration-quick) var(--ease-out);
+}
+
+.consumer-starters button:not(:disabled):hover {
+  border-color: var(--ink);
+}
+
+.consumer-composer-shell [data-slot="composer"] {
+  position: static;
+  border-color: var(--line-strong);
+  border-radius: 18px;
+}
+
+.consumer-composer-shell [data-slot="composer"]:not(:focus-within) {
+  box-shadow: none;
+}
+
+.consumer-composer-shell [data-slot="textarea"] {
+  min-height: var(--s-12);
+  max-height: calc(var(--s-12) * 3);
+  font-size: var(--consumer-bubble);
+}
+
+.consumer-composer-status,
+.consumer-composer-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--consumer-fine);
+  line-height: 1.45;
+  text-align: center;
+}
+
+.consumer-closed-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--consumer-panel-radius);
+  background: linear-gradient(180deg, var(--card-top), var(--card));
+  padding: var(--s-4) var(--s-5);
+}
+
+/*
+ * The one drenched panel on the surface, and only for the arm that earned it.
+ *
+ * The closed state covers three different endings -- the call is booked, the lead opted out, or the
+ * conversation simply closed -- and only one of them is an outcome worth saturating. Drenching the
+ * opt-out would dress a compliance stop up as an achievement, which is both tasteless and, on a
+ * screen whose whole job is to be unambiguous about having stopped, actively misleading. So the
+ * fill is keyed to `data-state`, which `ConsumerExperience` now stamps from the conversation state
+ * it already held, and the other two arms keep the plain card.
+ */
+.consumer-closed-state[data-state="booked"] {
+  border-color: transparent;
+  border-radius: var(--consumer-panel-radius-hero);
+  background: var(--consumer-drench-live);
+}
+
+.consumer-closed-state[data-state="booked"] strong {
+  color: var(--on-accent);
+}
+
+.consumer-closed-state[data-state="booked"] span {
+  color: var(--consumer-on-drench-sub);
+}
+
+/*
+ * The confirmed time, as a figure rather than as part of a sentence.
+ *
+ * A lead who has booked reopens this screen for one value, and until now that value was a clause
+ * inside a system message. It takes the product's figure treatment -- mono, weight 500, tight
+ * tracking, line-height under one -- at the size the artboard draws it, so it reads at arm's
+ * length on a phone.
+ *
+ * It is only ever inside the drenched booked panel, so the colour is the on-drench ink and not a
+ * theme token: the panel is a deliberate dark island in both palettes, and a token that follows
+ * the theme would put near-black text on it in light mode.
+ */
+.consumer-closed-state__figure {
+  margin: var(--s-2) 0 0;
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 500;
+  letter-spacing: -0.075em;
+  line-height: 0.92;
+}
+
+.consumer-closed-state__day {
+  margin-top: var(--s-1);
+  font-size: var(--consumer-body);
+  font-weight: 500;
+}
+
+/* The reservation sentence sits under the time and the zone, so it needs air above it rather than
+   reading as a third line of the same block. */
+.consumer-closed-state[data-state="booked"] span:last-of-type {
+  margin-top: var(--s-3);
+}
+
+/*
+ * "What the call is about", the plain card under the drenched booked panel.
+ *
+ * It borrows the surface's ordinary panel treatment rather than defining its own, so the one
+ * saturated thing on this screen stays the one saturated thing. `--consumer-panel-radius` is the
+ * same corner every other card on the stage takes.
+ */
+.consumer-booked-subject {
+  margin-top: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--consumer-panel-radius);
+  background: linear-gradient(180deg, var(--card-top), var(--card));
+  padding: var(--s-4) var(--s-5);
+}
+
+.consumer-booked-subject__label {
+  display: block;
+  color: var(--muted);
+  font-size: var(--consumer-meta);
+}
+
+.consumer-booked-subject__value {
+  margin: var(--s-1) 0 0;
+  color: var(--body);
+  font-size: var(--consumer-body);
+  line-height: 1.5;
+}
+
+/*
+ * The opt-out's own mark. A tile rather than a bare glyph so it reads as part of the strip's
+ * furniture at the same weight as the avatar tiles above it, and quiet rather than red: a lead who
+ * asked to be left alone has not made an error.
+ */
+.consumer-closed-state__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  /* `--s-7` for a night: the scale runs 6, 8, 10 with no 7, so both declarations were dropped and
+     the tile collapsed to its glyph -- on the lead's own screen, in the state a lead reaches by
+     asking to be left alone. `--consumer-avatar-lg` is what the sentence above means by "the same
+     weight as the avatar tiles". */
+  width: var(--consumer-avatar-lg);
+  height: var(--consumer-avatar-lg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--quiet);
+  color: var(--muted);
+}
+
+/*
+ * The booked arm's tick, which is a different object from the opt-out's padlock and is drawn as
+ * one.
+ *
+ * `ConsumerBooked.dc.html:76-79` puts it at 38px on a circle of translucent white, inside the
+ * drenched panel. The base rule above cannot serve it: `--quiet` on `--line` in `--muted` is a
+ * light-ground tile, and the booked strip is a deliberate dark island in both palettes
+ * (see `.consumer-closed-state[data-state="booked"]`), so the shared face would put a pale tile
+ * and a grey glyph on near-black and lose both. These are the on-drench values for the same
+ * reason `.consumer-closed-state__figure` takes `--on-accent` rather than a theme token.
+ *
+ * A circle rather than the padlock's rounded square, and that is the canvas's distinction rather
+ * than an inconsistency: the tick is a status, the mark beside a name is a tile.
+ */
+.consumer-closed-state__mark[data-state="booked"] {
+  width: 38px;
+  height: 38px;
+  border-color: transparent;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--on-accent);
+}
+
+.consumer-closed-state__mark svg {
+  width: var(--s-5);
+  height: var(--s-5);
+}
+
+.consumer-closed-state strong,
+.consumer-closed-state span {
+  display: block;
+}
+
+.consumer-closed-state strong {
+  color: var(--ink);
+  font-size: var(--consumer-name);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+.consumer-closed-state span {
+  margin-top: var(--s-1);
+  color: var(--muted);
+  font-size: var(--consumer-meta);
+  line-height: 1.5;
+}
+
+.consumer-context {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--consumer-panel-radius-hero);
+  background: linear-gradient(180deg, var(--card-top), var(--card));
+  box-shadow: var(--shadow-card);
+  padding: var(--s-10) var(--s-8);
+}
+
+.consumer-context__eyebrow {
+  display: block;
+}
+
+.consumer-context h2 {
+  margin: var(--s-4) 0 0;
+  text-wrap: balance;
+  color: var(--ink);
+  font-size: calc(var(--t-title) + var(--s-3));
+  font-weight: var(--t-section-w);
+  letter-spacing: var(--t-title-tr);
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.consumer-context__mobile-line {
+  display: none;
+}
+
+.consumer-context__intro {
+  max-width: var(--measure-tight);
+  margin: var(--s-4) 0 var(--s-2);
+  color: var(--body);
+  font-size: var(--consumer-body);
+  line-height: 1.55;
+}
+
+.consumer-context__promises {
+  display: flex;
+  margin: var(--s-4) 0 0;
+  padding: 0;
+  flex-direction: column;
+  list-style: none;
+}
+
+.consumer-context__promises li {
+  display: grid;
+  grid-template-columns: var(--s-4) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-3);
+  border-top: 1px solid var(--line);
+  padding: var(--s-4) 0;
+}
+
+.consumer-context__promises svg {
+  margin-top: var(--s-1);
+  color: var(--muted);
+}
+
+.consumer-context__promises span,
+.consumer-context__promises strong {
+  display: block;
+}
+
+/*
+ * The promise's own line, at `--consumer-body` rather than the 17px literal it carried.
+ *
+ * 17px was not a fifth role, it was the gap between two -- above `--consumer-body`'s 16px and
+ * below `--consumer-name`'s 20px -- and nothing anywhere named it or reused it. It is a lead-in to
+ * the sentence directly under it, so weight and colour are what separate the two, which is what
+ * they already do; one pixel of size was never carrying that distinction.
+ */
+.consumer-context__promises strong {
+  color: var(--ink);
+  font-size: var(--consumer-body);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.consumer-context__promises span {
+  margin-top: var(--s-1);
+  color: var(--muted);
+  font-size: var(--consumer-meta);
+  line-height: 1.5;
+}
+
+.consumer-live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .consumer-stage {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 0;
+    padding: var(--s-4);
+  }
+
+  .consumer-preview-ribbon {
+    grid-row: 1;
+  }
+
+  .consumer-chat-body {
+    grid-row: 3;
+    border-radius: 0 0 17px 17px;
+  }
+
+  .consumer-context {
+    grid-column: 1;
+    grid-row: 2;
+    border-radius: 0;
+    padding: var(--s-4) var(--s-5);
+  }
+
+  .consumer-context__eyebrow,
+  .consumer-context__intro,
+  .consumer-context__promises {
+    display: none;
+  }
+
+  .consumer-context h2 {
+    max-width: none;
+    margin: 0;
+    font-size: var(--t-title);
+    line-height: var(--t-title-lh);
+  }
+
+  .consumer-context__mobile-line {
+    display: block;
+    margin: var(--s-1) 0 0;
+    color: var(--body);
+    font-size: var(--consumer-meta);
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 620px) {
+  /*
+   * The preview marker wraps instead of being sliced.
+   *
+   * It was `overflow: hidden` with `white-space: nowrap` and no ellipsis, so below 620px the
+   * sentence saying this is a preview rather than a real conversation was simply cut off at the
+   * pane edge -- with no ellipsis, not even a signal that words were missing. A test-data label
+   * that a phone silently truncates is worse than no label, because the reader cannot tell it is
+   * incomplete, and "test data is labelled on screen" is a rule about what the reader can actually
+   * read.
+   */
+  .consumer-preview-ribbon {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .consumer-stage {
+    padding: 0;
+  }
+
+  .consumer-preview-ribbon,
+  .consumer-context,
+  .consumer-chat-body {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .consumer-context {
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .consumer-context h2 {
+    font-size: var(--t-section);
+  }
+
+  /* A sentence, so it wraps. Ellipsizing a sentence loses the half that carried the verb. */
+  .consumer-context__mobile-line {
+    overflow-wrap: anywhere;
+  }
+
+  .consumer-header {
+    gap: var(--s-2);
+    padding: var(--s-2) var(--s-3);
+  }
+
+  .consumer-avatar {
+    width: var(--consumer-avatar-sm);
+    height: var(--consumer-avatar-sm);
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  .consumer-identity p {
+    max-width: 18ch;
+  }
+
+  .consumer-human-action {
+    align-items: flex-end;
+  }
+
+  .consumer-human-button {
+    min-height: var(--consumer-target);
+    padding: var(--s-2);
+  }
+
+  .consumer-human-button__long,
+  .consumer-human-window {
+    display: none;
+  }
+
+  .consumer-human-button__short,
+  .consumer-human-window-short {
+    display: inline;
+  }
+
+  .consumer-human-window-short {
+    max-width: var(--measure-caption);
+    white-space: normal;
+  }
+
+  .consumer-disclosure {
+    padding: var(--s-2) var(--s-3);
+    text-align: left;
+  }
+
+  .consumer-conversation {
+    padding: var(--s-3);
+  }
+
+  .consumer-message {
+    gap: var(--s-2);
+  }
+
+  /* Artifact .phone--consumer .chatlog .msg__text: the bubble steps down at phone width, by one
+     role rather than back to the console's size. The composer textarea does not step down at all,
+     so nothing here invites an iOS zoom. */
+  .consumer-message__body > p {
+    font-size: var(--consumer-meta);
+  }
+
+  .consumer-booking,
+  .consumer-inline-state {
+    align-items: flex-start;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .consumer-primary-button {
+    width: 100%;
+  }
+
+  .consumer-composer-shell {
+    padding: var(--s-2) var(--s-3) max(var(--s-2), env(safe-area-inset-bottom));
+  }
+
+  .consumer-starters {
+    margin: 0 calc(-1 * var(--s-3));
+    padding: 0 var(--s-3);
+  }
+
+  .consumer-starters button {
+    min-height: var(--consumer-target);
+  }
+
+  .consumer-composer-shell [data-slot="textarea"] {
+    font-size: var(--consumer-bubble);
+  }
+
+  .consumer-handoff-divider,
+  .consumer-system-event {
+    grid-template-columns: minmax(var(--s-4), 1fr) minmax(0, auto) minmax(var(--s-4), 1fr);
+    gap: var(--s-2);
+  }
+
+  .consumer-system-event > div {
+    max-width: var(--measure-caption);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .consumer-shell *,
+  .consumer-shell *::before,
+  .consumer-shell *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/*
+ * "Add to my calendar", the one action on a screen whose whole content is a fact.
+ *
+ * The artboard fills this in the accent at 58px. It takes `--ink` instead, the same treatment
+ * `.consumer-closed-state button` already uses, and that is a ruling rather than a stopgap.
+ *
+ * `consumer-accent.test.ts` caps this surface at two accent spends and names them: the button that
+ * asks for a person, and the button that confirms a time. Those two are open-conversation controls
+ * and this one only exists once the conversation has closed, so no screen ever really shows three,
+ * and widening the budget would have been safe. It was still refused, and the reason is worth
+ * having here rather than as an entry in that test's allowlist: the gain is a filled button on a
+ * screen with exactly one action, where ink already reads as the thing to press, and the cost is
+ * that the next person finds a budget with an argued exception and reads the exception as the
+ * pattern. That is how a two-accent budget becomes a three-accent budget. The rule stays whole and
+ * the argument lives at the call site.
+ *
+ * It keeps `--consumer-target-primary` rather than the 44px floor, for the reason the confirm
+ * control does: it is the last thing a lead does on this screen, on a phone, and it is easier to
+ * hit than to correct.
+ */
+.consumer-booked-calendar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: var(--consumer-target-primary);
+  margin-top: var(--s-3);
+  border: 1px solid var(--ink);
+  border-radius: var(--consumer-panel-radius);
+  background: var(--ink);
+  color: var(--on-accent);
+  font-size: var(--consumer-body);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.consumer-booked-calendar svg {
+  width: 20px;
+  height: 20px;
+}

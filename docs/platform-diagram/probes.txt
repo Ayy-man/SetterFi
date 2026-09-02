@@ -1,0 +1,86 @@
+== unauthenticated probes 2026-09-01T22:35:34Z
+/api/health/live                 GET  200 ->  | {"status":"alive"}
+/api/health/ready                GET  503 ->  | {"status":"unready","configuration":true,"database":true,"automation":false,"requiredProviders":false}
+/                                GET  200 ->  | <!DOCTYPE html><html data-dpl-id="[deployment id]" lang="en" class="archivo_9a129254-module__NRWdgq__variable ibm_plex_mono_88c6c26e-module__pV
+/signup                          GET  200 ->  | <!DOCTYPE html><html data-dpl-id="[deployment id]" lang="en" class="archivo_9a129254-module__NRWdgq__variable ibm_plex_mono_88c6c26e-module__pV
+/consumer                        GET  200 ->  | <!DOCTYPE html><html data-dpl-id="[deployment id]" lang="en" class="archivo_9a129254-module__NRWdgq__variable ibm_plex_mono_88c6c26e-module__pV
+/opt-in                          GET  404 ->  | <!DOCTYPE html><html data-dpl-id="[deployment id]" lang="en" class="archivo_9a129254-module__NRWdgq__variable ibm_plex_mono_88c6c26e-module__pV
+/login                           GET  307 -> https://setter-fi.vercel.app/access?next=%2Flogin | Redirecting... 
+/coach                           GET  307 -> https://setter-fi.vercel.app/access?next=%2Fcoach | Redirecting... 
+/admin                           GET  307 -> https://setter-fi.vercel.app/admin/overview | Redirecting... 
+/affiliate                       GET  307 -> https://setter-fi.vercel.app/access?next=%2Faffiliate | Redirecting... 
+/api/coach                       GET  401 ->  | {"error":"This deployment is password protected."}
+/api/platform/billing            GET  401 ->  | {"error":"This deployment is password protected."}
+/api/onboarding/run              GET  401 ->  | {"error":"Unauthorized."}
+/api/onboarding/signup           GET  200 ->  | {"tiers":[]}
+/api/opt-in                      GET  404 ->  | <!DOCTYPE html><html data-dpl-id="[deployment id]" lang="en" class="archivo_9a129254-module__NRWdgq__variable ibm_plex_mono_88c6c26e-module__pV
+/api/consumer-agent              GET  405 ->  | 
+/api/consumer-agent/reply        GET  404 ->  | <!DOCTYPE html><html data-dpl-id="[deployment id]" lang="en" class="archivo_9a129254-module__NRWdgq__variable ibm_plex_mono_88c6c26e-module__pV
+== batch 2 2026-09-01T22:36:06Z
+/admin/overview                  GET  307 -> https://setter-fi.vercel.app/access?next=%2Fadmin%2Foverview | Redirecting... 
+/admin/brain                     GET  307 -> https://setter-fi.vercel.app/access?next=%2Fadmin%2Fbrain | Redirecting... 
+/coach/overview                  GET  307 -> https://setter-fi.vercel.app/access?next=%2Fcoach%2Foverview | Redirecting... 
+/affiliate/overview              GET  307 -> https://setter-fi.vercel.app/access?next=%2Faffiliate%2Foverview | Redirecting... 
+/api/webhooks/meta               GET  503 ->  | {"error":"Webhook verification unavailable."}
+/api/webhooks/ghl                GET  405 ->  | 
+/api/webhooks/stripe             GET  405 ->  | 
+/api/webhooks/resend             GET  405 ->  | 
+/api/onboarding/status           GET  401 ->  | {"error":"This deployment is password protected."}
+/api/onboarding/readiness        GET  401 ->  | {"error":"This deployment is password protected."}
+/api/onboarding/go-live          GET  401 ->  | {"error":"This deployment is password protected."}
+/api/onboarding/artifacts        GET  401 ->  | {"error":"This deployment is password protected."}
+/api/opt-in/demo-tenant          GET  404 ->  | <!DOCTYPE html><html data-dpl-id="[deployment id]" lang="en" class="archivo_9a129254-module__NRWdgq__variable ibm_plex_mono_88c6c26e-module__pVHrza__variable"><head><meta charSet="utf
+/api/jobs/a2p-probe              GET  401 | {"error":"Unauthorized."}
+/api/jobs/a2p-probe              POST 405 | 
+/api/jobs/agent-inactivity-sweep GET  401 | {"error":"Unauthorized."}
+/api/jobs/agent-inactivity-sweep POST 401 | {"error":"Unauthorized."}
+/api/jobs/appointment-reconcile  GET  401 | {"error":"Unauthorized."}
+/api/jobs/appointment-reconcile  POST 405 | 
+/api/jobs/billing-allowances     GET  401 | {"error":"Unauthorized."}
+/api/jobs/billing-allowances     POST 401 | {"error":"Unauthorized."}
+/api/jobs/billing-cost-rollup    GET  401 | {"error":"Unauthorized."}
+/api/jobs/billing-cost-rollup    POST 401 | {"error":"Unauthorized."}
+/api/jobs/capi-events            GET  401 | {"error":"Unauthorized."}
+/api/jobs/capi-events            POST 405 | 
+/api/jobs/compliance-reconcile   GET  401 | {"error":"Unauthorized."}
+/api/jobs/compliance-reconcile   POST 405 | 
+/api/jobs/contact-deletion-recovery GET  401 | {"error":"Unauthorized."}
+/api/jobs/contact-deletion-recovery POST 405 | 
+/api/jobs/engine-evals           GET  401 | {"error":"Unauthorized."}
+/api/jobs/engine-evals           POST 405 | 
+/api/jobs/followups              GET  401 | {"error":"Unauthorized."}
+/api/jobs/followups              POST 405 | 
+/api/jobs/ghl-install-reconcile  GET  401 | {"error":"Unauthorized."}
+/api/jobs/ghl-install-reconcile  POST 405 | 
+/api/jobs/inbound-recovery       GET  401 | {"error":"Unauthorized."}
+/api/jobs/inbound-recovery       POST 405 | 
+/api/jobs/notification-deliveries GET  401 | {"error":"Unauthorized."}
+/api/jobs/notification-deliveries POST 405 | 
+/api/jobs/outbound-reconciliation GET  401 | {"error":"Unauthorized."}
+/api/jobs/outbound-reconciliation POST 405 | 
+/api/jobs/stripe-webhooks        GET  401 | {"error":"Unauthorized."}
+/api/jobs/stripe-webhooks        POST 401 | {"error":"Unauthorized."}
+/api/jobs/tenant-health-rollup   GET  401 | {"error":"Unauthorized."}
+/api/jobs/tenant-health-rollup   POST 401 | {"error":"Unauthorized."}
+/api/jobs/tier-change-reconcile  GET  401 | {"error":"Unauthorized."}
+/api/jobs/tier-change-reconcile  POST 401 | {"error":"Unauthorized."}
+/api/onboarding/signup           POST 403 | {"error":"Request origin was refused."}
+/api/consumer-agent              POST 400 | {"error":"The assistant couldn’t process that request.","code":"CONSUMER_BODY_INVALID"}
+/api/webhooks/meta               POST 401 | {"error":"Invalid webhook signature."}
+/api/webhooks/ghl                POST 401 | {"error":"Invalid webhook signature."}
+/api/webhooks/stripe             POST 503 | {"error":"Webhook configuration unavailable."}
+/api/webhooks/resend             POST 401 | {"error":"Invalid webhook signature."}
+/api/onboarding/run              POST 401 | {"error":"Unauthorized."}
+== batch 3 2026-09-01T22:36:52Z
+/api/onboarding/signup           POST+origin 400 | {"error":"Signup details are invalid."}
+/api/consumer-agent              POST+origin 400 | {"error":"The assistant couldn’t process that request.","code":"CONSUMER_BODY_INVALID"}
+== batch 4 2026-09-01T22:40:52Z
+/ title: <title>SetterFi — your funding DMs answered, qualified and booked
+/ price-like strings:    3 $2    1 $4 
+/ per-month strings: 
+/signup title: <title>Create your SetterFi account · SetterFi
+/signup price-like:    2 $10    4 $2    1 $4    1 $9 
+/signup placeholder/tier words: 
+/signup POST minimal:
+{"error":"Signup details are invalid."} -> 400
+

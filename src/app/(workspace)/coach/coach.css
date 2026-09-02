@@ -1,0 +1,1465 @@
+/*
+ * The coach surface language.
+ *
+ * Every rule in this file is scoped to `[data-shell-role="coach"]`, which `AppShell` already
+ * stamps on the shell root. That scoping is the whole safety argument: the owner console is a
+ * different product for a different reader and must not move, so a coach rule cannot reach it
+ * even by accident.
+ *
+ * The two audiences are the reason there are two languages at all. The console is for the
+ * client's own team, in it all day, and seventeen destinations cannot live in a pill bar. The
+ * coach side is for credit coaches over 55 who told us in round-1 demo feedback that the console
+ * was confusing, so it is bigger, quieter, and offers fewer things to press.
+ *
+ * The shape is the round-3 build's, recovered from commit 40c58b5 (`workspace.css`,
+ * `workspace-screens.tsx`) rather than from screenshots -- the screenshots do not show that the
+ * old card was a deck panel with a specific anatomy, and a first pass built from the pictures
+ * alone produced a flat uniform grid that missed the point. The colour is the current product's,
+ * every value already declared in `tokens.css`. Nothing here introduces a colour.
+ *
+ * `docs/REDESIGN-CANVAS.md` is the visual authority and the artifact it links is current.
+ */
+
+[data-shell-role="coach"] {
+  /*
+   * 16px, not the 13px the console runs at. This is the single highest-leverage line in the file:
+   * it is the one thing every coach who called the product hard to read was actually describing.
+   */
+  --coach-body: 16px;
+  /*
+   * 14px, not 12. `docs/SIMPLIFICATION-SPEC.md` §5 sets the floor for this surface at "secondary
+   * and helper text 14px minimum -- nothing below it, ever", and the eyebrow was two pixels under
+   * it on every panel of every coach screen: the deck panels, the setup steps, the trend heading,
+   * the offer editor's labels. It is the label that says what a figure is, read by the audience
+   * this whole stylesheet exists for, so it was the worst two pixels in the file to save.
+   */
+  --coach-eyebrow: 14px;
+  /*
+   * The name a row is about, and the figure inside a sentence: a lead, a card, a stage column, the
+   * `Day N` in the carrier counter. One step over `--coach-body`, which is the same relationship
+   * the console draws between `--t-row` and `--t-body` -- the emphasis is a step, not a shout.
+   *
+   * `COACH_ROW_NAME_CLASS` in `coach-type.ts` reads this token rather than spelling 17 again, the
+   * way `COACH_EYEBROW_CLASS` reads `--coach-eyebrow`. That is the whole reason the token exists
+   * rather than a second literal in the sheet: the eyebrow spent a redesign pass two pixels under
+   * the floor because one number lived in two places and only one of them was ever read.
+   */
+  --coach-row-name: 17px;
+  --coach-panel-name: 20px;
+  --coach-page-title: 46px;
+
+  /*
+   * The deck figure. Mono, and tight in both directions -- the negative tracking and the sub-1
+   * line-height are what make a large number read as a designed figure rather than as shouting.
+   */
+  --coach-figure: clamp(40px, 4vw, 62px);
+  --coach-figure-tracking: -0.075em;
+  --coach-figure-leading: 0.92;
+
+  /* Asymmetric on purpose: larger on top, so a column of panels reads as a deck of cards. */
+  --coach-panel-radius: 24px 24px 17px 17px;
+  --coach-panel-radius-hero: 30px 30px 17px 17px;
+
+  /*
+   * 44px is the floor for anything a coach presses, with no exceptions. The console's controls
+   * are 26-34px, which is fine for someone using it all day with a mouse and is not fine here.
+   */
+  --coach-target: 44px;
+  --coach-target-primary: 60px;
+
+  /*
+   * The top bar, at 76px rather than the console's 52px.
+   *
+   * `--topbar-h` is a `:root` token in `tokens.css` and it stays 52px there: the console's bar
+   * carries breadcrumbs and a search box at 13.5px, and it is the right height for them. The coach
+   * bar carries a 38px mark, a 46px pill group and a 46px account chip, and every coach artboard
+   * draws it at 76px. Overriding the token here rather than hard-coding a height on the header is
+   * what keeps the four surfaces that compute against it -- the inbox's fixed pane, the page
+   * skeleton, the two page templates -- correct on both densities without any of them learning
+   * about the coach.
+   */
+  --topbar-h: 76px;
+
+  /*
+   * The two drenches, and there are only two. `--drench-live` is round 3's `--sf-route-live`
+   * unchanged, because its hue was already inside the product's family. `--drench-info` was the
+   * old electric blue `#2050c8` re-hued onto teal so the accent stayed one colour across both
+   * languages; Alec reversed that on 2026-08-31 and asked for the blue back, so it walks home
+   * to hue 264 -- the same move `tokens.css` makes on the `--accent-*` family, and made here
+   * too because a drenched panel is the one place the accent owns a whole surface. Both stops
+   * carry white 600 text: the lighter one measures 5.98:1 and the darker 9.72:1.
+   */
+  --coach-drench-live: linear-gradient(158deg, oklch(0.28 0.08 262), oklch(0.17 0.04 265));
+  --coach-drench-info: linear-gradient(158deg, oklch(0.5 0.15 264), oklch(0.385 0.128 261));
+  --coach-on-drench-line: rgba(255, 255, 255, 0.16);
+  --coach-on-drench-sub: rgba(255, 255, 255, 0.8);
+
+  font-size: var(--coach-body);
+}
+
+/*
+ * The deck panel, which is the only card shape on the coach side.
+ *
+ * `display: flex` with a column direction is load-bearing rather than incidental: the footer
+ * widget is pushed down with `margin-top: auto`, so panels in a row keep their footers on one
+ * line however much copy sits above them. A grid of panels with ragged footers is what the
+ * round-3 build looked like before this rule, and it is the detail that makes the deck read as a
+ * set rather than as five unrelated boxes.
+ */
+[data-shell-role="coach"] .coach-panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--coach-panel-radius);
+  background: linear-gradient(180deg, var(--card-top), var(--card));
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+[data-shell-role="coach"] .coach-panel[data-hero="true"] {
+  border-radius: var(--coach-panel-radius-hero);
+}
+
+/*
+ * A drenched panel carries its own ground, so it drops the card gradient and the hairline both.
+ * At most two per screen and nothing else fills -- the accent is only legible as emphasis while
+ * it stays scarce, and round 3's failure mode was a page where every panel wanted to be the
+ * important one.
+ */
+[data-shell-role="coach"] .coach-panel[data-drench="live"] {
+  border-color: transparent;
+  background: var(--coach-drench-live);
+}
+
+[data-shell-role="coach"] .coach-panel[data-drench="info"] {
+  border-color: transparent;
+  background: var(--coach-drench-info);
+}
+
+[data-shell-role="coach"] .coach-panel[data-drench] :where(.coach-panel__name, .coach-panel__figure) {
+  color: var(--on-accent);
+}
+
+[data-shell-role="coach"] .coach-panel[data-drench] :where(.coach-panel__eyebrow, .coach-panel__sentence) {
+  color: var(--coach-on-drench-sub);
+}
+
+[data-shell-role="coach"] .coach-panel[data-drench] .coach-panel__header {
+  border-bottom-color: var(--coach-on-drench-line);
+}
+
+/*
+ * The header band. The eyebrow sits above the name rather than beside it, which is what lets the
+ * name stay a plain sentence-case phrase: the eyebrow is already carrying the category, so the
+ * name does not have to.
+ */
+[data-shell-role="coach"] .coach-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  /*
+   * `19px 20px` on a 78px floor, which is what the artboards draw and what
+   * `docs/REDESIGN-CANVAS.md` now records. It shipped at `15px 18px` with no floor, and the floor
+   * is the half that matters: without it a panel whose header is a bare name is 22px shorter than
+   * the one beside it, so a row of three cards puts its three names at three different heights and
+   * the deck stops reading as a set. `min-height` rather than `height` because the band also has
+   * to hold an eyebrow above a two-line name.
+   */
+  min-height: 78px;
+  padding: 19px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+[data-shell-role="coach"] .coach-panel__eyebrow {
+  /*
+   * Sentence case at `--coach-eyebrow`, which is 14px. The comment here said 12px for a while
+   * after the token moved, which is the same mistake in miniature: a rule written where only its
+   * author looks. The 9.5px uppercase mono overline this replaces was the worst
+   * legibility case in the product and coach Home carried thirteen of them; see
+   * `docs/DESIGN.md` for where that role still legitimately lives on the console.
+   */
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: var(--coach-eyebrow);
+  line-height: 1.4;
+}
+
+[data-shell-role="coach"] .coach-panel__name {
+  color: var(--ink);
+  font-size: var(--coach-panel-name);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+/* The action in the header band is a square, and it is a full-size target like everything else. */
+[data-shell-role="coach"] .coach-panel__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--coach-target);
+  height: var(--coach-target);
+  border-radius: 10px;
+  background: var(--well);
+  color: var(--body);
+}
+
+[data-shell-role="coach"] .coach-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 20px;
+}
+
+/*
+ * The panel that is the whole page, and it is a different density from the panel that is one of
+ * three in a deck.
+ *
+ * `CoachError.dc.html:96` and `:106` draw a `15px 30px` band with its lead tile and name centred
+ * against each other, and a `28px 30px 30px` body on a 24px gap. The deck's `19px 20px` on a 78px
+ * floor is the measurement for a card in a row of cards -- the floor exists purely so three names
+ * land on one line, and a page made of one panel has nothing to line up with. Rendering the deck's
+ * band here left the error page's heading in a tall band with its warning tile hanging at the top
+ * of it, and squeezed a 620px card's body into a 20px gutter.
+ *
+ * This is a modifier rather than a second component because everything else about the shape is the
+ * deck panel's: the same header band, the same eyebrow above the same name, the same hairline. It
+ * is applied from `error.tsx` alongside `nameSize="page"`, which is the prop that already means
+ * "this panel is the page" -- the two say the same thing about the same panel and should move
+ * together, so if a third page-shaped panel ever appears it takes both or neither.
+ *
+ * It says nothing about the radius, which the artboard also draws differently at `30px 30px 17px
+ * 17px`. That is already the `hero` prop's job -- `.coach-panel[data-hero="true"]` sets exactly
+ * this radius above, and `error.tsx` already passes it. Restating it here would be two rules
+ * claiming one property because their values happen to agree today.
+ */
+[data-shell-role="coach"] .coach-panel--page .coach-panel__header {
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+  padding: 15px 30px;
+}
+
+[data-shell-role="coach"] .coach-panel--page .coach-panel__body {
+  gap: 24px;
+  padding: 28px 30px 30px;
+}
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * The wide data panel: the third card shape, and the only one whose body is a data surface.
+ * ---------------------------------------------------------------------------------------------
+ *
+ * **Its trigger is a full-width panel whose body is a chart, a table or a board** -- not "the
+ * biggest panel on the screen", which is a size and would pull in any card that happens to span
+ * the column. The census that established it parsed all 55 artboards and found three, on two
+ * artboards and two roles: `Main.dc.html:305-310` (the company trend chart) and `:366-371` (the
+ * keyword table) on the coach side, and `Affiliate.dc.html:163-168` (the referrals table) on the
+ * affiliate's. All three are identical property for property, which is what makes this a shape
+ * rather than three drawings that happen to agree -- 3 of 55 artboards, parsed 2026-09-01.
+ *
+ * **What separates it from the deck panel, which is the confusion worth preventing.** The band
+ * padding, and the absent floor. A deck panel's band is `19px 20px` on a `min-height: 78px`,
+ * because the floor reserves room for a two-line eyebrow-over-name stack and keeps three cards in
+ * a row printing their names at one height. A data panel is alone on its row, so it has nothing to
+ * line up with and takes no floor at all; its band is `22px 26px`, and the extra padding is what
+ * pays for the wider card. Those two numbers are the discriminator in both directions: the census
+ * found no band at `22px 26px` that is not this shape, and no band at any other padding that
+ * produces a 22px name.
+ *
+ * **What separates it from the title-led card is the band itself, and then a split the sizes
+ * hide.** Both names are 22px, which is why this needed a census rather than a grep. A title-led
+ * card has no band -- its title is the first line of the body, a `div` at weight 600. This one is
+ * an `h2` at weight 500 inside a band, under an eyebrow. Same size, different weight and different
+ * element, and it is the weight that carries the meaning: the eyebrow above is already naming the
+ * category, exactly as it does on a deck panel, so the name does not have to shout it. A heading
+ * with nothing above it pays the extra hundred of weight to carry its own category, which is the
+ * same rule `COACH_SURFACE_TITLE_CLASS` is written from.
+ *
+ * Scoped to `[data-shell-role="coach"]` like every rule in this sheet, which reaches the
+ * affiliate's referrals table because `affiliate-money.tsx` wraps its content in `CoachScale` --
+ * that component stamps the role, and its own comment at `:432` says so. A caller outside a coach
+ * root gets none of this and the band renders unstyled, so `coach-data-panel.test.ts` holds the
+ * caller list rather than trusting that it was walked once.
+ */
+[data-shell-role="coach"] .coach-data-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-6);
+  padding: 22px 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+/*
+ * The same category line the deck panel wears, at the same token and the same 4px, because it is
+ * the same role in a wider band. It is spelled again rather than shared with
+ * `.coach-panel__eyebrow` because the two selectors sit on different shapes: making one rule serve
+ * both would mean a deck-panel change silently moving every chart and table head in the product,
+ * which is the blast radius this sheet's own header note refuses.
+ */
+/*
+ * The band is a row at every width the canvas draws it at, and stacks below that. The query is on
+ * the container rather than the viewport because `Surface` declares `@container` on the panel
+ * itself, and a data panel can sit in a full-width pane on one screen and a narrower column on
+ * another -- a viewport breakpoint would be measuring the wrong box. This is here rather than as a
+ * Tailwind variant on the component for the reason the whole sheet has: `coach.css` is unlayered
+ * and outranks utilities silently, so a `gap` utility written beside the `gap` above would never
+ * have applied and nothing would have said so.
+ */
+@container (max-width: 380px) {
+  [data-shell-role="coach"] .coach-data-panel__header {
+    flex-direction: column;
+    gap: var(--s-2);
+  }
+
+  [data-shell-role="coach"] .coach-data-panel__trailing {
+    margin-left: 0;
+  }
+}
+
+[data-shell-role="coach"] .coach-data-panel__eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: var(--coach-eyebrow);
+  line-height: 1.4;
+}
+
+/*
+ * 22px at 500. The size is a literal and not a token, for the reason `COACH_SURFACE_TITLE_CLASS`
+ * gives at length: `--coach-panel-name` holds 20px and this holds 22, so there is no token to read
+ * -- and minting `--coach-data-panel-name` beside it would be a second name for a number only one
+ * shape uses. If a third shape ever lands on 22px/500, that is the moment it becomes a token.
+ */
+[data-shell-role="coach"] .coach-data-panel__name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+/*
+ * The trailing slot: the download the canvas draws on all three instances. `flex: none` because
+ * two of the three drawings set it explicitly and the third has a control group that must not be
+ * squeezed either -- a head whose name wraps to two lines while its button shrinks is the failure
+ * this prevents.
+ */
+[data-shell-role="coach"] .coach-data-panel__trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-shell-role="coach"] .coach-panel__figure {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--coach-figure);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--coach-figure-tracking);
+  line-height: var(--coach-figure-leading);
+}
+
+/*
+ * One sentence, never two, and narrow on purpose so it reads as a caption to the figure rather
+ * than as a paragraph competing with it. `--measure-deck` is why this is not a hand-rolled `ch`
+ * value; `src/app/measures.test.ts` refuses those.
+ */
+[data-shell-role="coach"] .coach-panel__sentence {
+  max-width: var(--measure-deck);
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: var(--coach-body);
+  line-height: 1.5;
+}
+
+/* Pushed to the bottom so a row of panels keeps its footers aligned. See the note above. */
+/*
+ * The footer widget, pushed to the bottom so a row of panels keeps its footers on one line.
+ *
+ * The hairline above it is the artboard's, and it has to reach the card's edges to be the line
+ * that is drawn: `Main.dc.html:271` and `:297` both put `border-top: 1px solid var(--line-soft)`
+ * on a footer that is itself a full-width child of the card, so the rule runs gutter to gutter.
+ * This footer is a child of `.coach-panel__body`, which already carries `padding: 20px`, so a
+ * plain `border-top` here would draw a rule inset 20px on each side -- a different mark, and the
+ * kind of near-miss that reads as a mistake rather than as a divider. The negative horizontal
+ * margin puts it back on the card's edges and the padding puts the content back where it was.
+ *
+ * A drenched panel has no hairline, which is the artboard's own discrimination rather than a
+ * simplification: `Main.dc.html:155` draws the Booked panel's footer with `margin-top: auto` and
+ * no border at all, because `--line-soft` is a hairline for a card ground and disappears on an
+ * accent fill. The panel that needs a line on a drench already has `--coach-on-drench-line`; the
+ * footer does not use it because the canvas does not draw one there.
+ */
+[data-shell-role="coach"] .coach-panel__footer {
+  margin: auto -20px 0;
+  padding: 20px 20px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+[data-shell-role="coach"] .coach-panel[data-drench] .coach-panel__footer {
+  border-top-color: transparent;
+}
+
+/*
+ * The pill bar, which replaces the rail for coaches.
+ *
+ * Five destinations, so they fit across the top with room to breathe, and a coach never has to
+ * decide whether the thing they want is one of nine. The four that left the rail did not lose
+ * their route: setup and connections are on Home's own card, notifications and help are in the
+ * account menu. `src/lib/workspace-navigation.test.ts` guards that, and it has to, because
+ * commit f8d0381 added two of them to the rail precisely because they had become unreachable.
+ */
+[data-shell-role="coach"] .coach-pillbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+[data-shell-role="coach"] .coach-pillbar a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--coach-target);
+  padding: 0 18px;
+  border-radius: var(--r-full);
+  color: var(--muted);
+  font-size: var(--coach-body);
+  line-height: 1;
+}
+
+[data-shell-role="coach"] .coach-pillbar a:hover {
+  background: var(--band);
+  color: var(--body);
+}
+
+/*
+ * The active pill is a solid fill, which is how round 3 drew it. The current console uses a wash,
+ * and a wash at this size is genuinely ambiguous about which destination you are on -- the thing
+ * a coach most needs the bar to answer.
+ */
+[data-shell-role="coach"] .coach-pillbar a[aria-current="page"] {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+
+/*
+ * The bar's own frame, above the phone breakpoint only.
+ *
+ * The group sits in a bordered well inside the 76px top bar, which is what every coach artboard
+ * draws and is the reason it reads as one control rather than as five loose links floating in the
+ * chrome. It is scoped to a media query rather than written unconditionally because below `sm` the
+ * same `<nav>` is the phone tab bar: it goes `fixed` to the bottom edge with its own top hairline
+ * and its own `--pane` ground, and those are plain Tailwind utilities. `coach.css` is unlayered, so
+ * an unconditional `border` here would beat `max-sm:border-t` and put a pill-shaped outline around
+ * the phone's tab strip.
+ *
+ * Every pill carries a transparent hairline so the current one can take an accent edge without
+ * gaining a pixel and shoving its neighbours sideways.
+ */
+@media (min-width: 640px) {
+  [data-shell-role="coach"] .coach-pillbar {
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-full);
+    background: var(--well);
+  }
+
+  [data-shell-role="coach"] .coach-pillbar a {
+    min-height: 46px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    font-size: 17px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  [data-shell-role="coach"] .coach-pillbar a[aria-current="page"] {
+    border-color: var(--accent-line);
+    font-weight: 600;
+  }
+}
+
+/* The artboard's 26px of pill padding, once the window is wide enough to seat five of them
+   between the two 250px end slots without the group having to scroll. */
+@media (min-width: 1280px) {
+  [data-shell-role="coach"] .coach-pillbar a {
+    padding: 0 26px;
+  }
+}
+
+[data-shell-role="coach"] .coach-page-title {
+  color: var(--ink);
+  font-size: var(--coach-page-title);
+  /* 600, as every artboard draws it. At 46px the difference between 500 and 600 is the
+     difference between a large sentence and a title. */
+  font-weight: 600;
+  letter-spacing: -0.026em;
+  line-height: 1.05;
+}
+
+/*
+ * The phone step-down, taken from `CoachHomeMobile.dc.html` rather than invented.
+ *
+ * 46px is drawn on a 1440px artboard and it does not survive a 390px one: "Welcome back, Marcus"
+ * at 46px is wider than the phone's text column, so the title either wraps mid-greeting or runs
+ * past the 14px gutter. The phone artboard draws the same heading at 30px with -0.024em of
+ * tracking on a 1.1 leading -- looser than the desktop pair, because tight negative tracking is
+ * what a big title can afford and a small one cannot. The breakpoint is 640px, the same line the
+ * pill bar uses to become the phone's tab strip, so the whole surface changes density once
+ * rather than at two different widths.
+ */
+@media (max-width: 639px) {
+  [data-shell-role="coach"] {
+    --coach-page-title: 30px;
+
+    /*
+     * 60px, which `CoachHomeMobile.dc.html:62` draws, against the 76px the desktop artboards do.
+     *
+     * The desktop bar is 76px because it seats a 38px mark, a 46px pill group and a 46px account
+     * chip on one line. The phone bar carries none of that: the pill group has become the tab
+     * strip at the bottom of the screen, so what is left is a 34px mark and a 44px chip, and 76px
+     * around them is 16px of a 844px screen spent on nothing. Overriding the token rather than the
+     * header's height is what keeps the four surfaces that compute against it correct -- the
+     * inbox's fixed pane, the page skeleton and the two page templates all subtract `--topbar-h`
+     * from the viewport, and every one of them was 16px short on a phone for the whole redesign.
+     */
+    --topbar-h: 60px;
+
+    /*
+     * 19px, from `CoachHomeMobile.dc.html:99`. The phone draws every deck panel's name one step
+     * under the desktop's 20px, which is not a rounding of the same decision: the panel is full
+     * width here instead of one of three columns, so its name has more room and needs less size
+     * to read as the panel's name rather than as a line of the body under it.
+     */
+    --coach-panel-name: 19px;
+  }
+
+  [data-shell-role="coach"] .coach-page-title {
+    letter-spacing: -0.024em;
+    line-height: 1.1;
+  }
+
+  /*
+   * The panel's phone form, which the sheet simply did not have.
+   *
+   * `CoachHomeMobile.dc.html:95-137` draws the same card at a lower density throughout -- a
+   * `14px 16px` band with no floor under it, and a 16px body -- and none of that was written, so
+   * a phone rendered the desktop panel's `19px 20px` band on a 78px floor inside a 390px screen.
+   * The floor is the part that had to go rather than shrink: it exists so a row of three panels
+   * puts three names at the same height, and on a phone there is no row -- there is one panel per
+   * line, so the floor only adds 20-odd pixels of empty band above every name on the screen.
+   */
+  [data-shell-role="coach"] .coach-panel__header {
+    min-height: 0;
+    padding: 14px 16px;
+  }
+
+  [data-shell-role="coach"] .coach-panel__eyebrow {
+    margin-bottom: 2px;
+  }
+
+  [data-shell-role="coach"] .coach-panel__body {
+    padding: 16px;
+  }
+
+  /*
+   * The footer's hairline follows the body in: it is pulled out by the body's own padding, so the
+   * offset has to be the padding that is actually in force or the rule overshoots the card by 4px
+   * on each side and gets clipped by `overflow: hidden`. Two numbers that must agree, which is why
+   * they are next to each other.
+   */
+  [data-shell-role="coach"] .coach-panel__footer {
+    margin: auto -16px 0;
+    padding: 16px 16px 0;
+  }
+
+  /* 11px against the desktop's 10px, per `CoachHomeMobile.dc.html:104`. The target stays 44px. */
+  [data-shell-role="coach"] .coach-panel__action {
+    border-radius: 11px;
+  }
+}
+
+/*
+ * The floor, stated once rather than per component.
+ *
+ * `button-class.ts` sizes the kit's buttons at 26/30/34px, which is the console's scale. Rather
+ * than fork every control, the coach surface raises the floor here and lets the kit keep its own
+ * sizes everywhere else. `:where()` keeps the specificity at zero so a component that genuinely
+ * needs to opt out can, without an `!important` arms race.
+ */
+[data-shell-role="coach"] :where(button, [role="button"], a[href], input, select, [role="tab"]):not(
+  .coach-pillbar a,
+  .coach-panel__action,
+  [data-coach-target="exempt"]
+) {
+  min-height: var(--coach-target);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-shell-role="coach"] .coach-panel {
+    transition: translate 160ms var(--ease-smooth-out, ease-out);
+  }
+
+  [data-shell-role="coach"] .coach-panel[data-liftable="true"]:hover {
+    translate: 0 -2px;
+  }
+}
+
+/*
+ * The status line under the greeting: what is answering, and what is still waiting.
+ *
+ * Two dots and two clauses on one row, wrapping to two rows on a phone. The dots are the only
+ * colour in the line and they carry a state that the words beside them also carry -- a coach who
+ * cannot tell the green from the amber still reads "still in carrier review" -- because colour is
+ * never the sole carrier of a distinction on this surface.
+ */
+[data-shell-role="coach"] .coach-statusline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) 28px;
+  margin: 0;
+  font-size: var(--coach-body);
+}
+
+[data-shell-role="coach"] .coach-statusline__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-shell-role="coach"] .coach-statusline__item[data-tone="good"] {
+  color: var(--body);
+}
+
+[data-shell-role="coach"] .coach-statusline__item[data-tone="warning"] {
+  color: var(--warning-text);
+}
+
+[data-shell-role="coach"] .coach-statusline__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-full);
+}
+
+[data-shell-role="coach"] .coach-statusline__item[data-tone="good"] .coach-statusline__dot {
+  background: var(--good);
+}
+
+[data-shell-role="coach"] .coach-statusline__item[data-tone="warning"] .coach-statusline__dot {
+  background: var(--warning);
+}
+
+/*
+ * The carrier-review notice.
+ *
+ * Deliberately not the amber attention card. `docs/DESIGN.md` bans two stacked amber frames, and
+ * more importantly the two blocks are making opposite claims: the attention card is a list of
+ * things the coach must do, and this notice exists to say that there is nothing to do. Giving it
+ * the waiting hue rather than the warning one is the whole point -- a coach who reads this as an
+ * alarm has been told the wrong thing by the colour before they reach the sentence.
+ */
+[data-shell-role="coach"] .coach-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) 26px;
+  padding: 22px 26px;
+  border: 1px solid color-mix(in oklab, var(--waiting) 26%, transparent);
+  border-radius: 20px 20px 14px 14px;
+  background: color-mix(in oklab, var(--waiting) 8%, transparent);
+}
+
+/*
+ * The tile the notice opens with, from `Main.dc.html:124-126`.
+ *
+ * It is not decoration and it is why it was worth adding rather than leaving as a nicety. This
+ * notice is the one place on coach Home carrying the A2P wait, and the honest-states rule makes
+ * that a thing a coach has to recognise instantly and repeatedly -- it sits on the page for two
+ * to three weeks. Without a leading mark the card is a paragraph in a tinted box, indistinguish-
+ * able at a glance from the setup card that used to occupy the same slot; the clock in a tile is
+ * what makes it readable as "still waiting" before a word of it is read.
+ *
+ * The tones are the waiting family mixed the same way the notice's own border and ground are, so
+ * the tile cannot drift away from the card it opens. `place-items: center` rather than flex,
+ * because the only child is an icon that should be centred on both axes with no other rule.
+ */
+[data-shell-role="coach"] .coach-notice__tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid color-mix(in oklab, var(--waiting) 26%, transparent);
+  border-radius: 13px;
+  background: color-mix(in oklab, var(--waiting) 10%, transparent);
+  color: var(--warning-text);
+}
+
+[data-shell-role="coach"] .coach-notice__body {
+  flex: 1 1 var(--measure-deck);
+  min-width: 0;
+}
+
+[data-shell-role="coach"] .coach-notice__title {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+[data-shell-role="coach"] .coach-notice__prose {
+  /*
+   * 72ch and 17px, both from `Main.dc.html:128`, and both a step over what the rest of the page
+   * uses. The notice is a single wide card rather than one of three columns, so it has the room,
+   * and this is the sentence that says the wait is normal and there is nothing to do about it --
+   * the one piece of copy on Home whose job is to stop a coach worrying. 17px is written as a
+   * literal and not as `--coach-row-name`, which is also 17px: that token means "the name a row
+   * is about", and borrowing it here would tie this sentence to a decision about row names.
+   */
+  max-width: var(--measure-wide);
+  margin: 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+[data-shell-role="coach"] .coach-notice__counter {
+  margin-top: 10px;
+}
+
+[data-shell-role="coach"] .coach-notice__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 0 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--well);
+  color: var(--body);
+  font-weight: 500;
+}
+
+/*
+ * The footer stats a deck panel carries under its figure.
+ *
+ * Two small readings side by side, on the panel's own baseline grid, and always with their own
+ * label: the whole risk of a stat under a big number is that a reader takes it for a slice of
+ * that number, so the label is never optional and the note line below is what says which
+ * population the pair was counted over when it differs from the figure's.
+ */
+[data-shell-role="coach"] .coach-panel__stats {
+  display: flex;
+  flex-wrap: wrap;
+  /* 40px between the pair, which is what `Main.dc.html:271` sets. The row gap stays a token
+     because it only applies once the pair wraps, which the artboard never draws. */
+  gap: var(--s-2) 40px;
+}
+
+[data-shell-role="coach"] .coach-panel__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+[data-shell-role="coach"] .coach-panel__stat-label {
+  color: var(--muted);
+  font-size: var(--coach-eyebrow);
+  line-height: 1.4;
+}
+
+[data-shell-role="coach"] .coach-panel__stat-value {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  /*
+   * 21px, which `Main.dc.html:274` draws. It shipped at 18px, one step over `--coach-body` and so
+   * close to it that the pair under a 62px figure read as two more lines of body copy rather than
+   * as the two readings the figure is counted against. The gap between the figure and its stats
+   * is the whole point of the footer: the stats have to be legible as figures themselves.
+   */
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+/*
+ * 19px, not the pair's 21px, and the two pixels are drawn rather than rounded off: `Main.dc.html`
+ * sets the stats pair at 21px on line 274 and the meter's caption at 19px on line 157. They are
+ * different roles on the same panel family -- the pair is read as a figure in its own right under
+ * a headline, the caption annotates a bar that has already made the claim visually -- so the
+ * caption gives up a step. Written as its own rule because the day someone tunes the pair, this
+ * should not follow it.
+ */
+[data-shell-role="coach"] .coach-panel__stat-value--caption {
+  font-size: 19px;
+}
+
+[data-shell-role="coach"] .coach-panel__stat-value[data-absent="true"] {
+  color: var(--faint);
+  font-family: inherit;
+  font-size: var(--coach-eyebrow);
+}
+
+/*
+ * The note under a panel's footer stats, and under the whole deck.
+ *
+ * It exists so a footer never has to be read as a slice of the figure above it by inference. When
+ * a pair is counted over a different population than the headline -- open conversations under an
+ * active-contacts figure, a billing period under an analytics window -- this line says so in
+ * words, and when a figure the artboard drew is simply not available it says that instead.
+ */
+[data-shell-role="coach"] .coach-panel__stat-note {
+  margin: 8px 0 0;
+  max-width: var(--measure-deck);
+  /*
+   * 16px `--muted`, not 14px `--faint`. `Main.dc.html:297` draws this line at the body size in the
+   * muted role, and the distinction matters more here than anywhere else on the panel: this is the
+   * sentence that says which population a footer was counted over, so a coach who does not read it
+   * takes the pair above as a slice of the figure. `--faint` at 14px is the treatment for text a
+   * reader may skip, and this is the one line in the footer they must not.
+   */
+  color: var(--muted);
+  font-size: var(--coach-body);
+  line-height: 1.45;
+}
+
+/*
+ * The footer on a drench, which was rendering dark on dark.
+ *
+ * Both drenches are dark gradients and `--ink` / `--muted` / `--faint` are all dark on this
+ * palette, so a footer under a drenched figure had its readings in near-black on near-black. The
+ * name, the figure, the eyebrow and the sentence were each given their on-drench colour when the
+ * palette moved and the footer's four roles were not -- they are styled in a different part of
+ * this file and the sweep stopped at the block it started in. It is the same miss twice, so the
+ * selector is written to cover every text role the footer has rather than the one that was
+ * noticed: label, note, value, and the value's absent state.
+ */
+[data-shell-role="coach"] .coach-panel[data-drench]
+  :where(.coach-panel__stat-label, .coach-panel__stat-note, .coach-panel__stat-value[data-absent="true"]) {
+  color: var(--coach-on-drench-sub);
+}
+
+[data-shell-role="coach"] .coach-panel[data-drench] .coach-panel__stat-value {
+  color: var(--on-accent);
+}
+
+/*
+ * The section eyebrow: sentence case at `--coach-eyebrow`, the coach scale's replacement for the
+ * 9.5px uppercase mono overline. Same role as `.coach-panel__eyebrow` and the same size, but it
+ * labels a block on the page rather than a panel, so it carries its own bottom margin.
+ *
+ * The size is stated as the token and not as a number, because the number was wrong here for the
+ * whole redesign pass: this comment read "12px" while the declaration below already resolved to
+ * 14, and a comment nobody can be wrong in is the only kind worth writing next to a token.
+ */
+[data-shell-role="coach"] .coach-eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--coach-eyebrow);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/*
+ * `DayCounter`, lifted to the coach scale from outside the component.
+ *
+ * This is the A2P sentence, and it is the one line in the product with a hard rule behind it: SMS
+ * really is registering for two to three weeks per coach, `CLAUDE.md` says that gets a real day
+ * counter and never a percentage or a predicted date, and `day-counter.tsx` is the component that
+ * keeps that promise. It shipped at the console's sizes -- `text-body` is `--t-body`, 13px, and
+ * the `Day N` figure `--t-row`, 14px -- on a surface whose floor is 14 and whose body is 16. The
+ * sentence carrying the product's most carefully worded honest state was the one rendering too
+ * small for the people it was written for.
+ *
+ * Lifted here rather than in the kit, because `DayCounter` is shared: `admin-channel-health.tsx`
+ * and `admin-provisioning.tsx` mount it inside the owner console, which is deliberately 13.5px,
+ * and editing the component's own classes would move their screens to fix these. The scope is
+ * what keeps the console still -- these declarations cannot match outside a
+ * `[data-shell-role="coach"]` root, and no admin surface has one.
+ *
+ * A rule rather than a per-call-site class list, which is the difference from `COACH_JOURNEY_SCALE`
+ * in `get-started-checklist.tsx`: that one lifts a journey mounted in exactly one place, and this
+ * component is mounted on four coach surfaces -- coach Home's carrier notice, the integrations
+ * page, the SMS eligibility step and the connect step -- so a class list would be the same scale
+ * retyped four times, drifting the first time somebody fixes three of them.
+ *
+ * 16px on the line and 17px on the figure, which is `CoachSetup.dc.html`: its carrier pill sets
+ * the sentence at 16px and both mono numbers at 17px. The +1 is the same relationship the
+ * component already draws at the console's scale, so nothing about its shape changes.
+ */
+[data-shell-role="coach"] .daycount {
+  font-size: var(--coach-body);
+  line-height: 1.5;
+}
+
+[data-shell-role="coach"] .daycount strong {
+  font-size: var(--coach-row-name);
+  line-height: 1.35;
+}
+
+/* ============================================================================
+   theme-light lane, appended 2026-09-01.
+
+   The coach side has the same dependency the console does, and it breaks the same way. A
+   drenched panel keeps its own dark ground in every theme, but its contents inherit the text
+   roles from whichever palette is live; under the light palette those are near-black, so a
+   drenched panel's figure and its sentence render dark-on-dark. `--coach-on-drench-sub` covers
+   the eyebrow and the sentence by name, which is why the panel looked half-right rather than
+   plainly broken -- the figure and anything else inside it did not.
+
+   Re-declaring the four roles for the panel's subtree fixes all of them at once and cannot be
+   outrun by a new element inside the panel. Ratios are measured against the lighter stop of
+   `--coach-drench-info`, the lightest ground either drench presents.
+   ========================================================================== */
+[data-shell-role="coach"] .coach-panel[data-drench] {
+  --ink: oklch(0.99 0.012 265);              /* 5.96 on the info drench / 14.3 on live */
+  --body: oklch(0.955 0.012 265);            /* 5.40 / 12.9 */
+  --muted: oklch(0.925 0.012 265);           /* 4.93 / 11.8 */
+  --faint: oklch(0.9 0.012 265);             /* 4.57 / 10.9 */
+
+  /*
+   * The grounds, appended 2026-09-01, and this is the same bug one layer down.
+   *
+   * The block above re-declared the four text roles and no ground token, so anything inside a
+   * drenched panel that paints a face kept resolving the live palette's. Under the light palette
+   * that is near-white: `.coach-panel__action` at `:163` is `background: var(--well)` with
+   * `color: var(--body)`, and `--body` took the override above while `--well` did not, which put a
+   * near-white chevron on a near-white square at about 1.02:1 -- an invisible control, on the
+   * action in the header band of Home's hero panel.
+   *
+   * A drenched panel brings its own dark ground in every theme, so every face and every hairline
+   * inside it has to be authored against that ground rather than against the page's. White alphas
+   * are the only values that are true in both palettes for the same reason the drenches themselves
+   * are declared once. These are scoped overrides for a dark subtree, not a change to the tokens
+   * in `tokens.css`, which the palette lane owns.
+   */
+  --well: rgba(255, 255, 255, 0.1);
+  --quiet: rgba(255, 255, 255, 0.1);
+  --band: rgba(255, 255, 255, 0.16);
+  --row-hover: rgba(255, 255, 255, 0.08);
+  --control-fill: rgba(255, 255, 255, 0.1);
+  --line: rgba(255, 255, 255, 0.26);
+  --line-soft: var(--coach-on-drench-line);
+
+  /*
+   * The accent hairline, for the same reason and one role further out. `--accent-edge` is the edge
+   * a quiet control brightens to on hover -- the go-live panel's "Change something first" takes it
+   * -- and in the base palette it is a low-alpha blue. On a blue drench that is blue on blue, so
+   * the hover did nothing at all. At 0.44 it brightens visibly off the 0.26 hairline the same
+   * control rests at, which is the relationship the base palette draws and the drench lost.
+   */
+  --accent-edge: rgba(255, 255, 255, 0.44);
+
+  /*
+   * The rest of the ramp and every tone role, appended 2026-09-01, and the reason they are all
+   * here at once rather than one hero at a time.
+   *
+   * This block has now been extended three times, and each extension was the roles whichever
+   * figure happened to be on screen: the four text roles, then the grounds, then the accent pair.
+   * The console lane found the fourth instance in `console.css` -- `TONE_TEXT` maps `good` and
+   * `failure` to `--good-text` and `--failure-text`, nothing redeclared them inside a drench, and
+   * five signed money figures on the Revenue hero measured 2.56:1 in the light palette. The rule
+   * that stops a fifth is not "redeclare the roles the current panel prints" but **redeclare every
+   * token a control or a figure inside a drench can resolve to**, so the set below is the whole of
+   * `tone.ts`'s `TONE_TEXT` and `TONE_MARK` plus the tail of the text ramp, not the subset anything
+   * prints today. These are the same values `console.css` declares, against the same two gradients;
+   * a divergence between two identical grounds would be a bug rather than a choice.
+   *
+   * Ratios are measured against the lighter stop of `--coach-drench-info` -- the lightest ground
+   * either drench presents, so the worst case -- and then the live drench's lighter stop. Text
+   * roles clear 4.5:1 (1.4.3); the six marks are shapes and clear 3:1 (1.4.11).
+   *
+   * The chroma is low because the drench has one octave to spend: white itself measures only
+   * 6.15:1 on the info drench's lighter stop, so a tone that clears 4.5:1 has to sit near white and
+   * its hue survives as a tint rather than as a colour. The `-body` roles land *on* their `-text`
+   * roles rather than a step below, for the same reason `--meta` and `--overline` land on
+   * `--faint`: a fifth visible step would be under the floor.
+   */
+
+  /* The tail of the ramp. */
+  --meta: oklch(0.9 0.012 265);              /* 4.57 / 10.9 */
+  --overline: oklch(0.9 0.012 265);          /* 4.57 / 10.9 */
+  --dim: oklch(0.82 0.012 265);              /* 3.52 /  8.4 -- shape floor, 1.4.11 */
+  --glyph: oklch(0.8 0.012 265);             /* 3.29 /  7.9 */
+
+  /* The tone roles. */
+  --on-accent: oklch(0.99 0.012 265);        /* 5.96 / 14.3 */
+  --accent-text: oklch(0.945 0.026 265);     /* 5.24 / 12.5 */
+  --good-text: oklch(0.945 0.05 164);        /* 5.34 / 12.8 */
+  --warning-text: oklch(0.945 0.041 71);     /* 5.22 / 12.5 */
+  --waiting-text: oklch(0.945 0.026 271);    /* 5.23 / 12.5 */
+  --draft-text: oklch(0.945 0.028 292);      /* 5.21 / 12.5 */
+  --failure-text: oklch(0.945 0.027 32);     /* 5.20 / 12.4 */
+  --critical-text: oklch(0.945 0.027 25);    /* 5.19 / 12.4 */
+  --critical: oklch(0.945 0.027 25);         /* 5.19 / 12.4 -- printed as text, so 1.4.3 */
+  --warning-body: oklch(0.945 0.04 74);      /* 5.22 / 12.5 */
+  --failure-body: oklch(0.945 0.027 39);     /* 5.20 / 12.4 */
+  --accent-bright: oklch(0.82 0.089 264);    /* 3.51 /  8.4 */
+  --good: oklch(0.82 0.11 164);              /* 3.69 /  8.8 */
+  --warning: oklch(0.82 0.11 71);            /* 3.47 /  8.3 */
+  --waiting: oklch(0.82 0.089 271);          /* 3.50 /  8.4 */
+  --draft: oklch(0.82 0.098 292);            /* 3.44 /  8.2 */
+  --failure: oklch(0.82 0.101 32);           /* 3.40 /  8.1 */
+
+  /*
+   * The two grounds those tones land on, and the one hairline, which the set above needs to be
+   * true rather than merely complete.
+   *
+   * Every tone wash is an alpha except two. An alpha tints the drench and the pairing holds --
+   * the six alpha washes put their own `-text` role at 4.77:1 or better on the worst stop, in
+   * either palette. `--critical-wash` and `--info-wash` are opaque in both palettes, so inside a
+   * drench they keep whichever page palette is live, and under the light palette that is
+   * near-white: `--critical-text` at its new near-white value lands on `--critical-wash` at
+   * **1.03:1**. The role would be present, its value right on its own, and the pair invisible --
+   * which is the same defect one level further in, introduced by the fix for it.
+   *
+   * These darken rather than lighten, and that is the departure from white alphas above. White is
+   * right for a face that has to lift off a dark ground; a wash marks a region *behind* text that
+   * is already near-white, so lifting it costs the text the contrast it has least of -- a 14% white
+   * wash drops `--critical-text` to 3.84:1, under the floor. Black is true in both palettes for the
+   * same reason white is, because the drench is dark in both. At 0.18 the wash reads as a recessed
+   * patch (1.32:1 off the info drench) and puts its text at 6.83:1, and the hairline carries the
+   * region on the live drench where a darker patch has less to say. That is the same trade
+   * `.coach-panel__action` below makes and for the same measured reason.
+   */
+  --critical-wash: rgba(0, 0, 0, 0.18);      /* --critical-text on it: 6.83 / 13.62 */
+  --info-wash: rgba(0, 0, 0, 0.18);
+  --critical-line: rgba(255, 255, 255, 0.32);  /* 1.97 off the info drench */
+  --info-line: rgba(255, 255, 255, 0.32);
+  /* What `--neutral-line` resolves through, and the only hairline in that chain the block above
+     left on the page palette. */
+  --line-strong: rgba(255, 255, 255, 0.38);    /* 2.21 */
+}
+
+/*
+ * The accent-painted control inside a drench, appended 2026-09-01, and this is the same bug one
+ * layer further out again.
+ *
+ * The two blocks above re-declared the text roles and then the grounds. The accent pair was never
+ * touched, so a control painting `--accent-fill` inside a drenched panel painted the drench's own
+ * colour onto the drench: the go-live primary in `coach-agent-preview.tsx` measured 1.10:1 against
+ * the panel at the top of the gradient and 1.28:1 at the bottom, with an `--accent-line` border
+ * that was blue over blue and added nothing. The quiet control beside it takes `--well` and `--line`,
+ * which the block above remaps to white alphas, so it measured 1.24:1 -- the secondary read as a
+ * control and the primary did not. That is the emphasis inverted, on the panel that starts the
+ * agent talking to real people.
+ *
+ * `MeetYourAgent.dc.html:217` is the canvas's own answer and it is not a stronger blue: inside the
+ * drench the primary inverts to a white face with dark text and a `rgba(255, 255, 255, 0.4)` edge,
+ * while the secondary stays a 12% white fill. So the loud control is the lightest thing on the
+ * panel rather than the most saturated, which is the only move available when the ground has
+ * already spent the accent.
+ *
+ * This is a rule rather than an `--accent-fill` override in the block above because `--on-accent`
+ * cannot follow it. Inside a drench that token means "text on the drenched ground" -- `:140` prints
+ * the panel's name and figure in it, and `deck-panel.tsx` prints a `TitlePanel`'s title in it -- so
+ * inverting it to a dark ink would turn every drenched title dark-on-blue, which is the defect
+ * these three blocks exist to stop. The face and the ink therefore land together, on the elements
+ * that actually paint the face, and nothing else moves.
+ *
+ * Measured on the lighter stop of `--coach-drench-info`, the hardest ground either drench presents:
+ * the face reads 5.82:1 against the panel and the ink reads 13.62:1 on the face. White alphas for
+ * the face and the edge, per the block above; the ink is the artboard's own value, and a fixed
+ * colour is right here because it is authored against a face that is fixed in both palettes.
+ *
+ * ## What this selector matches, and what it therefore misses
+ *
+ * It is an attribute selector over the class string: it matches an element whose `class` contains
+ * the literal text `bg-[var(--accent-fill)]` or `bg-[var(--accent)]`, which are the two spellings
+ * Tailwind emits for an accent face and the two that exist in `src/` today. That is matching on
+ * what a thing is *called* rather than on what it is, and the tradeoff is deliberate but real, so
+ * it is written here rather than left to be discovered.
+ *
+ * **It does not reach a face painted any other way.** A different utility spelling
+ * (`bg-[image:var(--accent-fill)]`), a `background` in a stylesheet rule of its own, an inline
+ * `style`, or a component that takes its colour through a prop rather than a class will all paint
+ * the accent onto the drench with this rule none the wiser. `Meter` is the live example one prop
+ * away: its `tone` defaults to `accent`, which paints `bg-[var(--accent)]`, and only because
+ * `DeckStats` passes `tone="current"` explicitly does the meter on a drenched deck panel take the
+ * panel's own colour instead. That second spelling is in the selector for exactly that reason.
+ *
+ * **That is a category, not a coincidence: a default that is wrong for a context, held correct only
+ * by every caller remembering to override it.** It is worth naming because no sweep of the tree can
+ * find it -- a sweep reads what is painted, and what is painted here is correct. The defect is in
+ * what the next caller would paint by writing `<Meter value={...} />` the natural way, with no tone
+ * at all, so it is invisible until somebody adds that caller and silent when they do. Guarding it
+ * here corrects the wrong default after the fact rather than preventing it; removing the unsafe
+ * default is the real fix, and it is deliberately not done here: `Meter`'s `tone` should default
+ * to `current` so an unadorned `<Meter />` inherits its panel's colour, and that change alters the
+ * component's contract and every call site, so it is a separate, reviewed change.
+ *
+ * **There is no better selector available, which is why the guard is elsewhere.** CSS cannot ask
+ * "does this element's computed background resolve to the same colour as its ancestor's", so the
+ * cost of catching every spelling here would be remapping `--accent-fill` as a token -- which is
+ * the thing `--on-accent` forbids, two paragraphs up. So the stylesheet catches the spellings that
+ * exist and `coach-drench-controls.test.ts` carries the part CSS cannot: it measures this rule's
+ * face against both stops of both drenches, asserts it stands further off the ground than the quiet
+ * control beside it, and asserts the class `coach-agent-preview.tsx` actually writes is one this
+ * selector matches -- so renaming the utility on either side fails the build rather than silently
+ * un-styling the button.
+ */
+[data-shell-role="coach"] .coach-panel[data-drench]
+  :where([class*="bg-[var(--accent-fill)]"], [class*="bg-[var(--accent)]"]) {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.96);
+  color: oklch(0.28 0.06 232);
+  /*
+   * The fourth property, and it was the one missing.
+   *
+   * A face is a ground, an edge, an ink and a shadow, and this rule was replacing three of them.
+   * `ACCENT_FILL_SHADOW_CLASS` rides every accent face as `0 1px 0 rgba(255,255,255,0.25) inset` --
+   * a bevel authored for a saturated fill, where a white inset highlight reads as the top edge
+   * catching light. On the near-white face this rule paints it is white on white: not a halo,
+   * simply nothing, a declaration that survived an inversion it has no meaning under.
+   *
+   * It comes off for the reason the other three moved rather than for how it currently renders.
+   * That constant used to carry a second layer, an accent-coloured blur, and dropped it when the
+   * light palette landed because a blue shadow under a blue button on a near-white ground reads as
+   * print misregistration -- the reasoning is written out at `button-class.ts:49-56`. The day
+   * anyone restores a coloured glow for the dark surfaces it was authored for, this inverted face
+   * would wear it around a near-white button on a blue panel, which is that same defect with the
+   * grounds swapped. Neutralising the shadow here means the inversion covers a whole face and
+   * cannot be reopened by a change somewhere else that looks unrelated.
+   *
+   * `none` rather than a white inset of its own: `MeetYourAgent.dc.html:217` draws this control
+   * flat, and a bevel is a thing a saturated fill needs to stop reading as a flat rectangle. A
+   * near-white face on a blue panel already has all the separation it needs from the ground.
+   */
+  box-shadow: none;
+}
+
+/*
+ * The action square, outlined rather than filled, and only inside a drench.
+ *
+ * A white-alpha fill costs the glyph contrast it cannot spare: the lighter stop of
+ * `--coach-drench-info` is the hardest ground either drench presents, and a 10% white face drops
+ * `--body` on it from 5.40:1 to 4.35:1. Dropping the face and keeping a hairline puts the glyph
+ * straight on the drench at 5.96:1 with `--ink`, and it is also what the artboards draw -- an
+ * outlined control on a drenched surface, so the drench stays the panel's one fill.
+ */
+[data-shell-role="coach"] .coach-panel[data-drench] .coach-panel__action {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: transparent;
+  color: var(--ink);
+}
+
+/* ============================================================================
+   The account menu, appended 2026-09-01.
+
+   This is the one piece of coach chrome that does not render inside the shell. The menu is a
+   shadcn `DropdownMenu`, and `src/components/ui/dropdown-menu.tsx` wraps its content in
+   `MenuPrimitive.Portal`, which mounts to `document.body` -- outside the `[data-shell-role="coach"]`
+   root every rule above is scoped to. So none of the floors reached it: the coach's own account
+   menu rendered at the console's density, 26px rows of 14px text in a 192px column, where
+   `CoachAccountMenu.dc.html` draws a 340px panel of 48px rows at 17px.
+
+   `app-topbar.tsx` stamps `data-shell-role="coach"` onto the portalled content, so the popup is
+   itself the scope root and the rules below are written against `[data-shell-role="coach"]` and
+   the class on the same element rather than as descendants of it. That also gives the popup the
+   sheet's `font-size: var(--coach-body)` and the 44px interactive floor for free, which is the
+   argument for stamping the role rather than copying four numbers into class strings that the
+   coach type-floor test cannot read.
+
+   The console's menu carries neither attribute nor class and is untouched: it is 13.5px on 30-34px
+   targets on purpose, for a team in the console all day.
+   ========================================================================== */
+[data-shell-role="coach"].coach-account-menu {
+  width: 340px;
+  padding: 8px;
+  /* The deck's asymmetric radius, at the menu's smaller scale, so it reads as the same family of
+     surfaces as the panels behind it. */
+  border-radius: 20px 20px 15px 15px;
+  background: linear-gradient(180deg, var(--card-top), var(--card));
+}
+
+/*
+ * The identity header: full-bleed across the menu's own 8px padding, closed by a hairline, so the
+ * account it belongs to is a header rather than the first item in the list.
+ */
+[data-shell-role="coach"].coach-account-menu [data-slot="dropdown-menu-label"].coach-account-menu__identity {
+  gap: 13px;
+  margin: -8px -8px 8px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+[data-shell-role="coach"].coach-account-menu .coach-account-menu__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--accent-edge);
+  border-radius: 11px;
+  background: var(--accent-wash);
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+
+[data-shell-role="coach"].coach-account-menu .coach-account-menu__name {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* The business line, at the surface's helper size rather than the badge scale the console reads
+   it at. It is the answer to "whose workspace is this", so it is not the place to save a pixel. */
+[data-shell-role="coach"].coach-account-menu .coach-account-menu__business {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+/*
+ * A row. 48px rather than the surface's 44px minimum, which is what the artboard draws: a menu is
+ * a list of same-shaped targets stacked with no gap between them, so the floor is the wrong number
+ * here -- the reader is aiming at one of six adjacent rectangles rather than at a lone button.
+ */
+[data-shell-role="coach"].coach-account-menu :where(
+  [data-slot="dropdown-menu-item"],
+  [data-slot="dropdown-menu-radio-item"]
+) {
+  gap: 14px;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: 11px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+/* The kit sizes menu glyphs at 16px for the console's rows. The coach's rows are half again as
+   tall, and a 16px glyph beside 17px text reads as a smudge rather than as an icon. */
+[data-shell-role="coach"].coach-account-menu :where([data-slot="dropdown-menu-item"]) svg {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+
+/* The theme group's own label, which names a choice rather than a destination, stays at the
+   surface's helper size instead of taking a row's 17px. */
+[data-shell-role="coach"].coach-account-menu
+  [data-slot="dropdown-menu-label"]:not(.coach-account-menu__identity) {
+  padding: 10px 12px 4px;
+  font-size: var(--coach-eyebrow);
+}
+
+[data-shell-role="coach"].coach-account-menu [data-slot="dropdown-menu-separator"] {
+  margin: 6px 4px;
+  background: var(--line-soft);
+}
+
+/* The sign-out form is a layout element the menu never drew, so it carries no shape of its own --
+   without this the button inside it is a block in a row's clothing. */
+[data-shell-role="coach"].coach-account-menu form {
+  display: contents;
+}
+
+/*
+ * The pipeline board's drag states.
+ *
+ * These were written into `globals.css` and are the coach's alone: `KanbanBoard` is mounted only by
+ * `coach-pipeline.tsx`, which reaches the tree only through `LeadsSurface` on `/coach/pipelines`
+ * and `/coach/contacts`. Both sit under the route group whose layout imports this file, so nothing
+ * outside the coach shell could ever have drawn them, and the app budget was carrying 141 lines of
+ * one surface's behaviour for every reader of every other one.
+ *
+ * The real card leaves a quiet slot while a raised copy follows the pointer. Pointer Events and a
+ * requestAnimationFrame loop own that copy, so the browser never substitutes its native drag glyph
+ * and movement stays synced with paint while the horizontal track auto-scrolls. The lanes move only
+ * a few pixels, enough to identify the target without making seven tall columns wave around.
+ *
+ * **The preview rules carry no shell scope, and that is deliberate.** The preview is built by hand
+ * and appended to `document.body`, so it is not inside the `[data-shell-role="coach"]` root
+ * `AppShell` stamps and any descendant selector would simply never match -- the rules would go
+ * quiet with nothing failing anywhere, which is how CSS breaks. Stamping the role onto the node,
+ * the way `app-topbar.tsx` does for the account menu, is the other way to solve this and was tried;
+ * it makes the stylesheet depend on a line in a component to keep working, and this file should not
+ * be one edit away from silently drawing nothing. The class is enough: this sheet is loaded only by
+ * the coach layout, and `.kanban-drag-preview` is created by exactly one component.
+ *
+ * Every custom property below is a root token. That is a requirement rather than a coincidence:
+ * properties inherit through the DOM, not the React tree, so a `--coach-*` token read out at
+ * `document.body` is undefined and the browser drops the whole declaration.
+ */
+[data-shell-role="coach"] [data-kanban-column] {
+  transition:
+    transform var(--duration-quick) var(--ease-smooth-out),
+    border-color var(--duration-quick) var(--ease-out),
+    background-color var(--duration-quick) var(--ease-out),
+    opacity var(--duration-quick) var(--ease-out);
+}
+
+[data-shell-role="coach"] [data-drag-active="true"] [data-kanban-column] {
+  opacity: 0.76;
+  transform: scale(0.995);
+  will-change: transform;
+}
+
+[data-shell-role="coach"] [data-drag-active="true"] [data-kanban-column][data-drop-allowed="true"] {
+  opacity: 1;
+  transform: translateY(calc(-1 * var(--distance-micro)));
+}
+
+[data-shell-role="coach"] [data-drag-active="true"] [data-kanban-column][data-drop-target="true"] {
+  box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--focus-ring), var(--shadow-open);
+  transform: translateY(calc(-1 * var(--distance-small))) scale(1.006);
+}
+
+[data-shell-role="coach"] [data-kanban-card][data-drag-enabled="true"] {
+  touch-action: pan-y;
+}
+
+body.is-kanban-pointer-dragging,
+body.is-kanban-pointer-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+[data-shell-role="coach"] [data-kanban-card][data-dragging="true"] {
+  background: color-mix(in oklab, var(--accent-wash) 64%, transparent);
+  border-color: var(--accent-edge);
+  border-style: dashed;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent-text) 12%, transparent);
+  opacity: 1;
+  transform: scale(var(--scale-small));
+}
+
+[data-shell-role="coach"] [data-kanban-card][data-dragging="true"] > * {
+  opacity: 0.16;
+  transition: opacity var(--duration-quick) var(--ease-out);
+}
+
+.kanban-drag-preview {
+  contain: layout style;
+  left: 0;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  transform: translate3d(-9999px, -9999px, 0);
+  width: 228px;
+  will-change: transform;
+  z-index: 100;
+}
+
+.kanban-drag-preview .kanban-drag-preview-card {
+  animation: kanban-drag-lift var(--duration-quick) var(--ease-smooth-out) both;
+  background: linear-gradient(180deg, var(--card-top), var(--card)) !important;
+  border-color: var(--accent-edge) !important;
+  box-shadow: var(--shadow-raised) !important;
+  cursor: grabbing !important;
+  opacity: 0.97;
+  transform-origin: 42% 50%;
+}
+
+.kanban-drag-preview .kanban-drag-preview-card button {
+  visibility: hidden;
+}
+
+.kanban-drag-preview .kanban-drag-preview-label {
+  align-items: center;
+  background: color-mix(in oklab, var(--raised) 97%, var(--canvas));
+  border: 1px solid var(--line-strong);
+  /* `--r-full`, not the `--r-pill` this shipped with: that name is declared nowhere, so the browser
+     dropped the declaration and the pill drew as a square. `tokens.css:234` names `--r-full` for
+     "pills, avatars, switches". */
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-card);
+  color: var(--muted);
+  display: flex;
+  /* 14px, up from the 13px this arrived with. It is a label on a coach surface, and the floor for
+     one is 14 -- `docs/SIMPLIFICATION-SPEC.md` §5, enforced by `coach-type-floor.test.ts` against
+     this file. It read 13 because it lived in `globals.css`, which that floor does not police. A
+     literal rather than `--coach-eyebrow` for the reason the docblock above gives: this element is
+     outside the root the coach tokens are declared on, so the token would resolve to nothing. */
+  font-size: 14px;
+  font-weight: 600;
+  gap: var(--s-2);
+  left: 50%;
+  max-width: calc(100% - var(--s-4));
+  overflow: hidden;
+  padding: 5px 10px;
+  position: absolute;
+  text-overflow: ellipsis;
+  top: calc(100% + var(--s-2));
+  transform: translateX(-50%);
+  transition:
+    color var(--duration-quick) var(--ease-out),
+    background-color var(--duration-quick) var(--ease-out),
+    border-color var(--duration-quick) var(--ease-out),
+    transform var(--duration-quick) var(--ease-smooth-out);
+  white-space: nowrap;
+}
+
+.kanban-drag-preview .kanban-drag-preview-label::before {
+  background: var(--muted);
+  border-radius: 999px;
+  content: "";
+  height: 6px;
+  transition: background-color var(--duration-quick) var(--ease-out);
+  width: 6px;
+}
+
+.kanban-drag-preview[data-valid="true"] .kanban-drag-preview-label {
+  background: color-mix(in oklab, var(--accent-wash-strong) 96%, var(--raised));
+  border-color: var(--accent-edge);
+  color: var(--accent-text);
+  transform: translateX(-50%) translateY(calc(-1 * var(--distance-micro))) scale(1.015);
+}
+
+.kanban-drag-preview[data-valid="true"] .kanban-drag-preview-label::before {
+  background: var(--accent-text);
+}
+
+[data-shell-role="coach"] [data-kanban-card][data-landed="true"] {
+  animation: kanban-card-land var(--duration-slow) var(--ease-smooth-out) both;
+}
+
+[data-shell-role="coach"] [data-kanban-card][data-landed="true"]::after {
+  animation: kanban-card-land-ring var(--duration-slow) var(--ease-smooth-out) both;
+  border: 1px solid var(--accent-edge);
+  border-radius: inherit;
+  content: "";
+  inset: -3px;
+  pointer-events: none;
+  position: absolute;
+}
+
+@keyframes kanban-drag-lift {
+  from { opacity: 0.55; transform: rotate(0deg) scale(0.985); }
+  to { opacity: 0.97; transform: rotate(0.75deg) scale(1.02); }
+}
+
+@keyframes kanban-card-land {
+  0%, 45% { border-color: var(--accent-text); }
+  100% { border-color: var(--accent-edge); }
+}
+
+@keyframes kanban-card-land-ring {
+  from { opacity: 0.8; transform: scale(0.985); }
+  to { opacity: 0; transform: scale(1.035); }
+}
+
+/* The board's own reduced-motion rule. `globals.css` still zeroes every duration under `reduce`,
+   but a transform that lands somewhere new arrives instantly rather than not happening, so the
+   displacement is cancelled here as well -- and it has to travel with the rules it cancels. */
+@media (prefers-reduced-motion: reduce) {
+  [data-shell-role="coach"] [data-kanban-column],
+  [data-shell-role="coach"] [data-kanban-card][data-dragging="true"],
+  [data-shell-role="coach"] [data-kanban-card][data-landed="true"]::after,
+  .kanban-drag-preview .kanban-drag-preview-card,
+  .kanban-drag-preview .kanban-drag-preview-label {
+    transform: none !important;
+  }
+}

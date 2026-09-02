@@ -1,0 +1,1054 @@
+/* ============================================================================
+   SetterFi design tokens -- the artifact palette
+   Authority: .planning/design/ARTIFACT-SPEC.md section 8, extracted verbatim from
+   "SetterFi Redesign.dc.html", turn 3 option 3c. Names and values are fixed there
+   because parallel work writes markup against them; do not rename or re-derive.
+
+   Theme model, four blocks:
+     :root                                   the palette (default)
+     @media (prefers-color-scheme: dark)     :root:not([data-theme="light"])
+     :root[data-theme="dark"]                explicit dark (the toggle wins both ways)
+     [data-theme="light"]                    forced-light island
+   The light palette landed here on 2026-09-01. Alec reviewed the redesign and asked for
+   "the white and blue colors" back, and for the whole thing to look softer, so the bare
+   :root block and the forced-light island now carry a real light palette and the two dark
+   blocks keep theirs -- the toggle has to win in both directions, and a theme that only
+   works one way is worse than no theme. The accent moved with it, from the teal at hue 218
+   to blue at 264, in all four blocks: the teal existed so one accent could serve both design
+   languages, and that is the decision Alec reversed, so leaving dark on teal would have
+   split the accent in exactly the way the teal was chosen to avoid.
+
+   Opaque colours are OKLCH, converted losslessly from the artifact's hex so the
+   contrast tests can parse them; the artifact's alpha values stay as authored rgba,
+   because a hairline or a wash over a gradient card has to pick up the face beneath
+   it. Ratios in the comments were computed, not estimated. Never pure black / white.
+   ========================================================================== */
+:root {
+  /* ---- Grounds. The same four surfaces the dark palette names -- shell, content pane,
+     card face, and the well sunk into it -- but walked in much smaller steps. The dark
+     palette spans 0.134 to 0.220 in lightness, which is a wide ramp because near black a
+     large step is still a quiet one; up here the eye reads lightness far more finely, so
+     the same visual separation comes from 0.961 to 0.998. That is what Alec's "softer"
+     means at the ground layer: the shell, the pane and the card are legibly different
+     surfaces without any of the borders between them turning into a grey box. --------- */
+  --canvas: oklch(0.9612 0.0042 262);        /* shell ground */
+  --pane: oklch(0.9745 0.0034 262);          /* content pane */
+  /* The bloom is the one place the accent touches a whole surface, and on a light ground it
+     has to be far weaker than its dark counterpart: a 0.12 wash that reads as a faint glow
+     over near-black reads as a coloured stain over near-white. Six percent of the blue,
+     fading to nothing, is a tint you notice only when you look for it. */
+  --pane-bloom: radial-gradient(85% 50% at 78% -8%, rgba(46, 92, 200, 0.06), rgba(46, 92, 200, 0) 60%);
+  --rail: linear-gradient(180deg, oklch(0.9838 0.003 264), oklch(0.9702 0.0038 264));
+  --card-top: oklch(0.9975 0.0016 262);      /* lit upper stop of the card face */
+  --card: oklch(0.9905 0.0026 262);          /* lower stop, and the flat card colour */
+  /* Held just under --card at 1.022:1, which is exactly where the dark palette holds its own
+     well against its card -- a well reads as recessed by being a flat face inside a gradient one,
+     not by being a different grey. The first cut put it at 0.9668, which is a hair off --canvas:
+     1.017:1, and the consumer shell is painted --well over a --canvas chat body, so the two
+     grounds that are supposed to be a panel on a page were one flat surface. 1.066:1 now. */
+  --well: oklch(0.983 0.0048 262);           /* inset panel, sunk below the card */
+  --quiet: var(--well);                      /* legacy name for the same recessed ground */
+  --raised: var(--card-top);                 /* drawer / popover face */
+  /* Alpha for the same reason the dark palette uses it: the card face is a gradient, so an
+     opaque band separates at one end of a table and vanishes at the other. The channels are
+     the shared slate rather than a light-specific grey, which on a near-white card darkens
+     rather than lightens. Every alpha below is solved so the fill RENDERS at the same ratio
+     its dark counterpart renders at -- the fill is the thing a reader sees, so matching the
+     appearance is what parity means, and it takes a lower alpha here than the dark palette
+     uses because a dark slate over near-white composites harder than a periwinkle over
+     near-black. Band 1.155:1 off --card against dark's 1.142, hover 1.051 against 1.049. */
+  /* The >= 1.10 floor tokens-contrast.test.ts pins exists because Round 5.6 measured the
+     shipped subscriptions band at 1.022:1 and found it invisible; the periwinkle at 0.1 lands
+     at 1.096 here, just under it. The console leans on this band to separate a header from its
+     table at 13.5px, so it is the surface that would have paid for the miss. */
+  --band: rgba(60, 90, 150, 0.1);         /* group + header band inside a table, 1.155:1 */
+  --row-hover: rgba(60, 90, 150, 0.035);
+  --row-hover-quiet: rgba(60, 90, 150, 0.06);
+  --control-fill: rgba(28, 42, 82, 0.035);   /* secondary controls on a light surface */
+  --row-selected: var(--accent-wash);
+  /* Ink rather than black, and a third rather than the dark palette's 0.6: over a light page
+     a heavy scrim reads as the lights going out, while the job is only to say the page behind
+     is out of reach. Held above the 0.25 floor because below that it is the flat bg-black/10
+     problem again -- a backdrop nobody can see. */
+  --scrim: oklch(0.28 0.03 262 / 0.32);
+
+  /* ---- Lines. A darker slate than the dark palette's periwinkle, because a hairline is a
+     DARKENING of whatever it crosses and the two palettes cross opposite grounds -- the
+     periwinkle at 0.14 lifts only 1.017:1 off a near-white card, which is to say it draws
+     nothing here, the same measured-into-invisibility failure --quiet had before --band
+     replaced it. These are decorative rules and input borders, not the meaningful boundaries
+     1.4.11 governs; an input stays perceivable through its focus ring, its label and its
+     placeholder. -------------------------------------------------------------------------
+     Each alpha is solved for the ratio its dark counterpart RENDERS at, so the two palettes
+     look alike rather than merely sharing a number. Composited the way a browser does it --
+     in gamma-encoded sRGB, which is what tokens-contrast.test.ts's over() does -- the dark
+     hairlines measure 1.209 / 1.088 / 1.250, not the 2.44 an earlier revision of this comment
+     claimed. That figure came from compositing in linear light, and it is what made the first
+     light palette overshoot: --line shipped at 0.3 for one day, rendering 1.582 against dark's
+     1.209, so the "softer" pass produced visibly heavier rules than the thing it softened. */
+  --line: rgba(60, 90, 150, 0.13);           /* card and rail hairline, 1.208:1 off --card */
+  --line-soft: rgba(60, 90, 150, 0.06);      /* faint dividers inside a card, 1.090:1 */
+  --line-input: rgba(60, 90, 150, 0.15);     /* input borders, 1.246:1 */
+  --line-strong: var(--line-input);
+
+  /* ---- Text ramp, darkest to lightest -- the mirror of the dark palette's, and the place
+     where "softer" stops. The coach reading this is typically over 55 and told us in round-1
+     demo feedback that the product was hard to read, so every role below the first is solved
+     to land on the ratio its DARK counterpart measures -- body 12.6, muted 9.7, faint 7.1,
+     and so on down. The first cut of this palette merely cleared AA and came out a full step
+     weaker than the dark ramp at every role (body 9.2, faint 5.6), which would have shipped
+     the round-1 complaint back to the person who made it, in the theme they asked for. --ink
+     is the one exception and is deliberately not black: 15:1 on the canvas is as legible as
+     21:1 and far less harsh, and dark's 17.1 over a light ground means near-black.
+     The last four are label weight only (11px overlines, weekend letters, icon strokes). */
+  --ink: oklch(0.2325 0.023 262);            /* 15.0 on canvas / 16.3 on card */
+  --body: oklch(0.2905 0.032 262);           /* 12.6 / 13.7 */
+  --muted: oklch(0.3604 0.036 262);          /*  9.7 / 10.6 */
+  --faint: oklch(0.4349 0.039 262);          /*  7.1 /  7.7 */
+  --meta: oklch(0.4819 0.04 262);            /*  5.8 */
+  --overline: oklch(0.5261 0.041 262);       /*  4.8 */
+  --dim: oklch(0.5819 0.042 262);            /*  3.8, weekend letters */
+  --glyph: oklch(0.5951 0.045 262);          /*  3.6, icon strokes */
+
+  /* ---- Accent: back to blue, which is the decision Alec reversed. The teal at hue 218 was
+     the old electric #2050c8 re-hued; this walks it home to 264, one degree off the canvas
+     family, so the accent and the grounds are the same colour idea at two ends of the ramp
+     rather than two hues arguing. Chroma sits at 0.15 rather than the original's ~0.20 --
+     that is the "softer" part, and it costs nothing legible: white 600 text over the solid
+     measures 5.98:1 and the lightest stop of --accent-fill still measures 5.43:1, both well
+     clear of AA. --accent-hover and --accent-active darken rather than lighten, because on a
+     light ground pressing something has to feel like pushing it further in. ------------- */
+  --accent: oklch(0.5 0.15 264);             /* on-accent text 5.98:1; 5.50 on canvas */
+  --accent-fill: linear-gradient(180deg, oklch(0.523 0.148 266), oklch(0.443 0.152 261));
+  --accent-hover: oklch(0.455 0.158 264);    /* on-accent 7.30 */
+  --accent-active: oklch(0.41 0.152 262);    /* on-accent 8.83 */
+  --accent-line: rgba(46, 92, 200, 0.32);
+  --accent-text: oklch(0.44 0.165 264);      /* 7.2 canvas / 7.8 card / 6.5 on its own wash */
+  --accent-bright: oklch(0.47 0.16 264);     /* 6.3 canvas / 6.9 card */
+  --accent-wash: rgba(46, 92, 200, 0.07);
+  --accent-wash-strong: rgba(46, 92, 200, 0.1);
+  --accent-edge: rgba(46, 92, 200, 0.22);
+  --slot-on: rgba(46, 92, 200, 0.42);
+  --on-accent: oklch(0.99 0.003 267);
+  --focus-ring: oklch(0.47 0.16 264 / 0.65);
+
+  /* ---- Attention. Every state family below is solved the same way, which is why the numbers
+     repeat: the dot is walked until it clears 3:1 on the canvas, the lightest ground it can
+     land on being --card-top, and the text is walked until it clears 4.5:1 while sitting on
+     its own wash over the canvas -- the worst case in the product, and the one an estimate
+     always gets wrong. The washes are a tenth rather than the dark palette's eighth, because
+     a coloured film over near-white is far louder than the same film over near-black. ---- */
+  --warning: oklch(0.6409 0.115 71);         /* dot 3.06 canvas / 3.40 card-top */
+  --warning-text: oklch(0.5183 0.105 71);    /* 5.07 canvas, 4.55 on its own wash */
+  --warning-body: oklch(0.47 0.045 80);      /* 6.12 canvas */
+  --warning-wash: rgba(176, 116, 32, 0.1);
+  --warning-line: rgba(176, 116, 32, 0.28);
+
+  /* ---- Affirmative. Spent once per screen, on the pricing invariant. --------- */
+  --good: oklch(0.6237 0.095 164);           /* dot 3.06 canvas / 3.40 card-top */
+  --good-text: oklch(0.4992 0.09 164);       /* 5.13 canvas, 4.55 on its own wash */
+  --good-wash: rgba(36, 132, 96, 0.09);
+  --good-line: rgba(36, 132, 96, 0.26);
+
+  /* ---- Waiting: a state nobody is failing at yet. The coach owes us something and the
+     clock is theirs, not ours, so periwinkle rather than the amber of "you must act now"
+     or the clay of "this broke". The hue survives the move to light unchanged; only the
+     lightness flips, because 271 at 0.64 reads as the same idea as 271 at 0.71. ------- */
+  --waiting: oklch(0.6398 0.115 271);        /* dot 3.06 canvas / 3.40 card-top */
+  --waiting-text: oklch(0.5152 0.105 271);   /* 5.12 canvas, 4.55 on its own wash */
+  --waiting-wash: rgba(92, 110, 196, 0.09);
+  --waiting-line: rgba(92, 110, 196, 0.26);
+
+  /* ---- Draft: non-production state only, and never on a live surface. Violet marks a
+     thing that is written but not running -- an unpublished edit, a draft assistant --
+     which is the Draft-Is-Not-Live rule, not a comment. It has to stay clearly apart from
+     the blue accent on a light ground, where both are cool and mid-lightness, so the hue
+     stays at 292 and its chroma is the highest of the state families. ---------------- */
+  --draft: oklch(0.6466 0.135 292);          /* dot 3.06 canvas / 3.40 card-top */
+  --draft-text: oklch(0.5212 0.125 292);     /* 5.13 canvas, 4.55 on its own wash */
+  --draft-wash: rgba(124, 96, 204, 0.1);
+  --draft-line: rgba(124, 96, 204, 0.28);
+
+  /* ---- Failure: something broke and a person has to go fix it -- a breached SLA, a
+     declined card, a churn figure. Clay, like --negative, and still a separate role from it:
+     --negative is a 14x2px bar held to 1.4.11's 3:1, while these are dark foregrounds on a
+     light card held to 1.4.3's 4.5:1. --failure-body is the quieter sentence under the
+     headline and drops most of the chroma rather than the contrast. ------------------- */
+  --failure: oklch(0.6503 0.135 32);         /* dot 3.06 canvas / 3.40 card-top */
+  --failure-text: oklch(0.5239 0.125 32);    /* 5.14 canvas, 4.55 on its own wash */
+  --failure-body: oklch(0.47 0.075 39);      /* 6.30 canvas, 6.05 on the wash */
+  --failure-wash: rgba(196, 86, 66, 0.1);
+  --failure-line: rgba(196, 86, 66, 0.28);
+
+  /* ---- Negative: the disqualifier dash. A 14x2px bar, never a full border, and a shape
+     token -- as text it fails AA instantly. Held to 1.4.11's 3:1 on every ground including
+     --card-top, which up here is the near-white one; it lands at 3.99 on the canvas. ---- */
+  --negative: oklch(0.585 0.135 32);      /* 3.99 canvas / 4.34 card / 4.43 card-top */
+
+  /* ---- Kept from the pass-2 palette: hues the artifact does not spend but the rest of the
+     console still draws (destructive states, info callouts, charts). --info is pulled to 236
+     so that on a light ground it stays clearly a different blue from the 264 accent; in the
+     dark palette the two sat 12 degrees apart for the same reason. The two washes here are
+     opaque rather than alpha because they are callout grounds, not films over a card. */
+  --critical: oklch(0.6537 0.155 25);        /* dot 3.06 canvas */
+  --critical-wash: oklch(0.956 0.024 25);
+  --critical-text: oklch(0.5244 0.15 25);    /* 5.21 canvas, 5.08 on --critical-wash */
+  --critical-line: oklch(0.81 0.07 25);
+  --info: oklch(0.5052 0.13 236);            /* 5.01 canvas, 5.07 on --info-wash */
+  --info-wash: oklch(0.964 0.018 236);
+  --info-line: oklch(0.82 0.052 236);
+  --t-data-1: oklch(0.47 0.16 264);          /* 6.3 canvas */
+  --t-data-2: oklch(0.56 0.03 262);          /* 4.2 canvas */
+  --t-data-3: oklch(0.56 0.12 75);           /* 4.2 canvas */
+  --neutral: var(--line-strong);
+  --neutral-wash: var(--well);
+  --neutral-line: var(--line-strong);
+
+  /* ---- Shadows, and this is where "softer" is most of the work. The dark palette casts
+     pure black at up to 0.7 alpha, which is the only way to get separation when the ground is
+     already near-black. On a light page that same shadow reads as dirt. So every rung casts
+     the same ink the text is made of, tinted 262 rather than neutral, at a fifth of the
+     opacity and over a shorter distance, and each one gains a white inset highlight along its
+     top edge -- the card catching the light rather than the page being cut out of it. The
+     ordering still means what it meant: --shadow-card is the page's own material, --shadow-open
+     is the rung a card takes while it is being edited, and the last three still mean
+     "temporarily over your work" and nothing else. --------------------------------------- */
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 1px 2px rgba(28, 42, 82, 0.04), 0 8px 20px -14px rgba(28, 42, 82, 0.16);
+  --shadow-open: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 2px 4px rgba(28, 42, 82, 0.05), 0 16px 34px -20px rgba(28, 42, 82, 0.2);
+  --shadow-raised: 0 1px 2px rgba(28, 42, 82, 0.06), 0 10px 26px -10px rgba(28, 42, 82, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --shadow-drawer: -8px 0 32px -14px rgba(28, 42, 82, 0.18), 0 0 0 1px var(--line-strong);
+  --shadow-modal: 0 2px 6px rgba(28, 42, 82, 0.07), 0 24px 56px -20px rgba(28, 42, 82, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  --shadow-toast: 0 4px 18px -6px rgba(28, 42, 82, 0.18), 0 0 0 1px var(--line-strong);
+
+  /* ---- Spacing (4px grid) ------------------------------------------- */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px;
+  --s-6: 24px; --s-8: 32px; --s-10: 40px; --s-12: 48px;
+
+  /* ---- Radii --------------------------------------------------------- */
+  --r-control: 4px;   /* buttons, checkboxes, menu items */
+  --r-input: 6px;     /* inputs, badges, chips */
+  --r-card: 14px;     /* the artifact's card radius; cards, tiles, popovers */
+  --r-well: 11px;     /* inset panels: price wells, sample threads, the slot grid frame */
+  --r-chip: 8px;      /* chips, pills, secondary buttons */
+  --r-panel: 12px;    /* drawers, dialogs */
+  --r-full: 999px;    /* pills, avatars, switches */
+
+  /* ---- z-index ------------------------------------------------------- */
+  --z-sticky: 10; --z-rail: 20; --z-drawer: 30; --z-popover: 40; --z-toast: 50;
+
+  /* ---- Layout -------------------------------------------------------- */
+  --sidebar-w: 240px;
+  --sidebar-w-collapsed: 56px;
+  --topbar-h: 52px;
+  --drawer-w: 480px;
+  --content-max: 1440px;
+  --page-x: var(--s-8);
+
+  /* ---- Density (row heights). Admin has a toggle; coach is comfortable. */
+  --row-h-comfortable: 48px;
+  --row-h-compact: 40px;
+  --row-h-dense: 32px;
+  --row-h: var(--row-h-compact);
+  --cell-x: 12px;
+
+  /* ---- Density, pass-2 admin scale. Separate names so --row-h-* stays the
+     density-toggle contract and these stay the fixed console rhythm. -------- */
+  --d-row: 36px;          /* data row */
+  /* The ledger variant's data row. The 6a drawing sets it: at 36px the ledger read as
+     compressed against the approved sheet at the same type size, and the height is the
+     whole difference. */
+  --d-row-ledger: 48px;
+  /* The quiet variant's data row. It gets its own rung rather than borrowing
+     --row-h-comfortable, which is the density toggle's own token: sharing it made 6b's row
+     height track a user setting, so a coach on "dense" silently got a treatment the drawing
+     never has. The 6b drawing sets it taller than the ledger because every row carries its
+     evidence stacked under the name. */
+  --d-row-quiet: 54px;
+  --d-th: 32px;           /* table header row */
+  --d-group-row: 32px;    /* group / subheader row inside a table */
+  --d-page-x: 24px;       /* page gutter */
+  --d-card-p: 16px;       /* card padding */
+
+  /* The vertical rhythm, as four named steps rather than one repeated gap. A template that
+     separates its crumb, its title, its stat strip and its table by the same 16px reads as a
+     single undifferentiated stack, which is the other half of why the console reads flat. Each
+     step aliases a --s-* rung so the rhythm cannot drift off the 4px grid. */
+  --d-stack-gap: var(--s-3);    /* 12px: a control row -> the thing it controls */
+  --d-head-gap: var(--s-5);     /* 20px: page head -> first content block */
+  --d-section-gap: var(--s-8);  /* 32px: between sections that do different jobs */
+
+  /* ---- Motion tokens, copied from .agents/skills/transitions-dev/_root.css ---- */
+  /* Durations */
+  --duration-stagger: 40ms;
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --duration-very-slow: 500ms;
+  /* Easings */
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: ease-in-out;
+  --ease-out: ease-out;
+  --ease-linear: linear;
+  --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --ease-bounce-strong: cubic-bezier(0.34, 3.85, 0.64, 1);
+  /* Distances */
+  --distance-micro: 4px;
+  --distance-small: 6px;
+  --distance-base: 8px;
+  --distance-medium: 12px;
+  --distance-large: 30px;
+  /* Scales */
+  --scale-large: 0.96;
+  --scale-medium: 0.97;
+  --scale-small: 0.98;
+  --scale-tiny: 0.99;
+  /* Blur */
+  --blur-small: 2px;
+  --blur-medium: 3px;
+  --blur-large: 8px;
+  /* Number pop-in */
+  --digit-dur: 500ms;
+  --digit-distance: 8px;
+  --digit-stagger: 70ms;
+  --digit-blur: 2px;
+  --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  /* Menu dropdown */
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Modal open / close */
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Panel reveal (drawer) */
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Skeleton loader and reveal */
+  --pulse-dur: 1000ms;
+  --pulse-count: 1;
+  --pulse-min: 0.5;
+  --reveal-dur: 400ms;
+  --reveal-blur: 2px;
+  --reveal-ease: ease-in-out;
+  /* Tabs sliding */
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Tooltip */
+  --tt-in-dur: 150ms;
+  --tt-out-dur: 50ms;
+  --tt-scale: 0.98;
+  --tt-delay: 80ms;
+  --tt-in-ease: ease-out;
+  --tt-out-ease: ease-out;
+  /* Accordion */
+  --acc-expand: 250ms;
+  --acc-collapse: 250ms;
+  --acc-chevron: 250ms;
+  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Toast */
+  --toast-open: 350ms;
+  --toast-close: 250ms;
+  --toast-distance: 16px;
+  --toast-blur: 2px;
+  --toast-scale: 0.97;
+  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Toggle */
+  --toggle-dur: 350ms;
+  --toggle-travel: 16px;
+  --toggle-ov1: 1px;
+  --toggle-ov2: 0px;
+  --toggle-track: 150ms;
+  --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  /* Checkbox check */
+  --check-box: 150ms;
+  --check-draw: 350ms;
+  --check-delay: 0ms;
+  --check-uncheck: 150ms;
+  --check-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Text states swap */
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+  /* Button press feedback -- the one motion the whole product shares */
+  --press-dur: 80ms;
+  --press-scale: 0.98;
+  /* Error state shake (form validation) */
+  --shake-dur: 400ms;
+  --shake-small: 6px;
+  --shake-large: 8px;
+  /* Row hover is deliberately instant; nothing reads from a token here on purpose. */
+
+  color-scheme: light;
+}
+
+/* ---- Dark: system preference, unless the page explicitly chose light ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* ---- Grounds. Four surfaces, not a light-to-dark ramp: the shell, the content
+       pane under its single bloom, the card face, and the well sunk into it. ------ */
+    --canvas: oklch(0.1342 0.0172 262.2);      /* shell ground */
+    --pane: oklch(0.15 0.0208 264.3);          /* content pane */
+    --pane-bloom: radial-gradient(85% 50% at 78% -8%, rgba(52, 96, 200, 0.14), rgba(5, 8, 15, 0) 60%);
+    --rail: linear-gradient(180deg, oklch(0.1801 0.0349 265.2), oklch(0.1552 0.0252 264));
+    --card-top: oklch(0.2196 0.0421 263.2);    /* lit upper stop of the card face */
+    --card: oklch(0.1802 0.0325 266.6);        /* lower stop, and the flat card colour */
+    --well: oklch(0.1918 0.0354 261.3);        /* inset panel */
+    --quiet: var(--well);                      /* legacy name for the same recessed ground */
+    --raised: var(--card-top);                 /* drawer / popover face */
+    --band: rgba(143, 170, 220, 0.09);      /* group + header band inside a table */
+    --row-hover: rgba(143, 170, 220, 0.03);
+    --row-hover-quiet: rgba(143, 170, 220, 0.055);
+    --control-fill: rgba(255, 255, 255, 0.04); /* secondary controls on a dark surface */
+    --row-selected: var(--accent-wash);
+    --scrim: oklch(0 0 0 / 0.6);
+
+    /* ---- Lines. Alpha on purpose: a hairline over a gradient card has to pick up
+       the face it sits on, which a flat opaque line cannot do. ------------------- */
+    --line: rgba(120, 150, 200, 0.14);         /* card and rail hairline */
+    --line-soft: rgba(120, 150, 200, 0.07);    /* faint dividers inside a card */
+    --line-input: rgba(120, 150, 200, 0.16);   /* input borders */
+    --line-strong: var(--line-input);
+
+    /* ---- Text ramp, brightest to dimmest. The first four are the contract roles and
+       each clears AA on every ground in the design; the last four are label-weight only
+       (9.5px mono overlines, weekend letters, icon strokes) and never carry body copy. */
+    --ink: oklch(0.9449 0.0133 262.4);         /* 17.1 on canvas / 16.0 on card */
+    --body: oklch(0.8492 0.0303 262.5);        /* 12.6 / 11.9 */
+    --muted: oklch(0.7709 0.0342 262.7);       /*  9.7 /  9.1 */
+    --faint: oklch(0.687 0.0466 262.3);        /*  7.1 /  6.7 */
+    --meta: oklch(0.6343 0.0443 262.2);        /*  5.8 */
+    --overline: oklch(0.5871 0.0471 261.6);    /*  4.8 */
+    --dim: oklch(0.5297 0.0479 262.8);         /*  3.8, weekend letters */
+    --glyph: oklch(0.52 0.0564 263.4);         /*  3.6, icon strokes */
+
+    /* ---- Accent: blue again. The teal at hue 218 was the old electric #2050c8 re-hued
+       so one accent could serve both design languages; Alec reversed that on 2026-08-31,
+       and this walks the whole family home to 264 without touching the grounds, the text
+       ramp or the state hues around it. Lightness is unchanged from the teal, so every
+       ratio the old comment claimed still holds or improves: white 600 text over the
+       solid measures 5.19:1 against the teal's 5.10, and --accent-fill's lightest stop
+       still clears AA. Chroma is a little under the original blue's, which is the
+       "softer" half of the same request. */
+    --accent: oklch(0.5306 0.115 264);         /* on-accent text 5.19:1 */
+    --accent-fill: linear-gradient(180deg, oklch(0.5565 0.12 265), oklch(0.4515 0.098 261));
+    --accent-hover: oklch(0.5765 0.12 265);
+    --accent-active: oklch(0.4515 0.098 261);
+    --accent-line: rgba(150, 180, 250, 0.4);
+    --accent-text: oklch(0.8586 0.062 265);    /* 12.2 on card, 10.7 on its own wash */
+    --accent-bright: oklch(0.8148 0.085 264);  /* 10.6 on card */
+    --accent-wash: rgba(70, 110, 215, 0.14);
+    --accent-wash-strong: rgba(70, 110, 215, 0.17);
+    --accent-edge: rgba(120, 160, 240, 0.26);
+    --slot-on: rgba(70, 110, 215, 0.5);
+    --on-accent: oklch(0.99 0.003 267);
+    --focus-ring: oklch(0.8148 0.085 264 / 0.6);
+
+    /* ---- Attention. The dot carries the page's only glow, deliberately. --------- */
+    --warning: oklch(0.6633 0.0955 71.2);
+    --warning-text: oklch(0.7971 0.0738 69.8);
+    --warning-body: oklch(0.7801 0.0249 79.7);
+    --warning-wash: rgba(184, 137, 78, 0.14);
+    --warning-line: rgba(184, 137, 78, 0.26);
+
+    /* ---- Affirmative. Spent once per screen, on the pricing invariant. --------- */
+    --good: oklch(0.6718 0.066 164.1);
+    --good-text: oklch(0.8074 0.0468 162.2);
+    --good-wash: rgba(111, 163, 139, 0.11);
+    --good-line: rgba(111, 163, 139, 0.26);
+
+    /* ---- Waiting: a state nobody is failing at yet. The coach owes us something and the
+       clock is theirs, not ours, so periwinkle rather than the amber of "you must act now"
+       or the clay of "this broke". Dot 6.77:1 on --card-top; pill text 9.80 there and
+       8.35 on its own wash over the same ground. --------------------------------- */
+    --waiting: oklch(0.7135 0.0843 271.1);
+    --waiting-text: oklch(0.8167 0.0525 270.7);
+    --waiting-wash: rgba(143, 160, 216, 0.1);
+    --waiting-line: rgba(143, 160, 216, 0.26);
+
+    /* ---- Draft: non-production state only, and never on a live surface. Violet marks a
+       thing that is written but not running -- an unpublished edit, a draft assistant --
+       which is the Draft-Is-Not-Live rule in docs/DESIGN.md section 2, not a comment.
+       Dot 4.82:1 on --card-top; text 8.36 there and 7.08 on its own wash. --------- */
+    --draft: oklch(0.6315 0.1143 291.7);
+    --draft-text: oklch(0.7747 0.0715 295.7);
+    --draft-wash: rgba(139, 124, 201, 0.13);
+    --draft-line: rgba(155, 140, 216, 0.3);
+
+    /* ---- Failure: something broke and a person has to go fix it -- a breached SLA, a
+       declined card, a churn figure. Clay, like --negative, and deliberately a separate
+       role: --negative is a 14x2px bar on a ground, held to 1.4.11's 3:1 and walked up
+       from the artifact to reach it, while these are light foregrounds on a dark card and
+       clear 1.4.3's 4.5:1 at the artifact's own values. Collapsing them would drag text
+       down to a bar's floor. Dot 5.93:1 on --card-top; --failure-text 8.28 there and 6.79
+       on its own wash; --failure-body 7.64 and 6.27. ----------------------------- */
+    --failure: oklch(0.6848 0.0854 31.4);
+    --failure-text: oklch(0.7733 0.0642 33.3);
+    --failure-body: oklch(0.747 0.0304 39.3);
+    --failure-wash: rgba(201, 134, 121, 0.14);
+    --failure-line: rgba(201, 134, 121, 0.3);
+
+    /* ---- Negative: the disqualifier dash. A 14x2px bar, never a full border, and a
+       shape token -- as text it fails AA instantly. Walked up from the artifact's own
+       value, which measured 2.87:1 on --card-top and so would have failed 1.4.11 in
+       the lit band at the top of a card; this clears 3:1 on every ground. -------- */
+    --negative: oklch(0.5334 0.0774 34.8);  /* 3.23 card-top / 3.50 card / 3.72 canvas */
+
+    /* ---- Kept from the pass-2 palette: hues the artifact does not spend but the
+       rest of the console still draws (destructive states, info callouts, charts). */
+    --critical: oklch(0.74 0.14 25);
+    --critical-wash: oklch(0.26 0.06 22);
+    --critical-text: oklch(0.74 0.14 25);
+    --critical-line: oklch(0.44 0.12 22);
+    --info: oklch(0.74 0.09 230);
+    --info-wash: oklch(0.25 0.035 230);
+    --info-line: oklch(0.42 0.07 230);
+    --t-data-1: oklch(0.8148 0.085 264);
+    --t-data-2: oklch(0.700 0.028 262);
+    --t-data-3: oklch(0.780 0.120 75);
+    --neutral: var(--line-strong);
+    --neutral-wash: var(--well);
+    --neutral-line: var(--line-strong);
+
+    /* ---- Shadows. --shadow-card is the page's own material; --shadow-open is the
+       rung a card takes while it is being edited, and it comes with --accent-edge.
+       The remaining three still mean "temporarily over your work" and nothing else. */
+    --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 16px 34px -20px oklch(0 0 0);
+    --shadow-open: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 26px 50px -24px oklch(0 0 0);
+    --shadow-raised: 0 1px 2px oklch(0 0 0 / 0.3), 0 12px 32px -8px oklch(0 0 0 / 0.55), inset 0 1px 0 oklch(1 0 0 / 0.055);
+    --shadow-drawer: -8px 0 40px -12px oklch(0 0 0 / 0.6), 0 0 0 1px var(--line-strong);
+    --shadow-modal: 0 2px 6px oklch(0 0 0 / 0.35), 0 28px 64px -16px oklch(0 0 0 / 0.7), inset 0 1px 0 oklch(1 0 0 / 0.07);
+    --shadow-toast: 0 4px 20px -4px oklch(0 0 0 / 0.6), 0 0 0 1px var(--line-strong);
+
+    color-scheme: dark;
+  }
+}
+
+/* ---- Dark: explicit choice. Identical values so the toggle wins in both directions. ---- */
+:root[data-theme="dark"],
+[data-theme="dark"] {
+  /* ---- Grounds. Four surfaces, not a light-to-dark ramp: the shell, the content
+     pane under its single bloom, the card face, and the well sunk into it. ------ */
+  --canvas: oklch(0.1342 0.0172 262.2);      /* shell ground */
+  --pane: oklch(0.15 0.0208 264.3);          /* content pane */
+  --pane-bloom: radial-gradient(85% 50% at 78% -8%, rgba(52, 96, 200, 0.14), rgba(5, 8, 15, 0) 60%);
+  --rail: linear-gradient(180deg, oklch(0.1801 0.0349 265.2), oklch(0.1552 0.0252 264));
+  --card-top: oklch(0.2196 0.0421 263.2);    /* lit upper stop of the card face */
+  --card: oklch(0.1802 0.0325 266.6);        /* lower stop, and the flat card colour */
+  --well: oklch(0.1918 0.0354 261.3);        /* inset panel */
+  --quiet: var(--well);                      /* legacy name for the same recessed ground */
+  --raised: var(--card-top);                 /* drawer / popover face */
+  --band: rgba(143, 170, 220, 0.09);      /* group + header band inside a table */
+  --row-hover: rgba(143, 170, 220, 0.03);
+  --row-hover-quiet: rgba(143, 170, 220, 0.055);
+  --control-fill: rgba(255, 255, 255, 0.04); /* secondary controls on a dark surface */
+  --row-selected: var(--accent-wash);
+  --scrim: oklch(0 0 0 / 0.6);
+
+  /* ---- Lines. Alpha on purpose: a hairline over a gradient card has to pick up
+     the face it sits on, which a flat opaque line cannot do. ------------------- */
+  --line: rgba(120, 150, 200, 0.14);         /* card and rail hairline */
+  --line-soft: rgba(120, 150, 200, 0.07);    /* faint dividers inside a card */
+  --line-input: rgba(120, 150, 200, 0.16);   /* input borders */
+  --line-strong: var(--line-input);
+
+  /* ---- Text ramp, brightest to dimmest. The first four are the contract roles and
+     each clears AA on every ground in the design; the last four are label-weight only
+     (9.5px mono overlines, weekend letters, icon strokes) and never carry body copy. */
+  --ink: oklch(0.9449 0.0133 262.4);         /* 17.1 on canvas / 16.0 on card */
+  --body: oklch(0.8492 0.0303 262.5);        /* 12.6 / 11.9 */
+  --muted: oklch(0.7709 0.0342 262.7);       /*  9.7 /  9.1 */
+  --faint: oklch(0.687 0.0466 262.3);        /*  7.1 /  6.7 */
+  --meta: oklch(0.6343 0.0443 262.2);        /*  5.8 */
+  --overline: oklch(0.5871 0.0471 261.6);    /*  4.8 */
+  --dim: oklch(0.5297 0.0479 262.8);         /*  3.8, weekend letters */
+  --glyph: oklch(0.52 0.0564 263.4);         /*  3.6, icon strokes */
+
+  /* ---- Accent: blue again. The teal at hue 218 was the old electric #2050c8 re-hued
+     so one accent could serve both design languages; Alec reversed that on 2026-08-31,
+     and this walks the whole family home to 264 without touching the grounds, the text
+     ramp or the state hues around it. Lightness is unchanged from the teal, so every
+     ratio the old comment claimed still holds or improves: white 600 text over the
+     solid measures 5.19:1 against the teal's 5.10, and --accent-fill's lightest stop
+     still clears AA. Chroma is a little under the original blue's, which is the
+     "softer" half of the same request. */
+  --accent: oklch(0.5306 0.115 264);         /* on-accent text 5.19:1 */
+  --accent-fill: linear-gradient(180deg, oklch(0.5565 0.12 265), oklch(0.4515 0.098 261));
+  --accent-hover: oklch(0.5765 0.12 265);
+  --accent-active: oklch(0.4515 0.098 261);
+  --accent-line: rgba(150, 180, 250, 0.4);
+  --accent-text: oklch(0.8586 0.062 265);    /* 12.2 on card, 10.7 on its own wash */
+  --accent-bright: oklch(0.8148 0.085 264);  /* 10.6 on card */
+  --accent-wash: rgba(70, 110, 215, 0.14);
+  --accent-wash-strong: rgba(70, 110, 215, 0.17);
+  --accent-edge: rgba(120, 160, 240, 0.26);
+  --slot-on: rgba(70, 110, 215, 0.5);
+  --on-accent: oklch(0.99 0.003 267);
+  --focus-ring: oklch(0.8148 0.085 264 / 0.6);
+
+  /* ---- Attention. The dot carries the page's only glow, deliberately. --------- */
+  --warning: oklch(0.6633 0.0955 71.2);
+  --warning-text: oklch(0.7971 0.0738 69.8);
+  --warning-body: oklch(0.7801 0.0249 79.7);
+  --warning-wash: rgba(184, 137, 78, 0.14);
+  --warning-line: rgba(184, 137, 78, 0.26);
+
+  /* ---- Affirmative. Spent once per screen, on the pricing invariant. --------- */
+  --good: oklch(0.6718 0.066 164.1);
+  --good-text: oklch(0.8074 0.0468 162.2);
+  --good-wash: rgba(111, 163, 139, 0.11);
+  --good-line: rgba(111, 163, 139, 0.26);
+
+  /* ---- Waiting: a state nobody is failing at yet. The coach owes us something and the
+     clock is theirs, not ours, so periwinkle rather than the amber of "you must act now"
+     or the clay of "this broke". Dot 6.77:1 on --card-top; pill text 9.80 there and
+     8.35 on its own wash over the same ground. --------------------------------- */
+  --waiting: oklch(0.7135 0.0843 271.1);
+  --waiting-text: oklch(0.8167 0.0525 270.7);
+  --waiting-wash: rgba(143, 160, 216, 0.1);
+  --waiting-line: rgba(143, 160, 216, 0.26);
+
+  /* ---- Draft: non-production state only, and never on a live surface. Violet marks a
+     thing that is written but not running -- an unpublished edit, a draft assistant --
+     which is the Draft-Is-Not-Live rule in docs/DESIGN.md section 2, not a comment.
+     Dot 4.82:1 on --card-top; text 8.36 there and 7.08 on its own wash. --------- */
+  --draft: oklch(0.6315 0.1143 291.7);
+  --draft-text: oklch(0.7747 0.0715 295.7);
+  --draft-wash: rgba(139, 124, 201, 0.13);
+  --draft-line: rgba(155, 140, 216, 0.3);
+
+  /* ---- Failure: something broke and a person has to go fix it -- a breached SLA, a
+     declined card, a churn figure. Clay, like --negative, and deliberately a separate
+     role: --negative is a 14x2px bar on a ground, held to 1.4.11's 3:1 and walked up
+     from the artifact to reach it, while these are light foregrounds on a dark card and
+     clear 1.4.3's 4.5:1 at the artifact's own values. Collapsing them would drag text
+     down to a bar's floor. Dot 5.93:1 on --card-top; --failure-text 8.28 there and 6.79
+     on its own wash; --failure-body 7.64 and 6.27. ----------------------------- */
+  --failure: oklch(0.6848 0.0854 31.4);
+  --failure-text: oklch(0.7733 0.0642 33.3);
+  --failure-body: oklch(0.747 0.0304 39.3);
+  --failure-wash: rgba(201, 134, 121, 0.14);
+  --failure-line: rgba(201, 134, 121, 0.3);
+
+  /* ---- Negative: the disqualifier dash. A 14x2px bar, never a full border, and a
+     shape token -- as text it fails AA instantly. Walked up from the artifact's own
+     value, which measured 2.87:1 on --card-top and so would have failed 1.4.11 in
+     the lit band at the top of a card; this clears 3:1 on every ground. ---------- */
+  --negative: oklch(0.5334 0.0774 34.8);  /* 3.23 card-top / 3.50 card / 3.72 canvas */
+
+  /* ---- Kept from the pass-2 palette: hues the artifact does not spend but the
+     rest of the console still draws (destructive states, info callouts, charts). */
+  --critical: oklch(0.74 0.14 25);
+  --critical-wash: oklch(0.26 0.06 22);
+  --critical-text: oklch(0.74 0.14 25);
+  --critical-line: oklch(0.44 0.12 22);
+  --info: oklch(0.74 0.09 230);
+  --info-wash: oklch(0.25 0.035 230);
+  --info-line: oklch(0.42 0.07 230);
+  --t-data-1: oklch(0.8148 0.085 264);
+  --t-data-2: oklch(0.700 0.028 262);
+  --t-data-3: oklch(0.780 0.120 75);
+  --neutral: var(--line-strong);
+  --neutral-wash: var(--well);
+  --neutral-line: var(--line-strong);
+
+  /* ---- Shadows. --shadow-card is the page's own material; --shadow-open is the
+     rung a card takes while it is being edited, and it comes with --accent-edge.
+     The remaining three still mean "temporarily over your work" and nothing else. */
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 16px 34px -20px oklch(0 0 0);
+  --shadow-open: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 26px 50px -24px oklch(0 0 0);
+  --shadow-raised: 0 1px 2px oklch(0 0 0 / 0.3), 0 12px 32px -8px oklch(0 0 0 / 0.55), inset 0 1px 0 oklch(1 0 0 / 0.055);
+  --shadow-drawer: -8px 0 40px -12px oklch(0 0 0 / 0.6), 0 0 0 1px var(--line-strong);
+  --shadow-modal: 0 2px 6px oklch(0 0 0 / 0.35), 0 28px 64px -16px oklch(0 0 0 / 0.7), inset 0 1px 0 oklch(1 0 0 / 0.07);
+  --shadow-toast: 0 4px 20px -4px oklch(0 0 0 / 0.6), 0 0 0 1px var(--line-strong);
+
+  color-scheme: dark;
+}
+
+/* ---- The forced-light island, for a surface that must render light whatever the system
+   or the toggle says. It carries the same values as the bare :root palette above, which is
+   what makes it an island rather than a third theme: anything that drifts between the two
+   shows up as one screen quietly disagreeing with the rest of the product. ---- */
+[data-theme="light"] {
+  /* ---- Grounds. The same four surfaces the dark palette names -- shell, content pane,
+     card face, and the well sunk into it -- but walked in much smaller steps. The dark
+     palette spans 0.134 to 0.220 in lightness, which is a wide ramp because near black a
+     large step is still a quiet one; up here the eye reads lightness far more finely, so
+     the same visual separation comes from 0.961 to 0.998. That is what Alec's "softer"
+     means at the ground layer: the shell, the pane and the card are legibly different
+     surfaces without any of the borders between them turning into a grey box. --------- */
+  --canvas: oklch(0.9612 0.0042 262);        /* shell ground */
+  --pane: oklch(0.9745 0.0034 262);          /* content pane */
+  /* The bloom is the one place the accent touches a whole surface, and on a light ground it
+     has to be far weaker than its dark counterpart: a 0.12 wash that reads as a faint glow
+     over near-black reads as a coloured stain over near-white. Six percent of the blue,
+     fading to nothing, is a tint you notice only when you look for it. */
+  --pane-bloom: radial-gradient(85% 50% at 78% -8%, rgba(46, 92, 200, 0.06), rgba(46, 92, 200, 0) 60%);
+  --rail: linear-gradient(180deg, oklch(0.9838 0.003 264), oklch(0.9702 0.0038 264));
+  --card-top: oklch(0.9975 0.0016 262);      /* lit upper stop of the card face */
+  --card: oklch(0.9905 0.0026 262);          /* lower stop, and the flat card colour */
+  /* Held just under --card at 1.022:1, which is exactly where the dark palette holds its own
+     well against its card -- a well reads as recessed by being a flat face inside a gradient one,
+     not by being a different grey. The first cut put it at 0.9668, which is a hair off --canvas:
+     1.017:1, and the consumer shell is painted --well over a --canvas chat body, so the two
+     grounds that are supposed to be a panel on a page were one flat surface. 1.066:1 now. */
+  --well: oklch(0.983 0.0048 262);           /* inset panel, sunk below the card */
+  --quiet: var(--well);                      /* legacy name for the same recessed ground */
+  --raised: var(--card-top);                 /* drawer / popover face */
+  /* Alpha for the same reason the dark palette uses it: the card face is a gradient, so an
+     opaque band separates at one end of a table and vanishes at the other. The channels are
+     the shared slate rather than a light-specific grey, which on a near-white card darkens
+     rather than lightens. Every alpha below is solved so the fill RENDERS at the same ratio
+     its dark counterpart renders at -- the fill is the thing a reader sees, so matching the
+     appearance is what parity means, and it takes a lower alpha here than the dark palette
+     uses because a dark slate over near-white composites harder than a periwinkle over
+     near-black. Band 1.155:1 off --card against dark's 1.142, hover 1.051 against 1.049. */
+  /* The >= 1.10 floor tokens-contrast.test.ts pins exists because Round 5.6 measured the
+     shipped subscriptions band at 1.022:1 and found it invisible; the periwinkle at 0.1 lands
+     at 1.096 here, just under it. The console leans on this band to separate a header from its
+     table at 13.5px, so it is the surface that would have paid for the miss. */
+  --band: rgba(60, 90, 150, 0.1);         /* group + header band inside a table, 1.155:1 */
+  --row-hover: rgba(60, 90, 150, 0.035);
+  --row-hover-quiet: rgba(60, 90, 150, 0.06);
+  --control-fill: rgba(28, 42, 82, 0.035);   /* secondary controls on a light surface */
+  --row-selected: var(--accent-wash);
+  /* Ink rather than black, and a third rather than the dark palette's 0.6: over a light page
+     a heavy scrim reads as the lights going out, while the job is only to say the page behind
+     is out of reach. Held above the 0.25 floor because below that it is the flat bg-black/10
+     problem again -- a backdrop nobody can see. */
+  --scrim: oklch(0.28 0.03 262 / 0.32);
+
+  /* ---- Lines. A darker slate than the dark palette's periwinkle, because a hairline is a
+     DARKENING of whatever it crosses and the two palettes cross opposite grounds -- the
+     periwinkle at 0.14 lifts only 1.017:1 off a near-white card, which is to say it draws
+     nothing here, the same measured-into-invisibility failure --quiet had before --band
+     replaced it. These are decorative rules and input borders, not the meaningful boundaries
+     1.4.11 governs; an input stays perceivable through its focus ring, its label and its
+     placeholder. -------------------------------------------------------------------------
+     Each alpha is solved for the ratio its dark counterpart RENDERS at, so the two palettes
+     look alike rather than merely sharing a number. Composited the way a browser does it --
+     in gamma-encoded sRGB, which is what tokens-contrast.test.ts's over() does -- the dark
+     hairlines measure 1.209 / 1.088 / 1.250, not the 2.44 an earlier revision of this comment
+     claimed. That figure came from compositing in linear light, and it is what made the first
+     light palette overshoot: --line shipped at 0.3 for one day, rendering 1.582 against dark's
+     1.209, so the "softer" pass produced visibly heavier rules than the thing it softened. */
+  --line: rgba(60, 90, 150, 0.13);           /* card and rail hairline, 1.208:1 off --card */
+  --line-soft: rgba(60, 90, 150, 0.06);      /* faint dividers inside a card, 1.090:1 */
+  --line-input: rgba(60, 90, 150, 0.15);     /* input borders, 1.246:1 */
+  --line-strong: var(--line-input);
+
+  /* ---- Text ramp, darkest to lightest -- the mirror of the dark palette's, and the place
+     where "softer" stops. The coach reading this is typically over 55 and told us in round-1
+     demo feedback that the product was hard to read, so every role below the first is solved
+     to land on the ratio its DARK counterpart measures -- body 12.6, muted 9.7, faint 7.1,
+     and so on down. The first cut of this palette merely cleared AA and came out a full step
+     weaker than the dark ramp at every role (body 9.2, faint 5.6), which would have shipped
+     the round-1 complaint back to the person who made it, in the theme they asked for. --ink
+     is the one exception and is deliberately not black: 15:1 on the canvas is as legible as
+     21:1 and far less harsh, and dark's 17.1 over a light ground means near-black.
+     The last four are label weight only (11px overlines, weekend letters, icon strokes). */
+  --ink: oklch(0.2325 0.023 262);            /* 15.0 on canvas / 16.3 on card */
+  --body: oklch(0.2905 0.032 262);           /* 12.6 / 13.7 */
+  --muted: oklch(0.3604 0.036 262);          /*  9.7 / 10.6 */
+  --faint: oklch(0.4349 0.039 262);          /*  7.1 /  7.7 */
+  --meta: oklch(0.4819 0.04 262);            /*  5.8 */
+  --overline: oklch(0.5261 0.041 262);       /*  4.8 */
+  --dim: oklch(0.5819 0.042 262);            /*  3.8, weekend letters */
+  --glyph: oklch(0.5951 0.045 262);          /*  3.6, icon strokes */
+
+  /* ---- Accent: back to blue, which is the decision Alec reversed. The teal at hue 218 was
+     the old electric #2050c8 re-hued; this walks it home to 264, one degree off the canvas
+     family, so the accent and the grounds are the same colour idea at two ends of the ramp
+     rather than two hues arguing. Chroma sits at 0.15 rather than the original's ~0.20 --
+     that is the "softer" part, and it costs nothing legible: white 600 text over the solid
+     measures 5.98:1 and the lightest stop of --accent-fill still measures 5.43:1, both well
+     clear of AA. --accent-hover and --accent-active darken rather than lighten, because on a
+     light ground pressing something has to feel like pushing it further in. ------------- */
+  --accent: oklch(0.5 0.15 264);             /* on-accent text 5.98:1; 5.50 on canvas */
+  --accent-fill: linear-gradient(180deg, oklch(0.523 0.148 266), oklch(0.443 0.152 261));
+  --accent-hover: oklch(0.455 0.158 264);    /* on-accent 7.30 */
+  --accent-active: oklch(0.41 0.152 262);    /* on-accent 8.83 */
+  --accent-line: rgba(46, 92, 200, 0.32);
+  --accent-text: oklch(0.44 0.165 264);      /* 7.2 canvas / 7.8 card / 6.5 on its own wash */
+  --accent-bright: oklch(0.47 0.16 264);     /* 6.3 canvas / 6.9 card */
+  --accent-wash: rgba(46, 92, 200, 0.07);
+  --accent-wash-strong: rgba(46, 92, 200, 0.1);
+  --accent-edge: rgba(46, 92, 200, 0.22);
+  --slot-on: rgba(46, 92, 200, 0.42);
+  --on-accent: oklch(0.99 0.003 267);
+  --focus-ring: oklch(0.47 0.16 264 / 0.65);
+
+  /* ---- Attention. Every state family below is solved the same way, which is why the numbers
+     repeat: the dot is walked until it clears 3:1 on the canvas, the lightest ground it can
+     land on being --card-top, and the text is walked until it clears 4.5:1 while sitting on
+     its own wash over the canvas -- the worst case in the product, and the one an estimate
+     always gets wrong. The washes are a tenth rather than the dark palette's eighth, because
+     a coloured film over near-white is far louder than the same film over near-black. ---- */
+  --warning: oklch(0.6409 0.115 71);         /* dot 3.06 canvas / 3.40 card-top */
+  --warning-text: oklch(0.5183 0.105 71);    /* 5.07 canvas, 4.55 on its own wash */
+  --warning-body: oklch(0.47 0.045 80);      /* 6.12 canvas */
+  --warning-wash: rgba(176, 116, 32, 0.1);
+  --warning-line: rgba(176, 116, 32, 0.28);
+
+  /* ---- Affirmative. Spent once per screen, on the pricing invariant. --------- */
+  --good: oklch(0.6237 0.095 164);           /* dot 3.06 canvas / 3.40 card-top */
+  --good-text: oklch(0.4992 0.09 164);       /* 5.13 canvas, 4.55 on its own wash */
+  --good-wash: rgba(36, 132, 96, 0.09);
+  --good-line: rgba(36, 132, 96, 0.26);
+
+  /* ---- Waiting: a state nobody is failing at yet. The coach owes us something and the
+     clock is theirs, not ours, so periwinkle rather than the amber of "you must act now"
+     or the clay of "this broke". The hue survives the move to light unchanged; only the
+     lightness flips, because 271 at 0.64 reads as the same idea as 271 at 0.71. ------- */
+  --waiting: oklch(0.6398 0.115 271);        /* dot 3.06 canvas / 3.40 card-top */
+  --waiting-text: oklch(0.5152 0.105 271);   /* 5.12 canvas, 4.55 on its own wash */
+  --waiting-wash: rgba(92, 110, 196, 0.09);
+  --waiting-line: rgba(92, 110, 196, 0.26);
+
+  /* ---- Draft: non-production state only, and never on a live surface. Violet marks a
+     thing that is written but not running -- an unpublished edit, a draft assistant --
+     which is the Draft-Is-Not-Live rule, not a comment. It has to stay clearly apart from
+     the blue accent on a light ground, where both are cool and mid-lightness, so the hue
+     stays at 292 and its chroma is the highest of the state families. ---------------- */
+  --draft: oklch(0.6466 0.135 292);          /* dot 3.06 canvas / 3.40 card-top */
+  --draft-text: oklch(0.5212 0.125 292);     /* 5.13 canvas, 4.55 on its own wash */
+  --draft-wash: rgba(124, 96, 204, 0.1);
+  --draft-line: rgba(124, 96, 204, 0.28);
+
+  /* ---- Failure: something broke and a person has to go fix it -- a breached SLA, a
+     declined card, a churn figure. Clay, like --negative, and still a separate role from it:
+     --negative is a 14x2px bar held to 1.4.11's 3:1, while these are dark foregrounds on a
+     light card held to 1.4.3's 4.5:1. --failure-body is the quieter sentence under the
+     headline and drops most of the chroma rather than the contrast. ------------------- */
+  --failure: oklch(0.6503 0.135 32);         /* dot 3.06 canvas / 3.40 card-top */
+  --failure-text: oklch(0.5239 0.125 32);    /* 5.14 canvas, 4.55 on its own wash */
+  --failure-body: oklch(0.47 0.075 39);      /* 6.30 canvas, 6.05 on the wash */
+  --failure-wash: rgba(196, 86, 66, 0.1);
+  --failure-line: rgba(196, 86, 66, 0.28);
+
+  /* ---- Negative: the disqualifier dash. A 14x2px bar, never a full border, and a shape
+     token -- as text it fails AA instantly. Held to 1.4.11's 3:1 on every ground including
+     --card-top, which up here is the near-white one; it lands at 3.99 on the canvas. ---- */
+  --negative: oklch(0.585 0.135 32);      /* 3.99 canvas / 4.34 card / 4.43 card-top */
+
+  /* ---- Kept from the pass-2 palette: hues the artifact does not spend but the rest of the
+     console still draws (destructive states, info callouts, charts). --info is pulled to 236
+     so that on a light ground it stays clearly a different blue from the 264 accent; in the
+     dark palette the two sat 12 degrees apart for the same reason. The two washes here are
+     opaque rather than alpha because they are callout grounds, not films over a card. */
+  --critical: oklch(0.6537 0.155 25);        /* dot 3.06 canvas */
+  --critical-wash: oklch(0.956 0.024 25);
+  --critical-text: oklch(0.5244 0.15 25);    /* 5.21 canvas, 5.08 on --critical-wash */
+  --critical-line: oklch(0.81 0.07 25);
+  --info: oklch(0.5052 0.13 236);            /* 5.01 canvas, 5.07 on --info-wash */
+  --info-wash: oklch(0.964 0.018 236);
+  --info-line: oklch(0.82 0.052 236);
+  --t-data-1: oklch(0.47 0.16 264);          /* 6.3 canvas */
+  --t-data-2: oklch(0.56 0.03 262);          /* 4.2 canvas */
+  --t-data-3: oklch(0.56 0.12 75);           /* 4.2 canvas */
+  --neutral: var(--line-strong);
+  --neutral-wash: var(--well);
+  --neutral-line: var(--line-strong);
+
+  /* ---- Shadows, and this is where "softer" is most of the work. The dark palette casts
+     pure black at up to 0.7 alpha, which is the only way to get separation when the ground is
+     already near-black. On a light page that same shadow reads as dirt. So every rung casts
+     the same ink the text is made of, tinted 262 rather than neutral, at a fifth of the
+     opacity and over a shorter distance, and each one gains a white inset highlight along its
+     top edge -- the card catching the light rather than the page being cut out of it. The
+     ordering still means what it meant: --shadow-card is the page's own material, --shadow-open
+     is the rung a card takes while it is being edited, and the last three still mean
+     "temporarily over your work" and nothing else. --------------------------------------- */
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 1px 2px rgba(28, 42, 82, 0.04), 0 8px 20px -14px rgba(28, 42, 82, 0.16);
+  --shadow-open: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 2px 4px rgba(28, 42, 82, 0.05), 0 16px 34px -20px rgba(28, 42, 82, 0.2);
+  --shadow-raised: 0 1px 2px rgba(28, 42, 82, 0.06), 0 10px 26px -10px rgba(28, 42, 82, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --shadow-drawer: -8px 0 32px -14px rgba(28, 42, 82, 0.18), 0 0 0 1px var(--line-strong);
+  --shadow-modal: 0 2px 6px rgba(28, 42, 82, 0.07), 0 24px 56px -20px rgba(28, 42, 82, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  --shadow-toast: 0 4px 18px -6px rgba(28, 42, 82, 0.18), 0 0 0 1px var(--line-strong);
+
+  color-scheme: light;
+}
+
+/* ============================================================================
+   Elevation, applied
+   The one thing that says "the page behind is out of reach" is the scrim, and until
+   now nothing wore it: --scrim was defined in every palette and referenced nowhere,
+   while the Base UI primitives painted a flat bg-black/10 that is all but invisible
+   over the navy dark canvas, so a drawer read as a panel glued to the page rather
+   than something above it. These rules are deliberately unlayered -- an unlayered
+   attribute rule beats a utility inside @layer utilities, which is how the flat
+   black gets replaced without editing the shared primitives.
+
+   Only the three modal backdrops are listed. Menus, popovers and tooltips get no
+   scrim on purpose: they dismiss on the next click and never claim the page.
+   ========================================================================== */
+[data-slot="sheet-overlay"],
+[data-slot="dialog-overlay"],
+[data-slot="alert-dialog-overlay"] {
+  background: var(--scrim);
+}
+
+/* ============================================================================
+   Base
+   ========================================================================== */
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--body);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+*, *::before, *::after { box-sizing: border-box; }
+/* Layered for the same reason as the form-control reset below: nav items, cards, and
+   buttons rendered as <a> set their own color/underline via utilities, and an unlayered
+   anchor rule would override all of them. Prose links still get accent from this base rule. */
+@layer base {
+  a { color: var(--accent-text); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 2px; }
+}
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--r-control); }
+::selection { background: var(--accent-wash); color: var(--ink); }
+/* Layered so utilities such as text-primary-foreground and aria-pressed:text-* keep winning;
+   an unlayered element rule beats every @layer utility regardless of specificity. */
+@layer base {
+  button, input, select, textarea { font: inherit; color: inherit; }
+}
+svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.i.i-sm { width: 14px; height: 14px; }
+svg.i.i-lg { width: 20px; height: 20px; }
+
+/* ============================================================================
+   Type roles (from fonts/REPORT.md, verbatim). Nothing below 11px; 11px is uppercase.
+   ========================================================================== */
+.t-title    { font-size: 24px; font-weight: 600; line-height: 1.2;  letter-spacing: -0.018em; color: var(--ink); }
+.t-metric   { font-size: 30px; font-weight: 600; line-height: 1.0;  letter-spacing: -0.022em; color: var(--ink); font-variant-numeric: tabular-nums lining-nums; }
+.t-section  { font-size: 16px; font-weight: 600; line-height: 1.35; letter-spacing: -0.008em; color: var(--ink); }
+.t-row      { font-size: 14px; font-weight: 500; line-height: 1.3;  letter-spacing: -0.003em; color: var(--ink); }
+.t-money    { font-size: 14px; font-weight: 500; line-height: 1.3;  letter-spacing: 0; color: var(--ink); font-variant-numeric: tabular-nums lining-nums; }
+.t-transcript { font-size: 15px; font-weight: 400; line-height: 1.55; color: var(--body); }
+.t-body     { font-size: 13px; font-weight: 400; line-height: 1.5;  color: var(--body); }
+.t-muted    { font-size: 13px; font-weight: 400; line-height: 1.5;  color: var(--muted); }
+.t-faint    { font-size: 12px; font-weight: 400; line-height: 1.4;  color: var(--faint); }
+.t-nav      { font-size: 13.5px; font-weight: 500; line-height: 1.35; }
+.t-overline { font-size: 11px; font-weight: 600; line-height: 1.2;  letter-spacing: 0.085em; text-transform: uppercase; color: var(--faint); }
+.t-th       { font-size: 11px; font-weight: 600; line-height: 1.2;  letter-spacing: 0.075em; text-transform: uppercase; color: var(--muted); }
+.t-badge    { font-size: 12px; font-weight: 600; line-height: 1.0;  letter-spacing: 0.002em; }
+.t-count    { font-size: 11.5px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.t-id       { font-family: var(--font-mono); font-size: 12px; font-weight: 500; line-height: 1.4; letter-spacing: 0; color: var(--muted); }
+.num        { font-variant-numeric: tabular-nums lining-nums; }
+.ink   { color: var(--ink); }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.nowrap { white-space: nowrap; }
+.right { text-align: right; }
+
+/* Density contexts: the admin shell uses compact; individual high-volume tables may use dense. */
+[data-density="comfortable"] { --row-h: var(--row-h-comfortable); --cell-x: 16px; }
+[data-density="compact"]     { --row-h: var(--row-h-compact); --cell-x: 12px; }
+[data-density="dense"]       { --row-h: var(--row-h-dense); --cell-x: 10px; }
+
+
+/* Control metrics, not type roles -- `--t-` here means "a root scale each shell re-authors",
+   which is why `tokens.test.ts` excludes this one from the type-token count.
+
+   44px because a tap target belongs to the input device, not to a shell's density: `coach.css`
+   and `consumer.css` reached 44 independently, and `console.css` re-authors this to its 32px,
+   the exception a mouse-driven audience earns. It exists because a fallback chain has to end in
+   a value somebody owns -- `/account/security` previously ran coach -> console -> `auto`, giving
+   an affiliate enabling MFA no floor at all, since `auto` is not a small minimum but none. */
+:root {
+  --t-target: 44px;
+}
+
+/* Type scale: fixed product roles from fonts/REPORT.md. */
+:root {
+  --t-title: 24px; --t-title-w: 600; --t-title-lh: 1.2; --t-title-tr: -0.018em;
+  --t-metric: 30px; --t-metric-w: 600; --t-metric-lh: 1.0; --t-metric-tr: -0.022em;
+  --t-section: 16px; --t-section-w: 600; --t-section-lh: 1.35; --t-section-tr: -0.008em;
+  --t-row: 14px; --t-row-w: 500; --t-row-lh: 1.3; --t-row-tr: -0.003em;
+  --t-read: 15px; --t-read-w: 400; --t-read-lh: 1.55; --t-read-tr: 0;
+  --t-body: 13px; --t-body-w: 400; --t-body-lh: 1.5; --t-body-tr: 0;
+  --t-nav: 13.5px; --t-nav-w: 500; --t-nav-lh: 1.35;
+  --t-badge: 12px; --t-badge-w: 600; --t-badge-lh: 1.0; --t-badge-tr: 0.002em;
+  --t-over: 11px; --t-over-w: 600; --t-over-lh: 1.2; --t-over-tr: 0.085em;
+
+  /* Pass-2 console roles. Tighter than the roles above, which the legacy
+     surfaces still read; both scales coexist until every screen is ported. */
+  --t-page-title: 20px; --t-page-title-w: 600; --t-page-title-lh: 1.25; --t-page-title-tr: -0.014em;
+  --t-section-title: 14px; --t-section-title-w: 600; --t-section-title-lh: 1.35; --t-section-title-tr: -0.006em;
+  --t-label: 11px; --t-label-w: 500; --t-label-lh: 1.25; --t-label-tr: 0.04em;
+  --t-figure: 22px; --t-figure-w: 500; --t-figure-lh: 1.1; --t-figure-tr: -0.01em;
+  /* One hero figure per page, Overview only: the number the owner opens the page for. */
+  --t-hero: 44px; --t-hero-w: 500; --t-hero-lh: 1.0; --t-hero-tr: -0.024em;
+  --t-mono-meta: 12px; --t-mono-meta-w: 400; --t-mono-meta-lh: 1.4;
+  /* 11.5px because that is what the console is drawn at, in both of this token's majority
+     roles: the breadcrumb trail on all 24 admin artboards that render the owner rail, and the
+     mono count beside a nav item 216 times across the same set. Nothing in the admin canvas
+     draws either at 11px. The name says "crumb" and eight things consume it -- the rail counts
+     and collapsed badge, the stat strip, the palette hint, the table group header, the record
+     sheet aside -- so the usual worry is that one value is standing in for roles that merely
+     agree today. It is not that here: the two dominant consumers are drawn at the same 11.5px,
+     so the token is right to be shared and simply carried the wrong number. It also sits above
+     the 11px floor, so it needs none of the label-face exemptions. */
+  --t-mono-crumb: 11.5px; --t-mono-crumb-w: 400; --t-mono-crumb-lh: 1.3;
+
+  /* Measures: the Line Length rule as tokens. `docs/DESIGN.md` names the rule and, before
+     these existed, every screen hand-rolled it -- 62 sites across 11 different ch values,
+     which is a rule in prose only. Four roles, because a right-aligned caption and a body
+     paragraph are not the same measure and collapsing them changes the layout.
+
+     `prose` is the default and the only one most copy should take. `wide` is for a
+     paragraph that owns a full pane; `tight` for centred empty-state copy; `caption` for
+     narrow right- or centre-aligned metadata that is meant to wrap into a block. */
+  /*
+   * The deck panel's one sentence, which sits beside a large figure rather than running as
+   * prose. Narrower than `tight` on purpose: at the coach surface's 16px it holds roughly one
+   * line of thought, which is the length the panel is designed to carry. Declared here rather
+   * than hand-rolled because `measures.test.ts` refuses a `max-w-[34ch]` written into a
+   * component, and it refuses it for good reason -- the measure drifted across eleven values
+   * once already.
+   */
+  --measure-deck: 34ch;
+  --measure-caption: 28ch;
+  --measure-tight: 48ch;
+  --measure-prose: 68ch;
+  --measure-wide: 72ch;
+}
+
+/* Utility form of the pass-2 roles, matching the .t-* classes above. */
+.t-page-title    { font-size: var(--t-page-title); font-weight: var(--t-page-title-w); line-height: var(--t-page-title-lh); letter-spacing: var(--t-page-title-tr); color: var(--ink); }
+.t-section-title { font-size: var(--t-section-title); font-weight: var(--t-section-title-w); line-height: var(--t-section-title-lh); letter-spacing: var(--t-section-title-tr); color: var(--ink); }
+.t-label         { font-size: var(--t-label); font-weight: var(--t-label-w); line-height: var(--t-label-lh); letter-spacing: var(--t-label-tr); color: var(--muted); }
+.t-hero          { font-family: var(--font-mono); font-size: var(--t-hero); font-weight: var(--t-hero-w); line-height: var(--t-hero-lh); letter-spacing: var(--t-hero-tr); color: var(--ink); font-variant-numeric: tabular-nums lining-nums; }
+.t-figure        { font-family: var(--font-mono); font-size: var(--t-figure); font-weight: var(--t-figure-w); line-height: var(--t-figure-lh); letter-spacing: var(--t-figure-tr); color: var(--ink); font-variant-numeric: tabular-nums lining-nums; }
+.t-mono-meta     { font-family: var(--font-mono); font-size: var(--t-mono-meta); font-weight: var(--t-mono-meta-w); line-height: var(--t-mono-meta-lh); color: var(--muted); }
+.t-mono-crumb    { font-family: var(--font-mono); font-size: var(--t-mono-crumb); font-weight: var(--t-mono-crumb-w); line-height: var(--t-mono-crumb-lh); color: var(--faint); }
+
+@layer base {
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    font-size: var(--t-body);
+    font-weight: var(--t-body-w);
+    line-height: var(--t-body-lh);
+    letter-spacing: var(--t-body-tr);
+  }
+}
+
+/* Density contract: admin stays compact, coach stays comfortable, and tables may opt into dense. */
+
+/* Reduced motion collapses the motion tokens above; the one block lives in globals.css. */

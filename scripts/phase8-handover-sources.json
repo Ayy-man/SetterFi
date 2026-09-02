@@ -1,0 +1,256 @@
+{
+  "procedures": [
+    {
+      "id": "provider-outage-or-rotation",
+      "title": "Provider outage or credential rotation",
+      "detectionEvidence": [
+        "System shows a failed or unavailable provider receipt.",
+        "The affected queue rows retain their attempt and safe error codes."
+      ],
+      "reversible": "Partly — selector changes are reversible; a provider-side rotation cannot be undone after the old credential is revoked.",
+      "action": [
+        "Keep the affected real driver disabled until the provider account and intended asset are confirmed.",
+        "Rotate the credential in deployment custody without copying its value into a ticket, document, log, or screenshot.",
+        "Run the named rotation verifier and one allowlisted test-recipient probe before restoring the real selector."
+      ],
+      "verify": [
+        "The verifier names the intended provider and receipt class without printing a value.",
+        "The allowlisted probe has a provider receipt and persisted read-back; an email acceptance is still Sent until its signed delivery receipt arrives."
+      ],
+      "undo": [
+        "If the former credential is still valid, restore its deployment reference and rerun the same verifier.",
+        "If it was revoked, keep the driver disabled and escalate; do not invent a replacement value."
+      ]
+    },
+    {
+      "id": "crm-webhook-disabled",
+      "title": "CRM webhook delivery disabled after sustained failures",
+      "detectionEvidence": [
+        "Channel health shows stale webhook freshness while the connection itself remains present.",
+        "The provider account shows delivery disabled after sustained low success."
+      ],
+      "reversible": "Yes — after the endpoint is healthy, the provider webhook can be re-enabled.",
+      "action": [
+        "Confirm the deployed callback responds successfully before changing the provider account.",
+        "Re-enable delivery for the intended location only.",
+        "Replay only the provider's eligible retained events through the idempotent receipt path."
+      ],
+      "verify": [
+        "Webhook freshness advances from a newly signed event.",
+        "Replayed events have one persisted receipt and do not duplicate messages."
+      ],
+      "undo": [
+        "Disable the webhook again if the callback resumes failing, and keep the connection state unavailable until the endpoint is repaired."
+      ]
+    },
+    {
+      "id": "meta-review-status",
+      "title": "Meta review or asset status changes",
+      "detectionEvidence": [
+        "Channel health shows the persisted review or asset state and its last evidence time.",
+        "The filing package records the affected permission and required read-back."
+      ],
+      "reversible": "No — review decisions and provider asset states are external facts.",
+      "action": [
+        "Read the current provider status for the intended app and asset without changing a connection.",
+        "If more information is requested, update the filing evidence and resubmit through the provider console.",
+        "Keep the channel pending or unavailable until a current provider read-back supports a ready state."
+      ],
+      "verify": [
+        "The persisted state matches the current provider response and names its evidence time.",
+        "No pending or rejected asset is rendered ready or live."
+      ],
+      "undo": [
+        "There is no local undo for a provider review decision; restore only a local display error, never the external state."
+      ]
+    },
+    {
+      "id": "stop-or-tripwire",
+      "title": "STOP, suppression, or tripwire incident",
+      "detectionEvidence": [
+        "Compliance shows the current suppression or provider-unconfirmed state.",
+        "The conversation trace and audit log name the keyword, scope refusal, or tripwire event."
+      ],
+      "reversible": "Only with authoritative opt-in or provider confirmation; a tripwire hold requires a named human release.",
+      "action": [
+        "Keep outbound messaging refused while suppression or provider confirmation is unresolved.",
+        "Review the exact trace and durable suppression evidence without copying lead data into a support note.",
+        "Use the registered correction or human-release action only when its required evidence is present."
+      ],
+      "verify": [
+        "No provider call occurs while the refusal remains active.",
+        "Any correction has its audit receipt and provider read-back before messaging resumes."
+      ],
+      "undo": [
+        "Reapply suppression if a correction was based on incomplete evidence; never clear a durable tombstone by editing a display row."
+      ]
+    },
+    {
+      "id": "delivery-queue-backlog",
+      "title": "Notification delivery queue backlog",
+      "detectionEvidence": [
+        "System shows persisted due depth, terminal attempts, and the last job receipt.",
+        "Attempt rows name retry times and safe error codes."
+      ],
+      "reversible": "Yes — bounded retries remain idempotent while the queue lease and attempt records are intact.",
+      "action": [
+        "Confirm the delivery job has a current persisted receipt before changing provider mode.",
+        "Resolve the named provider or configuration state and let due attempts retry through the worker.",
+        "Do not create a second manual send for an existing attempt."
+      ],
+      "verify": [
+        "Queue depth falls through persisted finishes rather than row deletion.",
+        "Attempt numbers remain unique and terminal rows receive no new due time."
+      ],
+      "undo": [
+        "Disable the affected real driver if errors increase, preserving all rows for later retry and audit."
+      ]
+    },
+    {
+      "id": "onboarding-stall",
+      "title": "Onboarding or provisioning stall",
+      "detectionEvidence": [
+        "Provisioning names the stalled step, owner, state, and last evidence time.",
+        "A2P registering stays amber during the 2–3 week carrier window; terminal rejection is permanently blocked."
+      ],
+      "reversible": "Eligible step retries are reversible; a terminal carrier rejection is not retryable.",
+      "action": [
+        "Identify whether the next action belongs to the coach, the platform, or an external provider.",
+        "Retry only an eligible current step and record the resulting audit receipt.",
+        "For a terminal rejection, leave the blocked state in place and escalate the carrier evidence."
+      ],
+      "verify": [
+        "The same row reads back the next attempt and state.",
+        "No provisioning row reads done, 100 percent, or all set while work is queued or registering."
+      ],
+      "undo": [
+        "Return an incorrectly advanced step to its last persisted evidence state through the owning service; never edit the tracker display."
+      ]
+    },
+    {
+      "id": "billing-failure",
+      "title": "Billing failure or disputed count",
+      "detectionEvidence": [
+        "Billing shows the persisted subscription mirror, invoice event, and correction state.",
+        "Allowance and account state are sourced without incomplete margin data."
+      ],
+      "reversible": "Corrections use immutable offset events; suspension and reactivation require separate reasoned actions.",
+      "action": [
+        "Reconcile the provider event with the persisted mirror before changing access.",
+        "Keep a failed payment overdue while dunning continues; do not automatically suspend the tenant.",
+        "For a valid count dispute, approve one correction with a reason and matching offset receipt."
+      ],
+      "verify": [
+        "The mirror and current allowance reflect the persisted event plus any single offset.",
+        "The decision has its audit receipt and no original ledger row was edited."
+      ],
+      "undo": [
+        "Reverse a mistaken correction with a new reasoned offset; reactivate a mistaken suspension through the registered action."
+      ]
+    },
+    {
+      "id": "truncated-export",
+      "title": "Truncated or abandoned export",
+      "detectionEvidence": [
+        "Audit contains export.started without the matching export.finished row.",
+        "The downloaded file ends before the expected row or JSON framing is complete."
+      ],
+      "reversible": "Yes — the source query is read-only and a fresh export receives a new audit pair.",
+      "action": [
+        "Keep the unmatched start row as evidence and discard the partial file.",
+        "Confirm the original filter, sort, columns, tenant, and reason before retrying.",
+        "Run a new export only after the source read is available."
+      ],
+      "verify": [
+        "The replacement file has complete framing and the expected visible columns.",
+        "Its own start and finish rows agree on actor, target, row count, and byte count."
+      ],
+      "undo": [
+        "Delete the incomplete local download; audit rows remain append-only and are not removed."
+      ]
+    }
+  ],
+  "runningCosts": [
+    {
+      "label": "Model spend per conversation",
+      "unit": "currency per completed conversation",
+      "status": "input_required",
+      "inputName": "MODEL_COST_PER_CONVERSATION"
+    },
+    {
+      "label": "SMS cost per segment",
+      "unit": "currency per carrier segment by destination",
+      "status": "input_required",
+      "inputName": "SMS_COST_PER_SEGMENT"
+    },
+    {
+      "label": "Database and storage",
+      "unit": "monthly provider invoice",
+      "status": "input_required",
+      "inputName": "DATABASE_MONTHLY_COST"
+    },
+    {
+      "label": "Application hosting",
+      "unit": "monthly provider invoice",
+      "status": "input_required",
+      "inputName": "HOSTING_MONTHLY_COST"
+    },
+    {
+      "label": "CRM and channel services",
+      "unit": "monthly provider invoice",
+      "status": "input_required",
+      "inputName": "CHANNEL_PROVIDER_MONTHLY_COST"
+    }
+  ],
+  "escalation": [
+    {
+      "scope": "Platform availability, database access, or a failed privileged receipt",
+      "owner": "SETTERFI_HANDOVER_INPUT_REQUIRED_NAMED_TECHNICAL_ESCALATION",
+      "status": "input_required"
+    },
+    {
+      "scope": "Provider account, filing, sender, billing, or asset ownership",
+      "owner": "SETTERFI_HANDOVER_INPUT_REQUIRED_NAMED_ACCOUNT_OWNER",
+      "status": "input_required"
+    },
+    {
+      "scope": "Approved coach, alert, consent, campaign, and billing copy",
+      "owner": "SETTERFI_HANDOVER_INPUT_REQUIRED_NAMED_CONTENT_APPROVER",
+      "status": "input_required"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "diagnose",
+      "title": "Diagnose a misbehaving agent",
+      "status": "recording_required",
+      "shots": [
+        "Open Channel health and identify whether the issue is one client or the platform.",
+        "Open the exact conversation and the reported exchange.",
+        "Read the trace retrieval, decision row, guardrail result, latency, and model evidence.",
+        "Show the held-state reason and claim a human takeover only if required.",
+        "Add the exchange as an eval case and show the resulting audit receipt."
+      ],
+      "proof": [
+        "The recording shows no credential value or unrelated lead data.",
+        "The final explanation names persisted evidence rather than a guess about the model."
+      ]
+    },
+    {
+      "id": "brain-publish-rollback",
+      "title": "Publish and roll back the Brain",
+      "status": "recording_required",
+      "shots": [
+        "Open the Brain draft and read the complete diff.",
+        "Run the safety and regression suites against the draft evidence.",
+        "Publish with the required reason and show the persisted version and audit receipt.",
+        "Open the generated trace on the changed behavior.",
+        "Roll back through the registered action and show the restored snapshot and audit receipt."
+      ],
+      "proof": [
+        "The recording distinguishes checker evidence from unavailable engine evidence.",
+        "Publish and rollback each show their own persisted snapshot and audit receipt."
+      ]
+    }
+  ]
+}

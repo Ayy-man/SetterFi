@@ -1,0 +1,726 @@
+/*
+ * The owner console's surface language.
+ *
+ * Every rule here is scoped to `[data-shell-role="admin"]`, which `AppShell` already stamps on
+ * the shell root (`src/components/kit/app-shell.tsx:351`). No new attribute and no edit to the
+ * shell were needed for that, which matters: the coach lane, the affiliate lane and three console
+ * lanes are all porting against `AppShell` at the same time, and a language that keys on an
+ * attribute the shell already writes cannot collide with any of them.
+ *
+ * This is the console half of the two densities `docs/REDESIGN-CANVAS.md` sets out. The coach
+ * side is 16px body, 46px titles and a 44px target floor because it is read by credit coaches
+ * over 55 who told us in round-1 demo feedback that the console was confusing. The console is the
+ * client's own team, in it all day, across nineteen rail destinations, so it runs at 13.5px body,
+ * 30px titles and 30-34px targets. Two languages, one product, and the split is deliberate.
+ *
+ * The panel anatomy is `src/components/kit/deck-panel.tsx`, which emits `coach-panel__*` class
+ * names for the five parts. Those names are the component's, not the coach surface's -- its own
+ * docstring says the same markup "has to be able to render at coach size and, later, at console
+ * size", and this file is that later. Restyling the classes it already writes is what keeps the
+ * deck panel one component; a second component drawing the same five parts at other numbers is
+ * the fork the 2026-08-30 craft audit was written about.
+ *
+ * Every colour is read from `src/app/tokens.css`. Nothing here introduces one.
+ */
+
+[data-shell-role="admin"] {
+  /*
+   * 13.5px, against the coach side's 16px. The console is not the coach product drawn smaller --
+   * it is a different reader with a different day, and shrinking a coach screen to fit nineteen
+   * destinations is what the round-3 build did before the split.
+   */
+  --console-body: 13.5px;
+  --console-eyebrow: 12px;
+  --console-panel-name: 16px;
+
+  /*
+   * The figure, at console scale. 26-34px, not the coach deck's 62px: an admin reads four of
+   * these at once across a strip, and a figure large enough to lead a coach's Home panel makes a
+   * four-tile console strip unreadable at any window narrower than the rail plus four cards.
+   */
+  --console-figure: 34px;
+  --console-figure-sm: 21px;
+  /*
+   * The one drenched hero per screen may go larger, because it is the only figure competing on
+   * the page. The canvas draws it at 58px; this holds it at 46 so it still reads as a console
+   * figure rather than as a coach one that wandered in. Flagged for Alec on review.
+   */
+  --console-figure-hero: 46px;
+  --console-figure-tracking: -0.075em;
+  --console-figure-leading: 0.92;
+
+  /* Asymmetric, larger on top, exactly as on the coach side: the shape is shared, the scale is not. */
+  --console-panel-radius: 24px 24px 17px 17px;
+  --console-panel-radius-hero: 30px 30px 17px 17px;
+
+  /* 30-34px is fine for someone using this all day with a mouse. It is not fine on the coach side. */
+  --console-target: 32px;
+  /*
+   * The console's opt-out from the root pressable floor, stated once here rather than by every
+   * caller that has to know the console is different. `tokens.css` sets `--t-target: 44px` for
+   * everyone, on the reasoning that a tap target belongs to the input device rather than to a
+   * shell's density; this shell is the exception the comment above already argues for, so it says
+   * so in the one place that owns the console's metrics.
+   *
+   * Written as a reference rather than a second `32px`, so the two cannot drift: whatever
+   * `--console-target` becomes, this follows it.
+   */
+  --t-target: var(--console-target);
+
+  /*
+   * The drenches, restated here rather than imported. `coach.css` declares the same gradients
+   * under its own attribute, so they cannot be read from here without widening that file's
+   * selectors -- which would edit a stylesheet three other lanes are porting against right now,
+   * for no gain. The literals trace to `docs/REDESIGN-CANVAS.md`.
+   *
+   * `--console-drench-info` is NOT here. It is declared once, in the theme-light lane at the foot
+   * of this file, because that is where the accent's move to blue reached it; it was declared here
+   * too until 2026-09-01, in the retired teal, at the same specificity and 450 lines above the
+   * declaration that overrode it. That is a value nothing could paint, sitting where a reader
+   * looks first, and it forced the contrast guard to encode "prefer the last one" -- a rule that
+   * stays quietly correct while measuring the wrong ground the day someone adds a third.
+   */
+  --console-drench-live: linear-gradient(158deg, oklch(0.28 0.08 262), oklch(0.17 0.04 265));
+  --console-on-drench-line: rgba(255, 255, 255, 0.16);
+  --console-on-drench-sub: rgba(255, 255, 255, 0.8);
+}
+
+/*
+ * The page title, raised from the shared 20px to the console's 30px.
+ *
+ * `--t-page-title` is a global token and `.t-page-title` is the class every page template writes,
+ * so redeclaring the token inside this scope moves every console page at once and moves nothing
+ * else. That is the point: a lane that hand-rolls `text-[30px]` on its own `<h1>` gets a console
+ * that is 30px on the pages that lane touched and 20px everywhere else, which is precisely the
+ * drift the craft audit found seven copies of.
+ */
+[data-shell-role="admin"] {
+  --t-page-title: 30px;
+  --t-page-title-w: 600;
+  --t-page-title-lh: 1.12;
+  --t-page-title-tr: -0.022em;
+}
+
+/*
+ * The deck panel at console scale.
+ *
+ * `display: flex` with a column direction is load-bearing rather than incidental: the footer is
+ * pushed down with `margin-top: auto`, so a row of panels keeps its footers on one line however
+ * much copy sits above them. A strip of four figures with ragged footers reads as four unrelated
+ * boxes rather than as one set, which is the whole reason the anatomy has a named footer slot.
+ */
+[data-shell-role="admin"] .coach-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--console-panel-radius);
+  background: linear-gradient(180deg, var(--card-top), var(--card));
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+/*
+ * The 30px corner is the hero's, and it is not the four-figure strip's. `ConsoleStatDeck` drenches
+ * one strip tile and passes `hero` with it, which handed a tile in a row of four the largest
+ * corner in the file; the strip's own rule near the foot of this file gives it the tile corner the
+ * artboards draw, and this exclusion is what lets that rule win without depending on which of two
+ * equal-specificity selectors was written last.
+ */
+[data-shell-role="admin"] .coach-panel[data-hero="true"]:not([data-slot="console-stat-panel"]) {
+  border-radius: var(--console-panel-radius-hero);
+}
+
+[data-shell-role="admin"] .coach-panel[data-liftable="true"] {
+  transition: transform 140ms ease, border-color 140ms ease;
+}
+
+[data-shell-role="admin"] .coach-panel[data-liftable="true"]:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-edge);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-shell-role="admin"] .coach-panel[data-liftable="true"] {
+    transition: none;
+  }
+
+  [data-shell-role="admin"] .coach-panel[data-liftable="true"]:hover {
+    transform: none;
+  }
+}
+
+/*
+ * A drenched panel carries its own ground, so it drops the card gradient and the hairline both.
+ *
+ * **At most one on a console screen.** The coach side allows two; the console allows one, because
+ * a console screen already spends its attention on a rail with nineteen destinations, a topbar
+ * and a banded table, and a second fill leaves nothing for the reader to rank against. The accent
+ * is only legible as emphasis while it stays scarce.
+ */
+[data-shell-role="admin"] .coach-panel[data-drench="live"] {
+  border-color: transparent;
+  background: var(--console-drench-live);
+}
+
+[data-shell-role="admin"] .coach-panel[data-drench="info"] {
+  border-color: transparent;
+  background: var(--console-drench-info);
+}
+
+[data-shell-role="admin"] .coach-panel[data-drench] :where(.coach-panel__name, .coach-panel__figure) {
+  color: var(--on-accent);
+}
+
+[data-shell-role="admin"] .coach-panel[data-drench] :where(.coach-panel__eyebrow, .coach-panel__sentence) {
+  color: var(--console-on-drench-sub);
+}
+
+[data-shell-role="admin"] .coach-panel[data-drench] .coach-panel__footer {
+  border-top-color: var(--console-on-drench-line);
+}
+
+/*
+ * A secondary button inside a drench, outlined rather than filled. Added 2026-09-01 with the plan
+ * card's "Edit this plan" button (`admin-money-tiers.tsx`), which is the first kit button to land
+ * on a drenched console panel.
+ *
+ * The variant's own face cannot survive here, and it fails silently rather than looking wrong:
+ * `secondary` is `--line` over `--control-fill`, and both are dark alphas in the light palette
+ * -- rgba(60,90,150,0.13) and rgba(28,42,82,0.035). Over a drench they darken a dark ground by
+ * almost nothing, so the button loses its hairline and its face and reads as bare text. The
+ * block below redeclares the ramp for this subtree but not these two, because they are surface
+ * roles rather than text roles, and a surface role has no single right value on a ground the
+ * page palette never described.
+ *
+ * The fill is dropped rather than replaced by the white alpha `AdminPlans.dc.html:263` draws on
+ * the Growth card. `coach.css` already ruled on exactly this for `.coach-panel__action`, with a
+ * measurement: a 10% white face over the lighter stop of the info drench drops `--body` from
+ * 5.40:1 to 4.35:1, and the artboard's 14% is a step further under AA again. A hairline at 28%
+ * with the label on the drench itself keeps `--ink` at 5.96:1, and it also keeps the drench as
+ * the panel's one fill, which is the reason the card is drenched at all.
+ */
+[data-shell-role="admin"]
+  .coach-panel[data-drench]
+  [data-slot="kit-button"][data-variant="secondary"] {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: transparent;
+  color: var(--ink);
+}
+
+/*
+ * The header band. The eyebrow sits above the name rather than beside it, which is what lets the
+ * name stay a plain sentence-case phrase -- the eyebrow is already carrying the category.
+ *
+ * The eyebrow here is NOT the 9.5px uppercase overline. That role is alive on the console, is
+ * defined in `docs/DESIGN.md`, and is pinned by `src/app/overline-size.test.ts`; it is what the
+ * `<Overline>` atomic and the grid-table header draw. This is the panel's own 12px sentence-case
+ * category line, which is a different role in a different place, and the two coexist on these
+ * screens on purpose.
+ */
+[data-shell-role="admin"] .coach-panel__header {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+[data-shell-role="admin"] .coach-panel__eyebrow {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: var(--console-eyebrow);
+  line-height: 1.4;
+}
+
+[data-shell-role="admin"] .coach-panel__name {
+  color: var(--ink);
+  font-size: var(--console-panel-name);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+/* 32px, not the coach side's 44px. Mouse-first, all day, nineteen destinations deep. */
+[data-shell-role="admin"] .coach-panel__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--console-target);
+  height: var(--console-target);
+  border-radius: 8px;
+  background: var(--well);
+  color: var(--body);
+}
+
+[data-shell-role="admin"] .coach-panel__action:hover {
+  color: var(--ink);
+}
+
+[data-shell-role="admin"] .coach-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 16px 18px 18px;
+  font-size: var(--console-body);
+}
+
+[data-shell-role="admin"] .coach-panel__figure {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--console-figure);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: var(--console-figure-tracking);
+  line-height: var(--console-figure-leading);
+}
+
+[data-shell-role="admin"] .coach-panel[data-hero="true"] .coach-panel__figure {
+  font-size: var(--console-figure-hero);
+}
+
+/*
+ * One sentence, never two, and narrow on purpose so it reads as a caption to the figure rather
+ * than as a paragraph competing with it. `--measure-deck` is why this is not a hand-rolled `ch`
+ * value; `src/app/measures.test.ts` refuses those.
+ */
+[data-shell-role="admin"] .coach-panel__sentence {
+  max-width: var(--measure-deck);
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: var(--console-body);
+  line-height: 1.5;
+}
+
+/* Pushed to the bottom so a row of panels keeps its footers aligned. See the note above. */
+[data-shell-role="admin"] .coach-panel__footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+/*
+ * The drenched hero drops its header's hairline rather than its header.
+ *
+ * The canvas draws the hero with no band at all -- eyebrow, then figure, straight down. Hiding
+ * the header outright would take the panel's `<h2>` with it, and that heading is what
+ * `headingId` wires to the section's `aria-labelledby`: a hero that led the page would then be an
+ * unnamed region, which is the one thing `deck-panel.tsx` added `headingId` to prevent. So the
+ * rule the canvas is actually expressing -- nothing between the reader and the figure -- is drawn
+ * by removing the rule and closing the gap, and the name stays where a screen reader can find it.
+ */
+[data-shell-role="admin"] .coach-panel[data-drench] .coach-panel__header {
+  padding: 22px 24px 0;
+  border-bottom: 0;
+}
+
+[data-shell-role="admin"] .coach-panel[data-drench] .coach-panel__body {
+  padding: 10px 24px 24px;
+}
+
+/*
+ * A panel whose body IS a list of rows.
+ *
+ * The rows draw their own 18px side padding and their own hairlines, so the body's padding would
+ * inset them from the header band above and break the one alignment that makes a list read as
+ * belonging to its panel. This is a modifier rather than a Tailwind arbitrary variant on the call
+ * site because the class it has to reach into is `coach-panel__body`, and a double underscore
+ * inside `[&_...]` needs escaping that survives exactly as long as nobody reformats the file.
+ */
+[data-shell-role="admin"] .coach-panel.console-panel--flush .coach-panel__body {
+  padding: 0;
+}
+
+/*
+ * The deck: the grid a console screen lays its panels out on.
+ *
+ * Auto-fit rather than a fixed column count, because these strips sit inside the page's content
+ * column, which is the window minus a 246px rail -- a four-column grid declared in columns wraps
+ * to one column on a laptop and leaves four figures stacked down the page.
+ */
+[data-shell-role="admin"] .console-deck {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(198px, 1fr));
+  gap: 14px;
+}
+
+/* The lead layout: one wide panel beside a narrower column. The hero goes on the left. */
+[data-shell-role="admin"] .console-deck--lead {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+}
+
+@media (max-width: 1180px) {
+  [data-shell-role="admin"] .console-deck--lead {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * A row inside a panel: the icon, the thing, its one sentence, and the figure at the end.
+ *
+ * This is the shape the canvas draws for every "needs a human" list -- subscriptions in trouble,
+ * open data requests, sync failures. The hairline is `--line-soft` rather than `--line` because
+ * these rows sit inside a panel that already has a `--line` header band under it, and two
+ * hairlines at the same weight 40px apart read as a table that lost its header.
+ */
+[data-shell-role="admin"] .console-row {
+  display: grid;
+  /*
+   * The trailing track is `minmax(0, auto)`, not `auto`. An `auto` track takes its content's full
+   * width and squeezes the `1fr` beside it, so a long trailing figure would eat the business name
+   * the row exists to identify -- the same failure that rendered every coach inbox lead as "Jo...".
+   * Identity holds its width; the metadata beside it truncates.
+   */
+  grid-template-columns: 30px minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 13px;
+  /*
+   * 13px, from `AdminRevenue.dc.html:266`. It was 12, which is the table row's padding rather than
+   * this row's -- a queue row carries two lines where a table cell carries one, and the drawing
+   * gives it the extra pixel for that.
+   *
+   * The same line draws a fourth track, `30px minmax(0, 1fr) auto 16px`, for a trailing chevron.
+   * That is NOT reproduced here and the omission is deliberate: the drawn chevron says the row
+   * navigates, and neither caller makes it navigate -- `admin-money-billing-revenue.tsx:375` and
+   * `admin-agents.tsx:596` both render a plain div with no press target. Drawing the affordance
+   * without the behaviour is the same class of claim as a "done" state over something still
+   * provisioning. The track goes in when a caller can be pressed, not before.
+   */
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+[data-shell-role="admin"] .console-row:last-child {
+  border-bottom: 0;
+}
+
+[data-shell-role="admin"] .console-row__mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+/*
+ * The stat inside a hero's footer: three small figures under a hairline, each with its label.
+ * `--console-figure-sm` rather than a second hand-rolled size, for the same reason the page title
+ * is a token: three lanes drawing this row is three chances to type 20px instead of 21px.
+ */
+[data-shell-role="admin"] .console-substat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 44px;
+}
+
+[data-shell-role="admin"] .console-substat__figure {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--console-figure-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.03em;
+}
+
+[data-shell-role="admin"] .console-substat__label {
+  font-size: 12.5px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+[data-shell-role="admin"] .coach-panel[data-drench] .console-substat__label {
+  color: var(--console-on-drench-sub);
+}
+
+/* ================================================================================
+ * The shared kit atomics, at console scale.
+ *
+ * Everything above dresses the deck panel. This section dresses the five atomics the six Run
+ * screens are actually built out of -- `Surface`, `SurfaceHeader`, `MetricCard`, `Figure` and
+ * `GridTable` -- because those screens are not panel markup: `admin-overview.tsx` alone is 1,209
+ * lines of measurement plumbing wrapped in `ListPage`, `MetricCard` and `GridTable`, and porting
+ * the shape by retyping it as deck panels would have meant rewriting the data layer to change a
+ * corner radius.
+ *
+ * The rules key on the `data-slot` attributes those atomics already emit. That is the whole
+ * leverage: one selector per atomic moves the same face on all six screens, and on the eleven
+ * console screens the other lanes are porting, without any of us editing a shared component. A
+ * pass that instead wrote `rounded-[24px_24px_17px_17px]` into each screen's class strings is the
+ * failure mode the 2026-08-30 craft audit recorded -- seven lanes, nine class strings, slightly
+ * different values, all of it visible to the reader.
+ *
+ * Nothing here changes a colour, a size the overline test pins, or any markup.
+ * ================================================================================ */
+
+[data-shell-role="admin"] {
+  /*
+   * 13.5px, from the shared 13px. `--t-body` is the token every atomic writes through, so moving
+   * it here moves the console's body copy and nothing else -- the coach side reads the same token
+   * under its own scope and is untouched. It is the same value `--console-body` above declares;
+   * that one names the console's body size for rules that set it explicitly, this one is how
+   * everything that never asks still gets it.
+   */
+  --t-body: 13.5px;
+
+  /*
+   * The KPI tile's corner. Smaller than the panel's on purpose -- see the rule that reads it.
+   * Declared here rather than inline so the five-tile strips on Overview, Channel health and
+   * System cannot end up at three different radii.
+   */
+  --console-tile-radius: 15px 15px 11px 11px;
+}
+
+/*
+ * The card face takes the deck's asymmetric corner -- 24px on top, 17px underneath -- so a column
+ * of panels reads as a deck of cards rather than as a stack of equal rectangles. `--r-card` is
+ * 14px and symmetric, which is the shape the console had and the reason a screen of six panels
+ * read as a form.
+ */
+[data-shell-role="admin"] [data-slot="surface"][data-variant="card"],
+[data-shell-role="admin"] [data-slot="surface"][data-variant="panel"] {
+  border-radius: var(--console-panel-radius);
+}
+
+/*
+ * The KPI tile is the exception, at 15/11. It is a smaller object -- five of them across a strip
+ * -- and a 24px top corner on a 90px-tall tile eats the label that sits in it. The canvas draws
+ * the strip at exactly this radius for the same reason:
+ * `.planning/design/canvas/artboards/AdminAffiliates.dc.html:244` and
+ * `AdminAgentPerformance.dc.html:241` both draw four figure tiles at `15px 15px 11px 11px`, in a
+ * grid, above cards drawn at 24/24/17/17 on the same screen.
+ */
+[data-shell-role="admin"] [data-slot="metric-card"] {
+  padding: 14px 16px;
+  border-radius: var(--console-tile-radius);
+}
+
+/*
+ * The console's four-figure strip is that same tile, so it takes that same corner.
+ *
+ * `ConsoleStatDeck` renders the strip as `DeckPanel`s rather than as `MetricCard`s, for a reason
+ * its own docstring gives and this file agrees with -- the panel is the one card shape in the
+ * product and the strip is that shape at console scale. But the shape it inherited included the
+ * panel's 24px corner, and a rule three hundred lines above this one said the KPI strip is the
+ * exception at 15/11 and cited the canvas for it. Two rules about one strip, disagreeing, with
+ * the drawing behind the second: the artboards cited above draw the strip a component away from
+ * where the code drew it.
+ *
+ * So the strip keeps the panel's anatomy and takes the tile's corner. The hero rule 350 lines up
+ * excludes the strip by name rather than this rule outranking it: the two selectors are the same
+ * specificity, so source order would otherwise decide which corner a drenched strip tile takes,
+ * and source order is invisible from either end of a 550-line file.
+ */
+[data-shell-role="admin"] .coach-panel[data-slot="console-stat-panel"] {
+  border-radius: var(--console-tile-radius);
+}
+
+/*
+ * The panel header band, matched to the deck panel's own 15px 18px so a screen carrying both a
+ * `Surface` panel and a `DeckPanel` does not show two different header heights on one row. The
+ * shared header runs 16px/12px.
+ */
+[data-shell-role="admin"] [data-slot="surface-header"] {
+  padding: 15px 18px;
+}
+
+/*
+ * The figure, re-tracked to the deck's -0.075em over 0.92. The sizes stay inside the console's
+ * 26-34px band: `lg` is the figure a panel is opened for, `xl` the single headline a revenue
+ * screen is allowed. Neither approaches the coach deck's 62px, which is the separation this
+ * whole file exists to hold.
+ *
+ * The tracking is the part that matters. A mono figure at default tracking reads as a field
+ * value; the same figure pulled in reads as something that was set on purpose, and that is the
+ * only difference between the console's numbers before this pass and after it.
+ */
+[data-shell-role="admin"] [data-slot="figure"][data-figure-size="lg"] {
+  font-size: 30px;
+  letter-spacing: var(--console-figure-tracking);
+  line-height: var(--console-figure-leading);
+}
+
+[data-shell-role="admin"] [data-slot="figure"][data-figure-size="xl"] {
+  font-size: var(--console-figure);
+  letter-spacing: var(--console-figure-tracking);
+  line-height: var(--console-figure-leading);
+}
+
+/*
+ * Table rows at 12px 18px, which is the console column of the density table. The head and footer
+ * take the same 18px gutter so the columns line up through all three bands; only the horizontal
+ * padding moves there, because the head's 9px and the footer's 11px are already right and a row
+ * height set in two places drifts.
+ */
+[data-shell-role="admin"] [data-slot="grid-table-row"] {
+  padding: 12px 18px;
+}
+
+[data-shell-role="admin"] [data-slot="grid-table-head"],
+[data-shell-role="admin"] [data-slot="grid-table-footer"] {
+  padding-right: 18px;
+  padding-left: 18px;
+}
+
+/*
+ * The queue row -- the console's other list shape -- takes the same 18px gutter as the table, so a
+ * screen carrying a queue above a table does not read as two grids that failed to agree. The
+ * vertical 13px is the canvas's; it is one pixel taller than a table row because a queue row
+ * carries two lines, the subject and the sentence saying why it is waiting.
+ */
+[data-shell-role="admin"] [data-slot="queue-item"] {
+  padding: 13px 18px;
+}
+
+/* ============================================================================
+   theme-light lane, appended 2026-09-01. Nothing above this line is touched.
+
+   Two things the light palette needs from the console, and both are colour only.
+
+   First, `--console-drench-info` was still the teal at hue 218. It is declared here rather than
+   read from `--accent-fill` because the console restates its own drenches, so the accent moving
+   to blue in `tokens.css` did not reach it and the one drenched panel on an admin screen kept a
+   colour the rest of the product had left. The stops are the same lightnesses as before, walked
+   to hue 264: white 600 text measures 5.98:1 on the lighter stop and 9.72:1 on the darker.
+   This started as an override, with the teal left in place in the base block above; the teal is
+   now deleted, so the declaration below is the only one and `tokens-contrast.test.ts` asserts
+   that it is -- a second declaration of this token is a red test, whichever of the two wins.
+
+   Second, and this is the one that actually broke: a drenched panel carries its own dark ground
+   whichever theme the page is in, but its contents inherit `--ink`, `--body` and the rest from
+   the palette. Under the dark palette those are already light, so the panel read correctly and
+   nobody noticed the dependency. Under the light palette they are near-black, and the hero
+   figure on Overview rendered as dark navy text on a dark navy ground -- unreadable, and the
+   most valuable number on the screen. So the panel re-declares the four text roles for its own
+   subtree, which fixes every descendant at once rather than chasing class names one at a time.
+   The ratios are measured against the lighter stop of `--console-drench-info`, which is the
+   lightest ground either drench presents: 5.96, 5.40, 4.93 and 4.57 -- all clear of AA, and far
+   clearer on the live drench, where the same four measure 14.3, 12.9, 11.8 and 10.9.
+   ========================================================================== */
+[data-shell-role="admin"] {
+  --console-drench-info: linear-gradient(158deg, oklch(0.5 0.15 264), oklch(0.385 0.128 261));
+}
+
+[data-shell-role="admin"] .coach-panel[data-drench] {
+  --ink: oklch(0.99 0.012 265);              /* 5.96 on the info drench / 14.3 on live */
+  --body: oklch(0.955 0.012 265);            /* 5.40 / 12.9 */
+  --muted: oklch(0.925 0.012 265);           /* 4.93 / 11.8 */
+  --faint: oklch(0.9 0.012 265);             /* 4.57 / 10.9 */
+  /* The tail of the ramp, added 2026-09-01. The four above were the four the Overview hero
+     printed, so they were the four that got redeclared, and the other half of the ramp kept
+     whatever the page palette handed it. Measured against the lighter stop of
+     `--console-drench-info` -- the lightest ground either drench presents, and so the worst
+     case -- the light palette put `--glyph` at 1.53:1 and `--meta` at 1.05:1 on the drench,
+     and the DARK palette is worse still at 1.11 and 1.79, because its own tail roles are mid
+     slates rather than light ones. That second half is what makes this one unconditional block
+     rather than a per-theme patch: a drenched panel is a dark ground in every theme, so what
+     goes on it answers to the drench and never to the page.
+     The live instance is the "Most clients" dot on the drenched plan card (`admin-money-tiers`
+     -> `Status tone="neutral"`, whose mark is `var(--glyph)`), which rendered as an unmarked
+     label beside two marked siblings.
+     `--meta` and `--overline` land ON `--faint` rather than below it, and that is deliberate:
+     the info drench's lighter stop is oklch 0.5, so pure white measures 6.0:1 against it and
+     the whole ramp has one octave to spend. Four steps spend it; a fifth and sixth below 4.57
+     would be under 1.4.3's floor, and small text that is a visible step softer but unreadable
+     is the worse trade. On a drench the ramp bottoms out at faint.
+     `--dim` and `--glyph` are the two roles the base palette already holds to 1.4.11's 3:1
+     rather than 4.5 -- weekend letters and icon strokes -- so they keep that floor here, and
+     keep their order (3.8 / 3.6 on the page, 3.52 / 3.29 on the drench). */
+  --meta: oklch(0.9 0.012 265);              /* 4.57 / 10.9 -- text, so it holds AA */
+  --overline: oklch(0.9 0.012 265);          /* 4.57 / 10.9 */
+  --dim: oklch(0.82 0.012 265);              /* 3.52 /  8.4 -- shape floor, 1.4.11 */
+  --glyph: oklch(0.8 0.012 265);             /* 3.29 /  7.9 */
+
+  /* The tone roles, appended 2026-09-01, and this is the third pass over the same block.
+   *
+   * The block's own comment above says what went wrong the first two times, in its own words:
+   * "the four above were the four the Overview hero printed, so they were the four that got
+   * redeclared". The neutral ramp was then finished and the tone palette was left, so the same
+   * sentence was true again one role family further out. On Revenue the drenched MRR hero prints
+   * five signed money figures through `TONE_TEXT` -- the four movement legend values and the Net
+   * figure (`admin-money-billing-revenue.tsx:210` and `:216`) -- and `TONE_TEXT` resolves `good`
+   * and `failure` to `--good-text` and `--failure-text`, which nothing here redeclared. They kept
+   * the page palette's near-black and measured 2.56:1 on the live drench this panel paints, 1.07:1
+   * on the info drench, and the DARK palette failed too at 2.93 for `--failure-text`. Five money
+   * figures under AA on the panel the page exists for.
+   *
+   * So this stops chasing the roles that happen to be printing today and redeclares every token a
+   * figure, a control or a label inside a drench can resolve to: the whole `TONE_TEXT` map, the
+   * whole `TONE_MARK` map, the two `-body` sentence roles under a tone headline, `--on-accent`,
+   * and `--critical`, which components print as text rather than as a dot in eight places.
+   * `tokens-contrast.test.ts` discovers that set from `tone.ts` and from the components rather
+   * than from a list anybody has to remember, and asserts every member is declared here.
+   *
+   * White alphas and light ramps, per the reasoning above: a drenched panel is a dark ground in
+   * every theme, so what goes on it answers to the drench and never to the page.
+   *
+   * The ratios are the lighter stop of `--console-drench-info` first -- the lightest ground either
+   * drench presents, and so the worst case -- then the live drench's lighter stop. Every text role
+   * also clears 4.5:1 composited on its own wash over that stop in BOTH palettes' wash values,
+   * which is the case that set the lightness: bare, `--waiting-text` had room at 0.925, but the
+   * dark palette's heavier 10-14% washes over the drench pulled it to 4.49.
+   *
+   * Two consequences of the octave, both of them the existing block's argument one family over.
+   * The chroma is low -- white measures only 6.15:1 on the info stop, so a tone that clears 4.5
+   * sits near white and its hue survives as a tint rather than as a colour. And the `-body` roles
+   * land ON their `-text` roles rather than a step below, exactly as `--meta` and `--overline`
+   * land on `--faint`: a fifth visible step would be under 1.4.3's floor.
+   *
+   * `--on-accent` is the same value as `--ink` here, and that is the meaning it already has inside
+   * a drench -- `:153` prints the panel's name and figure in it. It is redeclared rather than left
+   * to the palette because leaving a role to the palette is what this block keeps being wrong
+   * about, not because its base value was failing. */
+  --on-accent: oklch(0.99 0.012 265);        /* 5.96 / 14.3 */
+  --accent-text: oklch(0.945 0.026 265);     /* 5.24 / 12.5 -- 5.04 on its own wash */
+  --good-text: oklch(0.945 0.05 164);        /* 5.34 / 12.8 -- 4.93 on its own wash */
+  --warning-text: oklch(0.945 0.041 71);     /* 5.22 / 12.5 -- 4.89 on its own wash */
+  --waiting-text: oklch(0.945 0.026 271);    /* 5.23 / 12.5 -- 4.77 on its own wash */
+  --draft-text: oklch(0.945 0.028 292);      /* 5.21 / 12.5 -- 4.88 on its own wash */
+  --failure-text: oklch(0.945 0.027 32);     /* 5.20 / 12.4 -- 4.81 on its own wash */
+  --critical-text: oklch(0.945 0.027 25);    /* 5.19 / 12.4 */
+  --critical: oklch(0.945 0.027 25);         /* 5.19 / 12.4 -- printed as text, so 1.4.3 */
+  --warning-body: oklch(0.945 0.04 74);      /* 5.22 / 12.5 -- 4.90 on the warning wash */
+  --failure-body: oklch(0.945 0.027 39);     /* 5.20 / 12.4 -- 4.81 on the failure wash */
+  --accent-bright: oklch(0.82 0.089 264);    /* 3.51 /  8.4 -- shape floor, 1.4.11 */
+  --good: oklch(0.82 0.11 164);              /* 3.69 /  8.8 -- 3.41 on its own wash */
+  --warning: oklch(0.82 0.11 71);            /* 3.47 /  8.3 -- 3.25 on its own wash */
+  --waiting: oklch(0.82 0.089 271);          /* 3.50 /  8.4 -- 3.19 on its own wash */
+  --draft: oklch(0.82 0.098 292);            /* 3.44 /  8.2 -- 3.22 on its own wash */
+  --failure: oklch(0.82 0.101 32);           /* 3.40 /  8.1 -- 3.14 on its own wash */
+
+  /*
+   * The two grounds those tones land on, and the hairlines, which the set above needs to be true
+   * rather than merely complete. Found by `fix-coach-chrome-3` on the coach side; these are its
+   * five declarations verbatim, because both files draw the same two gradients and a value that
+   * differs between them would be drift rather than a decision.
+   *
+   * Every tone wash is an alpha except two. An alpha tints the drench and the pairing holds -- the
+   * six alpha washes put their own `-text` role at 4.77:1 or better on the worst stop, in either
+   * palette. `--critical-wash` and `--info-wash` are opaque in both palettes, so inside a drench
+   * they keep whichever page palette is live, and under the light palette that is near-white:
+   * `--critical-text` at its new near-white value lands on `--critical-wash` at **1.03:1**. Every
+   * role present, every value right on its own, and the pair invisible -- which is this block's own
+   * defect one level further in, reintroduced by the fix for it. A completeness check over the role
+   * set cannot see that, so `tokens-contrast.test.ts` now measures the pair rather than the role.
+   *
+   * These darken rather than lighten, and that is the departure from the white alphas above. White
+   * is right for a face that has to lift off a dark ground; a wash marks a region *behind* text
+   * that is already near-white, so lifting it costs the text the contrast it has least of -- a 14%
+   * white wash drops `--critical-text` to 3.84:1, under the floor. Black is true in both palettes
+   * for the same reason white is, because the drench is dark in both. At 0.18 the wash reads as a
+   * recessed patch (1.32:1 off the info drench) and puts its text at 6.83:1, and the hairline
+   * carries the region on the live drench where a darker patch has less to say.
+   */
+  --critical-wash: rgba(0, 0, 0, 0.18);      /* --critical-text on it: 6.83 / 13.62 */
+  --info-wash: rgba(0, 0, 0, 0.18);
+  --critical-line: rgba(255, 255, 255, 0.32);  /* 1.97 off the info drench */
+  --info-line: rgba(255, 255, 255, 0.32);
+  /* What `--neutral-line` resolves through, and the only hairline in that chain the block above
+     left on the page palette. */
+  --line-strong: rgba(255, 255, 255, 0.38);    /* 2.21 */
+}

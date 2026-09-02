@@ -1,0 +1,344 @@
+/* Meet Your Agent: surface rules that belong to this component rather than to the shared
+   agent sheet in globals.css. The palette lives there now - .agent-shell expresses the
+   product tokens directly, so there is no second midnight palette to override and no
+   product token (--card, --muted, --accent) shadowed on this subtree. */
+
+/* Session failure: a failed session is a critical state, never the green or amber confirmed
+   treatment, and it carries no success dot. */
+.agent-shell .sandbox-banner[data-tone="critical"] {
+  border-color: var(--critical-line);
+  background: var(--critical-wash);
+  color: var(--critical);
+}
+
+.agent-shell .session-error {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--s-2, 8px);
+}
+
+.agent-shell .session-error p {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.agent-shell .session-error strong {
+  color: var(--critical);
+}
+
+.agent-shell .session-error span {
+  color: var(--body);
+}
+
+.agent-shell .session-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2, 8px);
+}
+
+.agent-shell .session-error__actions button,
+.agent-shell .session-error__actions a {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-input, 8px);
+  padding: 2px 10px;
+  background: var(--raised);
+  color: var(--ink);
+  font-size: var(--t-badge);
+  text-decoration: none;
+}
+
+/* Active-edge pulse: token-sourced fill, opacity-only motion, still under reduced motion. */
+.agent-shell .trace-edge-pulse {
+  fill: var(--accent);
+  animation: ma-edge-pulse 1.2s ease-in-out infinite;
+}
+
+.agent-shell .trace-edge-pulse[data-tone="deflect"] {
+  fill: var(--warning);
+}
+
+.agent-shell .trace-edge-pulse[data-tone="block"] {
+  fill: var(--critical);
+}
+
+@keyframes ma-edge-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-shell .trace-edge-pulse {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* ===========================================================================================
+ * The coach density, for the surface a coach reads when they are deciding whether to trust this
+ * thing with their leads.
+ *
+ * Everything above this line, and the whole `.agent-shell` sheet in `globals.css`, was written at
+ * the owner console's scale: `--t-body` is 13px, controls are 29-34px, and the bubbles a coach
+ * actually reads a conversation in were 13px. `docs/REDESIGN-CANVAS.md`'s density table puts this
+ * screen in the same column as coach, affiliate, consumer and onboarding -- 16px body, 46px page
+ * title, a 44px floor under anything pressable, no exceptions -- because the reader is the same
+ * person, over 55, who told us in round-1 demo feedback that the console was hard to read. Meet
+ * Your Agent is where they watch their agent turn down a guarantee it was never given, so it is
+ * the last screen in the product that should make them squint.
+ *
+ * WHY THESE RULES LIVE HERE rather than in `globals.css`: that sheet is shared, `css-budget.test.ts`
+ * caps the top-level app stylesheets at 3,000 lines and they are already at 2,806, and the console
+ * still legitimately owns the values above. This file is the component's own sheet, already
+ * imported by `meet-your-agent.tsx`, and it is not charged to that budget.
+ *
+ * WHY THE SELECTOR CARRIES BOTH: `[data-shell-role="coach"]` is stamped by `CoachScale`, which the
+ * component now renders as its root, so the attribute and the class are the same element and the
+ * combined selector outranks every `.agent-shell ...` rule in `globals.css` without an `!important`
+ * anywhere. It also means these rules cannot escape onto a surface that has not opted in.
+ *
+ * WHERE THE OVERLINES WENT: the nine 9.5px uppercase mono labels this surface drew -- the
+ * preview-context label, the trace heading and legend, the receipt eyebrow, the technical-seams
+ * keys, the system-message kicker -- are gone, replaced by the 12px sentence-case eyebrow. That
+ * happened in `globals.css` rather than here, because the recipe was declared there once for all
+ * nine and out-specifying it from a component sheet would have left the console's values in the
+ * tree for the next reader to find and restore. `docs/DESIGN.md` now scopes the overline to the
+ * owner console, and `src/app/overline-size.test.ts` pins its absence from this surface rather
+ * than its size.
+ * =========================================================================================== */
+
+[data-shell-role="coach"].agent-shell {
+  /* The reading size, and the reason every rule below exists. */
+  font-size: var(--coach-body);
+}
+
+/* ---- Chrome ------------------------------------------------------------------------------- */
+
+/*
+ * The topbar is the coach chrome's 76px, not the console's 50px, and it is not merely taller: at
+ * 50px a 44px control has three pixels of air on each side and reads as jammed into the bar. The
+ * height is what makes the floor look deliberate rather than forced.
+ */
+[data-shell-role="coach"].agent-shell .agent-topbar {
+  min-height: 76px;
+  padding: 0 var(--s-5);
+}
+
+[data-shell-role="coach"].agent-shell .brand-name {
+  font-size: 20px;
+}
+
+[data-shell-role="coach"].agent-shell .agent-topbar h1 {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.014em;
+}
+
+/*
+ * The three chrome controls -- the preview-context switcher, the technical-details toggle and the
+ * restart -- all land on the 44px floor. They were 29, 29 and 30px, which is a mouse target.
+ */
+[data-shell-role="coach"].agent-shell :where(.segmented-control button, .seams-button, .restart-button) {
+  min-height: var(--coach-target);
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+[data-shell-role="coach"].agent-shell .segmented-control {
+  border-radius: var(--r-full);
+  padding: 4px;
+}
+
+[data-shell-role="coach"].agent-shell .segmented-control button {
+  border-radius: var(--r-full);
+}
+
+[data-shell-role="coach"].agent-shell :where(.seams-button svg, .restart-button svg) {
+  width: 18px;
+  height: 18px;
+}
+
+[data-shell-role="coach"].agent-shell .mobile-panel-tabs button {
+  min-height: var(--coach-target);
+  font-size: 16px;
+}
+
+/* ---- The two panels ----------------------------------------------------------------------- */
+
+/*
+ * The deck panel's asymmetric radius, larger on top. It is the only card shape the coach side has,
+ * and the pair of panels on this screen is the clearest place in the product to see why the shape
+ * matters: two square panes side by side read as a split view, two decked panels read as a set.
+ */
+[data-shell-role="coach"].agent-shell :where(.chat-panel, .trace-panel) {
+  border-radius: var(--coach-panel-radius);
+}
+
+/*
+ * The header band, at the deck panel's own anatomy: 19px/22px padding closed by a hairline, with
+ * the eyebrow above the name rather than beside it. The eyebrow carries the category, which is
+ * what lets the name stay a plain sentence-case phrase.
+ */
+[data-shell-role="coach"].agent-shell :where(.chat-heading, .trace-heading) {
+  min-height: 78px;
+  padding: 19px 22px;
+}
+
+[data-shell-role="coach"].agent-shell .agent-identity h2 {
+  font-size: var(--coach-panel-name);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+/*
+ * Sentence case at 12px, which is `coach.css`'s eyebrow. The canvas draws this particular label at
+ * 14px; the 12px role is used instead because it is the value the coach language declares once and
+ * every other coach panel in the product already reads at, and one screen keeping its own eyebrow
+ * size is exactly how the eleven different `ch` measures happened.
+ */
+[data-shell-role="coach"].agent-shell .agent-identity p {
+  font-size: var(--coach-eyebrow);
+  line-height: 1.4;
+}
+
+[data-shell-role="coach"].agent-shell .agent-avatar {
+  width: 38px;
+  height: 38px;
+}
+
+[data-shell-role="coach"].agent-shell .agent-avatar span {
+  width: 11px;
+  height: 11px;
+}
+
+[data-shell-role="coach"].agent-shell .sandbox-banner p {
+  font-size: 15px;
+}
+
+/* ---- The conversation --------------------------------------------------------------------- */
+
+/*
+ * The bubble is the whole point of the screen, so it gets the largest jump on the page: 13px to
+ * 16px. The radius follows the canvas -- one corner squared off toward the speaker, which is what
+ * makes a stack of bubbles read as a conversation rather than as a list of rounded rectangles.
+ */
+[data-shell-role="coach"].agent-shell .message-bubble {
+  border-radius: 14px 14px 14px 5px;
+  padding: 13px 17px;
+  font-size: var(--coach-body);
+  line-height: 1.45;
+}
+
+[data-shell-role="coach"].agent-shell .message-row--user .message-bubble {
+  border-radius: 14px 14px 5px 14px;
+}
+
+[data-shell-role="coach"].agent-shell :where(.system-message, .thinking-row) {
+  font-size: 15px;
+}
+
+/*
+ * The booking card, which is the outcome the whole conversation exists to reach. Its confirm
+ * control is the one thing on this panel a coach presses to commit, so it clears the floor by a
+ * wide margin rather than by a pixel.
+ */
+[data-shell-role="coach"].agent-shell .booking-card {
+  border-radius: 20px 20px 14px 14px;
+}
+
+[data-shell-role="coach"].agent-shell .booking-card__title strong {
+  font-size: 18px;
+}
+
+[data-shell-role="coach"].agent-shell .booking-card__title span {
+  font-size: 15px;
+}
+
+[data-shell-role="coach"].agent-shell .booking-actions [data-slot="button"] {
+  height: 48px;
+  font-size: 16px;
+}
+
+/* ---- Composer ----------------------------------------------------------------------------- */
+
+/*
+ * The suggested openers are how most people start this screen, so they are pressable targets and
+ * not decoration. They were 30px chips at 12px; a chip a thumb misses is a chip that teaches the
+ * reader the screen does not work.
+ */
+[data-shell-role="coach"].agent-shell .chip {
+  min-height: var(--coach-target);
+  padding: 0 16px;
+  border-radius: var(--r-full);
+  font-size: 15px;
+}
+
+[data-shell-role="coach"].agent-shell .chip svg {
+  width: 16px;
+  height: 16px;
+}
+
+[data-shell-role="coach"].agent-shell .composer input {
+  height: 46px;
+  border-radius: var(--r-full);
+  padding: 0 16px;
+  font-size: var(--coach-body);
+}
+
+[data-shell-role="coach"].agent-shell .composer [data-slot="button"] {
+  height: 46px;
+  min-width: 46px;
+}
+
+[data-shell-role="coach"].agent-shell :where(.composer-note, .go-live-link) {
+  font-size: 14px;
+}
+
+[data-shell-role="coach"].agent-shell .go-live-link {
+  min-height: var(--coach-target);
+}
+
+[data-shell-role="coach"].agent-shell .agent-embedded-actions [data-slot="button"] {
+  min-height: 48px;
+  font-size: 16px;
+}
+
+/* ---- The trace, and the receipt ------------------------------------------------------------ */
+
+/*
+ * The trace canvas is an instrument rather than prose -- a node has to fit a graph -- so it rises
+ * by less than the conversation does. What it may not do is stay at 11-12px, because the node
+ * headings are the plain-words account of what the agent actually did, and on the canvas that
+ * account is the second most important thing on the screen after the conversation itself.
+ */
+[data-shell-role="coach"].agent-shell .trace-node__heading {
+  font-size: 15px;
+}
+
+[data-shell-role="coach"].agent-shell .trace-heading p {
+  font-size: 14px;
+}
+
+[data-shell-role="coach"].agent-shell .receipt-content dl > div {
+  font-size: 15px;
+}
+
+[data-shell-role="coach"].agent-shell .decision-badge {
+  font-size: 14px;
+}
+
+[data-shell-role="coach"].agent-shell :where(.empty-receipt, .seams-grid dd) {
+  font-size: 15px;
+}
+
+[data-shell-role="coach"].agent-shell .eval-case-button {
+  min-height: var(--coach-target);
+  border-radius: 10px;
+  font-size: 15px;
+}

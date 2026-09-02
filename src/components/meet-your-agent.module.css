@@ -1,0 +1,31 @@
+/* Scoped additions for the multi-turn test session. Everything else on this
+   screen still comes from globals.css. */
+
+/* The session cap is a neutral stop, not a success, so it drops the green
+   wash the booking card uses. */
+.softClose {
+  border-color: var(--agent-border);
+  background: var(--agent-raised);
+}
+
+.softClose :global(.booking-card__title) > svg {
+  color: var(--agent-muted);
+}
+
+.turnMeter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.turnMeter::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--agent-faint);
+}
+
+.turnMeter[data-low="true"]::before {
+  background: var(--trace-amber);
+}

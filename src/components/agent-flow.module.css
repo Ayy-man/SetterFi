@@ -1,0 +1,71 @@
+/* Scoped to the Meet Your Agent trace canvas. Base node/edge colour lives in
+   globals.css; this file only adds the live-turn motion layer. */
+
+.node {
+  position: relative;
+}
+
+.node::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.node[data-status="active"]::after {
+  border-color: var(--trace-green);
+  animation: haloPulse 1500ms ease-out infinite;
+}
+
+.node[data-status="deflect"]::after {
+  border-color: var(--trace-amber);
+  animation: haloPulse 1500ms ease-out infinite;
+}
+
+.node[data-status="block"]::after {
+  border-color: var(--trace-red);
+  animation: haloPulse 900ms ease-out infinite;
+}
+
+@keyframes haloPulse {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.07);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.07);
+  }
+}
+
+/* Panning and zooming are disabled so the graph stays composed; don't offer a
+   grab cursor the canvas won't honour. */
+.canvas :global(.react-flow__pane) {
+  cursor: default;
+}
+
+.pulse {
+  fill: var(--trace-green);
+}
+
+.pulse[data-tone="deflect"] {
+  fill: var(--trace-amber);
+}
+
+.pulse[data-tone="block"] {
+  fill: var(--trace-red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node::after {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}

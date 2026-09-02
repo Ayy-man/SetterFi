@@ -1,0 +1,76 @@
+{
+  "crons": [
+    {
+      "path": "/api/jobs/appointment-reconcile",
+      "schedule": "15 3 * * *"
+    },
+    {
+      "path": "/api/jobs/compliance-reconcile",
+      "schedule": "15 3 * * *"
+    },
+    {
+      "path": "/api/jobs/a2p-probe",
+      "schedule": "45 3 * * *"
+    },
+    {
+      "path": "/api/jobs/stripe-webhooks",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/jobs/billing-allowances",
+      "schedule": "20 4 * * *"
+    },
+    {
+      "path": "/api/jobs/billing-cost-rollup",
+      "schedule": "40 4 * * *"
+    },
+    {
+      "path": "/api/jobs/tenant-health-rollup",
+      "schedule": "50 4 * * *"
+    },
+    {
+      "path": "/api/jobs/agent-inactivity-sweep",
+      "schedule": "10 4 * * *"
+    },
+    {
+      "path": "/api/jobs/tier-change-reconcile",
+      "schedule": "25 4 * * *"
+    },
+    {
+      "path": "/api/jobs/notification-deliveries",
+      "schedule": "10 5 * * *"
+    },
+    {
+      "path": "/api/jobs/engine-evals",
+      "schedule": "40 5 * * *"
+    },
+    {
+      "path": "/api/jobs/followups",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/jobs/ghl-install-reconcile",
+      "schedule": "7,22,37,52 * * * *"
+    },
+    {
+      "path": "/api/jobs/inbound-recovery",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/jobs/outbound-reconciliation",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/jobs/capi-events",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/jobs/contact-deletion-recovery",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/onboarding/run",
+      "schedule": "13,33,53 * * * *"
+    }
+  ]
+}

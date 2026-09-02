@@ -1,0 +1,104 @@
+name: CI
+
+# Runs on every push and PR. There is one environment and work ships to main behind env
+# flags, and a technical reviewer may audit any change, so the gate that says "this branch compiles,
+# lints, passes its tests, and builds" needs to be automatic rather than remembered.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Dependency security audit
+        run: npm audit --audit-level=high
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: UI contracts
+        run: npm run test:ui
+
+      - name: Provider rotation (mock)
+        run: npm run verify:rotation -- --mode mock
+
+      - name: First-customer environment contract (synthetic)
+        run: npm run verify:env:first-customer
+        env:
+          APP_BASE_URL: https://app.example.test
+          SETTERFI_AUTH_MODE: supabase
+          NEXT_PUBLIC_SUPABASE_URL: https://database.example.test
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: synthetic-service-role-key
+          CRON_SECRET: synthetic-cron-secret
+          SETTERFI_TAG_SECRET: synthetic-tag-secret
+          SETTERFI_DEMO_LOGINS: "false"
+          SETTERFI_PLATFORM_PREVIEW_DATA: "false"
+          SETTERFI_PHASE1_LIVE: "true"
+          SETTERFI_GHL_DRIVER: real
+          GHL_CLIENT_ID: synthetic-client-id
+          GHL_CLIENT_SECRET: synthetic-client-secret
+          GHL_WEBHOOK_PUBLIC_KEY: synthetic-public-key
+          SETTERFI_OPENROUTER_DRIVER: real
+          OPENROUTER_API_KEY: synthetic-openrouter-key
+
+      - name: Build
+        run: npm run build
+        env:
+          # Static generation renders auth-aware pages. Give CI an explicit review-only mode so
+          # the fail-closed auth contract is exercised without using deployment credentials.
+          SETTERFI_AUTH_MODE: password
+          SETTERFI_ACCESS_PASSWORD: synthetic-ci-build-password
+          # The premium registry key is only needed to *add* components, not to build
+          # ones already vendored into the repo, so CI builds without a secret.
+          SHADCNBLOCKS_API_KEY: ""
+
+  # Tenant isolation is the security bar (BUILD-PLAN B2): applies the migrations to a
+  # clean Postgres and runs the RLS suite, so any future migration that loosens a
+  # policy turns the build red instead of silently leaking cross-tenant rows.
+  rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.114.0
+
+      - name: Start database and apply migrations
+        run: supabase db start
+
+      - name: RLS isolation suite — first fresh application
+        run: npm run test:rls
+
+      # A migration chain can pass once and still depend on residue from a developer database.
+      # Recreate the platform database and replay the same source chain before accepting the gate.
+      - name: Recreate database and replay migrations
+        run: supabase db reset --local --no-seed
+
+      - name: RLS isolation suite — second fresh application
+        run: npm run test:rls

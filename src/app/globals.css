@@ -1,0 +1,1944 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
+  --color-card: var(--card);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--raised);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--quiet);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--quiet);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--accent-wash);
+  --color-accent-foreground: var(--accent-text);
+  --color-destructive: var(--critical);
+  --color-destructive-foreground: var(--on-accent);
+  --color-border: var(--line);
+  --color-input: var(--line-strong);
+  --color-ring: var(--focus-ring);
+  --color-sidebar: var(--quiet);
+  --color-sidebar-foreground: var(--body);
+  --color-sidebar-primary: var(--accent);
+  --color-sidebar-primary-foreground: var(--on-accent);
+  --color-sidebar-accent: var(--accent-wash);
+  --color-sidebar-accent-foreground: var(--accent-text);
+  --color-sidebar-border: var(--line);
+  --color-sidebar-ring: var(--focus-ring);
+  --color-chart-1: var(--accent);
+  --color-chart-2: var(--info);
+  --color-chart-3: var(--good);
+  --color-chart-4: var(--warning);
+  --color-chart-5: var(--critical);
+  --radius: var(--r-card);
+  --radius-sm: var(--r-control);
+  --radius-md: var(--r-input);
+  --radius-lg: var(--r-card);
+  --radius-xl: var(--r-panel);
+  /* The two --font-geist-* variables are historical names, not the faces behind them:
+     layout.tsx now loads Archivo and IBM Plex Mono under them, and consumer.css reads
+     those variable names directly. */
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-sans);
+  --text-title: var(--t-title);
+  --text-title--line-height: var(--t-title-lh);
+  --text-title--font-weight: var(--t-title-w);
+  --text-title--letter-spacing: var(--t-title-tr);
+  --text-metric: var(--t-metric);
+  --text-metric--line-height: var(--t-metric-lh);
+  --text-metric--font-weight: var(--t-metric-w);
+  --text-metric--letter-spacing: var(--t-metric-tr);
+  --text-section: var(--t-section);
+  --text-section--line-height: var(--t-section-lh);
+  --text-section--font-weight: var(--t-section-w);
+  --text-section--letter-spacing: var(--t-section-tr);
+  --text-row: var(--t-row);
+  --text-row--line-height: var(--t-row-lh);
+  --text-row--font-weight: var(--t-row-w);
+  --text-row--letter-spacing: var(--t-row-tr);
+  --text-read: var(--t-read);
+  --text-read--line-height: var(--t-read-lh);
+  --text-read--font-weight: var(--t-read-w);
+  --text-read--letter-spacing: var(--t-read-tr);
+  --text-body: var(--t-body);
+  --text-body--line-height: var(--t-body-lh);
+  --text-body--font-weight: var(--t-body-w);
+  --text-body--letter-spacing: var(--t-body-tr);
+  --text-nav: var(--t-nav);
+  --text-nav--line-height: var(--t-nav-lh);
+  --text-nav--font-weight: var(--t-nav-w);
+  --text-badge: var(--t-badge);
+  --text-badge--line-height: var(--t-badge-lh);
+  --text-badge--font-weight: var(--t-badge-w);
+  --text-badge--letter-spacing: var(--t-badge-tr);
+  --text-over: var(--t-over);
+  --text-over--line-height: var(--t-over-lh);
+  --text-over--font-weight: var(--t-over-w);
+  --text-over--letter-spacing: var(--t-over-tr);
+}
+
+@utility text-over {
+  text-transform: uppercase;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    font-size: 16px;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-size: var(--t-body);
+    font-weight: var(--t-body-w);
+    line-height: var(--t-body-lh);
+    letter-spacing: var(--t-body-tr);
+    margin: 0;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+
+  .tabular,
+  td.num,
+  .metric,
+  .count {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+}
+
+.mono {
+  font-family: var(--font-mono);
+  /* Figures stay in one column and never inherit uppercase label tracking, which would
+     otherwise push the decimal point away from its digits. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================================
+   Surface recipes (.planning/design/ARTIFACT-SPEC.md section 4)
+   Three grounds, not three rungs of one ramp: the card face is a gradient between
+   --card-top and --card, the well is a single flat colour sunk into it, and the
+   strip is barely a surface at all. The card's inset top hairline (carried inside
+   --shadow-card) is what makes the face read lit; the drop shadow only deepens it.
+   No glow and no edge stripe - the one glow on the page belongs to the attention dot.
+   ========================================================================== */
+.surface-card {
+  background: linear-gradient(180deg, var(--card-top), var(--card));
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+  padding: 16px 17px;
+}
+
+/* A card whose contents own their own edges - a panel with its own header and body rows, a
+   ledger table whose cells carry the padding, a setting row that lays out its own interior.
+   They want the card's face and none of its padding, and `p-0` beside `surface-card` cannot
+   say so: this sheet is unlayered, so it beats the utility layer and every one of those
+   elements drew 16px 17px it was written not to have. Three callers need it, 34 do not, so
+   the padding stays the default and this states the exception once. */
+.surface-card.is-flush {
+  padding: 0;
+}
+
+/* A card that is open or being edited lifts a rung and takes the accent edge. This is
+   the only place the accent draws a border, which is what makes "this one is open"
+   readable at a glance across a five-card grid. */
+.surface-card.is-open,
+.surface-card[data-open="true"] {
+  border-color: var(--accent-edge);
+  box-shadow: var(--shadow-open);
+}
+
+/* A card that is itself the control - a link or a button whose whole face is the target - previews
+   the open state on hover. It has to live here rather than at the call site: this sheet is
+   unlayered, so `.surface-card`'s own `border-color` beats any `hover:border-*` utility, and
+   splitting the shorthand into longhands does not change that. Two callers wrote that utility with
+   a `transition-[border-color]` beside it and neither has ever drawn an edge. Callers keep the
+   transition and the `motion-reduce` opt-out; this owns only the colour. */
+.surface-card.is-actionable:hover {
+  border-color: var(--accent-edge);
+}
+
+/* Recessed region - price wells, the sample exchange, inputs, the slot-grid frame.
+   --well sits just above --card in lightness but below --card-top, so against the lit
+   upper half of the card face it reads as sunk rather than as a second card. */
+.surface-well {
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--r-well);
+  padding: 12px 13px;
+}
+
+/* The managed strip: the quietest full-width member of the grid. It is deliberately
+   flatter than a card - a wash rather than a face, and no shadow at all - because it
+   states what SetterFi already decided and is never a thing the coach acts on. */
+/* The inline accent link. A utility rather than a component because the seven sites that
+   wanted it are three different elements -- an <a>, a <button> that opens a section, and a
+   next/Link -- and a component that hardcodes one of them would push the other two back into
+   hand-rolled class strings. Size and weight stay with the caller; this owns colour and the
+   hover underline only. It is the one place a link may spend accent colour without spending
+   the page's fill, so it must never grow a background. */
+.link-inline {
+  color: var(--accent-text);
+  text-underline-offset: 2px;
+}
+.link-inline:hover { text-decoration: underline; }
+
+/* The quiet variant, and until 2026-09-01 the one nobody could use on the default theme: this was
+   written dark-only, and rgba(255,255,255,0.02) over a near-white card is nothing at all while the
+   periwinkle hairline drew 1.017:1. Two lanes hit it in one night -- one took `well` instead and
+   said why at the call site, which is a component routing around a broken shared class, and that is
+   the signal the class is the bug. --control-fill is exactly this role and flips with the theme. */
+.surface-strip {
+  background: var(--control-fill);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 15px 17px;
+}
+
+/* The agent surface (Meet Your Agent, the onboarding preview, and their portalled dialog
+   and loading skeleton) reads the shared product tokens. It keeps its own --agent-* and
+   --trace-* aliases so the sheet below can name roles - panel, inset, trace tone - without
+   ever redefining a product token such as --card, --muted or --accent on a subtree:
+   --muted is a text role, so shadowing it hands nested kit components a surface value
+   where they expect ink.
+
+   There is no separate midnight console ramp here on purpose. The artifact styles the
+   whole trace surface out of the product tokens (screens.css .trace__*: --ink, --body,
+   --muted, --faint, --line, --quiet), so the agent surface is the themed product, not a
+   second look. Keeping a local dark ramp would also only ever paint the portalled
+   .agent-dialog and .agent-loading, because every mount of .agent-shell renders in the
+   product context - which is how a midnight modal ended up sitting on a light console. */
+.agent-shell,
+.agent-dialog,
+.agent-loading {
+  --agent-canvas: var(--canvas);
+  /* The four grounds of the design ladder, not two shades of --quiet. Before this the two panes
+     and the composer all sat on the same value, so the shell read as one flat sheet with lines
+     drawn on it; depth in this system comes from surface value plus a hairline, and the trace
+     canvas in particular is a recessed instrument rather than a second pane. */
+  --agent-panel: var(--pane);
+  --agent-inset: var(--well);
+  --agent-raised: var(--raised);
+  --agent-card: var(--card);
+  --agent-border: var(--line-strong);
+  --agent-border-soft: var(--line);
+  --agent-text: var(--ink);
+  --agent-body: var(--body);
+  --agent-secondary: var(--muted);
+  --agent-muted: var(--muted);
+  --agent-faint: var(--faint);
+  --agent-accent: var(--accent);
+  --agent-accent-text: var(--accent-text);
+  --agent-on-accent: var(--on-accent);
+  --agent-focus-ring: var(--focus-ring);
+  --trace-green: var(--good);
+  --trace-amber: var(--warning);
+  --trace-red: var(--critical);
+  --trace-edge: var(--line-strong);
+  --trace-dot: var(--accent-wash);
+  --agent-green-wash: var(--good-wash);
+  --agent-green-line: var(--good-line);
+  --agent-blue-wash: var(--accent-wash);
+  --agent-blue-line: var(--accent-line);
+  --agent-amber-wash: var(--warning-wash);
+  --agent-amber-line: var(--warning-line);
+  --agent-red-wash: var(--critical-wash);
+  --agent-red-line: var(--critical-line);
+  --agent-green-body: var(--good);
+  --agent-green-muted: var(--good);
+  --agent-blue-body: var(--accent-text);
+  --agent-blue-bright: var(--accent-text);
+  --agent-amber-body: var(--warning-text);
+  --agent-amber-strong: var(--warning-text);
+  --agent-amber-bright: var(--warning-text);
+  --agent-red-bright: var(--critical);
+}
+
+/* The eyebrow on this surface, and the reason it is no longer an overline.
+
+   These nine labels each used to write out the *legacy* scale's --t-over (11px sans 600 on
+   --faint) by hand, so Meet Your Agent carried a second overline no other screen used; they were
+   then unified onto the console's 9.5px uppercase mono role. Both of those are the owner console's
+   voice, and a coach is the reader of this screen -- the standalone /meet-agent page and the
+   preview embedded in onboarding are both coach-facing, and there is no third reader. So the role
+   moved with the surface: 12px, sentence case, --muted, which is the eyebrow `coach.css` declares
+   and every other coach panel already reads at.
+
+   `docs/DESIGN.md`'s Hierarchy section now scopes the overline to the owner console, and
+   `src/app/overline-size.test.ts` pins its absence from this sheet rather than its size. The
+   values are written once here rather than nine times because the stylesheet cannot reach the
+   atomic. */
+.agent-shell .context-label,
+.agent-shell .embedded-context,
+.agent-shell .trace-node__sub,
+.agent-shell .trace-heading > div:first-child > span,
+.agent-shell .trace-legend span,
+.agent-shell .receipt-eyebrow,
+.agent-shell .seams-grid dt,
+.agent-shell .system-message > .mono,
+.agent-dialog .go-live-promo__kicker {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agent-shell {
+  display: flex;
+  height: 100dvh;
+  min-height: 640px;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--agent-canvas);
+  color: var(--agent-text);
+  font-size: var(--t-body);
+}
+
+.agent-shell * {
+  scrollbar-color: var(--agent-border) transparent;
+  scrollbar-width: thin;
+}
+
+.agent-shell--embedded {
+  min-height: 100svh;
+}
+
+.agent-shell ::selection {
+  background: color-mix(in srgb, var(--agent-accent) 24%, transparent);
+}
+
+.agent-shell button:focus-visible,
+.agent-shell input:focus-visible {
+  outline: 2px solid var(--agent-focus-ring);
+  outline-offset: 2px;
+}
+
+.agent-topbar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  min-height: 50px;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--agent-border-soft);
+  padding: 0 18px;
+  background: color-mix(in srgb, var(--agent-canvas) 96%, transparent);
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-lockup--button {
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+}
+
+.brand-lockup--button > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--agent-secondary);
+}
+
+.embedded-context {
+  color: var(--overline);
+}
+
+.brand-mark,
+.agent-avatar {
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--agent-accent);
+}
+
+.brand-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+
+.brand-mark span,
+.agent-avatar span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--agent-accent);
+}
+
+.brand-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* The kit's italic wordmark; "Fi" takes the accessible accent (the midnight value stays as the fallback). */
+.brand-name--wordmark {
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.brand-name--wordmark > b {
+  font-weight: 700;
+  color: var(--agent-accent-text);
+}
+
+.topbar-slash {
+  /* The separator is text on the page, so it keeps the secondary voice rather than
+     fading into the border color. */
+  color: var(--agent-secondary);
+}
+
+.agent-topbar h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.segmented-control {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--agent-border);
+  border-radius: 9px;
+  padding: 2px;
+  background: color-mix(in srgb, var(--agent-panel) 84%, var(--agent-raised));
+}
+
+.segmented-control button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--agent-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.segmented-control button:hover {
+  color: var(--agent-text);
+}
+
+.segmented-control button.is-active {
+  background: color-mix(in srgb, var(--agent-raised) 72%, var(--agent-border));
+  color: var(--agent-text);
+}
+
+.admin-version button:last-child.is-active {
+  background: color-mix(in srgb, var(--trace-amber) 12%, var(--agent-panel));
+  color: color-mix(in srgb, var(--trace-amber) 76%, var(--agent-text));
+}
+
+.context-label {
+  padding: 0 6px;
+}
+
+.seams-button {
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  padding: 0 12px;
+  background: var(--control-fill);
+  color: var(--body);
+  font-size: 12.5px;
+}
+
+.seams-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.seams-button:hover {
+  border-color: var(--accent-edge);
+  color: var(--ink);
+}
+
+.seams-button.is-active {
+  border-color: color-mix(in srgb, var(--agent-accent) 42%, transparent);
+  background: var(--agent-blue-wash);
+  color: var(--agent-accent-text);
+}
+
+.mobile-panel-tabs {
+  display: none;
+}
+
+.agent-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.chat-panel,
+.trace-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.chat-panel {
+  width: 47%;
+  min-width: 460px;
+  flex: none;
+  border-right: 1px solid var(--agent-border-soft);
+  background: var(--agent-panel);
+}
+
+/* The single cool bloom off the top-right of the content, which is the only light source in this
+   system. It belongs to the pane, so it is painted once on the workspace rather than per panel. */
+.agent-workspace {
+  background: var(--pane-bloom), var(--agent-panel);
+}
+
+.chat-heading {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 10px;
+  flex: none;
+  border-bottom: 1px solid var(--agent-border-soft);
+  padding: 14px 20px;
+}
+
+.agent-avatar {
+  width: 29px;
+  height: 29px;
+  border-radius: 999px;
+}
+
+.agent-avatar span {
+  width: 9px;
+  height: 9px;
+}
+
+.agent-identity h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.agent-identity p {
+  margin: 2px 0 0;
+  color: var(--agent-faint);
+  font-size: 12px;
+}
+
+/* The secondary button recipe from docs/DESIGN.md, rather than an uppercase mono label pretending
+   to be one: a control that restarts the run is a control, and the overline face was telling the
+   reader it was a caption. Always rendered, never hover-revealed. */
+.restart-button {
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  padding: 0 12px;
+  background: var(--control-fill);
+  color: var(--body);
+  font-size: 12.5px;
+}
+
+.restart-button:hover {
+  border-color: var(--accent-edge);
+  color: var(--ink);
+}
+
+.restart-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sandbox-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 9px;
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--trace-green) 24%, transparent);
+  border-radius: 9px;
+  padding: 9px 12px;
+  background: var(--agent-green-wash);
+  color: var(--agent-green-body);
+}
+
+.sandbox-banner[data-tone="amber"] {
+  border-color: color-mix(in srgb, var(--trace-amber) 30%, transparent);
+  background: var(--agent-amber-wash);
+  color: var(--agent-amber-body);
+}
+
+.banner-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--trace-green);
+}
+
+.sandbox-banner[data-tone="amber"] .banner-dot {
+  background: var(--trace-amber);
+}
+
+.sandbox-banner p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.chat-scroll {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 11px;
+  overflow-y: auto;
+  padding: 16px 20px;
+  overscroll-behavior: contain;
+}
+
+.message-row {
+  display: flex;
+}
+
+.message-row--agent {
+  justify-content: flex-start;
+}
+
+.message-row--user {
+  justify-content: flex-end;
+}
+
+.message-bubble {
+  max-width: min(82%, 520px);
+  border: 1px solid var(--agent-border);
+  border-radius: 13px 13px 13px 4px;
+  padding: 10px 13px;
+  background: var(--agent-card);
+  color: var(--agent-body);
+  font-size: 13px;
+  line-height: 1.52;
+  text-wrap: pretty;
+}
+
+/* The Ownership Rule, read against who is speaking: the words typed into this box are the
+   tester's own, so they take the accent wash. The agent's reply stays neutral -- a streamed reply
+   is never a second accent spend, which docs/DESIGN.md calls out by name for this exact panel. */
+.message-row--user .message-bubble {
+  border-color: var(--accent-edge);
+  border-radius: 13px 13px 4px 13px;
+  background: var(--accent-wash);
+  color: var(--agent-blue-bright);
+}
+
+.message-row--system {
+  justify-content: center;
+}
+
+/* Neutral by default, and green only where a booking actually happened. This used to be green at
+   rest, so any system line the surface grew later would have arrived wearing a success colour it
+   had not earned. */
+.system-message {
+  display: inline-flex;
+  max-width: 94%;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--agent-border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: var(--agent-raised);
+  color: var(--agent-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.message-row--book .system-message {
+  border-color: color-mix(in srgb, var(--trace-green) 30%, transparent);
+  background: var(--agent-green-wash);
+  color: var(--trace-green);
+}
+
+.system-message > .mono {
+  flex: none;
+}
+
+.message-row--deflect .system-message {
+  border-color: color-mix(in srgb, var(--trace-amber) 34%, transparent);
+  background: var(--agent-amber-wash);
+  color: var(--trace-amber);
+}
+
+.message-row--block .system-message,
+.message-row--error .system-message {
+  border-color: color-mix(in srgb, var(--trace-red) 36%, transparent);
+  background: var(--agent-red-wash);
+  color: var(--agent-red-bright);
+}
+
+.thinking-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--agent-faint);
+  font-size: 12px;
+}
+
+.thinking-bubble {
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--agent-border);
+  border-radius: 12px 12px 12px 4px;
+  padding: 11px 13px;
+  background: var(--agent-card);
+}
+
+.thinking-bubble span {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--agent-accent-text);
+  animation: thinking-blip 1s infinite ease-in-out;
+}
+
+.thinking-bubble span:nth-child(2) { animation-delay: 160ms; }
+.thinking-bubble span:nth-child(3) { animation-delay: 320ms; }
+
+/* The one animation on this surface with a hardcoded duration, so collapsing the --duration-*
+   tokens does not reach it. It has to opt out by name or it keeps blipping. */
+@media (prefers-reduced-motion: reduce) {
+  .thinking-bubble span {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+.retry-row {
+  display: flex;
+  justify-content: center;
+}
+
+.booking-card {
+  border: 1px solid color-mix(in srgb, var(--trace-green) 42%, transparent);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--agent-green-wash);
+}
+
+.booking-card__title {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.booking-card__title > svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--trace-green);
+}
+
+.booking-card__title div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.booking-card__title strong {
+  color: var(--agent-body);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.booking-card__title span {
+  color: var(--agent-green-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.booking-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-left: 26px;
+}
+
+.booking-actions [data-slot="button"] {
+  height: 34px;
+  padding: 0 13px;
+  font-size: 12px;
+}
+
+/* The turn meter's own figure, so "3 of 8" lines up with every other count in the product while
+   the sentence beside it stays in Archivo. */
+.composer-note .mono {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.go-live-link {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--agent-secondary);
+  font-size: 11.5px;
+}
+
+.go-live-link:hover {
+  color: var(--agent-accent-text);
+}
+
+.go-live-link svg {
+  width: 14px;
+  height: 14px;
+}
+
+.composer-shell {
+  flex: none;
+  border-top: 1px solid var(--agent-border-soft);
+  padding: 12px 18px max(14px, env(safe-area-inset-bottom));
+  background: var(--agent-panel);
+}
+
+.suggestion-chips {
+  display: flex;
+  max-height: 94px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+/* The chip recipe from docs/DESIGN.md: --row-hover on --line at 8px, 12px --faint.
+   These were accent-text pills, which read as *selected* -- and a suggestion nobody has picked is
+   not selected. Accent arrives on hover, where it means "this is the one you are about to send". */
+.chip {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-chip);
+  padding: 0 10px;
+  background: var(--row-hover);
+  color: var(--faint);
+  font-size: 12px;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--accent-edge);
+  color: var(--agent-text);
+}
+
+.chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.chip--adversarial,
+.chip--attack {
+  border-color: var(--agent-amber-line);
+  background: var(--agent-amber-wash);
+  color: var(--agent-amber-strong);
+}
+
+.chip--adversarial.is-active,
+.chip--attack:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--trace-amber) 66%, transparent);
+  background: color-mix(in srgb, var(--trace-amber) 14%, transparent);
+  color: var(--agent-amber-bright);
+}
+
+.chip svg {
+  width: 13px;
+  height: 13px;
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer input {
+  min-width: 0;
+  height: 42px;
+  flex: 1;
+  border: 1px solid var(--line-input);
+  border-radius: var(--r-input);
+  padding: 0 13px;
+  background: var(--well);
+  color: var(--agent-text);
+  font-size: 13px;
+}
+
+.composer input::placeholder {
+  color: var(--agent-faint);
+}
+
+.composer [data-slot="button"] {
+  width: 42px;
+  height: 42px;
+  flex: none;
+}
+
+.composer-note {
+  margin: 8px 0 0;
+  color: var(--agent-faint);
+  font-size: var(--t-badge);
+  font-weight: var(--t-body-w);
+  letter-spacing: 0.01em;
+}
+
+.agent-embedded-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px -18px calc(-1 * max(14px, env(safe-area-inset-bottom)));
+  border-top: 1px solid var(--agent-border-soft);
+  padding: 12px 18px max(14px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--agent-panel) 88%, var(--agent-accent));
+}
+
+.agent-embedded-actions [data-slot="button"] {
+  min-height: 40px;
+}
+
+.trace-panel {
+  flex: 1;
+  background: var(--agent-panel);
+}
+
+.trace-heading {
+  display: flex;
+  min-height: 49px;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--agent-border-soft);
+  padding: 10px 18px;
+  background: color-mix(in srgb, var(--agent-panel) 88%, transparent);
+}
+
+.trace-heading > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.trace-heading p {
+  margin: 0;
+  color: var(--agent-secondary);
+  font-size: 11px;
+}
+
+.trace-legend {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.trace-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.trace-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--trace-green);
+}
+
+.trace-legend [data-tone="amber"] i { background: var(--trace-amber); }
+.trace-legend [data-tone="red"] i { background: var(--trace-red); }
+
+.trace-canvas-shell {
+  position: relative;
+  flex: 1;
+  min-height: 300px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 50%, var(--agent-blue-wash), transparent 42%),
+    var(--agent-inset);
+}
+
+.flow-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.trace-blueprint {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.trace-blueprint path,
+.trace-blueprint circle {
+  fill: none;
+  stroke: var(--agent-blue-line);
+  stroke-width: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.trace-blueprint circle:last-child {
+  stroke: color-mix(in srgb, var(--agent-blue-line) 50%, transparent);
+  stroke-dasharray: 5 7;
+}
+
+.flow-canvas .react-flow {
+  z-index: 1;
+  background: transparent;
+}
+
+.flow-canvas .react-flow__pane {
+  cursor: grab;
+}
+
+.flow-canvas .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.trace-node {
+  width: 144px;
+  border: 1px solid var(--agent-border);
+  border-radius: 11px;
+  padding: 11px 12px;
+  background: color-mix(in srgb, var(--agent-panel) 82%, var(--agent-raised));
+  color: var(--agent-muted);
+  transition: border-color 220ms ease, background 220ms ease, color 220ms ease;
+}
+
+.trace-node__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.trace-node__mark {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  place-items: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--agent-border) 54%, var(--agent-muted));
+}
+
+.trace-node__mark svg {
+  width: 11px;
+  height: 11px;
+}
+
+.trace-node__sub {
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-node[data-status="active"] {
+  border-color: color-mix(in srgb, var(--trace-green) 76%, transparent);
+  background: color-mix(in srgb, var(--trace-green) 9%, var(--agent-panel));
+  color: color-mix(in srgb, var(--trace-green) 8%, var(--agent-text));
+}
+
+.trace-node[data-status="done"] {
+  border-color: var(--agent-green-line);
+  background: color-mix(in srgb, var(--trace-green) 5.5%, transparent);
+  color: var(--agent-body);
+}
+
+.trace-node[data-status="active"] .trace-node__mark,
+.trace-node[data-status="done"] .trace-node__mark {
+  background: var(--trace-green);
+  color: var(--agent-on-accent);
+}
+
+.trace-node[data-status="deflect"] {
+  border-color: color-mix(in srgb, var(--trace-amber) 78%, transparent);
+  background: color-mix(in srgb, var(--trace-amber) 7.5%, transparent);
+  color: color-mix(in srgb, var(--trace-amber) 70%, var(--agent-text));
+}
+
+.trace-node[data-status="deflect"] .trace-node__mark {
+  background: var(--trace-amber);
+  color: color-mix(in srgb, var(--agent-inset) 90%, var(--trace-amber));
+}
+
+.trace-node[data-status="block"] {
+  border-color: color-mix(in srgb, var(--trace-red) 82%, transparent);
+  background: var(--agent-red-wash);
+  color: color-mix(in srgb, var(--trace-red) 64%, var(--agent-text));
+}
+
+.trace-node[data-status="block"] .trace-node__mark {
+  background: var(--trace-red);
+  color: color-mix(in srgb, var(--agent-inset) 90%, var(--trace-red));
+}
+
+.trace-handle {
+  width: 1px !important;
+  height: 1px !important;
+  border: 0 !important;
+  opacity: 0;
+}
+
+.trace-edge--active .react-flow__edge-path,
+.trace-edge--deflect .react-flow__edge-path,
+.trace-edge--block .react-flow__edge-path {
+  stroke-dasharray: 5 4;
+}
+
+.receipt-panel {
+  flex: none;
+  border-top: 1px solid var(--agent-border-soft);
+  background: var(--agent-panel);
+}
+
+.receipt-eyebrow {
+  display: block;
+  padding: 12px 18px 0;
+}
+
+.receipt-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 9px 18px 13px;
+}
+
+.decision-badge {
+  flex: none;
+  border: 1px solid var(--agent-border);
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: var(--agent-raised);
+  color: var(--agent-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.decision-badge[data-tone="green"] {
+  border-color: color-mix(in srgb, var(--trace-green) 42%, transparent);
+  background: color-mix(in srgb, var(--trace-green) 10%, transparent);
+  color: var(--trace-green);
+}
+
+.decision-badge[data-tone="amber"] {
+  border-color: color-mix(in srgb, var(--trace-amber) 44%, transparent);
+  background: var(--agent-amber-wash);
+  color: var(--trace-amber);
+}
+
+.decision-badge[data-tone="red"] {
+  border-color: color-mix(in srgb, var(--trace-red) 46%, transparent);
+  background: var(--agent-red-wash);
+  color: color-mix(in srgb, var(--trace-red) 78%, var(--agent-text));
+}
+
+/* A well, not bare text on the pane: this is the machine's account of the last turn sitting
+   under the canvas that drew it, and the sunk ground is what separates a readout from a caption. */
+.receipt-content dl {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 5px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-well);
+  padding: 10px 12px;
+  background: var(--well);
+}
+
+.receipt-content dl > div {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.receipt-content dt {
+  color: var(--agent-faint);
+  font-family: var(--font-mono);
+}
+
+.receipt-content dd {
+  margin: 0;
+  color: var(--agent-body);
+}
+
+.receipt-content dd.is-grounded {
+  color: var(--trace-green);
+}
+
+.receipt-content dd.is-generated {
+  color: var(--trace-amber);
+}
+
+/* An audited, deliberate action: amber because it puts a turn into the eval corpus, and outlined
+   because the page's one fill belongs to whatever verb is live, never to two things at once. */
+.eval-case-button {
+  min-height: 29px;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--agent-amber-line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--agent-amber-wash);
+  color: var(--trace-amber);
+  font-size: var(--t-badge);
+  font-weight: var(--t-body-w);
+  line-height: 1.3;
+  text-align: left;
+}
+
+.eval-case-button svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.empty-receipt {
+  margin: 0;
+  padding: 10px 18px 14px;
+  color: var(--agent-faint);
+  font-size: var(--t-badge);
+  font-weight: var(--t-body-w);
+}
+
+.seams-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  overflow: hidden;
+  margin: 0;
+  border-top: 1px solid var(--agent-border-soft);
+  padding: 12px 18px;
+  background: var(--well);
+}
+
+.seams-grid > div {
+  min-width: 0;
+}
+
+.seams-grid dt {
+  display: block;
+}
+
+.seams-grid dd {
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--agent-body);
+  font-family: var(--font-mono);
+  font-size: var(--t-badge);
+  font-weight: var(--t-body-w);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seams-grid dd[data-tone="green"] {
+  color: var(--trace-green);
+}
+
+body:has(.agent-dialog) [data-slot="dialog-overlay"] {
+  background: color-mix(in srgb, var(--ink) 76%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.agent-dialog {
+  --dialog-amber: var(--warning-text);
+  --dialog-body: var(--body);
+  --dialog-note: var(--faint);
+  max-width: 460px;
+  gap: 17px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  padding: 22px;
+  background: var(--raised);
+  box-shadow: var(--shadow-raised);
+  color: var(--ink);
+}
+
+.agent-dialog [data-slot="dialog-title"] {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.agent-dialog [data-slot="dialog-description"] {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.share-field {
+  display: flex;
+  gap: 8px;
+}
+
+.share-field > input {
+  display: flex;
+  min-width: 0;
+  height: 40px;
+  flex: 1;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-input);
+  outline: 0;
+  padding: 0 12px;
+  background: var(--quiet);
+  color: var(--muted);
+  font-size: var(--t-badge);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-field > input:focus-visible {
+  border-color: var(--agent-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent-focus-ring) 22%, transparent);
+}
+
+.share-field [data-slot="button"] {
+  height: 40px;
+  padding: 0 14px;
+}
+
+.dialog-note {
+  margin: -4px 0 0;
+  color: var(--dialog-note);
+  font-size: var(--t-badge);
+  font-weight: var(--t-body-w);
+}
+
+.go-live-checks {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-well);
+  padding: 10px 12px;
+  background: var(--well);
+}
+
+.go-live-checks > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: var(--dialog-body);
+  font-size: 12.5px;
+}
+
+.go-live-checks > div + div {
+  border-top: 1px solid var(--line-soft);
+}
+
+.go-live-checks svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--good);
+}
+
+.go-live-checks .is-pending,
+.go-live-checks .is-pending svg {
+  color: var(--dialog-amber);
+}
+
+.agent-dialog--go-live {
+  gap: 18px;
+}
+
+/*
+ * This was a "drench": a 138deg gradient panel bled to the dialog edges, two decorative outlined
+ * circles behind it, a 30px hero title and an "ASSEMBLY COMPLETE" kicker over the top. Three
+ * separate rules in docs/DESIGN.md say no -- no completion theatre, no hero template, no decorative
+ * ornament -- and the copy was the worst of it, because the panel announced completion on a screen
+ * whose own next line can read "SMS registering with carriers". A go-live check is a short list of
+ * what has and has not been proved, so it is now shaped like one.
+ */
+.go-live-promo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.go-live-promo__kicker {
+  display: block;
+}
+
+.go-live-promo [data-slot="dialog-description"] {
+  max-width: var(--measure-tight);
+}
+
+.agent-dialog__footer {
+  margin: 0 -22px -22px;
+  border-color: var(--line);
+  padding: 14px 22px;
+  background: var(--quiet);
+}
+
+.agent-loading {
+  --agent-loading-bg: var(--canvas);
+  --agent-loading-surface: var(--quiet);
+  --agent-loading-line: var(--line);
+  --agent-loading-sheen: color-mix(in srgb, var(--muted) 8%, transparent);
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--agent-loading-bg);
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--agent-loading-surface);
+}
+
+.skeleton::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--agent-loading-sheen), transparent);
+  content: "";
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.3s infinite;
+}
+
+.loading-topbar { height: 50px; border-bottom: 1px solid var(--agent-loading-line); }
+.loading-panels { display: grid; min-height: calc(100dvh - 50px); grid-template-columns: 47% 53%; }
+.loading-panels section { position: relative; padding: 20px; box-shadow: inset -1px 0 0 var(--agent-loading-line); }
+.loading-heading { height: 74px; border-radius: 10px; }
+.loading-message { width: 62%; height: 64px; margin-top: 18px; border-radius: 12px; }
+.loading-message--wide { width: 78%; }
+.loading-composer { position: absolute; right: 20px; bottom: 20px; left: 20px; height: 96px; border-radius: 12px; }
+.loading-trace { height: 70%; border-radius: 12px; }
+.loading-receipt { height: 120px; margin-top: 18px; border-radius: 12px; }
+
+@media (min-width: 1600px) {
+  .agent-topbar {
+    padding-inline: max(18px, calc((100vw - 2000px) / 2 + 18px));
+  }
+
+  .agent-workspace,
+  .loading-panels {
+    width: min(100%, 2000px);
+    margin-inline: auto;
+  }
+
+  .agent-workspace {
+    border-inline: 1px solid var(--agent-border-soft);
+  }
+
+  .loading-panels {
+    border-inline: 1px solid var(--agent-loading-line);
+  }
+}
+
+@keyframes thinking-blip {
+  0%, 100% { opacity: 0.28; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1px); }
+}
+
+@keyframes skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+
+/*
+ * Kit motion keyframes. These are the few pieces of motion that cannot be expressed as a
+ * state transition -- a digit re-entering, a field rejecting a submit, a checkmark drawing
+ * itself -- so they live here as named animations the components reference by token.
+ */
+
+/* Number pop-in: each digit re-enters blurred from below when the figure changes. */
+@keyframes kit-digit-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--digit-distance));
+    filter: blur(var(--digit-blur));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/*
+ * Error shake. Per-segment easing rather than one sine sweep: the field snaps away from centre
+ * and decays, which reads as a rejection instead of a wobble.
+ */
+@keyframes kit-shake {
+  0%   { transform: translateX(0); }
+  15%  { transform: translateX(calc(var(--shake-large) * -1)); }
+  30%  { transform: translateX(var(--shake-large)); }
+  45%  { transform: translateX(calc(var(--shake-small) * -1)); }
+  60%  { transform: translateX(var(--shake-small)); }
+  80%  { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
+}
+
+/* Success check: the stroke draws itself once the action has actually resolved. */
+@keyframes kit-check-draw {
+  from { stroke-dashoffset: var(--kit-check-length, 24); }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Toast: rises from below with a cross-blur, slower in than out. */
+@keyframes kit-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--toast-distance)) scale(var(--toast-scale));
+    filter: blur(var(--toast-blur));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/*
+ * Toast cross-blur.
+ *
+ * Sonner already owns the toast's transform (the stack offset, the lift on hover, the swipe
+ * travel) and its opacity, and it drives them from JS through `--y` and friends. Writing our own
+ * transform here would fight it and break the stack, so the rise itself stays sonner's. What is
+ * left unclaimed is `filter`: blurring the toast on the way in and out gives the rise the soft
+ * arrival the motion scale asks for without touching a single property sonner manages. Slower in
+ * than out, like every other surface in the kit.
+ */
+[data-sonner-toast] {
+  filter: blur(var(--toast-blur));
+  transition: filter var(--toast-open) var(--toast-ease);
+}
+
+[data-sonner-toast][data-mounted="true"] {
+  filter: blur(0);
+}
+
+[data-sonner-toast][data-removed="true"],
+[data-sonner-toast][data-swipe-out="true"] {
+  filter: blur(var(--toast-blur));
+  transition-duration: var(--toast-close);
+}
+
+/*
+ * Theme swap, via the View Transition API.
+ *
+ * The browser's default is to cross-fade the two snapshots, which puts a flat grey at the
+ * midpoint of every light/dark swap. Turning both animations off leaves the old theme sitting
+ * still while `theme-transition.ts` grows a circular clip on the new one, so the new theme
+ * arrives as a wipe from the control the reader pressed. `mix-blend-mode: normal` matters: the
+ * default `plus-lighter` is built for a cross-fade and blows out the overlap.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+}
+
+/* Skeleton -> content: the loaded content resolves out of a blur rather than popping in. */
+@keyframes kit-content-reveal {
+  from { opacity: 0; filter: blur(var(--reveal-blur)); }
+  to   { opacity: 1; filter: blur(0); }
+}
+
+@media (max-width: 959px) {
+  .agent-shell {
+    min-height: 560px;
+  }
+
+  .agent-topbar {
+    min-height: 58px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .topbar-spacer {
+    display: none;
+  }
+
+  .context-switcher {
+    order: 5;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .context-switcher button {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .seams-button,
+  .restart-button,
+  .mobile-panel-tabs button,
+  .chip,
+  .go-live-link,
+  .eval-case-button {
+    min-height: 44px;
+  }
+
+  .composer input,
+  .composer [data-slot="button"],
+  .booking-actions [data-slot="button"] {
+    min-height: 44px;
+    height: 44px;
+  }
+
+  .mobile-panel-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex: none;
+    border-bottom: 1px solid var(--agent-border-soft);
+    padding: 4px;
+    background: var(--agent-panel);
+  }
+
+  .mobile-panel-tabs button {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--agent-secondary);
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+
+  .mobile-panel-tabs button[aria-selected="true"] {
+    background: var(--agent-border-soft);
+    color: var(--agent-text);
+  }
+
+  .mobile-panel-tabs svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .agent-workspace {
+    position: relative;
+  }
+
+  .chat-panel,
+  .trace-panel {
+    width: 100%;
+    min-width: 0;
+    border-right: 0;
+  }
+
+  .mobile-hidden {
+    display: none;
+  }
+
+  .trace-canvas-shell {
+    min-height: 300px;
+    flex: 0 0 min(54dvh, 480px);
+  }
+
+  .flow-canvas {
+    min-height: 300px;
+  }
+
+  .trace-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 620px) {
+  .agent-dialog [data-slot="button"] {
+    min-height: 44px;
+  }
+
+  .brand-name,
+  .topbar-slash,
+  .context-label {
+    display: none;
+  }
+
+  .agent-topbar h1 {
+    max-width: 132px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-version {
+    order: 4;
+    width: 100%;
+  }
+
+  .admin-version button {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .chat-heading,
+  .chat-scroll {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .composer-shell {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .suggestion-chips {
+    max-height: 68px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .chip {
+    flex: none;
+  }
+
+  .composer-note {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trace-heading {
+    align-items: flex-start;
+  }
+
+  .trace-heading > div:first-child {
+    display: block;
+  }
+
+  .trace-heading p {
+    margin-top: 3px;
+  }
+
+  .trace-legend {
+    gap: 8px;
+  }
+
+  .trace-legend span {
+    font-size: 0;
+  }
+
+  .receipt-content {
+    display: grid;
+  }
+
+  .eval-case-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .decision-badge {
+    justify-self: start;
+  }
+
+  .seams-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .share-field {
+    flex-direction: column;
+  }
+
+  .share-field [data-slot="button"] {
+    width: 100%;
+  }
+
+  .booking-actions {
+    padding-left: 0;
+  }
+
+  .agent-embedded-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .agent-embedded-actions [data-slot="button"] {
+    width: 100%;
+  }
+
+  .loading-panels { grid-template-columns: 1fr; }
+  .loading-panels section:last-child { display: none; }
+}
+
+
+/*
+ * App-wide reduced motion (CLAUDE.md hard rule). Two rules are needed: the token override
+ * catches everything that reads a motion token (a Tailwind arbitrary class such as
+ * `![transition-duration:var(--duration-fast)]` beats a `*` selector on specificity even
+ * when both are !important), and the universal rule catches hardcoded durations like the
+ * sheet primitive's `duration-200`. This is the only reduced-motion block; tokens.css has none.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-stagger: 0.001ms;
+    --duration-micro: 0.001ms;
+    --duration-quick: 0.001ms;
+    --duration-fast: 0.001ms;
+    --duration-medium: 0.001ms;
+    --duration-slow: 0.001ms;
+    --duration-very-slow: 0.001ms;
+
+    /*
+     * The per-transition semantic durations are separate variables, so collapsing the seven
+     * base durations above leaves the sheet, the menus, the tooltip and the toast still
+     * animating. Collapse those too.
+     */
+    --digit-dur: 0.001ms;
+    --digit-stagger: 0ms;
+    --dropdown-open-dur: 0.001ms;
+    --dropdown-close-dur: 0.001ms;
+    --modal-open-dur: 0.001ms;
+    --modal-close-dur: 0.001ms;
+    --panel-open-dur: 0.001ms;
+    --panel-close-dur: 0.001ms;
+    --pulse-dur: 0.001ms;
+    --reveal-dur: 0.001ms;
+    --tabs-dur: 0.001ms;
+    --tt-in-dur: 0.001ms;
+    --tt-out-dur: 0.001ms;
+    --tt-delay: 0ms;
+    --acc-expand: 0.001ms;
+    --acc-collapse: 0.001ms;
+    --acc-chevron: 0.001ms;
+    --toast-open: 0.001ms;
+    --toast-close: 0.001ms;
+    --toggle-dur: 0.001ms;
+    --toggle-track: 0.001ms;
+    --check-box: 0.001ms;
+    --check-draw: 0.001ms;
+    --check-uncheck: 0.001ms;
+    --text-swap-dur: 0.001ms;
+    --press-dur: 0.001ms;
+    --shake-dur: 0.001ms;
+    --shake-small: 0px;
+    --shake-large: 0px;
+
+    /*
+     * Durations alone are not enough: a 0.001ms transition still snaps through its start
+     * transform, so an element that enters from `translateY(8px) blur(2px)` flashes. Zero the
+     * distances, the blurs, and the pre-open scales so reduced motion means no transform at
+     * all rather than a very fast one.
+     */
+    --distance-micro: 0px;
+    --distance-small: 0px;
+    --distance-base: 0px;
+    --distance-medium: 0px;
+    --distance-large: 0px;
+    --digit-distance: 0px;
+    --panel-translate-y: 0px;
+    --toast-distance: 0px;
+    --toggle-travel: 16px; /* the thumb still has to reach the other end; only the time is gone */
+    --text-swap-translate-y: 0px;
+
+    --scale-large: 1;
+    --scale-medium: 1;
+    --scale-small: 1;
+    --scale-tiny: 1;
+    --modal-scale: 1;
+    --modal-scale-close: 1;
+    --dropdown-pre-scale: 1;
+    --dropdown-closing-scale: 1;
+    --toast-scale: 1;
+    --tt-scale: 1;
+    --press-scale: 1;
+
+    --blur-small: 0px;
+    --blur-medium: 0px;
+    --blur-large: 0px;
+    --digit-blur: 0px;
+    --panel-blur: 0px;
+    --reveal-blur: 0px;
+    --toast-blur: 0px;
+    --text-swap-blur: 0px;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
