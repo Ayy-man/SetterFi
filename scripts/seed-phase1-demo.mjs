@@ -220,7 +220,8 @@ export const PHASE3_CONTACT_FIXTURES = Object.freeze([
   {
     name: LEAD_NAMES[3],
     channel: "sms",
-    pipelineStage: "new_lead",
+    /* Opted out and suppressed: a hard disqualification, so the stage says so rather than new_lead. */
+    pipelineStage: "disqualified",
     outcome: "HARD_DQ",
     dqReason: "The lead opted out by text message.",
     businessContext: "The lead opted out. Provider suppression is confirmed.",
@@ -244,7 +245,12 @@ export const PHASE3_CONTACT_FIXTURES = Object.freeze([
   {
     name: LEAD_NAMES[6],
     channel: "messenger",
-    pipelineStage: "booked",
+    /*
+     * Never progressed, and not booked: this lead's thread ends with the agent refusing further
+     * messaging until a consent basis exists, so a booking behind it would contradict the refusal
+     * the same tenant's calendar and audit trail record.
+     */
+    pipelineStage: "new_lead",
     outcome: null,
     dqReason: null,
     businessContext: "Follow-up stopped because no consent basis was present.",

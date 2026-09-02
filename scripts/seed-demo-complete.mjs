@@ -669,20 +669,6 @@ const APPOINTMENT_SPECS = [
     attendanceOffset: -9 * DAY + 20 * 60,
   },
   {
-    /*
-     * The second Booked fixture. It carried the stage with no appointment anywhere in the tenant,
-     * which `set_contact_pipeline_stage` refuses with PIPELINE_BOOKED_REQUIRES_APPOINTMENT, so
-     * the row was a state the product cannot produce.
-     */
-    sequence: 6,
-    conversationId: DEMO_PHASE3_IDS.conversations[3],
-    contactId: DEMO_PHASE3_IDS.contacts[3],
-    status: "scheduled",
-    startOffset: 4 * DAY + 16 * 60,
-    durationMinutes: 45,
-    timezone: "America/New_York",
-  },
-  {
     sequence: 5,
     conversationId: DEMO_PHASE4_IDS.conversations[1],
     contactId: DEMO_IDS.duplicateContact,

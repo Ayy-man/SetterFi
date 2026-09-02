@@ -11,21 +11,21 @@
 
 import { spawnSync } from "node:child_process";
 
-const DEFAULT_LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
-const dbUrl = process.env.RLS_TEST_DB_URL ?? DEFAULT_LOCAL_DB;
+const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-const host = (() => {
-  try {
-    return new URL(dbUrl).hostname;
-  } catch {
-    return "";
-  }
-})();
-
-if (!["127.0.0.1", "localhost", "::1", "db", "host.docker.internal"].includes(host)) {
+/*
+ * One database only, and it is the one `supabase db reset` resets. The reset command takes no
+ * connection string and always targets the CLI's local project, so an override that pointed the
+ * suite anywhere else would leave the reset and the suite talking to two different databases
+ * while this script reported one clean gate. A forwarded port on a Docker alias or on
+ * host.docker.internal can reach a hosted database, which is why hostnames are not enough: the
+ * URL has to be the local one, exactly.
+ */
+if (process.env.RLS_TEST_DB_URL !== undefined && process.env.RLS_TEST_DB_URL !== LOCAL_DB) {
   console.error(
-    `Refusing to reset a non-local database (host "${host}").\n` +
-      "This script only runs against local Supabase. Unset RLS_TEST_DB_URL or point it at 127.0.0.1.",
+    "Refusing to run: RLS_TEST_DB_URL is set to something other than the local Supabase database.\n" +
+      `This script resets and tests only ${LOCAL_DB}. Unset RLS_TEST_DB_URL, or run ` +
+      "`npm run test:rls` yourself against the database you mean.",
   );
   process.exit(1);
 }
@@ -46,4 +46,5 @@ if (resetStatus !== 0) {
   process.exit(resetStatus);
 }
 
+process.env.RLS_TEST_DB_URL = LOCAL_DB;
 process.exit(run("npx", ["vitest", "run", "--config", "vitest.rls.config.mts"]));

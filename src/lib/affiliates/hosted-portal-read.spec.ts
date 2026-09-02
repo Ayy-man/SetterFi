@@ -84,8 +84,21 @@ describe("affiliate portal against the hosted project", () => {
 
     // Printed rather than only asserted: this output is what a reviewer reads after a deploy, and
     // a green line saying nothing about what it saw is the kind of proof that let the 503 ship.
+    // Printed as a shape, never as the rows: the body carries referred-business names, commission
+    // amounts, payout references and the referral link, and a terminal or CI log is not a place
+    // an affiliate's money data may land. Counts and state names are enough to read a 200 by.
     console.log(`status ${response.status}`);
-    console.log(JSON.stringify(body, null, 2));
+    console.log(JSON.stringify({
+      referralCodePresent: typeof body.referral?.code === "string" && body.referral.code.trim() !== "",
+      referrals: Array.isArray(body.referrals) ? body.referrals.length : null,
+      accountStates: Array.isArray(body.referrals)
+        ? [...new Set(body.referrals.map((row: { accountStatus: string }) => row.accountStatus))].sort()
+        : null,
+      payouts: Array.isArray(body.payouts) ? body.payouts.length : null,
+      payoutStates: Array.isArray(body.payouts)
+        ? [...new Set(body.payouts.map((row: { state: string }) => row.state))].sort()
+        : null,
+    }));
 
     expect(response.status).toBe(200);
     expect(typeof body.referral?.code).toBe("string");
