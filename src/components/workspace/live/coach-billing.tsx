@@ -529,7 +529,7 @@ function PlanCard({
         One action, and it is a question rather than a mutation, because there is no coach-reachable
         route that moves a plan (see this component's note above). The canvas's second button,
         "Update your card", is not drawn: the billing snapshot carries no saved-card record at all,
-        so a control promising to update one would open onto nothing. Logged in `docs/GAPS.md`.
+        so a control promising to update one would open onto nothing.
       */}
       <div className={`flex flex-wrap items-center gap-[12px] ${HAIRLINE_TOP_CLASS}`}>
         <a className={COACH_ACTION_CLASS} href="/coach/help">
@@ -605,8 +605,9 @@ function BillingLoading() {
  * hairline all the way round plus the corner wash -- rather than the radial and the border
  * re-rolled by hand here at slightly different stops from the eight other screens that frame a
  * card in a status colour. Overdue is amber because a clock is running on the coach; suspended is
- * `failure` rather than the pre-redesign `--critical` red, per the ruling in
- * `.planning/design/LEDGER.md` that splits `critical` three ways and sends a *state* to `failure`.
+ * `failure` rather than the pre-redesign `--critical` red, because the kit splits `critical`
+ * three ways: a *state* becomes `failure`, inline error text takes a text token, and a
+ * destructive affordance is a button variant.
  *
  * They are mutually exclusive because `accountState` is a single value, so the page never stacks
  * two of them.
@@ -641,8 +642,8 @@ function AccountStateCard({ accountState }: { accountState: CoachBillingSnapshot
       <Surface aria-label="Account state" as="section" className="col-span-full" role="status" tone="failure">
         {/*
           Not approved copy yet, and the page says so rather than presenting draft wording as
-          final. Recorded at `.planning/phases/11-ui-rebuild/PLAN.md:3939` and pinned by two
-          guards; the fix is Alec approving the wording, not deleting the marker.
+          final. Pinned by two guards; the fix is the owner approving the wording, not deleting
+          the marker.
         */}
         <Status label="Draft copy" tone="draft" />
         <h2 className={cn(CARD_TITLE_CLASS, "mt-[9px]")} style={{ color: TONE_TEXT.failure }}>

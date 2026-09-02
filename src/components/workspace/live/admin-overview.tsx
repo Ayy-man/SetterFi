@@ -84,7 +84,8 @@ export const PLATFORM_DETAIL_HREF = "/admin/overview/detail";
 // third addition, cost per booked call, is not: `metric-definitions.ts` declares 25 `platform.*`
 // keys and not one of them is a cost rate, and `platform.margin` is cents with no call
 // denominator, so drawing that tile would mean deriving a figure the platform does not measure.
-// It is logged in `docs/GAPS.md` rather than approximated.
+// The tile is left out rather than approximated: a figure the platform does not measure is not a
+// figure this page may draw.
 const HEADLINE_METRIC_KEYS = [
   "platform.gross_mrr",
   "platform.new_signups",
@@ -506,7 +507,7 @@ function HeadlineHero({ substats, tile }: { substats: readonly HeroSubstat[]; ti
  *   - **The 98.6 composite is not defined anywhere.** No metric key, no rollup, no formula in
  *     `metric-definitions.ts`. A score is a claim about how the platform is doing overall, and one
  *     assembled on a page out of whatever numbers were to hand is a number nobody can audit or
- *     reproduce. It is omitted rather than approximated -- see `docs/GAPS.md`.
+ *     reproduce. It is omitted rather than approximated.
  *   - **"Agents healthy" is not a measurement this read carries.** `PlatformMeasurement` has no
  *     agent dimension at all: `tenantPerformance` is booked calls and margin per tenant,
  *     `guardrailRules` is keyed by rule, `provisioningPerformance` by step. Calling a client with
@@ -515,8 +516,8 @@ function HeadlineHero({ substats, tile }: { substats: readonly HeroSubstat[]; ti
  * What the read does carry per client is the subscription state, so the ratio counts exactly that
  * and says so in its own label. The closing sentence names the exceptions the ratio cannot include
  * rather than letting a reader take it for a whole-fleet all-clear -- three of the four categories
- * in the queue below have no client dimension in this read (`docs/GAPS.md`, the Overview queue
- * entry), so a client blocked in provisioning still counts as clear here.
+ * in the queue below have no client dimension in this read, so a client blocked in provisioning
+ * still counts as clear here.
  */
 export function fleetSubscriptionHealth(measurement: PlatformMeasurement) {
   const clients = new Set<string>();
@@ -565,7 +566,7 @@ export function FleetHealthPanel({ measurement }: { measurement: PlatformMeasure
             <p className="mt-[var(--s-3)] mb-0" data-slot="fleet-health-exception">
               {/*
                 A pill rather than an edge stripe, and the dot carries the tone as well as the
-                colour: `docs/GAPS.md` and the console's own rule both refuse colour alone.
+                colour, because the console's rule is that colour alone never carries meaning.
               */}
               <span className="inline-flex items-center gap-[6px] rounded-[var(--r-input)] border border-[var(--line)] bg-[var(--well)] px-[9px] py-[3px] text-[12.5px] font-medium text-[color:var(--warning-text)]">
                 <span

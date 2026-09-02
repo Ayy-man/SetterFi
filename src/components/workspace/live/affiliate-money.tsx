@@ -448,7 +448,7 @@ function AffiliateHead({ referralCount }: { referralCount: number | null }) {
   /*
    * The canvas opens this page "Welcome back, Dana", and until the workspace layout started
    * resolving a display name there was no source for one, so the head stated the count alone
-   * rather than greeting nobody (`docs/GAPS.md`). The layout now reads `users.full_name` once per
+   * rather than greeting nobody. The layout now reads `users.full_name` once per
    * request and hands the first token down through `WorkspaceEnvProvider`, so the greeting comes
    * from the signed-in row and from nothing else: outside `supabase` mode, on a blank column, or
    * on a failed read the name is undefined and the head falls straight back to the title it has
