@@ -71,6 +71,7 @@ function measurement(): CoachMeasurement {
     responses: [],
     tenantId: "tenant-synthetic",
     window: "1m",
+    windowEnd: "2026-08-19T04:00:00.000Z",
   };
 }
 

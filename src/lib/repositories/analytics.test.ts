@@ -100,8 +100,13 @@ describe("coach measurement repository", () => {
     });
     expect(Object.keys(result).sort()).toEqual([
       "allowance", "funnel", "isDemo", "keywords", "metrics", "pipeline", "responses",
-      "tenantId", "window",
+      "tenantId", "window", "windowEnd",
     ]);
+    // The instant the window closes at is admitted by name, like every other field here. The view
+    // model prints it in place of the `asOf` parameter name that the metric definitions write
+    // their windows against, so it has to survive the projection rather than be re-derived from a
+    // render-time clock.
+    expect(result.windowEnd).toBe(WINDOW_END);
     expect(result.isDemo).toBe(false);
     expect(result.metrics.map((row) => row.metricKey)).toEqual(COACH_METRIC_KEYS);
     expect(result.keywords).toEqual([expect.objectContaining({

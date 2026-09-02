@@ -72,6 +72,12 @@ export type CoachPipelineRow = {
 export type CoachMeasurement = {
   tenantId: string;
   window: CoachMeasurementWindow;
+  /**
+   * The instant the measured window closes at, which for a trailing window is the `asOf` the RPC
+   * was asked for. Carried onto the snapshot so the view model can print the moment the numbers
+   * were read at instead of leaking the parameter name into a methodology sentence.
+   */
+  windowEnd: string;
   metrics: readonly MetricEvidence[];
   funnel: readonly CoachFunnelRow[];
   responses: readonly CoachResponseRow[];
@@ -340,6 +346,7 @@ export async function loadCoachMeasurement(
   return {
     tenantId,
     window: input.window,
+    windowEnd,
     metrics,
     funnel,
     responses,

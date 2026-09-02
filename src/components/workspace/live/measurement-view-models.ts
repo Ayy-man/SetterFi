@@ -12,6 +12,8 @@ import {
   type MetricKey,
   type MetricState,
 } from "@/lib/analytics/metric-definitions";
+import { metricDescriptorText } from "@/lib/analytics/metric-descriptor";
+import { utcTimestampLabel } from "@/lib/format/datetime";
 import type {
   CoachLeadComposition,
   CoachMeasurement,
@@ -131,14 +133,8 @@ export function coachMetricDisplay(
   return view.value ?? view.absenceLabel ?? "Unavailable";
 }
 
-function descriptorFor(key: MetricKey): MetricDescriptorView {
-  const definition = metricDefinition(key);
-  return {
-    denominator: definition.denominator,
-    window: definition.window,
-    clock: definition.clock,
-    text: `Denominator: ${definition.denominator} Window: ${definition.window} Clock: ${definition.clock}`,
-  };
+function descriptorFor(key: MetricKey, asOfLabel: string | null): MetricDescriptorView {
+  return metricDescriptorText(key, asOfLabel);
 }
 
 function absenceLabel(state: MetricState | "missing") {
@@ -162,6 +158,7 @@ function formatMetric(evidence: MetricEvidence, value: number) {
 function metricView(
   snapshot: CoachMeasurement,
   key: (typeof COACH_HOME_KPI_KEYS)[number],
+  asOfLabel: string | null,
 ): CoachMetricView {
   const definition = metricDefinition(key);
   const evidence = snapshot.metrics.find((row) => row.metricKey === key);
@@ -171,7 +168,7 @@ function metricView(
     label: definition.label,
     value: evidence && numeric !== null ? formatMetric(evidence, numeric) : null,
     absenceLabel: evidence && numeric !== null ? null : absenceLabel(evidence?.state ?? "missing"),
-    descriptor: descriptorFor(key),
+    descriptor: descriptorFor(key, asOfLabel),
     selfReported: key === "coach.show_rate",
   };
 }
@@ -200,21 +197,24 @@ function stepViews(snapshot: CoachMeasurement): CoachStepView[] {
 }
 
 export function coachMeasurementView(snapshot: CoachMeasurement): CoachMeasurementView {
+  // Same instant the admin projection uses, from the same field: the moment this snapshot was
+  // measured at, not a re-read of the clock at render time.
+  const asOfLabel = utcTimestampLabel(snapshot.windowEnd);
   return {
-    metrics: COACH_HOME_KPI_KEYS.map((key) => metricView(snapshot, key)),
+    metrics: COACH_HOME_KPI_KEYS.map((key) => metricView(snapshot, key, asOfLabel)),
     isDemo: snapshot.isDemo,
     allowance: {
       ...snapshot.allowance,
-      descriptor: descriptorFor("coach.allowance_used"),
+      descriptor: descriptorFor("coach.allowance_used", asOfLabel),
     },
     funnel: snapshot.funnel,
     responses: snapshot.responses,
     steps: stepViews(snapshot),
     keywords: snapshot.keywords,
     descriptors: {
-      funnel: descriptorFor("coach.funnel.entered"),
-      responses: descriptorFor("coach.step.response_rate"),
-      keywords: descriptorFor("coach.keyword.conversations"),
+      funnel: descriptorFor("coach.funnel.entered", asOfLabel),
+      responses: descriptorFor("coach.step.response_rate", asOfLabel),
+      keywords: descriptorFor("coach.keyword.conversations", asOfLabel),
     },
   };
 }
@@ -333,13 +333,14 @@ export function coachCompositionExportRows(composition: CoachLeadComposition) {
 }
 
 export function coachPipelineView(snapshot: CoachMeasurement): CoachPipelineView {
+  const asOfLabel = utcTimestampLabel(snapshot.windowEnd);
   return {
     stages: COACH_PIPELINE_STAGES.map((stage) => ({
       ...stage,
       rows: snapshot.pipeline.filter((row) => row.stage === stage.key),
     })),
-    pipelineWin: metricView(snapshot, "coach.pipeline_win_rate"),
-    agentWin: metricView(snapshot, "coach.agent_win_rate"),
+    pipelineWin: metricView(snapshot, "coach.pipeline_win_rate", asOfLabel),
+    agentWin: metricView(snapshot, "coach.agent_win_rate", asOfLabel),
     readOnlyReason: "Pipeline changes are read-only because no persisted mutation is available.",
   };
 }

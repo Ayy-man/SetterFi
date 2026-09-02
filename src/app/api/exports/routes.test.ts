@@ -1379,6 +1379,7 @@ describe("Phase 7 coach measurement export route", () => {
     const snapshot: CoachMeasurement = {
       tenantId: "tenant-1",
       window: "1m",
+      windowEnd: "2026-09-01T00:00:00.000Z",
       isDemo: false,
       metrics: [],
       funnel: [{ stepKey: "identity", stepLabel: "Identity", enteredContacts: 4, completedContacts: 3 }],
