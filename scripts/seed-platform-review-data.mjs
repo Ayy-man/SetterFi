@@ -17,10 +17,13 @@ import { PHASE6_DEMO_IDS, PHASE6_DEMO_VALUES } from "./seed-phase6-demo.mjs";
 import { PHASE7_DEMO_IDS } from "./seed-phase7-demo.mjs";
 import { PHASE8_DEMO_IDS, seedPhase8Demo } from "./seed-phase8-demo.mjs";
 import { referredBusinessFixtures, seedDemoGaps } from "./seed-demo-gaps.mjs";
+import { isShowcaseLeadId } from "./fixtures/showcase-leads-namespace.mjs";
 import {
   COACH_NAMES,
   DEMO_BILLING_COPY,
   DEMO_REVIEW_THREADS,
+  DEMO_SUPPORT_TENANT_NAMES,
+  DEMO_TIER_LADDER,
   LEAD_NAMES,
   assertUniqueDisplayNames,
 } from "./fixtures/names.mjs";
@@ -220,13 +223,19 @@ async function seedPlatformTenantNames(database, tenants) {
     );
     assert(updated.rowCount === 1, "PLATFORM_REVIEW_COACH_NAME_UPDATE_FAILED", coachTenants[index]);
   }
+  /*
+   * The two non-coach demo tenants, labelled. They rendered in the admin clients table beside real
+   * rows without the `(demo)` marker every other demo display value carries, which is
+   * F-11-REVIEW-TENANT-NAMES-UNLABELLED read from the other side: an unmarked demo tenant reads
+   * as a real client.
+   */
   await database.query(
-    "update public.tenants set name='Affiliate Partner Demo' where id=$1 and is_demo=true",
-    [tenants.phase6Affiliate.id],
+    "update public.tenants set name=$2 where id=$1 and is_demo=true",
+    [tenants.phase6Affiliate.id, DEMO_SUPPORT_TENANT_NAMES.affiliatePartner],
   );
   await database.query(
-    "update public.tenants set name='Measurement Review Workspace' where id=$1 and is_demo=true",
-    [tenants.phase7.id],
+    "update public.tenants set name=$2 where id=$1 and is_demo=true",
+    [tenants.phase7.id, DEMO_SUPPORT_TENANT_NAMES.measurement],
   );
   const lead = await database.query(
     `update public.contacts set name=$1,business_context=$2,last_channel='sms',
@@ -414,17 +423,33 @@ async function seedSecondCoachCorrection(database, tenants) {
  * healthy margin, one loss, and one month whose model cost genuinely never arrived, so the honest
  * "Not shown" state has a real figure beside it rather than another zero.
  */
+/*
+ * Recognised revenue is the rung these three businesses actually subscribe to, never a number of
+ * this file's own. The three used to read $497, $297 and $197, which were rungs of the retired
+ * five-price ladder, so the admin cost evidence screen priced the same three coaches differently
+ * from the admin tier screen and from the affiliate's commission on their invoices.
+ *
+ * The spread the review needs lives in the costs instead, which is where it belongs: one healthy
+ * margin, one month that cost more than it earned, and one whose model cost genuinely never
+ * arrived, so the honest "Not shown" state has a real figure beside it rather than another zero.
+ */
+const REVIEW_SUBSCRIPTION_CENTS = DEMO_TIER_LADDER[1].priceCents;
+
 const REVIEW_COST_ROLLUPS = Object.freeze([
   Object.freeze({
-    revenueCents: 49_700, modelCents: 8_400, messagingCents: 3_100, embeddingCents: 900,
+    revenueCents: REVIEW_SUBSCRIPTION_CENTS,
+    modelCents: 8_400, messagingCents: 3_100, embeddingCents: 900,
     missingSources: "{}", note: DEMO_BILLING_COPY.costEvidenceComplete,
   }),
   Object.freeze({
-    revenueCents: 29_700, modelCents: 26_800, messagingCents: 9_400, embeddingCents: 1_200,
+    // Costs above the subscription on purpose: the review needs one month that lost money.
+    revenueCents: REVIEW_SUBSCRIPTION_CENTS,
+    modelCents: 51_200, messagingCents: 9_400, embeddingCents: 1_200,
     missingSources: "{}", note: DEMO_BILLING_COPY.costEvidenceComplete,
   }),
   Object.freeze({
-    revenueCents: 19_700, modelCents: null, messagingCents: 2_600, embeddingCents: 700,
+    revenueCents: REVIEW_SUBSCRIPTION_CENTS,
+    modelCents: null, messagingCents: 2_600, embeddingCents: 700,
     missingSources: "{model}", note: DEMO_BILLING_COPY.costEvidenceIncomplete,
   }),
 ]);
@@ -545,14 +570,31 @@ export function assertPlatformReviewData(snapshot) {
   const tenantNames = snapshot.tenants.map((tenant) => tenant.name);
   assert(COACH_NAMES.every((name) => tenantNames.includes(name)),
     "PLATFORM_REVIEW_COACH_NAMES_MISSING", tenantNames);
-  assertUniqueDisplayNames(
-    snapshot.contacts.map((contact) => contact.name ?? ""),
-    "PLATFORM_REVIEW_CONTACT_DISPLAY_NAMES_NOT_UNIQUE",
-  );
+  /*
+   * Display-name uniqueness is a fact about one coach's book, not about the whole database.
+   * This used to compare the three review tenants as one list, which was fine until
+   * `seed-showcase-leads.mjs` began writing the same two hundred lead names into two of them.
+   * Two coaches each having a client named Priya Raghunathan is what a real book of clients looks
+   * like; a coach seeing the same name twice in their own list is the defect worth catching.
+   */
+  for (const tenantId of new Set(snapshot.contacts.map((contact) => contact.tenant_id))) {
+    assertUniqueDisplayNames(
+      snapshot.contacts.filter((contact) => contact.tenant_id === tenantId)
+        .map((contact) => contact.name ?? ""),
+      "PLATFORM_REVIEW_CONTACT_DISPLAY_NAMES_NOT_UNIQUE",
+    );
+  }
   assert(!snapshot.contacts.some((contact) => /^(demo|test|synthetic|setterfi)\b/i.test(contact.name ?? "")),
     "PLATFORM_REVIEW_CONTACT_STATE_NAME_VISIBLE");
+  /*
+   * The stage spread below is calibrated to the curated review book of about seventeen and fails
+   * the moment one stage holds fifteen, so it is measured over those rows alone. The two hundred
+   * showcase leads are a separate dataset with a distribution of their own, exactly as
+   * `seed-phase1-demo.mjs` already excludes them from the same check.
+   */
   const phase1Contacts = snapshot.contacts.filter((contact) =>
-    contact.tenant_id === DEMO_IDS.tenant && contact.merged_into_contact_id === null);
+    contact.tenant_id === DEMO_IDS.tenant && contact.merged_into_contact_id === null
+    && !isShowcaseLeadId(contact.id));
   const stageCounts = Object.fromEntries(PIPELINE_STAGES.map((stage) => [stage, 0]));
   for (const contact of phase1Contacts) stageCounts[contact.pipeline_stage] += 1;
   const counts = Object.values(stageCounts);

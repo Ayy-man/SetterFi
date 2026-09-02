@@ -8,7 +8,12 @@ import pg from "pg";
 import { DEMO_IDS, resolveDemoTarget } from "./seed-phase1-demo.mjs";
 import { PHASE2_DEMO_IDS } from "./seed-phase2-demo.mjs";
 import { PHASE6_DEMO_IDS, PHASE6_DEMO_VALUES } from "./seed-phase6-demo.mjs";
-import { DEMO_MEASUREMENT_COPY, LEAD_NAMES, assertUniqueDisplayNames } from "./fixtures/names.mjs";
+import {
+  DEMO_MEASUREMENT_COPY,
+  DEMO_SUPPORT_TENANT_NAMES,
+  LEAD_NAMES,
+  assertUniqueDisplayNames,
+} from "./fixtures/names.mjs";
 import { isShowcaseLeadId } from "./fixtures/showcase-leads-namespace.mjs";
 
 const PHASE2_ADMIN_ID = PHASE2_DEMO_IDS.admin;
@@ -233,16 +238,17 @@ async function seedTenant(database) {
   await database.query(
     `insert into public.tenants
        (id, slug, name, status, is_demo, billing_contact_email, billing_contact_name, created_at)
-     values ($1, $2, 'Measurement Review Workspace', 'active', true, $3,
-       'Avery Morgan', '${demoDay(0)}')
+     values ($1, $2, $4, 'active', true, $3,
+       'Avery Morgan (demo)', '${demoDay(0)}')
      on conflict (id) do update set name=excluded.name,status='active',is_demo=true,
        billing_contact_email=excluded.billing_contact_email,
        billing_contact_name=excluded.billing_contact_name`,
-    [PHASE7_DEMO_IDS.tenant, PHASE7_DEMO_VALUES.slug, PHASE7_DEMO_VALUES.email],
+    [PHASE7_DEMO_IDS.tenant, PHASE7_DEMO_VALUES.slug, PHASE7_DEMO_VALUES.email,
+      DEMO_SUPPORT_TENANT_NAMES.measurement],
   );
   await database.query(
     `insert into public.users (id, email, full_name, role, tenant_id)
-     values ($1, $2, 'Avery Morgan', 'coach', $3)
+     values ($1, $2, 'Avery Morgan (demo)', 'coach', $3)
      on conflict (id) do update set email=excluded.email,full_name=excluded.full_name,
        role='coach',tenant_id=excluded.tenant_id`,
     [PHASE7_DEMO_IDS.coach, PHASE7_DEMO_VALUES.email, PHASE7_DEMO_IDS.tenant],

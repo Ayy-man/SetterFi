@@ -13,6 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { COACH_NAMES, DEMO_ONBOARDING_COPY, LEAD_NAMES, assertUniqueDisplayNames } from "./fixtures/names.mjs";
 import { isShowcaseLeadId } from "./fixtures/showcase-leads-namespace.mjs";
+import { DEMO_CONNECTED_CHANNEL_NAMES } from "./fixtures/demo-channels.mjs";
 
 export const LOCAL_API_URL = "http://127.0.0.1:54321";
 export const DEMO_IDS = Object.freeze({
@@ -215,7 +216,7 @@ const PIPELINE_STAGES = Object.freeze([
   "disqualified",
 ]);
 
-const PHASE3_CONTACT_FIXTURES = Object.freeze([
+export const PHASE3_CONTACT_FIXTURES = Object.freeze([
   {
     name: LEAD_NAMES[3],
     channel: "sms",
@@ -591,13 +592,31 @@ async function normalizeAdditionalDemoContacts(client) {
   if (additional.length > availableNames.length) {
     throw new Error(`DEMO_CONTACT_NAME_CAPACITY_EXCEEDED:${additional.length}`);
   }
-  const channels = ["sms", "instagram", "whatsapp", "messenger", "webchat"];
+  /*
+   * A lead's channel is taken from the identity it actually has, and only falls back to the cycle
+   * when the row carries none. The cycle used to include `webchat`, which no connection, provider
+   * or identity path in this product can produce, so those rows rendered "no channel saved" in the
+   * coach's own contacts table. `fixtures/demo-channels.mjs` holds the four that exist.
+   */
+  const identities = await requireSuccess(
+    "DEMO_ADDITIONAL_CONTACT_IDENTITY_READ_FAILED",
+    client.from("contact_identities").select("contact_id, channel, created_at")
+      .eq("tenant_id", DEMO_IDS.tenant).order("created_at"),
+  );
+  const identityChannel = new Map();
+  for (const identity of identities) {
+    if (!identityChannel.has(identity.contact_id)) {
+      identityChannel.set(identity.contact_id, identity.channel);
+    }
+  }
+  const channels = DEMO_CONNECTED_CHANNEL_NAMES;
   for (let index = 0; index < additional.length; index += 1) {
     await requireSuccess(
       "DEMO_ADDITIONAL_CONTACT_UPDATE_FAILED",
       client.from("contacts").update({
         name: availableNames[index],
-        last_channel: channels[index % channels.length],
+        last_channel: identityChannel.get(additional[index].id)
+          ?? channels[index % channels.length],
         pipeline_stage: PIPELINE_STAGES[index % PIPELINE_STAGES.length],
         stage_set_by: "system",
         outcome: null,

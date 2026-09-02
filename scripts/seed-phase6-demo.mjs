@@ -427,21 +427,25 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
           )`,
           [
             moneyTenantId, PHASE6_DEMO_VALUES.subscription, PHASE6_DEMO_VALUES.invoices[index],
-            `2026-08-${5 + index * 10}T00:00:00Z`, 1100 * (index + 1), 1000 * (index + 1),
+            `2026-08-${5 + index * 10}T00:00:00Z`,
+            // A paid month is this tenant's own subscription price, never an invented figure.
+            // These were $11.00 and $22.00 against a coach the tier screen prices at $297, so the
+            // affiliate's commission on them was a tenth of a number nothing on the platform sold.
+            DEMO_TIER_LADDER[0].priceCents, DEMO_TIER_LADDER[0].priceCents,
             `2026-08-${5 + index * 10}T00:00:01Z`,
           ],
         );
       }
       await database.query(
-        `select * from public.reverse_invoice_commission($1, $2, $3, 'refund', 40, '2026-08-16T00:00:00Z')`,
+        `select * from public.reverse_invoice_commission($1, $2, $3, 'refund', 900, '2026-08-16T00:00:00Z')`,
         [moneyTenantId, PHASE6_DEMO_VALUES.invoices[0], "SETTERFI_DEMO_PLACEHOLDER_REFUND"],
       );
       await database.query(
-        `select * from public.reverse_invoice_commission($1, $2, $3, 'dispute_loss', 30, '2026-08-17T00:00:00Z')`,
+        `select * from public.reverse_invoice_commission($1, $2, $3, 'dispute_loss', 600, '2026-08-17T00:00:00Z')`,
         [moneyTenantId, PHASE6_DEMO_VALUES.invoices[0], "SETTERFI_DEMO_PLACEHOLDER_DISPUTE"],
       );
       await database.query(
-        `select * from public.reverse_invoice_commission($1, $2, $3, 'dispute_recovery', 20, '2026-08-18T00:00:00Z')`,
+        `select * from public.reverse_invoice_commission($1, $2, $3, 'dispute_recovery', 400, '2026-08-18T00:00:00Z')`,
         [moneyTenantId, PHASE6_DEMO_VALUES.invoices[0], "SETTERFI_DEMO_PLACEHOLDER_RECOVERY"],
       );
     }
@@ -491,12 +495,18 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
       )`,
       [moneyTenantId, PHASE6_DEMO_IDS.tiers[1], PHASE6_DEMO_IDS.allowanceNotice],
     );
+    /*
+     * July is the month this tenant paid for, so recognised revenue is the rung it subscribes to
+     * rather than zero. It read $0.00 against sixty cents of cost, which made the admin cost
+     * evidence screen look broken rather than informative. August below stays at zero, and that
+     * one is honest: `apply_stripe_invoice_failed` runs against it, so nothing was recognised.
+     */
     await database.query(
       `select * from public.write_tenant_cost_rollup(
-        $1, '2026-07-01T00:00:00Z', '2026-08-01T00:00:00Z', 0, 10, 20, 30, '{}',
+        $1, '2026-07-01T00:00:00Z', '2026-08-01T00:00:00Z', $2, 7300, 2800, 600, '{}',
         '{"source":"SETTERFI_DEMO_PLACEHOLDER_COMPLETE"}'::jsonb
       )`,
-      [moneyTenantId],
+      [moneyTenantId, DEMO_TIER_LADDER[0].priceCents],
     );
     await database.query(
       `select * from public.write_tenant_cost_rollup(

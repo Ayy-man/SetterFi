@@ -48,7 +48,8 @@
     "demo:reset-phase8": "node scripts/reset-phase8-demo.mjs",
     "demo:reset-platform-review": "node scripts/reset-platform-review-data.mjs",
     "gate:phase8": "node scripts/phase8-gate.mjs",
-    "gate:phase11": "node scripts/phase11-gate.mjs"
+    "gate:phase11": "node scripts/phase11-gate.mjs",
+    "test:rls:clean": "node scripts/run-rls-suite.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

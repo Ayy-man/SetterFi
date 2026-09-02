@@ -475,6 +475,51 @@ describe("measurement readers", () => {
       .rejects.toThrow(/PHASE7_COACH_READER_TENANT_MISMATCH/);
   });
 
+  /**
+   * The funnel's steps have to nest, because a funnel that does not nest cannot be divided.
+   *
+   * Qualified counted contacts at stage booked or qualified_no_buy, or with outcome BOOK, while
+   * Booked counted contacts holding any live appointment. Neither was a subset of the other, so a
+   * contact with a booking still sitting in `qualifying` with a null outcome landed at Booked and
+   * not at Qualified, and the panel printed more leads at Booked than at Ready to book. This is
+   * that exact contact.
+   */
+  it("counts a booked contact at every step above Booked, whatever its pipeline stage says", async () => {
+    const booked = await createConversation(TENANT_A, "funnel-booked");
+    await createConversation(TENANT_A, "funnel-open");
+    await db.query(
+      `update public.contacts set pipeline_stage = 'qualifying', outcome = null where id = $1`,
+      [booked.contactId],
+    );
+    await db.query(
+      `insert into public.appointments
+        (tenant_id, contact_id, conversation_id, provider, external_id, start_at, end_at, timezone)
+       values ($1,$2,$3,'ghl','funnel-nesting-booking', now() + interval '2 days',
+         now() + interval '2 days 30 minutes', 'America/New_York')`,
+      [TENANT_A, booked.contactId, booked.conversationId],
+    );
+
+    await actAs("service_role", COACH_A, "coach", TENANT_A);
+    const result = await db.query<{
+      snapshot: {
+        funnel: Array<{ stepKey: string; enteredContacts: number; completedContacts: number }>;
+      };
+    }>(`select public.read_coach_measurement($1,'1m',null,null,now()) snapshot`, [TENANT_A]);
+
+    const funnel = result.rows[0].snapshot.funnel;
+    expect(funnel.map((step) => step.stepKey)).toEqual(["entered", "qualified", "booked"]);
+    const completed = funnel.map((step) => Number(step.completedContacts));
+    // The contact with the booking is at Booked, so it must also be at Qualified.
+    expect(completed).toEqual([2, 1, 1]);
+    // Monotone by construction, not by coincidence: every step completes at most what the step
+    // above it completed, which is the only shape a conversion rate can be read from.
+    for (let index = 1; index < completed.length; index += 1) {
+      expect(completed[index]).toBeLessThanOrEqual(completed[index - 1]!);
+    }
+    expect(funnel.every((step) =>
+      Number(step.completedContacts) <= Number(step.enteredContacts))).toBe(true);
+  });
+
   it("authorizes platform role before querying and returns the exact platform contract", async () => {
     await actAs("service_role", COACH_A, "coach", TENANT_A);
     await expect(db.query(`select public.read_platform_measurement(now())`))

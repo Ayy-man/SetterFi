@@ -133,4 +133,64 @@ describe("support thread lifecycle and affiliate identity", () => {
     expect(own.rows).toEqual([{ referral_code: "SF-OWN-908" }]);
     expect(other.rows).toEqual([]);
   });
+  /**
+   * F-11-SUPPORT-THREAD-TENANT-FK, as a standing test rather than a gap entry.
+   *
+   * The 2026-08-25 reseed found the two platform-review support threads orphaned after
+   * `reset-phase6-demo.mjs` recreated the money and affiliate tenants under new ids, and
+   * `app.inherit_is_test` then refused every later upsert with
+   * IS_TEST_PARENT_NOT_FOUND:support_threads. The repair at the time rewrote `tenant_id` from the
+   * seed script. What actually prevents it is the column referencing `tenants(id)`, which both
+   * support tables now do: deleting a tenant takes its threads and their messages with it, and no
+   * row can name a tenant that does not exist in the first place.
+   *
+   * Both halves are asserted, because a cascade with no reference behind it is just a delete that
+   * happened to work.
+   */
+  it("carries both support tables away with their tenant and refuses an unknown one", async () => {
+    await db.query(
+      `insert into public.support_messages (tenant_id, thread_id, author_id, body)
+       values ($1, $2, $3, 'Synthetic lifecycle message')`,
+      [TENANT, THREAD, COACH],
+    );
+
+    await db.query("savepoint orphan_tenant");
+    await expect(db.query(
+      `insert into public.support_threads (tenant_id, subject, created_by)
+       values ('90800000-0000-4000-8000-0000000000ff', 'Orphan thread', $1)`,
+      [COACH],
+    )).rejects.toThrow(/support_threads_tenant_id_fkey|IS_TEST_PARENT_NOT_FOUND/);
+    await db.query("rollback to savepoint orphan_tenant");
+
+    // The coach is detached first because `users.tenant_id` restricts the tenant delete, and the
+    // thread's `created_by` in turn restricts deleting the coach. Nothing touches the two support
+    // tables by hand, so what is left afterwards is whatever the references decided.
+    await db.query("update public.users set tenant_id = null where tenant_id = $1", [TENANT]);
+    await db.query("delete from public.tenants where id = $1", [TENANT]);
+
+    const threads = await db.query<{ total: string }>(
+      "select count(*)::text total from public.support_threads where id = $1", [THREAD],
+    );
+    const messages = await db.query<{ total: string }>(
+      "select count(*)::text total from public.support_messages where thread_id = $1", [THREAD],
+    );
+    expect(threads.rows[0].total).toBe("0");
+    expect(messages.rows[0].total).toBe("0");
+
+    const references = await db.query<{ table_name: string; delete_rule: string }>(`
+      select cls.relname as table_name, con.confdeltype::text as delete_rule
+      from pg_constraint con
+      join pg_class cls on cls.oid = con.conrelid
+      join pg_class target on target.oid = con.confrelid
+      join pg_attribute att on att.attrelid = con.conrelid and att.attnum = con.conkey[1]
+      where con.contype = 'f' and target.relname = 'tenants' and att.attname = 'tenant_id'
+        and cls.relname in ('support_threads', 'support_messages')
+        and array_length(con.conkey, 1) = 1
+      order by cls.relname
+    `);
+    expect(references.rows).toEqual([
+      { table_name: "support_messages", delete_rule: "c" },
+      { table_name: "support_threads", delete_rule: "c" },
+    ]);
+  });
 });

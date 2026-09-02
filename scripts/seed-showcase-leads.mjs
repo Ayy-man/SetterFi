@@ -107,6 +107,7 @@ import pg from "pg";
 
 import { SHOWCASE_LEADS_NAMESPACE } from "./fixtures/showcase-leads-namespace.mjs";
 import { COACH_NAMES, LEAD_NAMES, assertUniqueDisplayNames } from "./fixtures/names.mjs";
+import { demoChannelFor } from "./fixtures/demo-channels.mjs";
 import { resolveDemoTarget } from "./seed-phase1-demo.mjs";
 
 const DAY_MS = 86_400_000;
@@ -147,6 +148,7 @@ const KIND = Object.freeze({
   message: 3,
   appointment: 4,
   stepEvent: 5,
+  identity: 6,
 });
 
 /** `8d000000-<slot><kind>00-4000-8000-<sequence>`; see `fixtures/showcase-leads-namespace.mjs`. */
@@ -209,7 +211,13 @@ const BUSINESSES = [
   "Auto repair shop adding a diagnostics bay.",
 ];
 
-const CHANNELS = ["instagram", "messenger", "sms", "whatsapp", "webchat"];
+/*
+ * Channels come from `fixtures/demo-channels.mjs` rather than a list here, and `webchat` is gone
+ * from it. Every one of these two hundred leads used to render "no channel saved" in the coach's
+ * "Where they came from" column, because that column reads `contact_identities` and this seeder
+ * wrote none, and the fifth of them stamped `webchat` could never have had one: the demo tenant
+ * carries no web-chat connection and `channel_provider` has no web-chat provider in it.
+ */
 
 /**
  * Six keywords with deliberately different booking rates, plus untagged leads. The rates come out
@@ -390,6 +398,7 @@ export function buildShowcaseDataset(slot, nowMs) {
   let needsHumanBudget = 9;
 
   const contacts = [];
+  const identities = [];
   const conversations = [];
   const messages = [];
   const appointments = [];
@@ -434,7 +443,7 @@ export function buildShowcaseDataset(slot, nowMs) {
     contacts.push({
       id: contactId,
       name: names[index],
-      lastChannel: CHANNELS[index % CHANNELS.length],
+      lastChannel: demoChannelFor(index).channel,
       creditRange: spec.stage === "new_lead" ? null : CREDIT_RANGES[index % CREDIT_RANGES.length],
       fundingGoal: spec.stage === "new_lead" ? null : FUNDING_GOALS[index % FUNDING_GOALS.length],
       timeline: spec.stage === "new_lead" ? null : TIMELINES[index % TIMELINES.length],
@@ -446,6 +455,27 @@ export function buildShowcaseDataset(slot, nowMs) {
       createdAt: new Date(createdAtMs).toISOString(),
       stageSetAt: new Date(lastTurnMs).toISOString(),
       lastSeenAt: new Date(lastTurnMs).toISOString(),
+    });
+
+    /*
+     * The identity is what makes "Where they came from" print a channel, and its provider is the
+     * one the demo tenant's own connection for that channel uses, so the lead, the identity and
+     * the connection tell one story. `consent_state` is `conversation` because that is what an
+     * inbound lead who replied actually holds, and the evidence is marked synthetic so nothing
+     * mistakes it for a captured consent record.
+     */
+    const arrival = demoChannelFor(index);
+    identities.push({
+      id: showcaseLeadId(slot, KIND.identity, sequence),
+      contactId,
+      provider: arrival.provider,
+      channel: arrival.channel,
+      providerIdentityId: `showcase-${slot}-${arrival.channel}-${String(sequence).padStart(4, "0")}`,
+      normalizedPhone: arrival.channel === "sms" || arrival.channel === "whatsapp"
+        ? `+1555${String(1_000_000 + Number(slot) * 100_000 + sequence).slice(-7)}`
+        : null,
+      consentCapturedAt: new Date(createdAtMs).toISOString(),
+      createdAt: new Date(createdAtMs).toISOString(),
     });
 
     let status = "agent";
@@ -469,7 +499,7 @@ export function buildShowcaseDataset(slot, nowMs) {
     conversations.push({
       id: conversationId,
       contactId,
-      channel: CHANNELS[index % CHANNELS.length],
+      channel: demoChannelFor(index).channel,
       keyword,
       status,
       statusReason,
@@ -563,7 +593,7 @@ export function buildShowcaseDataset(slot, nowMs) {
     }
   });
 
-  return { contacts, conversations, messages, appointments, stepEvents };
+  return { contacts, identities, conversations, messages, appointments, stepEvents };
 }
 
 /** What the dataset should make the RPC say, computed from the same objects the writer inserts. */
@@ -630,6 +660,37 @@ async function insertRows(database, sql, rows, columns) {
   }
 }
 
+/**
+ * The install the tenant's SMS identities belong to.
+ *
+ * An existing one is reused rather than replaced: the Phase 1 demo tenant already owns
+ * `DEMO_IDS.ghlInstall`, its Phase 4 and Phase 9 fixtures reference it, and minting a second
+ * install for the same tenant would give that tenant two accounts it never installed. Only a
+ * tenant with none gets one, under this seeder's own id namespace, so the measurement tenant's
+ * showcase book can carry SMS leads too. Idempotent both ways.
+ */
+async function ensureShowcaseGhlInstall(database, tenant) {
+  const existing = (await database.query(
+    `select id, location_id from public.ghl_installs
+     where tenant_id = $1 and install_state = 'installed'
+     order by created_at, id limit 1`,
+    [tenant.tenantId],
+  )).rows[0];
+  if (existing) return { installId: existing.id, locationId: existing.location_id };
+
+  const installId = showcaseLeadId(tenant.slot, KIND.identity, 0);
+  const locationId = `SETTERFI_DEMO_PLACEHOLDER_LOCATION_SHOWCASE_${tenant.slot}`;
+  await database.query(
+    `insert into public.ghl_installs
+       (id, tenant_id, location_id, company_id, token_expires_at, install_state)
+     values ($1, $2, $3, $4, '2030-01-01T00:00:00Z', 'installed')
+     on conflict (id) do update set tenant_id = excluded.tenant_id,
+       location_id = excluded.location_id, install_state = 'installed'`,
+    [installId, tenant.tenantId, locationId, `showcase-demo-company-${tenant.slot}`],
+  );
+  return { installId, locationId };
+}
+
 async function writeTenant(database, tenant, nowMs) {
   await requireDemoTenant(database, tenant);
   const guardedBefore = await readGuardedCounts(database, tenant.tenantId);
@@ -656,6 +717,42 @@ async function writeTenant(database, tenant, nowMs) {
       contact.lastSeenAt, contact.createdAt,
     ]),
     17,
+  );
+
+  /*
+   * Identities are written straight after the contacts and before the conversations, because the
+   * contacts table's channel column reads these rows and nothing else does. `on conflict (id)`
+   * keeps the seeder idempotent; the natural key
+   * (tenant, provider, channel, provider_identity_id) is derived from the slot and sequence, so a
+   * re-run lands on the same row rather than minting a second identity for the same lead.
+   *
+   * A `ghl` identity has to name the install it belongs to. `enforce_ghl_identity_account_binding`
+   * raises GHL_IDENTITY_ACCOUNT_BINDING_REQUIRED without one, which is right: an SMS lead that
+   * cannot say which account it arrived on is not an SMS lead.
+   */
+  const ghlInstallId = await ensureShowcaseGhlInstall(database, tenant);
+  await insertRows(
+    database,
+    `insert into public.contact_identities
+       (id, tenant_id, contact_id, provider, channel, provider_identity_id, normalized_phone,
+        consent_state, consent_source, consent_captured_at, consent_evidence, created_at,
+        provider_account_id, ghl_install_id)
+     values __VALUES__
+     on conflict (id) do update set contact_id=excluded.contact_id, provider=excluded.provider,
+       channel=excluded.channel, provider_identity_id=excluded.provider_identity_id,
+       normalized_phone=excluded.normalized_phone, consent_state=excluded.consent_state,
+       consent_source=excluded.consent_source, consent_captured_at=excluded.consent_captured_at,
+       consent_evidence=excluded.consent_evidence, created_at=excluded.created_at,
+       provider_account_id=excluded.provider_account_id, ghl_install_id=excluded.ghl_install_id`,
+    dataset.identities.map((identity) => [
+      identity.id, tenant.tenantId, identity.contactId, identity.provider, identity.channel,
+      identity.providerIdentityId, identity.normalizedPhone, "conversation", "inbound_message",
+      identity.consentCapturedAt, JSON.stringify({ kind: "synthetic_demo_inbound" }),
+      identity.createdAt,
+      identity.provider === "ghl" ? ghlInstallId.locationId : null,
+      identity.provider === "ghl" ? ghlInstallId.installId : null,
+    ]),
+    14,
   );
 
   await insertRows(

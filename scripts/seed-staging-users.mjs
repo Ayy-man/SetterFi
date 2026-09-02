@@ -32,6 +32,7 @@ import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 import { DEMO_IDS } from "./seed-phase1-demo.mjs";
+import { DEMO_STAFF_NAMES } from "./fixtures/names.mjs";
 
 const LOCAL = process.argv.includes("--local");
 const ENV_FILE = LOCAL ? "../.env.production.local" : "../.env.local";
@@ -83,10 +84,10 @@ const supabase = createClient(url, serviceKey, { auth: { persistSession: false }
 // tenant has never been seeded sees empty screens.
 const DEMO_TENANT_ID = DEMO_IDS.tenant;
 const SEED_USERS = [
-  { email: "support+owner@livelegacystrong.com", role: "owner", fullName: "Staging Owner", tenant: false },
-  { email: "support+admin@livelegacystrong.com", role: "admin", fullName: "Staging Admin", tenant: false },
-  { email: "support+coach@livelegacystrong.com", role: "coach", fullName: "Staging Coach", tenant: true },
-  { email: "support+affiliate@livelegacystrong.com", role: "affiliate", fullName: "Staging Affiliate", tenant: false },
+  { email: "support+owner@livelegacystrong.com", role: "owner", fullName: DEMO_STAFF_NAMES.owner, tenant: false },
+  { email: "support+admin@livelegacystrong.com", role: "admin", fullName: DEMO_STAFF_NAMES.admin, tenant: false },
+  { email: "support+coach@livelegacystrong.com", role: "coach", fullName: DEMO_STAFF_NAMES.coach, tenant: true },
+  { email: "support+affiliate@livelegacystrong.com", role: "affiliate", fullName: DEMO_STAFF_NAMES.affiliate, tenant: false },
 ];
 
 // The demo tenant must already exist, and this script deliberately does not create it.
@@ -122,7 +123,20 @@ for (const seed of SEED_USERS) {
     .maybeSingle();
   if (lookupErr) throw lookupErr;
   if (existing) {
-    console.log(`${seed.email} already seeded — skipping`);
+    /*
+     * The display name is repaired rather than left alone. These four accounts were created with
+     * environment names, so the demo coach was greeted "Welcome back, Staging" and the account
+     * chip read "SC Staging", and a run that skipped an existing row could never fix that on a
+     * database already seeded. Only `full_name` is rewritten: the password, the role and the
+     * tenant assignment stay whatever the account already holds.
+     */
+    const { error: renameErr } = await supabase
+      .from("users")
+      .update({ full_name: seed.fullName })
+      .eq("id", existing.id)
+      .neq("full_name", seed.fullName);
+    if (renameErr) throw new Error(`public.users rename (${seed.email}): ${renameErr.message}`);
+    console.log(`${seed.email} already seeded, name kept current as ${seed.fullName}`);
     continue;
   }
 
