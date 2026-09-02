@@ -127,9 +127,9 @@ describe("the handover package against the guide registry", () => {
       return;
     }
 
-    // Handover copy: a repository whose only commit is its root has no history the manifest's
-    // source commit could belong to. The hash checks above still hold the package to the tree;
-    // ancestry is checked again from the first commit this repository makes on its own.
+    // A repository whose only commit is its root has no history the manifest's source commit
+    // could belong to. The guide-count and guide-title checks above still hold the package to the
+    // registry; ancestry is checked again from the first commit this repository makes on its own.
     const commitCount = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { encoding: "utf8" }).trim());
     if (commitCount <= 1) return;
 
