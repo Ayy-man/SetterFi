@@ -477,6 +477,67 @@ describe("AppShell", () => {
     expect(delivery).toHaveAttribute("aria-current", "page");
   });
 
+  it("marks one deepest destination current when overlapping siblings both match", () => {
+    // Siblings, not parent and child: the section landing and the page under it sit in the same
+    // group, so nesting cannot displace either one. Both prefix-match the active path, and both
+    // used to carry aria-current at once.
+    const overlappingNav: readonly NavGroup[] = [
+      {
+        label: "Run",
+        items: [
+          { label: "Run", href: "/admin/run" },
+          { label: "Support", href: "/admin/run/support" },
+        ],
+      },
+    ];
+
+    render(
+      <AppShell
+        activePath="/admin/run/support"
+        crumbs={[{ label: "Run", href: "/admin/run" }, { label: "Support" }]}
+        nav={overlappingNav}
+        role="admin"
+      >
+        <h1>Support</h1>
+      </AppShell>,
+    );
+
+    const currentLinks = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+    expect(currentLinks).toHaveLength(1);
+    expect(currentLinks[0]).toHaveAttribute("href", "/admin/run/support");
+  });
+
+  it("keeps a matchPaths alias from stealing current from a deeper destination", () => {
+    const aliasNav: readonly NavGroup[] = [
+      {
+        label: "Run",
+        items: [
+          { label: "Run", href: "/admin/run", matchPaths: ["/admin/run/support"] },
+          { label: "Support thread", href: "/admin/run/support/thread" },
+        ],
+      },
+    ];
+
+    render(
+      <AppShell
+        activePath="/admin/run/support/thread"
+        crumbs={[{ label: "Run", href: "/admin/run" }, { label: "Support thread" }]}
+        nav={aliasNav}
+        role="admin"
+      >
+        <h1>Support thread</h1>
+      </AppShell>,
+    );
+
+    const currentLinks = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+    expect(currentLinks).toHaveLength(1);
+    expect(currentLinks[0]).toHaveAttribute("href", "/admin/run/support/thread");
+  });
+
   it("offers the workspace's real destinations, not whatever nav it was handed", () => {
     const decoyNav: readonly NavGroup[] = [
       { label: "Decoy", items: [{ label: "Not a real page", href: "/admin/nowhere" }] },

@@ -399,6 +399,35 @@ describe("workspace navigation path resolution", () => {
     expect(active.map((item) => item.label)).toEqual(["Evals"]);
   });
 
+  /**
+   * Every route the navigation itself declares has to resolve to one current item. The rail draws
+   * `aria-current` from this predicate per row, so two rows answering true for one path is two
+   * current pages in the same list.
+   */
+  it("names one current item for every route the navigation declares", () => {
+    const overlaps: string[] = [];
+
+    for (const [role, groups] of Object.entries(workspaceNavigation)) {
+      const items = groups.flatMap((group) =>
+        workspaceNavItemsWithChildren(group.items),
+      );
+      const routes = new Set(
+        items.flatMap((item) => [item.href, ...(item.matchPaths ?? [])]),
+      );
+
+      for (const route of routes) {
+        const current = items.filter((item) =>
+          isWorkspaceNavItemActive(item, route),
+        );
+        if (current.length !== 1) {
+          overlaps.push(`${role} ${route}: ${current.map((item) => item.label).join(", ")}`);
+        }
+      }
+    }
+
+    expect(overlaps).toEqual([]);
+  });
+
   it("still marks a coach destination current without an admin route match", () => {
     const inbox = workspaceNavigation.coach[0].items.find((item) => item.href === "/coach/conversations");
     expect(inbox && isWorkspaceNavItemActive(inbox, "/coach/conversations/thread-1")).toBe(true);
