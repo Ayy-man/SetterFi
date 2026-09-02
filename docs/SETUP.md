@@ -291,13 +291,18 @@ were created and their portal work was closed on 2026-08-19: names, types, targe
 types, redirect URLs, webhook URL and events, scopes, and client key pairs are all in place, and the
 four link and credential pairs they produce are stored in the deployment configuration.
 
-**What has not happened is the install onto the client's own agency.** That is a live call with the
-client owner driving his own GoHighLevel session, and section 2.8 onward is the runbook for it. One
-earlier attempt on 2026-08-21 produced a single-location install rather than an all-sub-accounts one,
-which is exactly the outcome the call procedure exists to prevent.
+**The agency install of app 1 completed on the 2026-09-02 call.** Alec, signed in at agency level,
+selected all sub-accounts; the callback consumed its state at 15:48:49 UTC, `audit_log` id 1446
+recorded `channel.messaging_install.completed` with `install_target = "company"`, and the `agent`
+row in `ghl_agency_installs` is `token_ok` with `install_to_future_locations`,
+`approve_all_locations` and `is_bulk_installation` all `true`. That is the section 2.10 pass
+condition in full. App 2 was not redone on the call and did not need to be: its company grant from
+2026-08-21 is still `token_ok` and refreshing. The answers to section 2.12's three questions are
+recorded there.
 
-So: portal configuration is complete, the agency install is outstanding, and the two driver flags
-stay at `mock` until the install is verified.
+So: portal configuration is complete, both agency installs hold, the per-location receipts are
+waiting on tenant bindings (section 2.12), and the two driver flags stay at `mock` until section 2.13
+is proven.
 
 ### 2.2 Why two apps
 
@@ -704,6 +709,27 @@ no amount of documentation has settled them and one real install settles all thr
    a SetterFi route on every path, so it should land on `/coach/integrations`. Watch it rather than
    assume it.
 
+**Answers recorded 2026-09-02, from production reads after the call.**
+
+1. **Yes, the install link honours the appended `state`.** The state minted at 15:48:05 UTC came
+   back on the callback and was consumed at 15:48:49 UTC; the `started` and `completed` audit rows
+   (ids 1445 and 1446) carry the same `state_ref`. Nothing was refused.
+2. **Yes, `INSTALL` webhook bodies arrive, one per sub-account plus one for the company.** Between
+   15:48:49 and 15:48:56 UTC, 78 signed `INSTALL` events landed in `webhook_events`, all
+   `signature_verified = true`. One is `installType: "Company"` with no `locationId`, and is marked
+   `INSTALL_RECEIPT_INVALID` because the per-location reconciler has nothing to reconcile for it.
+   The other 77 are `installType: "Location"` with 77 distinct `locationId` values, so the agency
+   has 77 sub-accounts today, not the 74 counted on 2026-08-22. All 77 sit in `failed`, which is the
+   retryable state: 41 as `GHL_INSTALL_TENANT_UNRESOLVED`, the designed refusal for a location no
+   coach tenant is bound to yet, and 36 as `INSTALL_RECONCILE_FAILED`, meaning the driver's
+   `reconcileInstall` step threw during the burst before tenant resolution was reached. The second
+   group's cause was not read on the day. An hour later none of the 78 rows had moved
+   (`attempts = 0`, `processed_at` null) although `/api/jobs/ghl-install-reconcile` is scheduled
+   every fifteen minutes; confirm the job is actually running before relying on the retry.
+3. **The browser was meant to land on `/admin/provisioning`**, the `return_path` on the state row,
+   and Alec saw "Installed". Whether the marketplace screen appeared in between was not observed;
+   nobody on the call was asked to watch for it.
+
 **Then capture the values the code needs.** `companyId` from the agency grant into
 `GHL_AGENCY_COMPANY_ID`. The coach snapshot's ID, read from its URL in the agency interface, into
 `GHL_SNAPSHOT_ID`. The number pool ID, read from
@@ -847,8 +873,9 @@ messaging-limit pooling.
 
 "Meta review" is not one clock. It is four distinct processes with different owners and durations.
 
-1. **Business Verification.** The client's action, not ours. It is asserted but unchecked, and
-   everything below is blocked on it.
+1. **Business Verification.** The client's action, not ours. On the 2026-09-02 call Alec showed
+   the portfolio's Security Center reading Verified; the Meta reference and date still have to be
+   entered in `docs/META-APP-REVIEW-PACKAGE.md` before its ledger row moves.
 2. **Access Verification.** Roughly 5 days. It lifts the 10-onboardings-per-rolling-7-days cap on
    WhatsApp Embedded Signup, so it gates coach self-serve volume rather than the demo. It needs an
    owner and a submission date.
@@ -873,6 +900,12 @@ get the phone number back, send a test message, and confirm the credentials work
 **Every completion claim needs a provider receipt, meaning a response ID and a readback, not an HTTP
 200.** The IDs land in `META_WABA_ID` and `META_WHATSAPP_PHONE_NUMBER_ID`; the token lands in
 `META_WHATSAPP_SYSTEM_USER_TOKEN`, in the deployment configuration only.
+
+**State on 2026-09-02.** The WABA ID and Phone Number ID from the call were added to the Vercel
+production environment that day (the WABA's last digit is to be confirmed against the account page).
+No Meta token or app credential of any name exists in production yet, so the validation call has not
+been fired; it runs the moment `META_WHATSAPP_SYSTEM_USER_TOKEN` is entered by hand. On the call Alec
+also added a payment card to the WhatsApp account and assigned the system user to it.
 
 ---
 
