@@ -172,3 +172,56 @@ describe("one fixture owns each demo contact", () => {
     expect(seeder.resolveAnchor(["--anchor=2026-08-19"])).toBe(Date.parse("2026-08-19T00:00:00.000Z"));
   });
 });
+
+/**
+ * The Phase 7 measurement tenant is a real tenant that people use. Its verifier asserts exact
+ * counts, and it used to assert them over the tenant's totals, so a coach opening the test agent
+ * in production added a session, a contact, a conversation, two messages and a trace, and every
+ * one of those genuine rows read as drift and failed the next reseed. Production did that on
+ * 2026-08-22 and the hosted reseed stopped with PHASE7_DEMO_COUNT_MISMATCH.
+ *
+ * The fixture's own test turn is minted by RPCs with server-side ids, so it cannot be recognised
+ * by an id shape; it is recognised by the session it belongs to. Every count real usage can
+ * inflate has to be scoped to that session, and the exactness is kept over the fixture set.
+ */
+describe("the phase 7 verifier counts the fixture, not the tenant", () => {
+  const verifier = readFileSync(join(process.cwd(), "scripts/run-phase7-demo.mjs"), "utf8");
+
+  it("finds the fixture's test session through the turn the seed wrote", () => {
+    expect(verifier).toContain("DEMO_MEASUREMENT_COPY.testAgentResponse");
+    expect(verifier).toContain("PHASE7_DEMO_TEST_SESSION_NOT_UNIQUE");
+  });
+
+  it("scopes every count a real test run can inflate", () => {
+    const query = verifier.slice(
+      verifier.indexOf("const counts = (await database.query("),
+      verifier.indexOf("const expected = {"),
+    );
+
+    for (const counted of ["contacts", "conversations", "messages", "traces", "test_sessions"]) {
+      const clause = query.slice(0, query.indexOf(`) ${counted},`));
+      expect(
+        clause.slice(clause.lastIndexOf("(select count(")),
+        `${counted} still counts rows the fixture does not own`,
+        // The row tables reach the session through `contacts.test_session_id`; the session table
+        // is the session. Either way the count is bounded by the fixture's session parameter.
+      ).toMatch(/\bis not distinct from \$\d::uuid/u);
+    }
+  });
+
+  /**
+   * A coach types their own words into the test agent, and those are neither synthetic nor this
+   * verifier's to judge. What the seed writes is what the seed has to label.
+   */
+  it("asks only the seed's own messages to carry the demo marker", () => {
+    const guard = verifier.slice(0, verifier.indexOf(" non_placeholder_messages,"));
+
+    expect(guard.slice(-700)).toMatch(/test_session_id is not distinct from \$\d::uuid/u);
+  });
+
+  /** Segregation is unchanged: it still counts every row on the tenant and still has to be zero. */
+  it("keeps the is_test sweep across the whole tenant", () => {
+    expect(verifier).toContain("from public.messages where tenant_id=$1 and not is_test) messages,");
+    expect(verifier).toContain("PHASE7_DEMO_SEGREGATION_FAILED");
+  });
+});

@@ -7,6 +7,7 @@ import pg from "pg";
 import { resolveDemoTarget } from "./seed-phase1-demo.mjs";
 import { PHASE7_DEMO_IDS, PHASE7_DEMO_VALUES } from "./seed-phase7-demo.mjs";
 import { SHOWCASE_LEADS_SQL_PATTERN } from "./fixtures/showcase-leads-namespace.mjs";
+import { DEMO_MEASUREMENT_COPY } from "./fixtures/names.mjs";
 
 function assert(condition, code, detail) {
   if (!condition) throw new Error(detail ? `${code}:${JSON.stringify(detail)}` : code);
@@ -20,6 +21,23 @@ function assert(condition, code, detail) {
  * counts every row on the tenant, showcase rows included, and still has to come back zero.
  */
 const FIXTURE_ONLY = `id::text like '${SHOWCASE_LEADS_SQL_PATTERN}'`;
+
+/**
+ * The fixture's own rows carry the Phase 7 namespace, except the one test-agent turn, which the
+ * `create_test_agent_session` and `persist_test_agent_turn` RPCs mint with server-side ids. So the
+ * turn is identified by the session it belongs to rather than by an id shape.
+ *
+ * This matters because the counts below are exact equalities and this is a real tenant that people
+ * use. A coach opening the test agent in production adds a session, a contact, a conversation and
+ * two messages, all of them genuine, and every one of them used to read as drift and fail a
+ * reseed. Production did exactly that on 2026-08-22. Counting the fixture's rows rather than the
+ * tenant's totals means honest usage can no longer break the verifier, and the equalities stay
+ * exact over the fixture set, which is what they were always for.
+ *
+ * The `not is_test` and non-placeholder blocks further down are untouched. They still count every
+ * row on the tenant, and still have to come back zero.
+ */
+const NAMESPACE = `id::text like '87000000-%'`;
 
 export async function verifyPhase7Demo({
   argumentsList = process.argv.slice(2),
@@ -38,12 +56,45 @@ export async function verifyPhase7Demo({
       && tenant[0].slug === PHASE7_DEMO_VALUES.slug && tenant[0].is_demo === true,
     "PHASE7_DEMO_TENANT_ANCESTRY_REFUSED", tenant);
 
+    /*
+     * The fixture's session, found through the turn it wrote: its contact carries the session, and
+     * that contact's conversation holds the agent line this seed puts there. A session no fixture
+     * message hangs off is somebody's real test run and is not counted.
+     */
+    const fixtureSession = (await database.query(
+      `select session.id from public.test_agent_sessions session
+       where session.tenant_id = $1 and exists (
+         select 1 from public.contacts contact
+         join public.conversations conversation on conversation.contact_id = contact.id
+         join public.messages message on message.conversation_id = conversation.id
+         where contact.test_session_id = session.id and message.body = $2)`,
+      [PHASE7_DEMO_IDS.tenant, DEMO_MEASUREMENT_COPY.testAgentResponse],
+    )).rows;
+    assert(fixtureSession.length <= 1, "PHASE7_DEMO_TEST_SESSION_NOT_UNIQUE", fixtureSession);
+    const sessionId = fixtureSession[0]?.id ?? null;
+
     const counts = (await database.query(
       `select
-        (select count(*)::int from public.contacts where tenant_id=$1 and not ${FIXTURE_ONLY}) contacts,
-        (select count(*)::int from public.conversations where tenant_id=$1 and not ${FIXTURE_ONLY}) conversations,
-        (select count(*)::int from public.messages where tenant_id=$1 and not ${FIXTURE_ONLY}) messages,
-        (select count(*)::int from public.message_traces where tenant_id=$1) traces,
+        (select count(*)::int from public.contacts where tenant_id=$1 and not ${FIXTURE_ONLY}
+          and (${NAMESPACE} or test_session_id is not distinct from $5::uuid)) contacts,
+        (select count(*)::int from public.conversations conversation
+          where conversation.tenant_id=$1 and not conversation.${FIXTURE_ONLY}
+          and (conversation.${NAMESPACE} or exists (select 1 from public.contacts contact
+            where contact.id = conversation.contact_id
+              and contact.test_session_id is not distinct from $5::uuid))) conversations,
+        (select count(*)::int from public.messages message
+          where message.tenant_id=$1 and not message.${FIXTURE_ONLY}
+          and (message.${NAMESPACE} or exists (select 1 from public.conversations conversation
+            join public.contacts contact on contact.id = conversation.contact_id
+            where conversation.id = message.conversation_id
+              and contact.test_session_id is not distinct from $5::uuid))) messages,
+        (select count(*)::int from public.message_traces trace
+          where trace.tenant_id=$1 and exists (select 1 from public.messages message
+            where message.id = trace.message_id
+              and (message.${NAMESPACE} or exists (select 1 from public.conversations conversation
+                join public.contacts contact on contact.id = conversation.contact_id
+                where conversation.id = message.conversation_id
+                  and contact.test_session_id is not distinct from $5::uuid)))) traces,
         (select count(*)::int from public.conversation_step_events
           where tenant_id=$1 and not ${FIXTURE_ONLY}) step_events,
         (select count(*)::int from public.contact_identities
@@ -58,7 +109,8 @@ export async function verifyPhase7Demo({
           where tenant_id=$1 and test_session_id is null) pipeline_stages,
         (select count(*)::int from public.brain_knowledge_usage_events where tenant_id=$1) knowledge_usage,
         (select count(*)::int from public.brain_objection_usage_events where tenant_id=$1) objection_usage,
-        (select count(*)::int from public.test_agent_sessions where tenant_id=$1) test_sessions,
+        (select count(*)::int from public.test_agent_sessions
+          where tenant_id=$1 and id is not distinct from $5::uuid) test_sessions,
         (select count(*)::int from public.model_configs where openrouter_model=$2
           and role='generator' and active=false) challengers,
         (select count(*)::int from public.eval_comparisons where case_set_hash=$3
@@ -71,7 +123,7 @@ export async function verifyPhase7Demo({
         (select count(*)::int from public.eval_cases where source_tenant_id=$1 and notes=$4
           and suite='qualification_accuracy') promoted_cases`,
       [PHASE7_DEMO_IDS.tenant, PHASE7_DEMO_VALUES.challengerModel,
-        PHASE7_DEMO_VALUES.comparisonCaseSet, PHASE7_DEMO_VALUES.promotionNotes],
+        PHASE7_DEMO_VALUES.comparisonCaseSet, PHASE7_DEMO_VALUES.promotionNotes, sessionId],
     )).rows[0];
     const expected = {
       contacts: 8,
@@ -109,15 +161,23 @@ export async function verifyPhase7Demo({
         (select count(*)::int from public.conversation_step_events where tenant_id=$1 and not is_test) steps,
         (select count(*)::int from public.brain_knowledge_usage_events where tenant_id=$1 and not is_test) knowledge,
         (select count(*)::int from public.brain_objection_usage_events where tenant_id=$1 and not is_test) objections,
-        -- Every message on this tenant has to announce itself as synthetic. It used to do that
+        -- Every message this seed writes has to announce itself as synthetic. It used to do that
         -- with a raw SETTERFI_DEMO_PLACEHOLDER_ sentinel, which held the line on a local stack
         -- and turned the hosted demo into a database dump. The (demo) marker carries the same
         -- guarantee in copy a person can read.
-        (select count(*)::int from public.messages where tenant_id=$1
-          and body not like '%(demo)%') non_placeholder_messages,
+        --
+        -- Scoped to the seed's own messages, because a coach who opens the test agent on this
+        -- tenant types their own words, and those are neither synthetic nor this verifier's to
+        -- judge. What the seed writes is what the seed must label.
+        (select count(*)::int from public.messages message where message.tenant_id=$1
+          and message.body not like '%(demo)%'
+          and (message.${NAMESPACE} or exists (select 1 from public.conversations conversation
+            join public.contacts contact on contact.id = conversation.contact_id
+            where conversation.id = message.conversation_id
+              and contact.test_session_id is not distinct from $2::uuid))) non_placeholder_messages,
         (select count(*)::int from public.contact_identities where tenant_id=$1
           and coalesce(consent_evidence,'{}'::jsonb)::text ~ '"approved"[[:space:]]*:[[:space:]]*true') approved_consent`,
-      [PHASE7_DEMO_IDS.tenant],
+      [PHASE7_DEMO_IDS.tenant, sessionId],
     )).rows[0];
     assert(Object.values(segregation).every((value) => value === 0),
       "PHASE7_DEMO_SEGREGATION_FAILED", segregation);
