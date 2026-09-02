@@ -26,6 +26,7 @@ import {
   recordInstallStartRefusal,
   type GhlInstallStartRefusal,
 } from "@/lib/integrations/install-events";
+import { installLog, installLogElapsed } from "@/lib/integrations/install-log";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 
 const noStoreHeaders = { "Cache-Control": "no-store" };
@@ -95,14 +96,25 @@ export function createGhlInstallStartHandler(dependencies: GhlInstallStartDepend
     if (!dependencies.enabled()) {
       return Response.json({ error: "Not found." }, { status: 404, headers: noStoreHeaders });
     }
+    const startedAt = Date.now();
     const actor = await dependencies.session();
     if (!actor) {
+      installLog("start.unauthenticated", {}, "error");
       return Response.json({ error: "Authentication required." }, { status: 401, headers: noStoreHeaders });
     }
     // Read before the role check only to name the app on a refusal; the checks keep their order,
     // so an unparseable body from a coach is still a 403 rather than a 400.
     const parsed = parseBody(await request.json().catch(() => null));
     const refused = async (code: string, missingEnv?: readonly string[]) => {
+      installLog("start.refused", {
+        app: parsed?.app ?? "unknown",
+        actor_id: actor.userId,
+        actor_role: actor.role,
+        tenant_id: parsed?.tenantId ?? null,
+        code,
+        missing_env: missingEnv,
+        duration_ms: installLogElapsed(startedAt),
+      }, "error");
       try {
         await dependencies.record({
           app: parsed?.app ?? "unknown",
@@ -134,6 +146,15 @@ export function createGhlInstallStartHandler(dependencies: GhlInstallStartDepend
     }
     try {
       const result = await dependencies.begin({ ...parsed, actorId: actor.userId });
+      installLog("start.issued", {
+        app: parsed.app,
+        actor_id: actor.userId,
+        actor_role: actor.role,
+        tenant_id: parsed.tenantId,
+        return_path: parsed.returnPath ?? undefined,
+        expires_at: result.expiresAt,
+        duration_ms: installLogElapsed(startedAt),
+      });
       return Response.json(result, { status: 201, headers: noStoreHeaders });
     } catch (error) {
       // Configuration and provider failures collapse to one shape; the install URL and client
@@ -181,6 +202,15 @@ export async function beginGhlInstall(
       },
     },
   });
+  installLog("start.state_saved", {
+    app: input.app,
+    state_ref: installEventStateRef(issued.state),
+    actor_id: input.actorId,
+    tenant_id: input.tenantId,
+    expires_at: issued.expiresAt,
+    audit_action: "channel.messaging_install.started",
+    outcome: error ? "audit_failed" : "audit_written",
+  }, error ? "error" : "info");
   if (error) {
     // The link is never returned, so the state row would otherwise sit there unconsumed for ten
     // minutes as a live credential nobody is waiting for. The raw state is in hand here and only

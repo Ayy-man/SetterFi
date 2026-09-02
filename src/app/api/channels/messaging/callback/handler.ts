@@ -29,6 +29,7 @@ import {
   recordInstallCallbackEvent,
   type GhlInstallCallbackEvent,
 } from "@/lib/integrations/install-events";
+import { installLog, installLogElapsed } from "@/lib/integrations/install-log";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 const noStoreHeaders = { "Cache-Control": "no-store" };
@@ -91,10 +92,23 @@ export async function recordInstallCompletion(
   client: { from(table: string): { insert(row: Record<string, unknown>): Promise<{ error: unknown }> } },
   row: Record<string, unknown>,
 ) {
+  const fields = {
+    audit_action: String(row.action),
+    install_target: String(row.target_type),
+    install_id: String(row.target_id),
+  };
   const first = await client.from("audit_log").insert(row);
-  if (!first.error) return;
+  if (!first.error) {
+    installLog("complete.audit_written", { ...fields, attempt: 1 });
+    return;
+  }
+  installLog("complete.audit_retry", { ...fields, attempt: 1 }, "error");
   const retry = await client.from("audit_log").insert(row);
-  if (!retry.error) return;
+  if (!retry.error) {
+    installLog("complete.audit_written", { ...fields, attempt: 2 });
+    return;
+  }
+  installLog("complete.audit_failed", { ...fields, attempt: 2 }, "error");
   // The identifiers only. No state, no code, no envelope.
   console.error("[install-complete] completion audit write failed", {
     action: row.action,
@@ -138,19 +152,46 @@ export function createGhlCallbackHandler(dependencies: GhlCallbackDependencies) 
     const state = query.get("state")?.trim();
     const code = query.get("code")?.trim();
     const providerError = query.get("error")?.trim();
+    const startedAt = Date.now();
     const observe = ghlCallbackRecorder(dependencies, "agent");
     // Computed before the state is consumed, so a state we refuse still names which one it was.
     const stateRef = state ? { stateRef: installEventStateRef(state) } : {};
+    installLog("callback.received", {
+      app: "agent",
+      ...stateRef.stateRef ? { state_ref: stateRef.stateRef } : {},
+      has_state: Boolean(state),
+      has_code: Boolean(code),
+      has_provider_error: Boolean(providerError),
+    });
+    const redirect = (path: string, outcome: GhlCallbackOutcome, extra: Parameters<typeof installLog>[1] = {}) => {
+      installLog("callback.redirect", {
+        app: "agent",
+        ...stateRef.stateRef ? { state_ref: stateRef.stateRef } : {},
+        outcome,
+        redirect_to: path,
+        duration_ms: installLogElapsed(startedAt),
+        ...extra,
+      }, outcome === "linked" ? "info" : "error");
+      return ghlCallbackRedirect(path, "messaging", outcome);
+    };
 
     // Without a state there is no return path we are willing to send a browser to.
     if (!state) {
       await observe({ outcome: "failed", code: "GHL_OAUTH_STATE_MISSING", tenantId: null });
-      return ghlCallbackRedirect(GHL_OAUTH_DEFAULT_RETURN_PATHS.agent, "messaging", "error");
+      return redirect(GHL_OAUTH_DEFAULT_RETURN_PATHS.agent, "error", { code: "GHL_OAUTH_STATE_MISSING" });
     }
 
     let record: GhlOAuthStateRecord;
     try {
       record = await dependencies.consumeState(state);
+      installLog("callback.state_consumed", {
+        app: "agent",
+        state_ref: stateRef.stateRef,
+        tenant_id: record.tenantId,
+        actor_id: record.actorId,
+        return_path: record.returnPath,
+        expires_at: record.expiresAt,
+      });
     } catch (error) {
       const context = installEventContext(error);
       await observe({
@@ -159,7 +200,7 @@ export function createGhlCallbackHandler(dependencies: GhlCallbackDependencies) 
         ...ghlConsumeStateRef(context.code, stateRef),
         tenantId: null,
       });
-      return ghlCallbackRedirect(GHL_OAUTH_DEFAULT_RETURN_PATHS.agent, "messaging", "error");
+      return redirect(GHL_OAUTH_DEFAULT_RETURN_PATHS.agent, "error", { code: context.code });
     }
 
     // `error_description` is provider prose that can carry request context; it never reaches the
@@ -172,7 +213,7 @@ export function createGhlCallbackHandler(dependencies: GhlCallbackDependencies) 
         ...stateRef,
         tenantId: record.tenantId,
       });
-      return ghlCallbackRedirect(record.returnPath, "messaging", "declined");
+      return redirect(record.returnPath, "declined", { code: "GHL_OAUTH_PROVIDER_DECLINED" });
     }
     if (!code) {
       await observe({
@@ -181,21 +222,27 @@ export function createGhlCallbackHandler(dependencies: GhlCallbackDependencies) 
         ...stateRef,
         tenantId: record.tenantId,
       });
-      return ghlCallbackRedirect(record.returnPath, "messaging", "error");
+      return redirect(record.returnPath, "error", { code: "GHL_OAUTH_CODE_MISSING" });
     }
 
     try {
       await dependencies.complete({ state: record, code });
     } catch (error) {
+      const context = installEventContext(error);
       await observe({
         outcome: "failed",
-        ...installEventContext(error),
+        ...context,
         ...stateRef,
         tenantId: record.tenantId,
       });
-      return ghlCallbackRedirect(record.returnPath, "messaging", "error");
+      return redirect(record.returnPath, "error", {
+        code: context.code,
+        provider_status: context.providerStatus,
+        body_shape: context.bodyShape,
+        missing_env: context.missingEnv,
+      });
     }
-    return ghlCallbackRedirect(record.returnPath, "messaging", "linked");
+    return redirect(record.returnPath, "linked");
   };
 }
 
@@ -233,8 +280,20 @@ export async function completeGhlAgentInstall(
   const persistAgency = dependencies.persistAgency ?? persistGhlAgencyInstall;
   const persistSubAccount = dependencies.persistSubAccount ?? persistGhlSubAccountInstall;
 
+  const exchangeStartedAt = Date.now();
   const grant = await exchange(code);
   const company = grant.userType === "Company";
+  installLog("complete.exchanged", {
+    app: "agent",
+    state_ref: installEventHashRef(state.stateHash),
+    user_type: grant.userType,
+    company_id: grant.companyId,
+    location_id: grant.locationId,
+    install_target: company ? "company" : "location",
+    token_expires_at: grant.tokenExpiresAt,
+    ...installShapePayload(grant),
+    duration_ms: installLogElapsed(exchangeStartedAt),
+  });
   // Company: this app's own agency-level credential, upserted on (app, company_id) so it never
   // lands on the provisioning app's row. Location: upserted on the location, so replaying a code
   // or reinstalling an existing location overwrites one row instead of creating a second,
@@ -242,6 +301,15 @@ export async function completeGhlAgentInstall(
   const install = company
     ? await persistAgency(grant, "agent", client)
     : await persistSubAccount(grant, state.tenantId, client);
+  installLog("complete.persisted", {
+    app: "agent",
+    state_ref: installEventHashRef(state.stateHash),
+    install_id: install.id,
+    install_target: company ? "company" : "location",
+    company_id: install.companyId,
+    location_id: install.locationId,
+    tenant_id: install.tenantId,
+  });
 
   await recordInstallCompletion(client as never, {
     actor_id: state.actorId,

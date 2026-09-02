@@ -25,6 +25,7 @@ import { DriverConfigurationError } from "@/lib/env-contract";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 import { GhlOAuthError, ghlOAuthStateHash, type GhlOAuthApp } from "./ghl-oauth";
+import { installLog } from "./install-log";
 
 type ServiceClient = ReturnType<typeof createSupabaseServiceClient>;
 
@@ -207,11 +208,16 @@ async function writeInstallEvent(
 ) {
   try {
     const { error } = await client.from("audit_log").insert(row);
-    if (!error) return;
+    if (!error) {
+      installLog("event.audit_written", { audit_action: String(row.action), code });
+      return;
+    }
   } catch {
     // Falls through to the same line: a rejected promise and a returned error are the same
     // outcome to a caller that is not allowed to have one.
   }
+  // One line, not two: the install-events tests pin a single console.error here, and the
+  // `[install-event]` prefix is what the runbook says to filter on for a failed audit write.
   console.error("[install-event] audit write failed", { action: row.action, code });
 }
 
