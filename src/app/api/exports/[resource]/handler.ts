@@ -279,10 +279,10 @@ type ExportActor = {
   tenantId: string | null;
   role: UserRole;
   /**
-   * The `affiliates` row, as the hook stamps it. T15-13 (`docs/DECISIONS.md:277`) makes that row
-   * the affiliate capability rather than `role = 'affiliate'`, and the affiliate export is the
-   * one resource on this route whose authority is that capability. Absent for every other actor,
-   * which is why it is optional rather than defaulted.
+   * The `affiliates` row, as the hook stamps it. That row is the affiliate capability rather than
+   * `role = 'affiliate'`, and the affiliate export is the one resource on this route whose
+   * authority is that capability. Absent for every other actor, which is why it is optional rather
+   * than defaulted.
    */
   affiliateAccess?: boolean;
 };
@@ -2637,8 +2637,8 @@ export function createExportHandler(dependencies: ExportDependencies) {
     // Phase 6: the affiliate projection is the single allowlisted affiliate export and derives
     // its identity from the session-bound repository. It must be checked before the blanket role refusal.
     //
-    // Gated on the `affiliates` row, never on `role = 'affiliate'` (T15-13, `docs/DECISIONS.md:277`),
-    // and through the same predicate `/affiliate` and `GET /api/affiliate/referrals` use, because
+    // Gated on the `affiliates` row existing, never on `role = 'affiliate'`, and through the same
+    // predicate `/affiliate` and `GET /api/affiliate/referrals` use, because
     // this export is the Copy/Export control drawn on that page: a dual-role coach who can open the
     // portal and read the table must be able to export the rows they are already looking at. The
     // rows come from `listOwnReferrals()`, which takes no argument and selects the affiliate inside

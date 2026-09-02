@@ -48,8 +48,9 @@ describe("the consumer accent budget", () => {
 
   /**
    * The other half of the rule. `--critical` is the destructive-affordance family and its text
-   * role sits below the small-text floor on purpose; a send that failed is a *state*, which
-   * `.planning/design/LEDGER.md` rules becomes `failure`. The failure family is the one whose
+   * role sits below the small-text floor on purpose; a send that failed is a *state*, and the kit
+   * splits `critical` three ways: states become `failure`, inline error text takes a text token,
+   * and a destructive affordance is a button variant. The failure family is the one whose
    * contrast was actually measured for a sentence on its own wash.
    */
   it("draws a failed turn in the failure family, never in critical", () => {

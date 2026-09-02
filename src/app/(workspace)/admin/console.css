@@ -490,10 +490,9 @@
 /*
  * The KPI tile is the exception, at 15/11. It is a smaller object -- five of them across a strip
  * -- and a 24px top corner on a 90px-tall tile eats the label that sits in it. The canvas draws
- * the strip at exactly this radius for the same reason:
- * `.planning/design/canvas/artboards/AdminAffiliates.dc.html:244` and
- * `AdminAgentPerformance.dc.html:241` both draw four figure tiles at `15px 15px 11px 11px`, in a
- * grid, above cards drawn at 24/24/17/17 on the same screen.
+ * the strip at exactly this radius for the same reason: the drawn admin affiliates and admin
+ * agent-performance screens both put four figure tiles at `15px 15px 11px 11px` in a grid, above
+ * cards drawn at 24/24/17/17 on the same screen.
  */
 [data-shell-role="admin"] [data-slot="metric-card"] {
   padding: 14px 16px;

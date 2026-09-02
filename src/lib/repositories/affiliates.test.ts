@@ -86,11 +86,11 @@ const invoice = {
 
 describe("affiliate repository", () => {
   /**
-   * Three columns, and the count is the access model rather than tidiness. `CLAUDE.md`: an
-   * affiliate "sees only referred-coach name, status, and commission earned, never their
-   * performance data." This allowlist is what caught a fourth field, Joined, being added from the
-   * canvas; the canvas is a drawing and this rule is not, so the field set stays at three and the
-   * question went to Alec (`docs/DECISIONS.md`).
+   * Three columns, and the count is the access model rather than tidiness. The contractual rule
+   * is that an affiliate sees only referred-coach name, status, and commission earned, never their
+   * performance data. This allowlist is what caught a fourth field, Joined, being added from the
+   * canvas; the canvas is a drawing and this rule is not, so the field set stays at three and
+   * whether a join date counts as performance data is the owner's call, still unanswered.
    *
    * The *values* of `account_status` did change, from a two-state active/inactive to four states,
    * and that is inside the rule rather than a widening of it: it narrows what one field may say so

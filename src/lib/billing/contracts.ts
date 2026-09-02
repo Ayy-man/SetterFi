@@ -133,11 +133,11 @@ export const AFFILIATE_ACCOUNT_STATE_LABELS: Record<AffiliateAccountState, strin
 /**
  * Three fields, and the count is a rule rather than a coincidence.
  *
- * `CLAUDE.md`: an affiliate "sees only referred-coach name, status, and commission earned, never
- * their performance data." The canvas draws a fourth column, Joined, and it is not here: whether a
- * join date is performance data in spirit is Alec's call, not the build side's, and every layer
- * below refuses a fourth key today. Widening this type means widening the access model, so it goes
- * through `docs/DECISIONS.md` first.
+ * The contractual rule is that an affiliate sees only referred-coach name, status, and commission
+ * earned, never their performance data. The canvas draws a fourth column, Joined, and it is not
+ * here: whether a join date is performance data in spirit is the owner's call, not the build
+ * side's, and every layer below refuses a fourth key today. Widening this type means widening the
+ * access model, so it needs that decision first.
  */
 export type AffiliateProjectionRow = {
   business_name: string;

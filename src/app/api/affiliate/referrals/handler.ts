@@ -46,8 +46,8 @@ export function createAffiliateReferralsHandler(
       );
     }
     /*
-     * T15-13 (`docs/DECISIONS.md:277`, restated at `docs/ARCHITECTURE.md:366`): the `affiliates`
-     * row is the capability, so portal access is gated on that row existing and never on
+     * The `affiliates` row is the affiliate capability (restated at `docs/ARCHITECTURE.md:366`),
+     * so portal access is gated on that row existing and never on
      * `role = 'affiliate'`. `users.role` is single-valued and `users.email` unique, so gating on
      * the role forces a coach who refers other coaches into a second account under a second email.
      * The row reaches this route as the hook-stamped `affiliate_access` claim
