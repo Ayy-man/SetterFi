@@ -156,7 +156,8 @@ describe("every seeded money row is priced from the ladder", () => {
     expect(review).not.toMatch(/revenueCents: \d/u);
     // The money tenant's paid month is its own rung, and its unpaid one stays at zero.
     expect(phase6).toContain("DEMO_TIER_LADDER[0].priceCents, DEMO_TIER_LADDER[0].priceCents,");
-    expect(phase6).toContain("[moneyTenantId, DEMO_TIER_LADDER[0].priceCents]");
+    expect(phase6).toContain("revenueCents: DEMO_TIER_LADDER[0].priceCents,");
+    expect(phase6).toContain("revenueCents: 0, modelCents: 10,");
   });
   /**
    * A subscription's tier is resolved by matching `tiers.stripe_price_id`
@@ -250,5 +251,81 @@ describe("the subscription snapshot stamp advances only when the snapshot change
 
     expect(await snapshotStampFor(database, "t", desired, FIXED))
       .toBe("2026-08-01T00:00:02.000Z");
+  });
+});
+
+/**
+ * A cost rollup is the one record here with no correction path. Its window is unique per tenant,
+ * `write_tenant_cost_rollup` raises COST_ROLLUP_REPLAY_MISMATCH on a differing replay, and the
+ * append-only trigger refuses every update and delete, cascade included. A month computes once.
+ *
+ * The seeders write a rung's price into that record, so reseeding a database holding an older
+ * ladder used to abort: the seeder was asking to restate a closed month, which nothing in the
+ * product can do. It now asks before writing.
+ */
+describe("a cost rollup is written once and never restated", () => {
+  const rollup = {
+    tenantId: "t", windowStart: "2026-07-01T00:00:00Z", windowEnd: "2026-08-01T00:00:00Z",
+    revenueCents: 29_700, modelCents: 7_300, messagingCents: 2_800, embeddingCents: 600,
+    evidence: "SETTERFI_DEMO_PLACEHOLDER_COMPLETE",
+  };
+  const stored = (overrides: Record<string, unknown>) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      query: async (text: string) => {
+        calls.push(text);
+        return calls.length === 1
+          ? {
+            rows: [{
+              recognized_subscription_cents: 29_700, model_cents: 7_300,
+              messaging_cents: 2_800, embedding_cents: 600, ...overrides,
+            }],
+          }
+          : { rows: [] };
+      },
+    };
+  };
+
+  it("writes a window nothing has computed yet", async () => {
+    const { writeCostRollupOnce } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const calls: string[] = [];
+    const empty = {
+      query: async (text: string) => { calls.push(text); return { rows: [] }; },
+    };
+
+    expect(await writeCostRollupOnce(empty, rollup)).toBe("written");
+    expect(calls[1]).toContain("write_tenant_cost_rollup");
+  });
+
+  it("leaves a window that already holds these figures alone", async () => {
+    const { writeCostRollupOnce } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const database = stored({});
+
+    expect(await writeCostRollupOnce(database, rollup)).toBe("unchanged");
+    // The read, and nothing after it.
+    expect(database.calls).toHaveLength(1);
+  });
+
+  /**
+   * The production case. The old ladder's $197 sits in a closed month, and the seeder can neither
+   * rewrite it nor delete it, so it says so and carries on rather than stopping the whole reseed
+   * over a month it has no power to correct.
+   */
+  it("reports a window it cannot correct instead of raising", async () => {
+    const { writeCostRollupOnce } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const database = stored({ recognized_subscription_cents: 19_700 });
+
+    expect(await writeCostRollupOnce(database, rollup)).toBe("stale");
+    expect(database.calls).toHaveLength(1);
+  });
+
+  it("treats a null cost source as equal to a null one, not as a difference", async () => {
+    const { writeCostRollupOnce } = await import("../../../scripts/seed-phase6-demo.mjs");
+    const database = stored({ messaging_cents: null, embedding_cents: null });
+
+    expect(await writeCostRollupOnce(database, {
+      ...rollup, messagingCents: null, embeddingCents: null,
+    })).toBe("unchanged");
   });
 });

@@ -140,6 +140,52 @@ export async function snapshotStampFor(database, tenantId, desired, fixedStamp) 
 }
 
 /**
+ * Write a cost rollup only when the window is genuinely unwritten.
+ *
+ * A rollup is the one record in this schema with no correction path at all. Its window is unique
+ * per tenant, `write_tenant_cost_rollup` raises COST_ROLLUP_REPLAY_MISMATCH on any differing
+ * replay, and `app.reject_phase6_append_only` refuses every update and delete against the table,
+ * including the cascade from deleting the tenant. A month, once computed, is final. That is the
+ * right shape for a cost ledger and it is why reseeding a database that holds an older ladder used
+ * to abort here: the seeder was asking to restate a closed month, which nothing in the product can
+ * do.
+ *
+ * So this asks first. An unwritten window is written. A window already holding these exact figures
+ * is left alone, which is the rerun case. A window holding different figures is reported and
+ * skipped rather than raised on, because the seeder cannot correct it and stopping the whole chain
+ * over a closed month helps nobody. The returned count of stale windows is surfaced in the
+ * seeder's read-back line so an operator sees what was left standing rather than assuming it
+ * converged.
+ */
+export async function writeCostRollupOnce(database, rollup) {
+  const existing = (await database.query(
+    `select recognized_subscription_cents, model_cents, messaging_cents, embedding_cents
+     from public.tenant_cost_rollups
+     where tenant_id = $1 and window_start = $2::timestamptz and window_end = $3::timestamptz`,
+    [rollup.tenantId, rollup.windowStart, rollup.windowEnd],
+  )).rows[0];
+  const same = (stored, wanted) =>
+    (stored === null ? null : Number(stored)) === (wanted ?? null);
+  if (existing) {
+    const agrees = same(existing.recognized_subscription_cents, rollup.revenueCents)
+      && same(existing.model_cents, rollup.modelCents)
+      && same(existing.messaging_cents, rollup.messagingCents)
+      && same(existing.embedding_cents, rollup.embeddingCents);
+    return agrees ? "unchanged" : "stale";
+  }
+  await database.query(
+    `select * from public.write_tenant_cost_rollup(
+      $1, $2::timestamptz, $3::timestamptz, $4, $5, $6, $7, $8::text[],
+      jsonb_build_object('source', $9::text)
+    )`,
+    [rollup.tenantId, rollup.windowStart, rollup.windowEnd, rollup.revenueCents,
+      rollup.modelCents, rollup.messagingCents, rollup.embeddingCents,
+      rollup.missingSources ?? "{}", rollup.evidence],
+  );
+  return "written";
+}
+
+/**
  * `tiers.stripe_price_id` is globally unique, and which ladder rung each frozen tier id carries has
  * changed over the life of these seeds — `tiers[1]` used to be Growth and is now Scale. On a
  * database that still holds the old mapping, writing the new price id onto one row while a stale row
@@ -347,6 +393,7 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
   if (!target.databaseUrl) throw new Error("SUPABASE_DB_PASSWORD_REQUIRED_FOR_HOSTED_PHASE6_SEED");
   const database = new pg.Client({ connectionString: target.databaseUrl });
   await database.connect();
+  let staleRollups = 0;
   try {
     await database.query("begin");
     /*
@@ -542,20 +589,23 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
      * evidence screen look broken rather than informative. August below stays at zero, and that
      * one is honest: `apply_stripe_invoice_failed` runs against it, so nothing was recognised.
      */
-    await database.query(
-      `select * from public.write_tenant_cost_rollup(
-        $1, '2026-07-01T00:00:00Z', '2026-08-01T00:00:00Z', $2, 7300, 2800, 600, '{}',
-        '{"source":"SETTERFI_DEMO_PLACEHOLDER_COMPLETE"}'::jsonb
-      )`,
-      [moneyTenantId, DEMO_TIER_LADDER[0].priceCents],
-    );
-    await database.query(
-      `select * from public.write_tenant_cost_rollup(
-        $1, '2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z', 0, 10, null, null,
-        '{messaging,embedding}', '{"source":"SETTERFI_DEMO_PLACEHOLDER_INCOMPLETE"}'::jsonb
-      )`,
-      [moneyTenantId],
-    );
+    const rollupOutcomes = [
+      await writeCostRollupOnce(database, {
+        tenantId: moneyTenantId,
+        windowStart: "2026-07-01T00:00:00Z", windowEnd: "2026-08-01T00:00:00Z",
+        revenueCents: DEMO_TIER_LADDER[0].priceCents,
+        modelCents: 7300, messagingCents: 2800, embeddingCents: 600,
+        evidence: "SETTERFI_DEMO_PLACEHOLDER_COMPLETE",
+      }),
+      await writeCostRollupOnce(database, {
+        tenantId: moneyTenantId,
+        windowStart: "2026-08-01T00:00:00Z", windowEnd: "2026-09-01T00:00:00Z",
+        revenueCents: 0, modelCents: 10, messagingCents: null, embeddingCents: null,
+        missingSources: "{messaging,embedding}",
+        evidence: "SETTERFI_DEMO_PLACEHOLDER_INCOMPLETE",
+      }),
+    ];
+    staleRollups = rollupOutcomes.filter((outcome) => outcome === "stale").length;
     if (firstMoneyPass) {
       await database.query(
         `select * from public.apply_stripe_invoice_failed(
@@ -618,7 +668,8 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
     };
     assert(JSON.stringify(counts) === JSON.stringify(expected), `PHASE6_DEMO_READBACK_INVALID:${JSON.stringify(counts)}`);
     await database.query("commit");
-    console.log(`Phase 6 seed read-back: ${JSON.stringify(counts)} stripe_arm=Mock provider_proof=mock-only`);
+    console.log(`Phase 6 seed read-back: ${JSON.stringify(counts)} stripe_arm=Mock `
+      + `provider_proof=mock-only stale_cost_rollups=${staleRollups}`);
     return { counts, moneyTenantId, affiliateTenantId };
   } catch (error) {
     await database.query("rollback");

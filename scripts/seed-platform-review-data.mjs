@@ -13,7 +13,7 @@ import { pathToFileURL } from "node:url";
 import pg from "pg";
 
 import { DEMO_IDS, resolveDemoTarget } from "./seed-phase1-demo.mjs";
-import { PHASE6_DEMO_IDS, PHASE6_DEMO_VALUES } from "./seed-phase6-demo.mjs";
+import { PHASE6_DEMO_IDS, PHASE6_DEMO_VALUES, writeCostRollupOnce } from "./seed-phase6-demo.mjs";
 import { PHASE7_DEMO_IDS } from "./seed-phase7-demo.mjs";
 import { PHASE8_DEMO_IDS, seedPhase8Demo } from "./seed-phase8-demo.mjs";
 import { referredBusinessFixtures, seedDemoGaps } from "./seed-demo-gaps.mjs";
@@ -457,18 +457,22 @@ const REVIEW_COST_ROLLUPS = Object.freeze([
 async function seedCostEvidence(database, tenants) {
   assert(tenants.referrals.length === REVIEW_COST_ROLLUPS.length,
     "PLATFORM_REVIEW_COST_ROLLUP_MISMATCH");
+  // Same closed-month problem the phase 6 seeder has: these rollups carry a rung's price, and a
+  // written month can never be restated. `writeCostRollupOnce` writes an unwritten window, leaves
+  // an identical one alone, and reports one it cannot correct instead of aborting the reseed.
+  let stale = 0;
   for (let index = 0; index < tenants.referrals.length; index += 1) {
     const rollup = REVIEW_COST_ROLLUPS[index];
-    await database.query(
-      `select * from public.write_tenant_cost_rollup(
-        $1, '2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z', $2, $3, $4, $5, $6::text[],
-        jsonb_build_object('source', $7::text)
-      )`,
-      [tenants.referrals[index].id, rollup.revenueCents, rollup.modelCents,
-        rollup.messagingCents, rollup.embeddingCents, rollup.missingSources, rollup.note],
-    );
+    const outcome = await writeCostRollupOnce(database, {
+      tenantId: tenants.referrals[index].id,
+      windowStart: "2026-08-01T00:00:00Z", windowEnd: "2026-09-01T00:00:00Z",
+      revenueCents: rollup.revenueCents, modelCents: rollup.modelCents,
+      messagingCents: rollup.messagingCents, embeddingCents: rollup.embeddingCents,
+      missingSources: rollup.missingSources, evidence: rollup.note,
+    });
+    if (outcome === "stale") stale += 1;
   }
-  return REVIEW_COST_ROLLUPS.length;
+  return { count: REVIEW_COST_ROLLUPS.length, stale };
 }
 
 async function seedProvisioningPostures(database, tenants) {
@@ -628,10 +632,14 @@ export async function seedPlatformReviewData({ argumentsList = process.argv.slic
     await seedSupportThreads(database, tenants);
     await seedProvisioningPostures(database, tenants);
     await seedSecondCoachCorrection(database, tenants);
-    await seedCostEvidence(database, tenants);
+    const costEvidence = await seedCostEvidence(database, tenants);
     const snapshot = assertPlatformReviewData(await readPlatformReviewData(database));
     await database.query("commit");
-    if (!quiet) console.log(`Platform review seed: preview=synthetic metrics=${PLATFORM_METRIC_KEYS.length} support_threads=${snapshot.counts.threads} analytics_contamination=0`);
+    if (!quiet) {
+      console.log(`Platform review seed: preview=synthetic metrics=${PLATFORM_METRIC_KEYS.length} `
+        + `support_threads=${snapshot.counts.threads} analytics_contamination=0 `
+        + `stale_cost_rollups=${costEvidence.stale}`);
+    }
     return snapshot;
   } catch (error) {
     await database.query("rollback");
