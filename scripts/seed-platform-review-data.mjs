@@ -13,7 +13,13 @@ import { pathToFileURL } from "node:url";
 import pg from "pg";
 
 import { DEMO_IDS, resolveDemoTarget } from "./seed-phase1-demo.mjs";
-import { PHASE6_DEMO_IDS, PHASE6_DEMO_VALUES, writeCostRollupOnce } from "./seed-phase6-demo.mjs";
+import {
+  PHASE6_DEMO_IDS,
+  PHASE6_DEMO_VALUES,
+  assertCostRollupsCurrent,
+  verifyCostRollups,
+  writeCostRollupOnce,
+} from "./seed-phase6-demo.mjs";
 import { PHASE7_DEMO_IDS } from "./seed-phase7-demo.mjs";
 import { PHASE8_DEMO_IDS, seedPhase8Demo } from "./seed-phase8-demo.mjs";
 import { referredBusinessFixtures, seedDemoGaps } from "./seed-demo-gaps.mjs";
@@ -439,18 +445,18 @@ const REVIEW_COST_ROLLUPS = Object.freeze([
   Object.freeze({
     revenueCents: REVIEW_SUBSCRIPTION_CENTS,
     modelCents: 8_400, messagingCents: 3_100, embeddingCents: 900,
-    missingSources: "{}", note: DEMO_BILLING_COPY.costEvidenceComplete,
+    missingSources: [], note: DEMO_BILLING_COPY.costEvidenceComplete,
   }),
   Object.freeze({
     // Costs above the subscription on purpose: the review needs one month that lost money.
     revenueCents: REVIEW_SUBSCRIPTION_CENTS,
     modelCents: 51_200, messagingCents: 9_400, embeddingCents: 1_200,
-    missingSources: "{}", note: DEMO_BILLING_COPY.costEvidenceComplete,
+    missingSources: [], note: DEMO_BILLING_COPY.costEvidenceComplete,
   }),
   Object.freeze({
     revenueCents: REVIEW_SUBSCRIPTION_CENTS,
     modelCents: null, messagingCents: 2_600, embeddingCents: 700,
-    missingSources: "{model}", note: DEMO_BILLING_COPY.costEvidenceIncomplete,
+    missingSources: ["model"], note: DEMO_BILLING_COPY.costEvidenceIncomplete,
   }),
 ]);
 
@@ -458,21 +464,20 @@ async function seedCostEvidence(database, tenants) {
   assert(tenants.referrals.length === REVIEW_COST_ROLLUPS.length,
     "PLATFORM_REVIEW_COST_ROLLUP_MISMATCH");
   // Same closed-month problem the phase 6 seeder has: these rollups carry a rung's price, and a
-  // written month can never be restated. `writeCostRollupOnce` writes an unwritten window, leaves
-  // an identical one alone, and reports one it cannot correct instead of aborting the reseed.
-  let stale = 0;
-  for (let index = 0; index < tenants.referrals.length; index += 1) {
-    const rollup = REVIEW_COST_ROLLUPS[index];
-    const outcome = await writeCostRollupOnce(database, {
-      tenantId: tenants.referrals[index].id,
-      windowStart: "2026-08-01T00:00:00Z", windowEnd: "2026-09-01T00:00:00Z",
-      revenueCents: rollup.revenueCents, modelCents: rollup.modelCents,
-      messagingCents: rollup.messagingCents, embeddingCents: rollup.embeddingCents,
-      missingSources: rollup.missingSources, evidence: rollup.note,
-    });
-    if (outcome === "stale") stale += 1;
-  }
-  return { count: REVIEW_COST_ROLLUPS.length, stale };
+  // written month can never be restated. Write what is missing, then read every window back and
+  // judge it on all six columns, so a skipped month and a wrong month fail the same way.
+  const expected = tenants.referrals.map((tenant, index) => ({
+    tenantId: tenant.id,
+    windowStart: "2026-08-01T00:00:00Z", windowEnd: "2026-09-01T00:00:00Z",
+    revenueCents: REVIEW_COST_ROLLUPS[index].revenueCents,
+    modelCents: REVIEW_COST_ROLLUPS[index].modelCents,
+    messagingCents: REVIEW_COST_ROLLUPS[index].messagingCents,
+    embeddingCents: REVIEW_COST_ROLLUPS[index].embeddingCents,
+    missingSources: REVIEW_COST_ROLLUPS[index].missingSources,
+    evidence: REVIEW_COST_ROLLUPS[index].note,
+  }));
+  for (const rollup of expected) await writeCostRollupOnce(database, rollup);
+  return { count: expected.length, stale: await verifyCostRollups(database, expected) };
 }
 
 async function seedProvisioningPostures(database, tenants) {
@@ -633,12 +638,15 @@ export async function seedPlatformReviewData({ argumentsList = process.argv.slic
     await seedProvisioningPostures(database, tenants);
     await seedSecondCoachCorrection(database, tenants);
     const costEvidence = await seedCostEvidence(database, tenants);
+    const acknowledgedStale = assertCostRollupsCurrent(
+      costEvidence.stale, argumentsList, "PLATFORM_REVIEW_COST_ROLLUP_STALE",
+    );
     const snapshot = assertPlatformReviewData(await readPlatformReviewData(database));
     await database.query("commit");
     if (!quiet) {
       console.log(`Platform review seed: preview=synthetic metrics=${PLATFORM_METRIC_KEYS.length} `
         + `support_threads=${snapshot.counts.threads} analytics_contamination=0 `
-        + `stale_cost_rollups=${costEvidence.stale}`);
+        + `cost_rollups=${costEvidence.count} stale_cost_rollups=${acknowledgedStale}`);
     }
     return snapshot;
   } catch (error) {

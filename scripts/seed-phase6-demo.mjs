@@ -157,22 +157,64 @@ export async function snapshotStampFor(database, tenantId, desired, fixedStamp) 
  * seeder's read-back line so an operator sees what was left standing rather than assuming it
  * converged.
  */
-export async function writeCostRollupOnce(database, rollup) {
-  const existing = (await database.query(
-    `select recognized_subscription_cents, model_cents, messaging_cents, embedding_cents
-     from public.tenant_cost_rollups
+export const ACKNOWLEDGE_STALE_ROLLUPS = "--acknowledge-stale-rollups";
+
+/** The six columns a rollup is judged on, read back in one shape for writing and for verifying. */
+const ROLLUP_COLUMNS = `recognized_subscription_cents, model_cents, messaging_cents,
+  embedding_cents, missing_sources, source_evidence`;
+
+async function readRollup(database, rollup) {
+  return (await database.query(
+    `select ${ROLLUP_COLUMNS} from public.tenant_cost_rollups
      where tenant_id = $1 and window_start = $2::timestamptz and window_end = $3::timestamptz`,
     [rollup.tenantId, rollup.windowStart, rollup.windowEnd],
-  )).rows[0];
-  const same = (stored, wanted) =>
-    (stored === null ? null : Number(stored)) === (wanted ?? null);
-  if (existing) {
-    const agrees = same(existing.recognized_subscription_cents, rollup.revenueCents)
-      && same(existing.model_cents, rollup.modelCents)
-      && same(existing.messaging_cents, rollup.messagingCents)
-      && same(existing.embedding_cents, rollup.embeddingCents);
-    return agrees ? "unchanged" : "stale";
-  }
+  )).rows[0] ?? null;
+}
+
+function amount(value) {
+  return value === null || value === undefined ? null : Number(value);
+}
+
+/** The figures a rollup is expected to hold, in the shape the table stores them. */
+function expectedRollup(rollup) {
+  return {
+    recognized_subscription_cents: amount(rollup.revenueCents),
+    model_cents: amount(rollup.modelCents),
+    messaging_cents: amount(rollup.messagingCents),
+    embedding_cents: amount(rollup.embeddingCents),
+    missing_sources: [...(rollup.missingSources ?? [])].sort(),
+    source_evidence: { source: rollup.evidence },
+  };
+}
+
+function storedRollup(row) {
+  return {
+    recognized_subscription_cents: amount(row.recognized_subscription_cents),
+    model_cents: amount(row.model_cents),
+    messaging_cents: amount(row.messaging_cents),
+    embedding_cents: amount(row.embedding_cents),
+    missing_sources: [...(row.missing_sources ?? [])].sort(),
+    source_evidence: row.source_evidence ?? {},
+  };
+}
+
+/**
+ * Write a cost rollup only when the window is genuinely unwritten.
+ *
+ * A rollup is the one record in this schema with no correction path at all. Its window is unique
+ * per tenant, `write_tenant_cost_rollup` raises COST_ROLLUP_REPLAY_MISMATCH on any differing
+ * replay, and `app.reject_phase6_append_only` refuses every update and delete against the table,
+ * including the cascade from deleting the tenant. A month, once computed, is final. That is the
+ * right shape for a cost ledger and it is why reseeding a database that holds an older ladder used
+ * to abort here: the seeder was asking to restate a closed month, which nothing in the product can
+ * do.
+ *
+ * So this asks first, and writes only what is missing. Whether the result is right is not decided
+ * here; `verifyCostRollups` reads every window back and judges it, so a window that was skipped
+ * and a window that is wrong for any other reason are caught by the same check.
+ */
+export async function writeCostRollupOnce(database, rollup) {
+  if (await readRollup(database, rollup)) return "present";
   await database.query(
     `select * from public.write_tenant_cost_rollup(
       $1, $2::timestamptz, $3::timestamptz, $4, $5, $6, $7, $8::text[],
@@ -180,9 +222,50 @@ export async function writeCostRollupOnce(database, rollup) {
     )`,
     [rollup.tenantId, rollup.windowStart, rollup.windowEnd, rollup.revenueCents,
       rollup.modelCents, rollup.messagingCents, rollup.embeddingCents,
-      rollup.missingSources ?? "{}", rollup.evidence],
+      `{${(rollup.missingSources ?? []).join(",")}}`, rollup.evidence],
   );
   return "written";
+}
+
+/**
+ * Read every window this seeder owns back and compare all six columns it is judged on, not a count
+ * of rows. A count cannot tell a corrected month from an uncorrected one, and an uncorrected month
+ * is the exact defect: on a database carrying the old ladder the reseed leaves the admin margin
+ * figures wrong, and reporting success there is worse than failing.
+ */
+export async function verifyCostRollups(database, rollups) {
+  const stale = [];
+  for (const rollup of rollups) {
+    const row = await readRollup(database, rollup);
+    const expected = expectedRollup(rollup);
+    const stored = row === null ? null : storedRollup(row);
+    if (stored !== null && JSON.stringify(stored) === JSON.stringify(expected)) continue;
+    stale.push({ rollup, stored, expected });
+  }
+  return stale;
+}
+
+function describeStaleRollup({ rollup, stored, expected }) {
+  const period = `${rollup.windowStart} to ${rollup.windowEnd}`;
+  const missing = stored === null ? "no rollup written for this window" : "";
+  return `  tenant ${rollup.tenantId} ${period}\n`
+    + (missing ? `    ${missing}\n` : `    stored   ${JSON.stringify(stored)}\n`)
+    + `    expected ${JSON.stringify(expected)}`;
+}
+
+/**
+ * A closed month the seeder could not correct is a failure, and the process says so by exiting
+ * non-zero. `--acknowledge-stale-rollups` is the one way past it, and it does not pretend the
+ * months are fine: it prints every one of them in full so the operator can carry the list into the
+ * decision about whether to give the product a restatement path. It downgrades nothing else.
+ */
+export function assertCostRollupsCurrent(stale, argumentsList, code) {
+  if (stale.length === 0) return 0;
+  const detail = `${code}\n${stale.map(describeStaleRollup).join("\n")}`;
+  if (!argumentsList.includes(ACKNOWLEDGE_STALE_ROLLUPS)) throw new Error(detail);
+  console.warn(`${detail}\n  acknowledged by ${ACKNOWLEDGE_STALE_ROLLUPS}; `
+    + "these months keep the figures shown above until the product can restate a closed month.");
+  return stale.length;
 }
 
 /**
@@ -370,7 +453,6 @@ async function readBack(database, tenantId, affiliateTenantId) {
         where r.tenant_id = $3) ledger_entries,
       (select count(*)::int from public.commission_payout_events e join public.commission_payouts p on p.id = e.payout_id
         join public.affiliates a on a.id = p.affiliate_id where a.user_id = $4) payout_events,
-      (select count(*)::int from public.tenant_cost_rollups where tenant_id = $3) cost_rollups,
       (select status::text from public.tenants where id = $3) money_status,
       (select status::text from public.tenants where id = $5) suspended_status`,
     [
@@ -393,7 +475,8 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
   if (!target.databaseUrl) throw new Error("SUPABASE_DB_PASSWORD_REQUIRED_FOR_HOSTED_PHASE6_SEED");
   const database = new pg.Client({ connectionString: target.databaseUrl });
   await database.connect();
-  let staleRollups = 0;
+  let staleRollups = [];
+  let expectedRollups = [];
   try {
     await database.query("begin");
     /*
@@ -589,23 +672,25 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
      * evidence screen look broken rather than informative. August below stays at zero, and that
      * one is honest: `apply_stripe_invoice_failed` runs against it, so nothing was recognised.
      */
-    const rollupOutcomes = [
-      await writeCostRollupOnce(database, {
+    expectedRollups = [
+      {
         tenantId: moneyTenantId,
         windowStart: "2026-07-01T00:00:00Z", windowEnd: "2026-08-01T00:00:00Z",
         revenueCents: DEMO_TIER_LADDER[0].priceCents,
         modelCents: 7300, messagingCents: 2800, embeddingCents: 600,
+        missingSources: [],
         evidence: "SETTERFI_DEMO_PLACEHOLDER_COMPLETE",
-      }),
-      await writeCostRollupOnce(database, {
+      },
+      {
         tenantId: moneyTenantId,
         windowStart: "2026-08-01T00:00:00Z", windowEnd: "2026-09-01T00:00:00Z",
         revenueCents: 0, modelCents: 10, messagingCents: null, embeddingCents: null,
-        missingSources: "{messaging,embedding}",
+        missingSources: ["messaging", "embedding"],
         evidence: "SETTERFI_DEMO_PLACEHOLDER_INCOMPLETE",
-      }),
+      },
     ];
-    staleRollups = rollupOutcomes.filter((outcome) => outcome === "stale").length;
+    for (const rollup of expectedRollups) await writeCostRollupOnce(database, rollup);
+    staleRollups = await verifyCostRollups(database, expectedRollups);
     if (firstMoneyPass) {
       await database.query(
         `select * from public.apply_stripe_invoice_failed(
@@ -663,13 +748,17 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
     const expected = {
       tiers: 3, demo_tenants: 2, referrals: 1, checkouts: 1, subscriptions: 2,
       appointments: 4, billables: 4, correction_requests: 2, correction_decisions: 2,
-      allowance_actions: 2, ledger_entries: 5, payout_events: 2, cost_rollups: 2,
+      allowance_actions: 2, ledger_entries: 5, payout_events: 2,
       money_status: "overdue", suspended_status: "suspended",
     };
     assert(JSON.stringify(counts) === JSON.stringify(expected), `PHASE6_DEMO_READBACK_INVALID:${JSON.stringify(counts)}`);
     await database.query("commit");
+    const acknowledged = assertCostRollupsCurrent(
+      staleRollups, argumentsList, "PHASE6_DEMO_COST_ROLLUP_STALE",
+    );
     console.log(`Phase 6 seed read-back: ${JSON.stringify(counts)} stripe_arm=Mock `
-      + `provider_proof=mock-only stale_cost_rollups=${staleRollups}`);
+      + `provider_proof=mock-only cost_rollups=${expectedRollups.length} `
+      + `stale_cost_rollups=${acknowledged}`);
     return { counts, moneyTenantId, affiliateTenantId };
   } catch (error) {
     await database.query("rollback");
