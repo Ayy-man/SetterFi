@@ -51,6 +51,19 @@ describe("StepJourney", () => {
     expect(screen.getByRole("button", { name: "Connect calendar" })).toBeInTheDocument()
   })
 
+  it("sets the completed step's receipt in the registered badge type role", () => {
+    const { container } = render(<StepJourney steps={STEPS} />)
+
+    const receipt = container.querySelector(".step__receipt")
+    expect(receipt).not.toBeNull()
+    // `text-faint` was never a registered utility, so it emitted nothing and the receipt line
+    // inherited body type. The badge role is the one the receipt is specified in.
+    expect(receipt?.className).not.toContain("text-faint")
+    expect(receipt?.className).toContain("text-badge")
+    expect(receipt?.className).toContain("font-normal")
+    expect(receipt).toHaveTextContent("Workspace confirmed")
+  })
+
   it("rejects a done step without its provider receipt", () => {
     const invalid: readonly JourneyStep[] = [
       { ...STEPS[0], receipt: undefined },

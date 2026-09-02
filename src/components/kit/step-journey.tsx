@@ -239,7 +239,12 @@ export function StepJourney({ steps, className }: StepJourneyProps) {
               </h3>
 
               {step.state === "done" ? (
-                <p className="step__receipt text-faint text-[var(--faint)]">
+                /*
+                 * `text-faint` was never a registered utility, so it emitted no CSS and the
+                 * receipt line inherited 16px body type where the receipt role is the 12px badge.
+                 * The colour utility beside it always worked, which is why it read as styled.
+                 */
+                <p className="step__receipt text-badge font-normal text-[var(--faint)]">
                   {step.receipt.label}
                   {formattedReceiptTime ? `, ${formattedReceiptTime}` : null}
                 </p>
