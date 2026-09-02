@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AffiliateProjectionRow } from "@/lib/billing/contracts";
+import { AffiliateRepositoryError } from "@/lib/repositories/affiliates";
 
 import { createAffiliateReferralsHandler } from "./handler";
 
@@ -282,6 +283,41 @@ describe("GET /api/affiliate/referrals", () => {
       expect(logged).toHaveBeenCalledWith(
         "/api/affiliate/referrals failed.",
         "AFFILIATE_PROJECTION_FAILED",
+      );
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  /**
+   * Which read broke, and what the database said about it, in one line.
+   *
+   * The repository constant alone names the read and stops there, so a 503 could still not be told
+   * apart from any other 503 of the same read: a missing function, a revoked grant and a signature
+   * that no longer matches all logged identically. PostgREST's `code` separates them and is a
+   * fixed enumeration with no row content in it, which is why it may cross into the log while the
+   * body an affiliate receives does not move a byte.
+   */
+  it("carries the database failure kind into the log without widening the body", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await createAffiliateReferralsHandler({
+        enabled: () => true,
+        session: async () => affiliate,
+        list: async () => rows,
+        listPayouts: async () => {
+          throw new AffiliateRepositoryError("AFFILIATE_PAYOUT_PROJECTION_FAILED", "42883");
+        },
+        identity: async () => identity,
+      })(request());
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: "Affiliate referrals are temporarily unavailable.",
+      });
+      expect(logged).toHaveBeenCalledWith(
+        "/api/affiliate/referrals failed.",
+        "AFFILIATE_PAYOUT_PROJECTION_FAILED (42883)",
       );
     } finally {
       logged.mockRestore();
