@@ -752,10 +752,12 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
       money_status: "overdue", suspended_status: "suspended",
     };
     assert(JSON.stringify(counts) === JSON.stringify(expected), `PHASE6_DEMO_READBACK_INVALID:${JSON.stringify(counts)}`);
-    await database.query("commit");
+    // Judged before the commit so an unacknowledged stale month rolls back every other write
+    // above rather than leaving tiers, tenants and subscriptions committed under a failed exit.
     const acknowledged = assertCostRollupsCurrent(
       staleRollups, argumentsList, "PHASE6_DEMO_COST_ROLLUP_STALE",
     );
+    await database.query("commit");
     console.log(`Phase 6 seed read-back: ${JSON.stringify(counts)} stripe_arm=Mock `
       + `provider_proof=mock-only cost_rollups=${expectedRollups.length} `
       + `stale_cost_rollups=${acknowledged}`);

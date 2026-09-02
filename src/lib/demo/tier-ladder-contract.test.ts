@@ -409,4 +409,22 @@ describe("a stale cost month fails the reseed unless it is acknowledged", () => 
     expect(seed.indexOf("PHASE6_DEMO_READBACK_INVALID"))
       .toBeLessThan(seed.indexOf("assertCostRollupsCurrent(\n"));
   });
+
+  /**
+   * And it is judged before the transaction commits. A stale month that is not acknowledged has
+   * to roll back the tiers, tenants and subscriptions written above it, otherwise a failed exit
+   * leaves half a reseed committed and the retry starts from a state no run ever described. Both
+   * seeders that write rollups hold the same order.
+   */
+  it("fails before anything the seeder wrote is committed", () => {
+    for (const path of ["scripts/seed-phase6-demo.mjs", "scripts/seed-platform-review-data.mjs"]) {
+      const seed = readFileSync(join(process.cwd(), path), "utf8");
+      const gate = seed.indexOf("assertCostRollupsCurrent(\n");
+      const commit = seed.indexOf('database.query("commit")');
+
+      expect(gate, path).toBeGreaterThan(0);
+      expect(commit, path).toBeGreaterThan(gate);
+      expect(seed.indexOf('database.query("commit")', commit + 1), path).toBe(-1);
+    }
+  });
 });
