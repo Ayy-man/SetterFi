@@ -1,4 +1,4 @@
-# Recording shot list — Publish and roll back the Brain
+# Recording shot list: Publish and roll back the Brain
 
 **State: Recording required.** This file is an executable shot list, not evidence that a recording
 exists.

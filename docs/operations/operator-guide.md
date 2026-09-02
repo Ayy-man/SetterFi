@@ -5,23 +5,25 @@ evidence only: it does not prove deployment, provider delivery, a recording, or 
 
 ## Admin navigation coverage
 
-- `/admin/affiliates` — Review affiliate records
-- `/admin/agent-performance` — Read platform measurement
-- `/admin/alerts` — Review alert preferences
-- `/admin/audit` — Use the audit log
-- `/admin/billing` — Review tiers and billing
-- `/admin/brain` — Publish the Brain safely
-- `/admin/channel-health` — A2P and channel health
-- `/admin/compliance` — Review compliance and DNC evidence
-- `/admin/corrections` — Decide a billing correction
-- `/admin/help` — Use the handover package
-- `/admin/overview` — Read platform measurement
-- `/admin/platform-clients` — Manage the client book
-- `/admin/provisioning` — Operate the provisioning tracker
-- `/admin/settings` — Read platform alert settings
-- `/admin/support` — Work the support inbox
-- `/admin/system` — Read System health
-- `/admin/tiers` — Review tiers and billing
+- `/admin/account-terms`: Publish the account terms
+- `/admin/affiliates`: Review affiliate records
+- `/admin/agent-performance`: Read platform measurement
+- `/admin/agents`: Read the agent roster
+- `/admin/alerts`: Work the platform Inbox
+- `/admin/audit`: Use the audit log
+- `/admin/billing`: Review tiers and billing
+- `/admin/brain`: Publish the Brain safely
+- `/admin/brain/testing`: Run an eval suite before publish
+- `/admin/channel-health`: A2P and channel health
+- `/admin/compliance`: Review compliance and DNC evidence
+- `/admin/corrections`: Decide a billing correction
+- `/admin/help`: Use the handover package
+- `/admin/overview`: Read platform measurement
+- `/admin/platform-clients`: Manage the client book
+- `/admin/provisioning`: Operate the provisioning tracker
+- `/admin/support`: Work the support inbox
+- `/admin/system`: Read System health
+- `/admin/tiers`: Review tiers and billing
 
 ---
 
@@ -31,9 +33,9 @@ Take a draft from diff review to every agent without publishing more than you ch
 
 **Outcome:** Every agent inherits exactly the change you read in the diff, and the publish is on the record.
 
-1. **Read the diff before anything else.** The Brain header carries the DRAFT and PUBLISHED lifecycle with version history beside it. Open the diff and read what actually changed — qualification outcomes, objection responses, compliance language — rather than trusting the section you happened to edit.
+1. **Read the diff before anything else.** The Brain header carries the DRAFT and PUBLISHED lifecycle with version history beside it. Open the diff and read what actually changed (qualification outcomes, objection responses, compliance language) rather than trusting the section you happened to edit.
 2. **Check the eval status on the publish button.** The button surfaces the latest suite result. A failing safety suite soft-warns instead of hard-blocking, which means the decision to continue is yours and it is attributed to you.
-3. **Try the change on the Brain Testing tab.** Ask the lead question the edit was meant to fix and compare the draft against the published version. The grounding receipt shows the retrieval behind the answer before any coach sees it.
+3. **Try the change on the Evals page.** Ask the lead question the edit was meant to fix and compare the draft against the published version. The grounding receipt shows the retrieval behind the answer before any coach sees it.
 4. **Publish to all agents.** One action pushes the published version to every agent. The confirmation names what propagated; anything still sitting in draft stays in draft and keeps saying so.
 5. **Confirm the audit entry.** A brain publish is a privileged action, so it writes an entry with the actor, the version, and the timestamp. That entry is what settles a later question about when a behavior changed.
 
@@ -45,7 +47,7 @@ Take a draft from diff review to every agent without publishing more than you ch
 
 ### If verification fails
 
-If an agent still answers the old way, check whether the section you edited was saved into the same draft — an unsaved section never reaches a publish.
+If an agent still answers the old way, check whether the section you edited was saved into the same draft; an unsaved section never reaches a publish.
 
 ---
 
@@ -55,7 +57,7 @@ Prove a brain or model change against the safety and regression suites first.
 
 **Outcome:** You can say which suite passed, on which configuration, before the change went out.
 
-1. **Pick the configuration under test.** Brain Testing runs against draft, published, or a candidate configuration, with a client-overlay picker and channel simulation. Choose the one you intend to publish, not the one already live.
+1. **Pick the configuration under test.** The Evals page runs against draft, published, or a candidate configuration, with a client-overlay picker and channel simulation. Choose the one you intend to publish, not the one already live.
 2. **Run the safety suite first.** Qualification, compliance, and prompt-injection cases are the gate. They matter more than tone cases because they are the ones that create a real incident.
 3. **Read the failures as receipts, not scores.** Each case opens to the grounding receipt: the rule that fired and the passage it drew from. That is where you see whether the case failed on knowledge or on the decision table.
 4. **Add the case that caused the change.** Any production conversation can be added as an eval case. A fix you add a case for stays fixed across later prompt and model swaps.
@@ -69,31 +71,7 @@ Prove a brain or model change against the safety and regression suites first.
 
 ### If verification fails
 
-If a suite passes here but a coach reports the old behavior, the run was against the published configuration rather than your draft — re-run with draft selected.
-
----
-
-## Read a conversation trace
-
-Work back from a bad reply to the retrieval and the decision-table row behind it.
-
-**Outcome:** You can name the cause of a specific reply instead of guessing at the model.
-
-1. **Open the trace from the conversation.** Any lead conversation offers view trace. Start from the exact message that was wrong rather than the thread in general, because the trace is per exchange.
-2. **Read the retrieval before the prompt.** The trace shows what the brain retrieved for that turn. A wrong answer with the right passage is a prompt problem; a wrong answer with the wrong passage is a knowledge problem, and the two get fixed in different places.
-3. **Find the decision-table row that fired.** Qualification outcomes come from the first matching row of the decision table. The trace names that row, which is how you tell a bad rule apart from a bad answer.
-4. **Check latency and token cost on the same view.** Slow replies and expensive replies show up here beside the content, so a complaint about the agent being slow gets answered from the trace rather than from the model page.
-5. **Turn the finding into an eval case.** Add the exchange as an eval case before you edit anything. Then the fix is provable, and the same failure cannot come back unnoticed.
-
-### Verify
-
-- The trace names both the retrieved passage and the decision-table row for the turn you opened.
-- The activity log carries the same event code you can search by client or lead.
-- The case you added appears in the eval suite you intend to run before the next publish.
-
-### If verification fails
-
-If the trace shows no retrieval, the turn was handled by a hard-gated response — pricing and guarantees answer from the offer layer rather than from a passage.
+If a suite passes here but a coach reports the old behavior, the run was against the published configuration rather than your draft. Re-run with draft selected.
 
 ---
 
@@ -127,7 +105,7 @@ Find where a self-serve onboarding stopped and move it forward without taking it
 
 **Outcome:** The client resumes at the step that blocked them, and the intervention is attributed.
 
-1. **Take it from the attention queue.** Overview leads with the at-risk queue, and onboarding stalled at a named step is one of its entries. The named step is the whole diagnosis — start there rather than opening the client cold.
+1. **Take it from the attention queue.** Overview leads with the at-risk queue, and onboarding stalled at a named step is one of its entries. The named step is the whole diagnosis. Start there rather than opening the client cold.
 2. **Read the onboarding progress on client detail.** Client detail shows exactly which step a signup stalled at alongside channel health and the offer snapshot. A stall on a channel step is usually a permission the client could not grant.
 3. **Nudge before you impersonate.** Nudge stalled onboarding and resend signup link are the light actions and they keep the client in control of their own account. Reach for them first.
 4. **View-as only when you must reproduce.** Impersonation is logged with your name and the client's account. Use it to see what they see, and edit their offer on their behalf only when they have asked for it.
@@ -141,7 +119,7 @@ Find where a self-serve onboarding stopped and move it forward without taking it
 
 ### If verification fails
 
-If the stall repeats at the same step after a nudge, the step is genuinely blocked — check channel health for a permission the client cannot grant from their side.
+If the stall repeats at the same step after a nudge, the step is genuinely blocked. Check channel health for a permission the client cannot grant from their side.
 
 ---
 
@@ -165,7 +143,30 @@ Settle a disputed booked-call count with a reasoned, audited correction.
 
 ### If verification fails
 
-If the counts still disagree after an adjustment, check whether test-data conversations were counted — segregated test traffic never meters, and a mismatch there is a fixture problem, not a billing one.
+If the counts still disagree after an adjustment, check whether test-data conversations were counted. Segregated test traffic never meters, and a mismatch there is a fixture problem, not a billing one.
+
+---
+
+## Work the platform Inbox
+
+Triage system problems and lead handoffs from one queue, ranked by how long each has waited.
+
+**Outcome:** Every row that needed a person has been read, and the ones you acted on carry an audit entry.
+
+1. **Read the order before you read the rows.** Both lanes rank by how long a row has waited. Nothing in the platform stores a response target or a reply promise, so no row is late and none is breaching. A long wait is the oldest thing here, not a missed commitment.
+2. **Work the system lane first, because those rows block replies.** A disconnected channel or a blocked provisioning step stops an agent from answering. Open the row, read the blast radius, and follow the account to Channel health, which carries the provider's own error text. Read the receipt checklist there with care: the signed round-trip receipt has no write path yet, so an empty one means nothing was recorded rather than that the test failed.
+3. **Read the handoff lane as accounts, not as leads.** A handoff row names the account, the channel, what handed the thread over and how long it has waited. It never carries the lead's name or their message: those stay inside the coach's tenant, and the coach sees the thread in their own inbox. Contact the coach rather than trying to reach the lead.
+4. **Mark read when you are done looking, and say the rest out loud.** Marking read is the only per-row state the store keeps, and it means somebody looked. It does not mean the problem is fixed, and nothing records who is working a row, so hand off in writing rather than assuming the queue carries it.
+
+### Verify
+
+- The waiting figure equals the unopened rows in the system lane plus the rows in the handoff lane.
+- A row you marked read shows Marked read and stays in the list rather than disappearing.
+- With the cross-tenant handoff queue switched off, the lane says it is not counted rather than showing zero.
+
+### If verification fails
+
+If the handoff lane says it could not be read, that is a failed projection call rather than an empty platform. Check the queue flag and the RPC before telling a coach nothing is waiting.
 
 ---
 
@@ -175,7 +176,7 @@ Reply to coach support threads without mixing them with lead conversations.
 
 **Outcome:** The coach receives a persisted reply and the next operator can see who owns the thread.
 
-1. **Choose My clients or All clients.** My clients narrows the queue to your assigned book; All clients is an operating view, not a wider permission. Open the thread in Support and keep internal notes separate from the reply the coach will read.
+1. **Choose My clients or All clients.** My clients narrows the queue to your assigned book; All clients is an operating view, not a wider permission. Open the thread in Client requests and keep internal notes separate from the reply the coach will read.
 2. **Reply from the support thread.** Use Reply for coach-visible text and Internal note for staff context. Support messages live in their own system and never become lead-conversation messages.
 3. **Confirm the persisted read-back.** A successful reply reappears with its author and time. Reassignment reads Reassigned only after the owner and audit receipt both match the request.
 
@@ -212,13 +213,34 @@ If the owner does not change, keep the prior assignment and check the audit reas
 
 ---
 
+## Read the agent roster
+
+See which client's setter is live, which is on an old version, and which has never published.
+
+**Outcome:** You can name every client whose setter is not answering leads on its newest configuration, and say why.
+
+1. **Open Agents and read the three states apart.** There is one setter per client. Live means it is answering leads on a published version. Draft means edits are saved but nothing has ever been published, so it is answering nothing. Never published means the client has no offer layer at all. They are three different pieces of work, so they are three different sentences rather than one word in three colours.
+2. **Check the unpublished count before you chase anyone.** The count is the client's draft versions standing above their live one, read from offer_layers. A live setter with two unpublished edits is working correctly on older instructions -- that is a conversation with the coach, not an incident.
+3. **Go to where the setting is owned.** This screen reports state and does not change it. Publishing happens on the client's own offer page, where a change can be reviewed against what it replaces; channels and escalation are their own screens. Each row links to the one place that owns it.
+
+### Verify
+
+- The inherited count on a client matches how many offer-layer settings they have left unset.
+- A client with no published offer layer reads as never published, not as live on version 0.
+
+### If verification fails
+
+If the open-thread count reads as unavailable, the conversation store did not answer; the publish states are read separately and are still accurate. If The Brain's version is not named, no brain snapshot is currently published.
+
+---
+
 ## Review alert preferences
 
 Change optional destinations while leaving required notices locked and visible.
 
 **Outcome:** The account's bell, email, and Slack choices match the persisted registry read-back.
 
-1. **Open Alerts and read the rule before changing it.** The event, scope, audience, and default destinations come from the alert registry. Required billing consequences remain enabled and their controls read Required.
+1. **Open Notifications and read the rule before changing it.** The event, scope, audience, and default destinations come from the alert registry. Required billing consequences remain enabled and their controls read Required.
 2. **Change one optional destination.** The control is committed only after the service returns the persisted preference. A failed save restores the prior value rather than leaving an optimistic state on screen.
 3. **Confirm delivery separately.** A saved preference proves intent, not provider delivery. Use the bell receipt and System delivery queue for the actual destination state.
 
@@ -389,7 +411,7 @@ Interpret platform and agent-performance metrics only when their named evidence 
 **Outcome:** You can state the definition, window, denominator, and availability reason for a displayed metric.
 
 1. **Start from the metric definition.** Overview and Agent performance use the committed metric registry. The definition and the query must agree on population, attribution window, and exclusion of Demo and Test rows.
-2. **Treat absent evidence as absent.** Unavailable, Still filling, and Needs more history are evidence states. They never become zero, a dash, or a cached result presented as current.
+2. **Treat absent evidence as absent.** Unavailable, No completed events yet, and Needs more history are evidence states. They never become zero, a dash, or a cached result presented as current.
 3. **Use the role boundary.** Success operators receive operational evidence only. Platform economics remain owner/admin-only and incomplete margin has no renderable field.
 
 ### Verify
@@ -484,3 +506,24 @@ Open the generated operating package and verify its source metadata before relyi
 ### If verification fails
 
 If a hash differs, stop using the edited copy and regenerate from the committed source metadata.
+
+---
+
+## Publish the account terms
+
+Put the approved terms and privacy copy into the registry a signup acceptance is recorded against.
+
+**Outcome:** One published version exists, with a content hash an auditor can compare against the approved document.
+
+1. **Save the approved copy as a draft.** Paste the terms and the privacy policy exactly as counsel supplied them. SetterFi writes no legal copy of its own, and the content hash is computed from these two bodies, so a reformatted paste is a different document.
+2. **Publish the draft you checked.** Publishing stamps the version with your identity and the time, and both the draft and the publication are recorded in the audit log. A published version cannot be edited, replaced, or withdrawn from this screen.
+3. **Switch acceptance on separately.** Publishing alone changes nothing a coach sees. Signup only asks for acceptance once SETTERFI_ACCOUNT_TERMS_LIVE is on, which is why the publisher stays reachable while that flag is off.
+
+### Verify
+
+- The registry names one published version, with its key, hash, and publication date.
+- The audit log holds an account.terms.published row naming that version key.
+
+### If verification fails
+
+If publishing is refused because a version is already published, stop: the registry holds one published version and nothing here can withdraw it. Take the replacement to whoever owns the schema.

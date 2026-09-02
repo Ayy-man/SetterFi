@@ -34,26 +34,6 @@ import { describe, expect, it } from "vitest";
 import { ADMIN_GUIDES } from "@/lib/admin-help-guides";
 import { parseHandoverManifestMetadata } from "@/lib/handover/generator";
 
-/**
- * The drift as it stands on 2026-09-01, and every field is a fact somebody can re-derive.
- *
- * The manifest was generated once, on 2026-08-18 at `8a748f48`. Three guides have been added to the
- * registry since and never regenerated, and `read-trace` was deleted from the registry on
- * 2026-09-01 while remaining in the package. Regeneration needs local Postgres plus
- * `--generated-at` and `--source-commit`; it is a deliberate run, not an edit, which is why this
- * records the state rather than papering it.
- */
-const KNOWN_STALE = {
-  manifestGuideCount: 21,
-  /** In the registry, absent from the package: added after the package was generated. */
-  missingFromPackage: [
-    "Publish the account terms",
-    "Read the agent roster",
-    "Work the platform Inbox",
-  ],
-  /** In the package, absent from the registry: deleted from source, still shipped. */
-  extraInPackage: ["Read a conversation trace"],
-} as const;
 
 const HANDOVER = join(process.cwd(), "docs/operations");
 
@@ -76,37 +56,20 @@ function registryTitles() {
 }
 
 describe("the handover package against the guide registry", () => {
-  it("has drifted by exactly the amount on record, and no more", () => {
+  it("matches the guide registry, title for title", () => {
     const stated = manifest().match(/^Operator guides: (\d+)$/mu)?.[1];
     expect(stated, "MANIFEST.md no longer states its guide count").toBeDefined();
 
     const inPackage = packageGuideTitles();
     const inRegistry = registryTitles();
-    const missing = inRegistry.filter((title) => !inPackage.includes(title));
-    const extra = inPackage.filter((title) => !inRegistry.includes(title));
     const regenerate =
       "The handover package no longer matches the guide registry, and it ships to the client as "
-      + "operator documentation. Regenerate it -- `node scripts/generate-phase8-handover.mjs "
-      + "--generated-at <iso> --source-commit <sha>` with local Postgres up -- then delete "
-      + "KNOWN_STALE. If you are adding a guide and cannot regenerate now, say so in KNOWN_STALE "
-      + "rather than widening it silently.";
+      + "operator documentation. Regenerate it -- `node --experimental-strip-types "
+      + "scripts/generate-phase8-handover.mjs --generated-at <iso> --source-commit <sha>` with "
+      + "local Postgres reset to this branch's migrations.";
 
-    expect(Number(stated), regenerate).toEqual(KNOWN_STALE.manifestGuideCount);
-    expect(missing, regenerate).toEqual([...KNOWN_STALE.missingFromPackage]);
-    expect(extra, regenerate).toEqual([...KNOWN_STALE.extraInPackage]);
-  });
-
-  /**
-   * Fails when the package is regenerated, which is the signal to delete `KNOWN_STALE` and the
-   * test with it. A record of drift that outlives the drift is a description of code that no longer
-   * exists, and the next reader takes it for a live fact.
-   */
-  it("still has the recorded staleness to clear", () => {
-    expect(
-      KNOWN_STALE.missingFromPackage.length + KNOWN_STALE.extraInPackage.length,
-      "The package matches the registry now: delete KNOWN_STALE and this test.",
-    ).toBeGreaterThan(0);
-    expect(packageGuideTitles()).not.toEqual(registryTitles());
+    expect(Number(stated), regenerate).toEqual(inRegistry.length);
+    expect(inPackage, regenerate).toEqual(inRegistry);
   });
 
   /**

@@ -1,4 +1,4 @@
-# Recording shot list — Diagnose a misbehaving agent
+# Recording shot list: Diagnose a misbehaving agent
 
 **State: Recording required.** This file is an executable shot list, not evidence that a recording
 exists.
