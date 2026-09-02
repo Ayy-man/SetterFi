@@ -574,7 +574,7 @@ function CorrectionQueue({
                   * origin, device overlap. None of those facts reach this projection: the request
                   * carries a `billable_event_id` and nothing joins the appointment or its origin
                   * to it. The section states what is genuinely attached rather than drawing five
-                  * ticks nobody measured. Logged in docs/GAPS.md.
+                  * ticks nobody measured.
                   */}
                 <p className="m-0 max-w-[var(--measure-prose)] text-[var(--muted)]">
                   A billable event reference and an audit receipt are attached to this request. The

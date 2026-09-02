@@ -14,8 +14,9 @@ export type RouteActor = AppClaims & { userId: string; tenantId: string };
  * A signed-in actor with its hook-stamped capability claims intact.
  *
  * `loadPlatformActor` projects a session down to `{ userId, role }`, which is the exact shape that
- * cannot express T15-13 (`docs/DECISIONS.md:277`): the `affiliates` row is the capability, and it
- * reaches the app as the `affiliate_access` claim rather than as a role value. A route whose
+ * cannot express the affiliate capability: the `affiliates` row is what grants portal access,
+ * never `role = 'affiliate'`, and it reaches the app as the `affiliate_access` claim rather than
+ * as a role value. A route whose
  * authority is a capability row loads this instead, so it can apply the same
  * `canAccessWorkspace` predicate the page applies and the two cannot disagree.
  */

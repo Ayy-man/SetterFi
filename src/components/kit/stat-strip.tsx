@@ -51,8 +51,8 @@ export type StatStripItem = Pick<HeadlineStatProps, "label" | "action"> & {
   sparkline?: ReactNode;
   /**
    * A claim about the figure, carried as a dot before the label and the figure's own colour: the
-   * drawn strip in `.planning/design/screens-r2/1a.html` spends amber on the one number that needs
-   * someone to act and leaves the other three in `--ink`.
+   * drawn strip spends amber on the one number that needs someone to act and leaves the other
+   * three in `--ink`.
    *
    * Two rules the component enforces rather than trusting the caller with. It applies only to a
    * real reading -- an absence renders "not yet" in faint and a tone there would colour a number

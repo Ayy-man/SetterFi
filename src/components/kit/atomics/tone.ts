@@ -2,8 +2,8 @@
  * The tone contract every atomic shares.
  *
  * Seven tones, and each one is a claim about state rather than a colour choice. They are the
- * hues the extracted artifact actually spends across the fifteen screens in
- * `.planning/design/screens/`, mapped onto the token roles in `src/app/tokens.css`:
+ * hues the extracted artifact actually spends across its fifteen drawn screens, mapped onto the
+ * token roles in `src/app/tokens.css`:
  *
  *   neutral  nothing is being asserted -- a count, a plan name, an unstyled row
  *   accent   yours or live: the thing the coach owns or the platform is running right now
@@ -102,10 +102,10 @@ export const TONE_ROW_TINT = {
  *
  * That distinction is the whole point, and getting it wrong is what this comment used to do. The
  * earlier version argued that "glow is what attention looks like", scoped to these two tones, with
- * every other dot passing `glow={false}` to opt out. `.planning/design/LEDGER.md:246` overruled
- * that on 2026-08-30 and said why: a tone-keyed default had shipped five glowing dots on
- * Integrations and destroyed the signal it implements. `docs/DESIGN.md:378` allows one glow in the
- * product and spends it on the attention card's dot.
+ * every other dot passing `glow={false}` to opt out. A design ruling overruled that on 2026-08-30
+ * and said why: a tone-keyed default had shipped five glowing dots on Integrations and destroyed
+ * the signal it implements. `docs/DESIGN.md:378` allows one glow in the product and spends it on
+ * the attention card's dot.
  *
  * So this table is a permission, not a behaviour. `toneGlow` still refuses `good` and `neutral`,
  * because a glowing "Resolved" dot is a defect no caller should be able to ask for -- but a
@@ -131,8 +131,9 @@ export function toneGlow(tone: Tone): string | undefined {
  * The legacy `StateTone` mapped onto the kit's `Tone`.
  *
  * The two vocabularies are not the same size: `StateTone` has five members and `Tone` has seven,
- * because the kit split `critical` three ways (see the ruling in `.planning/design/LEDGER.md`) and
- * added `draft` and `accent`, which the legacy scale never had. So this map is deliberately not a
+ * because the kit split `critical` three ways -- a state becomes `failure`, inline error text
+ * takes a text token, and a destructive affordance is a button variant -- and added `draft` and
+ * `accent`, which the legacy scale never had. So this map is deliberately not a
  * bijection and it only goes one way -- porting a screen off `StateBadge` reads it, and nothing
  * reads it back.
  *

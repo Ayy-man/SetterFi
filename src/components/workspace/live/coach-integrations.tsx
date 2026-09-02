@@ -109,7 +109,8 @@ const CARD_SUB_CLASS = "text-[16px] leading-[1.55] text-[color:var(--faint)]";
  *
  * This file used to declare its own `[14, 21]`, which meant the wait an operator reads and the
  * wait a coach reads could be edited apart: `admin-channel-health.tsx` and `admin-provisioning.tsx`
- * still carry copies of the same pair, and `docs/GAPS.md` names the convergence. Re-exported
+ * still carry copies of the same pair, and converging those on this constant is outstanding
+ * work. Re-exported
  * rather than merely imported because `coach-integrations.test.tsx` reads it from here to check
  * the managed strip's sentence, and that check should keep pointing at whatever this page uses.
  */

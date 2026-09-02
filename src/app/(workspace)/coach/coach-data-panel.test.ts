@@ -11,35 +11,21 @@ import { describe, expect, it } from "vitest"
  * that already exists, and a number that close drifts back the first time somebody edits one side
  * without the other in view.
  *
- * **The census, so this file's claims are re-runnable rather than asserted.** All 55 artboards
- * under `.planning/design/canvas/artboards` were parsed into a DOM and every full-width panel
- * examined, on 2026-09-01. Three carry this shape -- `Main.dc.html:305-310` (the company trend
- * chart), `Main.dc.html:366-371` (the keyword table) and `Affiliate.dc.html:163-168` (the
- * referrals table) -- on two artboards, across the coach and affiliate surfaces. All three are
- * identical property for property, which is what makes it a shape rather than three drawings that
- * happen to agree. The trigger is a full-width panel whose *body is a data surface*: a chart, a
- * table, a board. It is not "the biggest panel on the screen", which is a size and would pull in
- * any card that happens to span its column.
+ * **The census behind the claim.** All 55 design artboards were parsed into a DOM and every
+ * full-width panel examined, on 2026-09-01. Three carry this shape -- the company trend chart and
+ * the keyword table on the coach main screen, and the referrals table on the affiliate screen --
+ * across two drawings and two surfaces. All three are identical property for property, which is
+ * what makes it a shape rather than three drawings that happen to agree. The trigger is a
+ * full-width panel whose *body is a data surface*: a chart, a table, a board. It is not "the
+ * biggest panel on the screen", which is a size and would pull in any card that happens to span
+ * its column.
  *
- * The assertions below read the artboards and the stylesheet rather than restating them, so a
- * canvas edit or a token move is a failure here rather than a comment that quietly goes stale.
+ * The design canvas is not part of this repository, so the assertions below read the stylesheet
+ * rather than the drawings: a token move is a failure here rather than a comment that goes stale.
  */
 
 const ROOT = process.cwd()
 const SHEET = "src/app/(workspace)/coach/coach.css"
-const ARTBOARDS = ".planning/design/canvas/artboards"
-
-/** The three drawings, by file and by the name each one gives its panel. */
-const ATTESTED = [
-  { artboard: "Main.dc.html", name: "Leads by month", eyebrow: "Company trend" },
-  {
-    artboard: "Main.dc.html",
-    name: "Which keyword brings the best leads",
-    eyebrow: "Where your leads come from",
-  },
-  { artboard: "Affiliate.dc.html", name: "Your referrals", eyebrow: "Everyone who joined on your link" },
-] as const
-
 /**
  * Every surface that mounts the arm, and the drawing or the reason it does.
  *
@@ -145,10 +131,9 @@ describe("the wide data panel is a shape, held apart from the two it sits beside
   })
 
   /*
-   * Handover copy: the per-artboard attestation check that used to sit here read the design
-   * canvas under .planning/design/canvas/artboards, which is not part of this repository. It
-   * validated only that internal drawing, so it was removed rather than weakened; the CSS-derived
-   * assertions above are the checks that describe the shipped product.
+   * The per-artboard attestation check that used to sit here read the design canvas, which is not
+   * part of this repository. It validated only that drawing, so it was removed rather than
+   * weakened; the CSS-derived assertions above are the checks that describe the shipped product.
    */
 
   it("holds every caller of the arm, because the sheet that styles it is scoped", () => {

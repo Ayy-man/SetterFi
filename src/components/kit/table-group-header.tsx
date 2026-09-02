@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
  * The band that opens a group of rows: a tiny caps mono label and its count on the left, and on
  * the right, in the same mono at `--muted`, one line saying what the group *means*.
  *
- * The annotation is the part that earns the band. `.planning/design/screens-r4/5a.html` never
- * writes a bare label: "SYSTEM PROBLEMS 3" carries "need a fix, not a reply", and "LEAD HANDOFFS 4"
+ * The annotation is the part that earns the band. The drawn Inbox never writes a bare label:
+ * "SYSTEM PROBLEMS 3" carries "need a fix, not a reply", and "LEAD HANDOFFS 4"
  * carries "claiming pauses the agent on the thread". A label plus a count only restates what the
  * reader can already see by looking down the rows; the annotation tells them what the grouping
  * commits to, which is the only reason to draw a rule across the table at all.

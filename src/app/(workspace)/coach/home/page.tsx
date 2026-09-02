@@ -260,8 +260,8 @@ const BROKEN_CHANNEL_STATES = [
  *
  * So a coach blocked by exactly that quarantine would have been shown no cause at all while the
  * database held the reason. The contract in `channel-connections.ts` was right the whole time; the
- * premise about its writers was the defect. What stays true, and is what `docs/GAPS.md` now says,
- * is that no *ongoing* application path records a provider's own words when a live call fails.
+ * premise about its writers was the defect. What stays true is that no *ongoing* application path
+ * records a provider's own words when a live call fails.
  *
  * The count is of **events, not threads**. `webhook_events` carries a provider and a status but no
  * conversation, so grouping into threads would mean parsing payloads, and Instagram and Messenger

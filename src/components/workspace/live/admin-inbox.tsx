@@ -7,15 +7,15 @@
  * threads the agent stopped on and handed to a person. They stay banded rather than interleaved
  * because the verbs are different, and both rank by how long a row has waited.
  *
- * Transcribed from `.planning/design/screens-r4/5a.html`, over the 2a transcription this file used
- * to be. Where it departs from the drawing it is because the drawing asserts something the
+ * Transcribed from the round-4 drawing of this screen, over the earlier transcription this file
+ * used to be. Where it departs from the drawing it is because the drawing asserts something the
  * platform cannot know, and each departure is stated on the screen rather than papered over:
  *
  * - **The claim model is not built, because nothing stores a claim.** `notifications` has no
  *   assignee, no claimed_at and no resolved_at, and `assign_support_thread` assigns a support
  *   ticket rather than a notice. So "Claim", "Claim next", "3 in someone's hands" and a per-row
  *   owner name are absent. What the store records is whether a row has been opened, which is a
- *   weaker claim and a true one, and the strip says so in words. Logged in `docs/GAPS.md`.
+ *   weaker claim and a true one, and the strip says so in words.
  * - **"sorted by time to breach" is "longest wait first".** No alert rule stores a response
  *   target, so nothing can be breaching. `queue.responseTargets.configured` drives the copy, so
  *   the sentence corrects itself when a target column arrives.

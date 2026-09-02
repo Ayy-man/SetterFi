@@ -8,9 +8,9 @@ import { describe, expect, it } from "vitest";
  *
  * `docs/DESIGN.md:377` reads: "One glow on the page, and it belongs to the attention dot. A glow
  * anywhere else -- on a status dot, a card edge, a button at rest -- is a defect."
- * `.planning/design/LEDGER.md:246` ruled on 2026-08-30 that glow must therefore be opt-in rather
- * than keyed to tone, and gave the reason: a tone-keyed default had shipped five glowing dots on
- * one screen and destroyed the signal it implements.
+ * A design ruling on 2026-08-30 settled that glow must therefore be opt-in rather than keyed to
+ * tone, and gave the reason: a tone-keyed default had shipped five glowing dots on one screen and
+ * destroyed the signal it implements.
  *
  * The budget is **per page**, not per product. An earlier version of this file asserted a single
  * spender across the whole tree and said in its own docstring that `DESIGN.md` "allows exactly one

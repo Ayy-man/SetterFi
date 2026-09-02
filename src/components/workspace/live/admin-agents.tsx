@@ -3,7 +3,7 @@
 /**
  * Screen 3a: Agent config, admin.
  *
- * Transcribed from `.planning/design/screens/3a.html`: the artifact's three panes are the app
+ * Transcribed from the drawing of this screen: the artifact's three panes are the app
  * rail (already `AppShell`), a list pane, and a detail pane, so this file draws the last two.
  *
  * The drawing's premise is a product SetterFi is not. It shows "Agents · 14 across 8 clients",

@@ -326,7 +326,7 @@ describe("AdminOverviewSurface", () => {
     expect(overlines[0]).toBe("Gross MRR");
     // Five tiles beside the hero, which is the canvas's strip. Median time to live and margin are
     // the two the canvas adds that a metric key actually backs; its third, cost per booked call,
-    // has no key at all and is logged in docs/GAPS.md rather than approximated into the row.
+    // has no key at all, so it is left out rather than approximated into the row.
     expect(overlines).toEqual([
       "Gross MRR",
       "New signups",

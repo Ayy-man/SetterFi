@@ -64,8 +64,8 @@ export type StatusProps = {
 /**
  * The two status treatments, which is the whole status vocabulary for the admin wave.
  *
- * There is deliberately no third. Every screen in `.planning/design/screens/` uses one of these
- * two, and the eight admin lanes reusing them is the difference between a design system and eight
+ * There is deliberately no third. Every drawn screen uses one of these two, and the eight admin
+ * lanes reusing them is the difference between a design system and eight
  * status pills that almost match.
  *
  * An absence is not a status. A cell with nothing to report renders an em-rule in `--faint`, not a

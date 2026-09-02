@@ -431,8 +431,8 @@ function conditionsOverlap(left: string, right: string): boolean {
  * into one line, and a row can stand for one place or a dozen. On the 2026-09-01 audit the nineteen
  * `debt` rows were thirty places across thirteen files, with `admin-channel-health.tsx` alone
  * holding seven sites behind a single row -- so a lane budgeting from the row count budgeted a
- * seventh of its work. Count the sites before planning against this table; `docs/GAPS.md` carries
- * the site-by-site list.
+ * seventh of its work. Count the sites in the files themselves before planning against this
+ * table; the row count is not a work estimate.
  */
 const KNOWN: Record<string, "deliberate" | "debt"> = {
   // The account menu is portalled to `document.body` and stamps `data-shell-role` on itself so

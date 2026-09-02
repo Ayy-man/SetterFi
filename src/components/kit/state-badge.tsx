@@ -54,10 +54,11 @@ const INDICATOR_TONE_CLASSES = {
  * and muted clay on the 8 using the kit's Status -- the same state in two colours.
  *
  * `--critical` and `--info` themselves are untouched and still correct for what they are used for:
- * `--color-destructive`, chart series, the agent trace, and inline error alerts, which
- * `.planning/design/LEDGER.md` separates from states explicitly ("critical splits three ways ...
- * inline error text takes a text token and never becomes a Status"). This is only the state arm of
- * that split, which is why it changes here rather than in tokens.css.
+ * `--color-destructive`, chart series, the agent trace, and inline error alerts. The kit's ruling
+ * separates those from states explicitly: `critical` splits three ways, so a state becomes
+ * `failure`, inline error text takes a text token and never becomes a `Status`, and a destructive
+ * affordance is a button variant. This is only the state arm of that split, which is why it
+ * changes here rather than in tokens.css.
  */
 const PILL_TONE_CLASSES = {
   neutral: "bg-[var(--neutral-wash)] text-[color:var(--body)]",

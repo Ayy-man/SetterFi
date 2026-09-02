@@ -109,7 +109,7 @@ const TITLE = "Client book";
  * which is the same failure as a percentage on a provisioning row: the sentence is the promise,
  * and the promise has to be one the screen keeps. So the clause is replaced by the state column
  * that *is* drawn and *is* rendered, and the drawn wording comes back the day the read carries
- * agent health (`docs/GAPS.md`, client-book columns).
+ * agent health, which is outstanding work on the read behind this page.
  *
  * It is a constant because both `ListPage` branches print it -- the disabled one and the enabled
  * one -- and two literals that must agree are two literals that will not. Every other divergence

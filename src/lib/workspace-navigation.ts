@@ -271,7 +271,7 @@ export const workspaceNavigation: Record<WorkspaceRole, readonly WorkspaceNavGro
          * label, a coach never sees both viewports at once, and the eighteen desktop drawings plus
          * the product's own back-link copy outweigh a single phone drawing. The guard is scoped to
          * the desktop bar and pins the phone's divergence separately, so this stays a decision
-         * somebody made rather than a difference nobody noticed. Logged in `docs/GAPS.md`.
+         * somebody made rather than a difference nobody noticed.
          */
         { label: "Overview", href: "/coach/home", glyph: "square" },
         /*

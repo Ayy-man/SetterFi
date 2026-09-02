@@ -15,9 +15,10 @@ import { describe, expect, it } from "vitest";
  *
  * This pins the fix at the only place it belongs. `--critical` and `--info` themselves are
  * deliberately NOT aliased: they have 48 and 5 other consumers -- `--color-destructive`, chart
- * series, the agent trace, inline error alerts -- and `.planning/design/LEDGER.md` separates those
- * from states on purpose ("critical splits three ways ... inline error text takes a text token and
- * never becomes a Status"). Only the state arm moves.
+ * series, the agent trace, inline error alerts -- and the kit's ruling separates those from
+ * states on purpose: `critical` splits three ways, so a state becomes `failure`, inline error text
+ * takes a text token and never becomes a `Status`, and a destructive affordance is a button
+ * variant. Only the state arm moves.
  */
 
 const BADGE = new URL("./state-badge.tsx", import.meta.url).pathname;

@@ -37,8 +37,8 @@ describe("Status", () => {
 
   /**
    * Every dot is flat unless something asks. This test used to assert the opposite -- that warning
-   * and failure glowed by default -- which is the behaviour `.planning/design/LEDGER.md:246`
-   * overruled on 2026-08-30, after a tone-keyed default shipped five glowing dots on one screen.
+   * and failure glowed by default -- which is the behaviour a design ruling overruled on
+   * 2026-08-30, after a tone-keyed default shipped five glowing dots on one screen.
    * The ruling was recorded and the code did not move, so this test kept the overruled position
    * green for a day. It now pins the ruling instead.
    */

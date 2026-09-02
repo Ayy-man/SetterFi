@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * The two-line table cell the drawn Inbox (`.planning/design/screens-r4/5a.html`) puts in every
- * column that carries more than one fact: a 14px/600 primary line in `--ink`, and under it the
+ * The two-line table cell the drawn Inbox puts in every column that carries more than one fact:
+ * a 14px/600 primary line in `--ink`, and under it the
  * one line of context that would otherwise need its own column.
  *
  * The primary line is the same size and weight as `GridTableIdentity`'s name and the one

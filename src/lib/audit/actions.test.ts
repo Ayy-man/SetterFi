@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -262,19 +262,6 @@ describe("AUDIT_ACTIONS", () => {
       process.cwd(),
       "supabase/migrations/20260823000001_phase7_measurement.sql",
     );
-    if (!existsSync(migrationPath)) {
-      // Plans 01 and 02 are independently landable in Wave 1. Before Plan 02 lands, pin its
-      // ownership contract; the merged tree automatically takes the strict SQL/exact-set arm.
-      const plan = readFileSync(resolve(
-        process.cwd(),
-        ".planning/phases/07-measurement/07-02-PLAN.md",
-      ), "utf8");
-      for (const key of PHASE7_AUDIT_KEYS) expect(plan).toContain(key);
-      expect(plan).toContain("add both Phase 7 audit keys to sorted `AUDIT_KEYS`");
-      expect(plan).toContain("supabase/migrations/20260823000001_phase7_measurement.sql");
-      return;
-    }
-
     const migration = readFileSync(migrationPath, "utf8");
     const migrationKeys = [...migration.matchAll(
       /\('((?:eval\.case\.promoted|eval\.model_config\.created))', '(?:human|system)'/g,

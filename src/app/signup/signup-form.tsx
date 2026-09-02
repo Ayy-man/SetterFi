@@ -242,7 +242,7 @@ export function SignupForm({ enabled, referralCode = null, terms = null, tiers }
             <KitInput name="timezone" onChange={(event) => setTimezone(event.target.value)} required value={timezone} />
           </Field>
           {/*
-            Prefilled and still editable. GAPS.md raised the alternative -- lock it once it arrives
+            Prefilled and still editable. The alternative was raised -- lock it once it arrives
             from a link -- and the field stays writable because a readonly box a prospect cannot
             correct is worse than a wrong code they can: nothing here is trusted, and the RPC
             resolves whatever is submitted against `affiliates.referral_code` either way. The hint
@@ -319,9 +319,10 @@ export function SignupForm({ enabled, referralCode = null, terms = null, tiers }
                   The artboard's line is "10 booked calls included, then $34 each" and only the
                   first half is here. No column, contract field or env value in this product
                   records a per-call overage price, so the second half would be the signup page
-                  inventing a number a customer is then owed at -- Alec's decision, recorded in
-                  `docs/DECISIONS.md`. So the card states the allowance and stops, which is a
-                  complete true sentence rather than half of an invented one.
+                  inventing a number a customer is then owed at. Whether calls past the allowance
+                  are billed at all, and at what price, is the owner's commercial call and has not
+                  been made. So the card states the allowance and stops, which is a complete true
+                  sentence rather than half of an invented one.
 
                   Absent rather than zero when the catalogue could not state it: `namedTierChoices`
                   drops anything that is not a non-negative whole number, and a card that says

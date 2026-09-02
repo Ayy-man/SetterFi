@@ -107,11 +107,11 @@ describe("GET /api/affiliate/referrals", () => {
   });
 
   /**
-   * The T15-13 pair, and the reason this route stopped reading `actor.role`.
+   * The dual-role pair, and the reason this route stopped reading `actor.role`.
    *
-   * `docs/DECISIONS.md:278` decided the `affiliates` row is the capability, so the coach below —
-   * one login, `role = 'coach'`, an `affiliates` row stamped as `affiliate_access` — is the user
-   * the decision exists for. Before this, `/affiliate` admitted them and this route answered 403
+   * The `affiliates` row is the affiliate capability, not `role = 'affiliate'`, so the coach below
+   * — one login, `role = 'coach'`, an `affiliates` row stamped as `affiliate_access` — is the user
+   * that rule exists for. Before this, `/affiliate` admitted them and this route answered 403
    * to the only fetch that page makes, so they got a permanently erroring portal. The plain coach
    * is the control: same role, no row, still refused, so widening the gate did not widen the data.
    */

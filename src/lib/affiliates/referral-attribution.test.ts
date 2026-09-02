@@ -18,7 +18,7 @@ import { REFERRAL_QUERY_PARAM, carriesReferralAttribution } from "@/lib/affiliat
  * A guard in each lane would not have caught it either. Each half is individually correct; it is
  * the *disagreement* that is the defect, and only something reading both sides can see it. So this
  * asserts the biconditional: either both halves are wired or neither is, and neither lane can move
- * alone. `docs/GAPS.md` carries the history.
+ * alone.
  */
 
 const ROOT = new URL("../../../", import.meta.url).pathname;
@@ -78,14 +78,14 @@ describe("the referral attribution contract", () => {
   });
 
   /**
-   * T15-13, on the one layer that implements it.
+   * The affiliate capability, on the one layer that implements it.
    *
    * This assertion nearly went in backwards, and the way it nearly went in is worth keeping. The
    * page and the API disagree about who may reach the affiliate portal, and the obvious reading of
    * a disagreement is that the stricter side is right and the looser one is the bug. Here it is
-   * the reverse: `docs/DECISIONS.md:278` records T15-13 as decided, "portal access is gated on
-   * that row existing, not on `role = 'affiliate'`", and `git log` shows the page's strict check
-   * was deliberately *replaced* by this one to deliver it. The API and
+   * the reverse: portal access is a decided rule, gated on an `affiliates` row existing and not on
+   * `role = 'affiliate'`, and `git log` shows the page's strict check was deliberately *replaced*
+   * by this one to deliver it. The API and
    * `affiliate_payout_history_projection` were not brought along until 2026-08-31, and are now.
    *
    * So the page is the correct half, and tightening it would have made the product consistently

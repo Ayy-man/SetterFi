@@ -12,8 +12,8 @@ import { describe, expect, it } from "vitest";
  * survived being read repeatedly: every reader who checked the claim found a claim rather than a
  * measurement.
  *
- * The artifact could not settle it. `500 10px 'IBM Plex Mono'` appears 44 times in
- * `.planning/design/screens/` and `500 9.5px` appears 21, so both are genuinely drawn. When the
+ * The artifact could not settle it. `500 10px 'IBM Plex Mono'` appears 44 times across the drawn
+ * screens and `500 9.5px` appears 21, so both are genuinely drawn. When the
  * markup is ambiguous the named rule is the authority, which is the whole reason `docs/DESIGN.md`
  * has a Type Roles section at all.
  *

@@ -1155,7 +1155,7 @@ function CardStatePill({ answer }: { answer: SectionAnswerValue }) {
  * strand `program_name`, `program_description`, `products`, `assets` and `proof` with no writer at
  * all, so what changes here is their weight: they stop being two of the six things the page is
  * about and become a shut drawer under the managed strip, opened once during setup and rarely
- * again. Whether they leave the surface entirely is Alec's call, recorded in `docs/GAPS.md`.
+ * again. Whether they leave the surface entirely is the owner's call and has not been made.
  */
 function ProgramAndAssets({ children }: { children: ReactNode }) {
   return (

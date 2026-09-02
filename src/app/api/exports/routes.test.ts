@@ -1042,11 +1042,12 @@ describe("Phase 6 export route", () => {
   });
 
   /**
-   * T15-13 on the export half. The affiliate referral export is the control drawn on `/affiliate`
-   * (`affiliate-money.tsx`, `resource="affiliate-referrals"`), so a dual-role coach who can open
-   * that portal and read the table must be able to export the rows they are already looking at.
-   * The gate is the `affiliates` row, never `role = 'affiliate'` (`docs/DECISIONS.md:277`); the
-   * plain coach is the control that shows the capability is doing the work, not the role.
+   * The affiliate capability, on the export half. The affiliate referral export is the control
+   * drawn on `/affiliate` (`affiliate-money.tsx`, `resource="affiliate-referrals"`), so a
+   * dual-role coach who can open that portal and read the table must be able to export the rows
+   * they are already looking at. The gate is the `affiliates` row existing, never
+   * `role = 'affiliate'`; the plain coach is the control that shows the capability is doing the
+   * work, not the role.
    */
   it("exports the affiliate projection for a dual-role coach and refuses a coach with no affiliates row", async () => {
     const { cursor } = cursorFromPages([[

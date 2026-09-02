@@ -481,8 +481,8 @@ describe("CoachMeasurementSurface", () => {
     // The absent arm, and only the absent arm: this fixture's `error` is null, so the row is
     // omitted rather than rendered blank. The two tests below cover the column carrying a value.
     expect(dialog.textContent).not.toMatch(/recorded reason/iu);
-    // The signed round trip is a real gate with no writer yet (docs/GAPS.md, 2026-08-31), so the
-    // step names the gate and refuses to promise how long it takes.
+    // The signed round trip is a real gate with no writer yet, so the step names the gate and
+    // refuses to promise how long it takes.
     expect(dialog.textContent).toContain("Nothing reads connected until that comes back");
     expect(dialog.textContent).toContain("we do not promise how long it takes");
     expect(dialog.textContent).toContain("separate step somebody runs per message");

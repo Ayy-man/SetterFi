@@ -67,8 +67,8 @@ const CRUMBS = [
  * filing has got to: `MetaReviewReceipt` is a type with no repository, no route and no column
  * behind it, so the six states this list used to carry ("current", then five "blocked") were
  * typed into the source rather than read from anything. They are gone. See `ReviewChecklist` for
- * why the component swap is the fix rather than better fixture states, and docs/GAPS.md for the
- * storage that would have to exist before any of this can report progress.
+ * why the component swap is the fix rather than better fixture states. Reporting progress here
+ * would first need a table, a route and a repository that record where a filing has got to.
  *
  * Step one is deliberately still the artifact's pairing of the two verifications, and it is
  * "you" on this surface because the admin portal belongs to the client's own team, which is the

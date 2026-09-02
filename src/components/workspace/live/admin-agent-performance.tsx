@@ -6,8 +6,8 @@
  * The artifact draws a ranking of agents with a booking rate, a 30-day trend, a lead count, a
  * reply time and a delta against an account baseline. This snapshot carries one per-client number
  * (booked appointments) plus the two money figures the economics roles are allowed to see. So
- * the *form* is transcribed and the *columns* are only what the route supplies; the gaps are
- * recorded in `.planning/design/LEDGER.md` rather than filled with plausible numbers.
+ * the *form* is transcribed and the *columns* are only what the route supplies; a column the
+ * route cannot fill is left out rather than filled with plausible numbers.
  *
  * A leaderboard ranks livelihoods, so ranking has a contract here rather than a sort call:
  *

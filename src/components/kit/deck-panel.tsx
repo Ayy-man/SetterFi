@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils";
  *
  * Recovered from the round-3 build at commit 40c58b5 (`.sf-route-deck__panel` in
  * `workspace.css`), which the client preferred to the console layout that replaced it. Reading
- * that source rather than the screenshots in `docs/reference/branding/preview-shots/` is what
- * made this component possible: the pictures show a card with a big number in it, and hide the
+ * that source rather than the preview screenshots of it is what made this component possible:
+ * the pictures show a card with a big number in it, and hide the
  * fact that the card is five named parts in a fixed order. A first pass built from the pictures
  * produced a flat uniform grid, which is exactly what the layout is not.
  *
@@ -247,8 +247,8 @@ function DeckPanelChevron() {
  * The second card shape.
  *
  * The canvas draws two, and the discriminator is the header band rather than the column count or
- * the width. `.planning/design/canvas/audit/round4-coach-secondary.md` settles it mechanically
- * across all 55 artboards: every 20px/500 name sits inside a hairline-closed band (52 of 57; the
+ * the width. A round-4 audit settled it mechanically across all 55 artboards: every 20px/500
+ * name sits inside a hairline-closed band (52 of 57; the
  * five exceptions are row labels and prices, not panel names), and every 22px/600 title sits on a
  * card with no band at all -- ten of ten, none of them on the 78px floor. So a size prop on
  * `DeckPanel` would have been the wrong fix: what changes between the two is the anatomy, and the

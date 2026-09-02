@@ -709,8 +709,8 @@ describe("AdminAuditLog craft", () => {
 });
 
 /**
- * The table language from `.planning/design/screens-r5/6ab-table-anatomy-screenshot.png`, applied
- * here first: this is the exemplar the other admin tables are migrated against.
+ * The table language from the round-5 table-anatomy drawing, applied here first: this is the
+ * exemplar the other admin tables are migrated against.
  */
 describe("AdminAuditLog table language", () => {
   beforeEach(() => {
