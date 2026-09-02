@@ -418,7 +418,10 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
           $1, $2, $3, $4, 'active', '2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z', false,
           '2026-08-01T00:00:01Z'
         )`,
-        [moneyTenantId, PHASE6_DEMO_VALUES.customer, PHASE6_DEMO_VALUES.subscription, "SETTERFI_DEMO_PLACEHOLDER_PRICE_STARTER"],
+        // Derived from the rung, never written out: a literal here and a `demoTierPriceId` there
+        // are two spellings of one identity, and only one of them moves when the ladder does.
+        [moneyTenantId, PHASE6_DEMO_VALUES.customer, PHASE6_DEMO_VALUES.subscription,
+          demoTierPriceId(DEMO_TIER_LADDER[0])],
       );
       for (let index = 0; index < PHASE6_DEMO_VALUES.invoices.length; index += 1) {
         await database.query(
@@ -524,12 +527,26 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
       );
     }
 
+    /*
+     * The suspended tenant subscribes to a rung that exists.
+     *
+     * It carried `SETTERFI_DEMO_PLACEHOLDER_SUSPENDED_PRICE`, which no `tiers` row holds, and the
+     * allowance job resolves a subscription's tier by matching `tiers.stripe_price_id`
+     * (`src/lib/billing/allowances.ts`). That read came back empty for this tenant on every run,
+     * logged ALLOWANCE_CANDIDATE_READ_FAILED, and skipped it, so a suspended account was also an
+     * account the platform could not price. `tenants.tier_id` already says Starter, and this now
+     * agrees with it.
+     *
+     * Suspension is not a price. It is `tenants.status`, set by the
+     * `set_tenant_billing_status` call directly below, which is what the screens read.
+     */
     await database.query(
       `select * from public.apply_billing_subscription_snapshot(
-        $1, $2, $3, 'SETTERFI_DEMO_PLACEHOLDER_SUSPENDED_PRICE', 'active',
+        $1, $2, $3, $4, 'active',
         '2026-08-01T00:00:00Z', '2026-09-01T00:00:00Z', false, '2026-08-01T00:00:01Z'
       )`,
-      [affiliateTenantId, PHASE6_DEMO_VALUES.suspendedCustomer, PHASE6_DEMO_VALUES.suspendedSubscription],
+      [affiliateTenantId, PHASE6_DEMO_VALUES.suspendedCustomer,
+        PHASE6_DEMO_VALUES.suspendedSubscription, demoTierPriceId(DEMO_TIER_LADDER[0])],
     );
     const affiliateStatus = (await database.query(
       `select status::text from public.tenants where id = $1`, [affiliateTenantId],

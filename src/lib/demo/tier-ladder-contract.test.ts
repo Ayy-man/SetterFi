@@ -158,4 +158,28 @@ describe("every seeded money row is priced from the ladder", () => {
     expect(phase6).toContain("DEMO_TIER_LADDER[0].priceCents, DEMO_TIER_LADDER[0].priceCents,");
     expect(phase6).toContain("[moneyTenantId, DEMO_TIER_LADDER[0].priceCents]");
   });
+  /**
+   * A subscription's tier is resolved by matching `tiers.stripe_price_id`
+   * (`src/lib/billing/allowances.ts`), so a seeded subscription carrying a price id no tier row
+   * holds is a tenant the platform cannot price. The suspended demo tenant carried exactly that,
+   * an invented `..._SUSPENDED_PRICE`, and the allowance job logged a failed read and skipped it
+   * on every run. Suspension is `tenants.status`, never a price.
+   *
+   * Every price id a seeder writes is derived from a rung, so this checks for the one thing that
+   * can reintroduce the defect: a price id spelled out by hand.
+   */
+  it("never writes a subscription price id that no rung derives", () => {
+    const seeders = ["scripts/seed-phase6-demo.mjs", "scripts/seed-demo-gaps.mjs"];
+    const invented = /"SETTERFI_DEMO_PLACEHOLDER_(?:SUSPENDED_)?PRICE[^"]*"/gu;
+
+    for (const path of seeders) {
+      const source = readFileSync(join(process.cwd(), path), "utf8");
+      const literals = [...source.matchAll(invented)]
+        // The prefix constant and the sentinel guard that releases stale ids are the definition
+        // and its check, not a subscription being written to a price.
+        .map((match) => match[0])
+        .filter((literal) => literal !== '"SETTERFI_DEMO_PLACEHOLDER_PRICE_"');
+      expect(literals, `${path} spells out a price id instead of deriving it`).toEqual([]);
+    }
+  });
 });
