@@ -936,25 +936,21 @@ describe("MessagingInstallPanel, on a grant nothing has ever refreshed", () => {
       expect(screen.getAllByText(term)).toHaveLength(2);
     }
     expect(screen.getAllByText("Not recorded")).toHaveLength(6);
-    expect(screen.getAllByText(/what the approval recorded when it was stored/i)).toHaveLength(2);
   });
 
   /**
-   * Rule: the whole point of the call. A reconnect replaces the stored grant, and the approval
-   * screen has to have every sub-account selected or the ones left out get no messaging app.
+   * Rule: the whole point of the call. The approval screen has to have every sub-account selected
+   * or the ones left out get no messaging app, so the messaging row says so in one line.
    */
-  it("says what a reconnect replaces and what has to be selected on the approval screen", () => {
+  it("says what has to be selected on the approval screen", () => {
     renderStalePanel();
 
     expect(screen.getByRole("button", { name: /Reconnect messaging/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reconnect provisioning/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Connect /i })).not.toBeInTheDocument();
 
-    expect(screen.getAllByText(/Reconnecting replaces the stored approval/i)).toHaveLength(2);
-    const messaging = screen.getByText(/select every sub-account/i);
-    expect(messaging).toHaveTextContent(/does not get the messaging app/i);
     // Only the messaging app: the provisioning app's approval is not per-sub-account.
-    expect(screen.getAllByText(/select every sub-account/i)).toHaveLength(1);
+    expect(screen.getAllByText("On the approval screen, choose all sub-accounts.")).toHaveLength(1);
   });
 
   it("names the date the grant was last refreshed", () => {

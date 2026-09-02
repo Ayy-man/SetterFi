@@ -113,8 +113,8 @@ function GrantFacts({ grant }: { grant: AgencyGrantSummary | null }) {
             className="flex flex-wrap items-baseline justify-between gap-x-[var(--s-4)] gap-y-[var(--s-1)] border-b border-[var(--line-soft)] py-[var(--s-2)] last:border-b-0"
             key={fact.term}
           >
-            <dt className="m-0 min-w-0 text-[12.5px] leading-[1.45] text-[color:var(--muted)]">{fact.term}</dt>
-            <dd className="m-0 min-w-0 text-right text-[12px] leading-[1.45] text-[color:var(--faint)]">
+            <dt className="m-0 min-w-0 text-[length:var(--t-body)] leading-[var(--t-body-lh)] text-[color:var(--muted)]">{fact.term}</dt>
+            <dd className="m-0 min-w-0 text-right text-[length:var(--t-body)] leading-[var(--t-body-lh)] text-[color:var(--faint)]">
               {fact.tone === "pending" || fact.tone === "bad" ? (
                 <Status
                   className="max-w-full whitespace-normal"
@@ -127,15 +127,6 @@ function GrantFacts({ grant }: { grant: AgencyGrantSummary | null }) {
           </div>
         ))}
       </dl>
-      {/*
-        * The consent flags are a record of one approval screen, which the column comment on
-        * `approve_all_locations` says in as many words. Reading them as the provider's current
-        * configuration is exactly the mistake a months-old row invites.
-        */}
-      <Prose className="mt-[var(--s-2)] text-[12px] leading-[1.45] text-[color:var(--faint)]">
-        These are what the approval recorded when it was stored, not the provider&apos;s settings
-        now. Nothing here re-reads them from the provider.
-      </Prose>
     </div>
   );
 }
@@ -275,7 +266,7 @@ export function MessagingInstallPanel({
             {rows.map(({ entry, grant, displayState, reconnect }, index) => {
               return (
                 <article
-                  className={index === 0 ? "p-[var(--s-4)]" : "border-t border-[var(--line-soft)] p-[var(--s-4)]"}
+                  className={index === 0 ? "p-[var(--s-4)] pb-[var(--s-5)]" : "border-t border-[var(--line-soft)] p-[var(--s-4)] pt-[var(--s-5)]"}
                   key={entry.app}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-[var(--s-3)]">
@@ -300,13 +291,9 @@ export function MessagingInstallPanel({
 
                   <GrantFacts grant={grant} />
 
-                  {reconnect ? (
+                  {reconnect && entry.app === "agent" ? (
                     <Prose className="mt-[var(--s-3)] text-[12.5px] leading-[1.45] text-[color:var(--muted)]">
-                      Reconnecting replaces the stored approval: the grant in use now stops being
-                      used the moment the new one is stored.
-                      {entry.app === "agent"
-                        ? " On the approval screen, select every sub-account. Any sub-account left out of the approval does not get the messaging app."
-                        : ""}
+                      On the approval screen, choose all sub-accounts.
                     </Prose>
                   ) : null}
 

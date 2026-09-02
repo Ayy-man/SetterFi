@@ -91,6 +91,11 @@ export type RecordSheetProps = {
   title: string;
   subtitle?: string;
   fullRecordHref?: string;
+  /**
+   * The drawer's width on desktop. `default` is the standard `--drawer-w`; `wide` is for a record
+   * whose body is a working surface rather than a summary. Full width on mobile either way.
+   */
+  size?: "default" | "wide";
   /** The flat body. Pass `tabs` instead when the record has more than one view. */
   sections?: readonly RecordSheetSection[];
   tabs?: readonly RecordSheetTab[];
@@ -327,6 +332,7 @@ export function RecordSheet({
   title,
   subtitle,
   fullRecordHref,
+  size = "default",
   sections,
   tabs,
   state,
@@ -375,7 +381,10 @@ export function RecordSheet({
         // to one duration: it arrives on --panel-open-dur and leaves on the shorter
         // --panel-close-dur, because a panel you have decided to dismiss should not make you
         // watch it go.
-        className="!w-full !max-w-none !gap-0 !rounded-l-[var(--r-panel)] !border-l !border-[var(--line)] !bg-[var(--raised)] !text-[var(--body)] !shadow-[var(--shadow-drawer)] ![transition-property:transform,opacity] ![transition-timing-function:var(--ease-smooth-out)] sm:!w-[var(--drawer-w)]"
+        className={cn(
+          "!w-full !max-w-none !gap-0 !rounded-l-[var(--r-panel)] !border-l !border-[var(--line)] !bg-[var(--raised)] !text-[var(--body)] !shadow-[var(--shadow-drawer)] ![transition-property:transform,opacity] ![transition-timing-function:var(--ease-smooth-out)]",
+          size === "wide" ? "sm:!w-[720px]" : "sm:!w-[var(--drawer-w)]",
+        )}
         data-slot="record-sheet"
         finalFocus={false}
         initialFocus={false}

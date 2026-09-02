@@ -890,7 +890,7 @@ export function AdminProvisioning({
           title: "Marketplace install",
           body: <div className="flex min-w-0 flex-col gap-[var(--s-6)]">{children}</div>,
         }]}
-        subtitle="Agency install evidence and the approval attempts behind it. Stored history is not proof a connection still works."
+        size="wide"
         title="Marketplace install"
       />
     </AppShell>

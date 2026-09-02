@@ -59,13 +59,13 @@ export const MESSAGING_INSTALL_APPS: readonly [MessagingInstallApp, MessagingIns
     app: "agent",
     buttonLabel: "Connect messaging",
     title: "Messaging app",
-    detail: "Approval happens on the provider's site. Nothing here reports connected until the approval returns.",
+    detail: "Sub-account app. Must cover every sub-account.",
   },
   {
     app: "provisioning",
     buttonLabel: "Connect provisioning",
     title: "Provisioning app",
-    detail: "The agency-level app that creates sub-accounts. One approval covers the platform.",
+    detail: "Agency app. One approval covers the platform.",
   },
 ];
 
