@@ -73,6 +73,7 @@ describe("GET /api/affiliate/referrals", () => {
       list,
       listPayouts: vi.fn(async () => payouts),
       identity: async () => identity,
+      signupOpen: async () => true,
     })(request());
 
     expect(response.status).toBe(404);
@@ -90,6 +91,7 @@ describe("GET /api/affiliate/referrals", () => {
         list,
         listPayouts: vi.fn(async () => payouts),
         identity: async () => identity,
+      signupOpen: async () => true,
       })(request());
     const missing = await refuse(async () => null);
     const coach = await refuse(async () => plainCoach);
@@ -122,6 +124,7 @@ describe("GET /api/affiliate/referrals", () => {
       list: async () => rows,
       listPayouts: async () => payouts,
       identity: async () => identity,
+      signupOpen: async () => true,
     })(request());
     const refused = await createAffiliateReferralsHandler({
       enabled: () => true,
@@ -129,6 +132,7 @@ describe("GET /api/affiliate/referrals", () => {
       list: async () => rows,
       listPayouts: async () => payouts,
       identity: async () => identity,
+      signupOpen: async () => true,
     })(request());
 
     expect(admitted.status).toBe(200);
@@ -153,6 +157,7 @@ describe("GET /api/affiliate/referrals", () => {
       list,
       listPayouts,
       identity: async () => identity,
+      signupOpen: async () => true,
     })(request());
 
     expect(list).toHaveBeenCalledWith();
@@ -172,6 +177,7 @@ describe("GET /api/affiliate/referrals", () => {
       list,
       listPayouts: vi.fn(async () => payouts),
       identity: async () => identity,
+      signupOpen: async () => true,
     })(request(query));
 
     expect(response.status).toBe(400);
@@ -200,6 +206,7 @@ describe("GET /api/affiliate/referrals", () => {
       list: async () => widened,
       listPayouts: async () => payouts,
       identity: async () => identity,
+      signupOpen: async () => true,
     })(request());
 
     expect(response.status).toBe(200);
@@ -210,7 +217,7 @@ describe("GET /api/affiliate/referrals", () => {
       payouts: Array<Record<string, unknown>>;
     };
     expect(payload).toEqual({
-      referral: { code: "SF-AFFILIATE", link: "https://setterfi.test/signup?ref=SF-AFFILIATE" },
+      referral: { code: "SF-AFFILIATE", link: "https://setterfi.test/signup?ref=SF-AFFILIATE", signupOpen: true },
       referrals: [{
         businessName: "Northstar Funding",
         accountStatus: "paying",
@@ -228,7 +235,7 @@ describe("GET /api/affiliate/referrals", () => {
       "businessName",
       "commissionEarnedCents",
     ]);
-    expect(Object.keys(payload.referral).sort()).toEqual(["code", "link"]);
+    expect(Object.keys(payload.referral).sort()).toEqual(["code", "link", "signupOpen"]);
   });
 
   it("keeps repository failure distinct from an empty owned projection", async () => {
@@ -238,6 +245,7 @@ describe("GET /api/affiliate/referrals", () => {
       list: async () => [],
       listPayouts: async () => [],
       identity: async () => identity,
+      signupOpen: async () => true,
     })(request());
     const unavailable = await createAffiliateReferralsHandler({
       enabled: () => true,
@@ -245,11 +253,12 @@ describe("GET /api/affiliate/referrals", () => {
       list: async () => { throw new Error("AFFILIATE_PROJECTION_FAILED"); },
       listPayouts: async () => payouts,
       identity: async () => identity,
+      signupOpen: async () => true,
     })(request());
 
     expect(empty.status).toBe(200);
     await expect(empty.json()).resolves.toEqual({
-      referral: { code: "SF-AFFILIATE", link: "https://setterfi.test/signup?ref=SF-AFFILIATE" },
+      referral: { code: "SF-AFFILIATE", link: "https://setterfi.test/signup?ref=SF-AFFILIATE", signupOpen: true },
       referrals: [],
       payouts: [],
     });
@@ -274,6 +283,7 @@ describe("GET /api/affiliate/referrals", () => {
         list: async () => { throw new Error("AFFILIATE_PROJECTION_FAILED"); },
         listPayouts: async () => payouts,
         identity: async () => identity,
+      signupOpen: async () => true,
       })(request());
 
       expect(response.status).toBe(503);
@@ -309,6 +319,7 @@ describe("GET /api/affiliate/referrals", () => {
           throw new AffiliateRepositoryError("AFFILIATE_PAYOUT_PROJECTION_FAILED", "42883");
         },
         identity: async () => identity,
+      signupOpen: async () => true,
       })(request());
 
       expect(response.status).toBe(503);
@@ -322,5 +333,28 @@ describe("GET /api/affiliate/referrals", () => {
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+describe("the referral link while signup cannot quote a plan", () => {
+  /*
+   * `/signup` stays reachable with an empty `tier_offer_terms` and renders "No named plan is
+   * available" (`docs/LAUNCH-CHECKLIST.md` B1). A link into that page attributes nothing, so the
+   * route withholds it and says why; the code, which is the affiliate's identity rather than a
+   * claim about the page, is still returned.
+   */
+  it("returns the code with no link and says signup is closed", async () => {
+    const response = await createAffiliateReferralsHandler({
+      enabled: () => true,
+      session: async () => affiliate,
+      list: async () => rows,
+      listPayouts: async () => payouts,
+      identity: async () => identity,
+      signupOpen: async () => false,
+    })(request());
+
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { referral: Record<string, unknown> };
+    expect(payload.referral).toEqual({ code: "SF-AFFILIATE", link: null, signupOpen: false });
   });
 });

@@ -67,8 +67,12 @@ const META_COPY = {
   },
 } as const;
 
-/** The one destination in the product that actually starts a channel connection. */
-const CONNECT_HREF = "/coach/get-started";
+/**
+ * The one destination in the product that actually starts a channel connection: Connections
+ * calls `POST /api/channels/meta/connect` itself. It used to be Setup, which only linked back to
+ * Connections, and the two pages sent a coach round in a circle with no Meta login in it.
+ */
+const CONNECT_HREF = "/coach/integrations";
 
 function metaCard(
   key: "instagram" | "messenger",

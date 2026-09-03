@@ -9,6 +9,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import {
   driverSelection,
+  phase4Live,
   requireEnvironment,
   type EnvironmentSource,
 } from "@/lib/env-contract";
@@ -508,4 +509,26 @@ export function selectMetaOAuthService({
     appSecret: values.META_APP_SECRET,
     loginConfigId: values.META_LOGIN_CONFIG_ID,
   }, { ...dependencies, environment });
+}
+
+/**
+ * Whether `POST /api/channels/meta/connect` can actually hand back an authorization URL on this
+ * deployment, answered from the same three facts the route itself resolves: the phase flag, the
+ * driver selector, and the OAuth credential names. Nothing is constructed and nothing is called.
+ *
+ * The Connections page reads this to decide whether a channel row may offer a "Connect" control at
+ * all. Before it did, every Instagram and Messenger row linked to Setup, Setup linked back to
+ * Connections, and no Meta login ever started (seen in production 2026-09-02). A control that can
+ * only ever come back 503 is the fake affordance the honest-state rule forbids, so a deployment
+ * whose Meta arm is still `mock` or unconfigured gets an "awaiting Meta" row and no button.
+ */
+export function metaOAuthStartAvailable(environment: EnvironmentSource = process.env): boolean {
+  if (!phase4Live(environment)) return false;
+  try {
+    if (driverSelection("meta", "SETTERFI_META_DRIVER", environment) === "mock") return true;
+    requireEnvironment("meta", META_OAUTH_CONFIGURATION_NAMES, environment);
+    return true;
+  } catch {
+    return false;
+  }
 }

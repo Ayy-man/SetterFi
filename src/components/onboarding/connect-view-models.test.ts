@@ -54,7 +54,7 @@ describe("connectCards", () => {
     const instagram = card(connectCards({ connections: [], registration: null }), "instagram");
     expect(instagram.status).toBeNull();
     expect(instagram.detail).toBeNull();
-    expect(instagram.action).toEqual({ href: "/coach/get-started", label: "Connect Instagram" });
+    expect(instagram.action).toEqual({ href: "/coach/integrations", label: "Connect Instagram" });
   });
 
   it("reads answering only from a signed round trip, never from a live state alone", () => {

@@ -13,6 +13,7 @@ import {
 import { REFERRAL_QUERY_PARAM } from "@/lib/affiliates/referral-attribution";
 import type { AffiliateProjectionRow } from "@/lib/billing/contracts";
 import { phase6AffiliatesLive } from "@/lib/env-contract";
+import { signupOpen } from "@/lib/onboarding/signup-open";
 import { createAffiliateRepository } from "@/lib/repositories/affiliates";
 import type { AffiliatePayoutProjectionRow } from "@/lib/repositories/affiliates";
 import {
@@ -29,6 +30,8 @@ type AffiliateReferralDependencies = {
   list(): Promise<readonly AffiliateProjectionRow[]>;
   listPayouts(): Promise<readonly AffiliatePayoutProjectionRow[]>;
   identity(): Promise<AffiliateReferralIdentity>;
+  /** Whether `/signup` can currently quote a plan. Decides whether a link is handed out at all. */
+  signupOpen(): Promise<boolean>;
 };
 
 export function createAffiliateReferralsHandler(
@@ -68,15 +71,26 @@ export function createAffiliateReferralsHandler(
       );
     }
     try {
-      const [rows, payouts, identity] = await Promise.all([
+      const [rows, payouts, identity, open] = await Promise.all([
         dependencies.list(),
         dependencies.listPayouts(),
         dependencies.identity(),
+        dependencies.signupOpen(),
       ]);
+      /*
+       * The link follows the page it points at. While `/signup` cannot quote a plan
+       * (`docs/LAUNCH-CHECKLIST.md` B1) there is no link, because a link to a page that asks for
+       * nothing attributes nothing, and the affiliate would find out by never being paid. The code
+       * is always returned: it is the affiliate's identity, not a promise about the page.
+       */
       const referralUrl = new URL("/signup", request.url);
       referralUrl.searchParams.set(REFERRAL_QUERY_PARAM, identity.referralCode);
       return Response.json({
-        referral: { code: identity.referralCode, link: referralUrl.toString() },
+        referral: {
+          code: identity.referralCode,
+          link: open ? referralUrl.toString() : null,
+          signupOpen: open,
+        },
         referrals: rows.map((row) => ({
           businessName: row.business_name,
           accountStatus: row.account_status,
@@ -122,4 +136,5 @@ export const GET = createAffiliateReferralsHandler({
   list: () => service.listOwnReferrals(),
   listPayouts: () => repository.listOwnPayouts(),
   identity: () => identity.readOwn(),
+  signupOpen: () => signupOpen(),
 });

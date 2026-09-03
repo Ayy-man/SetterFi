@@ -79,9 +79,15 @@ const MESSAGE_BODY_CLASS =
  * Both are re-cut to the coach's target floor -- 52px rather than the console's 34px, 17px label
  * rather than 13px -- because `coach.css` only raises `min-height`, and a 34px-tall button that
  * has been stretched to 44px by a `min-height` rule reads as a mistake rather than as a control.
+ *
+ * The `background:` arbitrary property rather than the `bg-` arbitrary-value utility, and the
+ * difference is the whole button: `--accent-fill` is a gradient, Tailwind compiles the `bg-`
+ * spelling to `background-color`, and a background-color cannot take a gradient, so the browser
+ * dropped the declaration and painted no ground under a near-white label.
+ * `accent-fill-spelling.test.ts` pins this.
  */
 const ACCENT_FILL_CLASS =
-  "inline-flex h-[52px] items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-fill)] px-[26px] text-[17px] leading-none font-semibold text-[color:var(--on-accent)]" +
+  "inline-flex h-[52px] items-center justify-center rounded-[12px] border border-[var(--accent-line)] [background:var(--accent-fill)] px-[26px] text-[17px] leading-none font-semibold text-[color:var(--on-accent)]" +
   ` ${ACCENT_FILL_SHADOW_CLASS} disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`;
 const SECONDARY_BUTTON_CLASS =
   "inline-flex h-[52px] items-center justify-center rounded-[12px] border border-[var(--line)] bg-[var(--well)] px-[24px] text-[17px] leading-none font-medium text-[color:var(--body)] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--line)]";

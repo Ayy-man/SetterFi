@@ -20,6 +20,7 @@ import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth
 import { calendarAvailabilityErrorCopy, humanError } from "@/lib/copy/errors";
 import { capiLive, phase1Live, phase4Live, phase9GhlOAuthLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
+import { metaOAuthStartAvailable } from "@/lib/integrations/meta-oauth";
 import {
   listChannelConnections,
   type ChannelConnectionView,
@@ -265,6 +266,7 @@ export default async function CoachIntegrationsPage() {
         conversionTracking={capi}
         impersonating={context.impersonation !== null}
         messaging={messaging}
+        metaConnect={metaOAuthStartAvailable() ? "ready" : "awaiting_meta"}
         nowIso={nowIso}
         storedErrorsByConnection={storedErrors}
         templates={templates}

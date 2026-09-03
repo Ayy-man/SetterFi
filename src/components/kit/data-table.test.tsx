@@ -1395,4 +1395,42 @@ describe("DataTable grouping", () => {
 
     expect(screen.getByRole("button", { name: "Export table" })).toBeVisible();
   });
+
+  it("renders a summary row but does not count it in the footer range", () => {
+    render(
+      <DataTable
+        ariaLabel="People"
+        columns={columns}
+        data={[
+          { id: "person-1", name: "Priya", status: "Active" },
+          { id: "person-2", name: "Ana", status: "Paused" },
+          { id: "total", name: "Total", status: "" },
+        ]}
+        emptyState={<div>No people match this view.</div>}
+        getRowId={(row) => row.id}
+        rowLabel={{ singular: "person", plural: "people" }}
+        summaryRow={(row) => row.id === "total"}
+      />,
+    );
+
+    expect(screen.getByText("Total")).toBeVisible();
+    expect(screen.getAllByRole("row")).toHaveLength(4);
+    expect(screen.getByText(/Showing 1–2 of 2 people/u)).toBeVisible();
+  });
+
+  it("reads a lone summary row as no rows at all", () => {
+    render(
+      <DataTable
+        ariaLabel="People"
+        columns={columns}
+        data={[{ id: "total", name: "Total", status: "" }]}
+        emptyState={<div>No people match this view.</div>}
+        getRowId={(row) => row.id}
+        rowLabel={{ singular: "person", plural: "people" }}
+        summaryRow={(row) => row.id === "total"}
+      />,
+    );
+
+    expect(screen.getByText("No people")).toBeVisible();
+  });
 });

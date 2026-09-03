@@ -42,7 +42,7 @@ import { COACH_FOOTNOTE_CLASS } from "@/components/workspace/live/coach-type";
  * true at both densities.
  */
 const RETRY_CLASS =
-  "inline-flex h-[52px] items-center justify-center gap-[12px] rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-fill)] px-[26px] text-[18px] leading-none font-semibold text-[color:var(--on-accent)]" +
+  "inline-flex h-[52px] items-center justify-center gap-[12px] rounded-[12px] border border-[var(--accent-line)] [background:var(--accent-fill)] px-[26px] text-[18px] leading-none font-semibold text-[color:var(--on-accent)]" +
   ` ${ACCENT_FILL_SHADOW_CLASS}`;
 const LEAVE_CLASS =
   "inline-flex h-[52px] items-center justify-center rounded-[12px] border border-[var(--line)] bg-[var(--well)] px-[22px] text-[16px] leading-none font-medium text-[color:var(--body)] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)]";

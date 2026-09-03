@@ -210,7 +210,7 @@ export function MoneySurfaceGuard({
         {actorRole === "success" && surface !== "corrections" ? (
           <p className="mt-[var(--s-4)] mb-0">
             <Link
-              className="inline-flex h-[var(--console-target,32px)] items-center rounded-[var(--r-control)] bg-[var(--accent-fill)] px-[14px] text-[length:var(--t-body)] font-medium text-[color:var(--on-accent)] no-underline hover:no-underline"
+              className="inline-flex h-[var(--console-target,32px)] items-center rounded-[var(--r-control)] [background:var(--accent-fill)] px-[14px] text-[length:var(--t-body)] font-medium text-[color:var(--on-accent)] no-underline hover:no-underline"
               href={SUCCESS_HOME.href}
             >
               {SUCCESS_HOME.label}

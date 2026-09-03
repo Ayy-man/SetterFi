@@ -104,7 +104,7 @@ const ACCENT_FILL_CLASS =
      in this component that had drifted; the panel's `22px 22px 16px 16px`, the rows' 12px and the
      launcher's full round all match. Kept as a literal beside them rather than tokenised, because
      a one-pixel relationship between two adjacent shapes is what the artboard is saying. */
-  "inline-flex h-[52px] w-full items-center justify-center gap-[11px] rounded-[11px] border border-[var(--accent-line)] bg-[var(--accent-fill)] text-[17px] leading-none font-semibold text-[color:var(--on-accent)] no-underline" +
+  "inline-flex h-[52px] w-full items-center justify-center gap-[11px] rounded-[11px] border border-[var(--accent-line)] [background:var(--accent-fill)] text-[17px] leading-none font-semibold text-[color:var(--on-accent)] no-underline" +
   ` ${ACCENT_FILL_SHADOW_CLASS}`;
 
 export function CoachSupportBubble({
@@ -285,7 +285,7 @@ export function CoachSupportBubble({
            */
           open
             ? "border border-[var(--line)] bg-[var(--well)] text-[color:var(--body)] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)]"
-            : `border border-[var(--accent-line)] bg-[var(--accent-fill)] text-[color:var(--on-accent)] ${ACCENT_FILL_SHADOW_CLASS}`,
+            : `border border-[var(--accent-line)] [background:var(--accent-fill)] text-[color:var(--on-accent)] ${ACCENT_FILL_SHADOW_CLASS}`,
         ].join(" ")}
         data-slot="coach-support-launcher"
         onClick={() => (open ? close() : setOpen(true))}

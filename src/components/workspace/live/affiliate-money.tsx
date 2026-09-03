@@ -116,6 +116,18 @@ export function parseAffiliateReferralCode(value: unknown): string {
   return code;
 }
 
+/**
+ * Whether the route said signup can take a coach to a plan. Absent means the route predates the
+ * field, and the link's own presence already decides what is offered; only the sentence under the
+ * code reads this, so an absent field keeps the older sentence.
+ */
+export function parseAffiliateSignupOpen(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+  const referral = (value as Record<string, unknown>).referral;
+  if (!referral || typeof referral !== "object" || Array.isArray(referral)) return true;
+  return (referral as Record<string, unknown>).signupOpen !== false;
+}
+
 export function affiliatePayoutLabel(payout: AffiliatePayoutView) {
   if (payout.state === "sent") {
     return payout.reference && payout.recordedOn
@@ -381,7 +393,16 @@ function CopyReferralButton({ label, value }: { label: string; value: string }) 
  * portal for. It is deliberately *not* drenched: the accent is legible as emphasis only while it
  * stays scarce, and the money is the emphasis.
  */
-function ReferralIdentity({ code, link }: { code: string; link: string | null }) {
+function ReferralIdentity({
+  code,
+  link,
+  signupOpen,
+}: {
+  code: string;
+  link: string | null;
+  /** False while `/signup` cannot quote a plan; the route withholds the link and this says why. */
+  signupOpen: boolean;
+}) {
   return (
     <DeckPanel
       eyebrow="How coaches find you"
@@ -415,7 +436,9 @@ function ReferralIdentity({ code, link }: { code: string; link: string | null })
         <Prose className={`min-w-0 ${COACH_READING_CLASS} text-[color:var(--muted)]`} measure="prose">
           {link
             ? "Coaches who sign up through this link are yours. The code works too, if you are reading it out."
-            : "A coach enters this at signup and every commission they generate is yours."}
+            : signupOpen
+              ? "A coach enters this at signup and every commission they generate is yours."
+              : "Coach signup is not open yet, so there is no link to hand out. This code is yours, and it will work the day signup opens."}
         </Prose>
       </div>
     </DeckPanel>
@@ -513,6 +536,7 @@ export function AffiliateMoney({
   const [payouts, setPayouts] = useState<readonly AffiliatePayoutView[]>(initialPayouts ?? []);
   const [referralCode, setReferralCode] = useState<string | null>(initialReferralCode ?? null);
   const [referralLink, setReferralLink] = useState<string | null>(null);
+  const [signupOpen, setSignupOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "success" | "error">(
     hasInitialData ? "success" : "loading",
@@ -534,6 +558,7 @@ export function AffiliateMoney({
       const code = parseAffiliateReferralCode(payload);
       setReferralCode(code);
       setReferralLink(parseAffiliateReferralLink(payload, code));
+      setSignupOpen(parseAffiliateSignupOpen(payload));
       setLoadState("success");
     } catch (cause) {
       if (!signal?.aborted) {
@@ -723,7 +748,7 @@ export function AffiliateMoney({
                 <CoachDeck items={deckItems} />
               </section>
 
-              {referralCode ? <ReferralIdentity code={referralCode} link={referralLink} /> : null}
+              {referralCode ? <ReferralIdentity code={referralCode} link={referralLink} signupOpen={signupOpen} /> : null}
 
               {/*
                 `Affiliate.dc.html:163-168` draws this as the wide data panel: one card, the head
@@ -753,6 +778,7 @@ export function AffiliateMoney({
                   emptyState={<p className={`py-[var(--s-4)] ${COACH_READING_CLASS} text-[color:var(--muted)]`}>No referred coaches are recorded.</p>}
                   getRowId={(row) => row.rowId}
                   rowLabel={{ singular: "row", plural: "rows" }}
+                  summaryRow={(row) => row.kind === "total"}
                   toolbar={(
                     <ExportMenu
                       filename="setterfi-affiliate-referrals"

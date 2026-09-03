@@ -68,6 +68,35 @@ describe("CoachBilling", () => {
     expect(screen.queryByText(/internal review note/i)).not.toBeInTheDocument();
   });
 
+  it("reads a null snapshot as no current billing period, never as a failed load with a retry", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify(
+      String(input).includes("/api/billing/checkout")
+        ? { checkout: { state: "unavailable", offer: null, attempt: null } }
+        : { snapshot: null },
+    ), { headers: { "Content-Type": "application/json" }, status: 200 })));
+
+    render(<CoachBilling enabled />);
+
+    expect(await screen.findByRole("heading", { name: "No current billing period" })).toBeVisible();
+    expect(screen.getByText(/no subscription period that covers today/i)).toBeVisible();
+    expect(screen.queryByText("Billing details could not load")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a refused read distinct from an empty one, with its retry", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify(
+      String(input).includes("/api/billing/checkout")
+        ? { checkout: { state: "unavailable", offer: null, attempt: null } }
+        : { error: "Billing details are temporarily unavailable." },
+    ), { headers: { "Content-Type": "application/json" }, status: String(input).includes("/api/billing/checkout") ? 200 : 503 })));
+
+    render(<CoachBilling enabled />);
+
+    expect(await screen.findByRole("heading", { name: "Billing details could not load" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
+    expect(screen.queryByText("No current billing period")).not.toBeInTheDocument();
+  });
+
   it("renders the server-authorized offer and sends only its opaque tier id", async () => {
     const user = userEvent.setup();
     let release!: (response: Response) => void;

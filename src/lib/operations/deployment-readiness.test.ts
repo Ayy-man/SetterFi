@@ -20,6 +20,7 @@ function receipt(job: SystemJobReceipt["job"], overrides: Partial<SystemJobRecei
     startedAt: "2026-08-31T00:00:00.000Z",
     finishedAt: "2026-08-31T00:00:01.000Z",
     receiptId: `receipt-${job}`,
+    errorDetail: null,
     freshness: "fresh",
     freshnessWindowMs: 60_000,
     ...overrides,

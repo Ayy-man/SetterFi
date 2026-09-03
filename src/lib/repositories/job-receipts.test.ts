@@ -33,8 +33,21 @@ describe("job receipt repository", () => {
       startedAt: "2026-08-18T05:55:00.000Z",
       finishedAt: "2026-08-18T05:55:01.000Z",
       receiptId: "receipt-1",
+      errorDetail: null,
       freshness: "fresh",
       freshnessWindowMs: 20 * 60_000,
+    }]);
+  });
+
+  it("carries a failed receipt's error detail through, so the operator surface can say why", async () => {
+    const repository = createJobReceiptRepository({
+      readLatest: async () => [latest({
+        jobKey: "provisioning-run", outcome: "failed", errorDetail: "PROVISIONING_TENANT_READ_FAILED", counters: {},
+      })],
+    });
+
+    await expect(repository.readLatest()).resolves.toMatchObject([{
+      job: "provisioning-run", outcome: "failed", errorDetail: "PROVISIONING_TENANT_READ_FAILED",
     }]);
   });
 

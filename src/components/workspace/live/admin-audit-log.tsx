@@ -1599,7 +1599,7 @@ export function AdminAuditLog({
        * 1h's own subline, with the em dash traded for a comma: "Don't write an em dash in UI copy"
        * is a named rule and the artifact is not authority on it.
        */
-      description="Every publish, override, takeover, and pause, because \u201cwhy did the agent say that\u201d always has an answer. Nothing here can be edited or deleted."
+      description="Every publish, override, takeover, and pause, because “why did the agent say that” always has an answer. Nothing here can be edited or deleted."
       /*
        * Seeded events sit in the same log as real ones, so the page says so whenever any are on
        * screen. The table drops the per-row chip once every row is seeded, which is exactly when

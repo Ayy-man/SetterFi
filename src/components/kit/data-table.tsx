@@ -14,6 +14,7 @@ import {
   getSortedRowModel,
   type OnChangeFn,
   type PaginationState,
+  type Row,
   type RowSelectionState,
   type SortingState,
   type VisibilityState,
@@ -123,6 +124,13 @@ export type DataTableProps<T> = {
   onRowClick?: (row: T) => void;
   rowActions?: (row: T) => readonly RowAction[];
   rowActionsLabel?: (row: T) => string;
+  /**
+   * A row that is arithmetic over the others rather than one of them: the Total line under a
+   * ledger. It renders in place and sorts and filters with the rest, but the footer's "Showing
+   * 1–3 of 3" counts the rows it sums and leaves it out, because "4 rows" over three referrals
+   * and their total was a miscount an affiliate could check against their own list.
+   */
+  summaryRow?: (row: T) => boolean;
   /** Prepends the checkbox column. `selection` alone also turns it on. */
   selectable?: boolean;
   selection?: { onBulk: (ids: string[]) => void; actions: BulkAction[] };
@@ -437,6 +445,7 @@ export function DataTable<T>({
   search,
   selectable,
   selection,
+  summaryRow,
   testRow,
   testRowLabel = "Demo data",
   toolbar,
@@ -567,8 +576,13 @@ export function DataTable<T>({
     },
   });
 
+  // Summary rows render but are not counted: the footer describes the rows that were summed.
+  const countedRows = (rows: readonly Row<T>[]) =>
+    summaryRow ? rows.filter((row) => !summaryRow(row.original)).length : rows.length;
   const filteredRowCount = table.getFilteredRowModel().rows.length;
-  const totalRows = isCursorPagination ? pagination.totalRows : filteredRowCount;
+  const totalRows = isCursorPagination
+    ? pagination.totalRows
+    : countedRows(table.getFilteredRowModel().rows);
   const pageCount = Math.max(1, Math.ceil(totalRows / paginationState.pageSize));
 
   useEffect(() => {
@@ -596,7 +610,8 @@ export function DataTable<T>({
   const allRowsAreTest = everyRowIsTest(tableData, testRow);
   const firstShown =
     totalRows === 0 ? 0 : paginationState.pageIndex * paginationState.pageSize + 1;
-  const lastShown = totalRows === 0 ? 0 : Math.min(totalRows, firstShown + visibleRows.length - 1);
+  const lastShown =
+    totalRows === 0 ? 0 : Math.min(totalRows, firstShown + countedRows(visibleRows) - 1);
   const selectedIds = Object.entries(rowSelection)
     .filter(([, selected]) => selected)
     .map(([id]) => id);

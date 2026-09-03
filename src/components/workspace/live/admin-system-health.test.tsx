@@ -18,6 +18,7 @@ const jobs: SystemHealth["jobs"] = [
     lastRunAt: "2026-08-24T03:15:00.000Z",
     reportedSinceYesterday: true,
     receiptId: "receipt-appointment",
+    errorDetail: null,
     reason: null,
   },
   {
@@ -28,6 +29,7 @@ const jobs: SystemHealth["jobs"] = [
     lastRunAt: "2026-08-24T03:15:00.000Z",
     reportedSinceYesterday: true,
     receiptId: "receipt-compliance",
+    errorDetail: null,
     reason: null,
   },
   {
@@ -38,6 +40,7 @@ const jobs: SystemHealth["jobs"] = [
     lastRunAt: null,
     reportedSinceYesterday: false,
     receiptId: null,
+    errorDetail: null,
     reason: "No run report has been recorded.",
   },
   {
@@ -48,6 +51,7 @@ const jobs: SystemHealth["jobs"] = [
     lastRunAt: "2026-08-24T04:45:00.000Z",
     reportedSinceYesterday: true,
     receiptId: "receipt-payments",
+    errorDetail: null,
     reason: "The latest run report is outside its expected window.",
   },
   {
@@ -58,6 +62,7 @@ const jobs: SystemHealth["jobs"] = [
     lastRunAt: "2026-08-24T04:20:00.000Z",
     reportedSinceYesterday: true,
     receiptId: "receipt-allowances",
+    errorDetail: null,
     reason: null,
   },
   {
@@ -68,6 +73,7 @@ const jobs: SystemHealth["jobs"] = [
     lastRunAt: "2026-08-22T04:40:00.000Z",
     reportedSinceYesterday: false,
     receiptId: "receipt-rollup",
+    errorDetail: null,
     reason: "The latest run report is outside its expected window.",
   },
   {
@@ -79,6 +85,7 @@ const jobs: SystemHealth["jobs"] = [
     reportedSinceYesterday: true,
     receiptId: "receipt-delivery",
     reason: "The latest run report says this job failed.",
+    errorDetail: "PROVISIONING_TENANT_READ_FAILED",
   },
   {
     id: "engine-evals",
@@ -88,6 +95,7 @@ const jobs: SystemHealth["jobs"] = [
     lastRunAt: "2026-08-24T05:40:00.000Z",
     reportedSinceYesterday: true,
     receiptId: "receipt-evaluation",
+    errorDetail: null,
     reason: null,
   },
 ];
@@ -200,6 +208,26 @@ describe("AdminSystemHealth job-reporting alarm", () => {
       beside the job and its cron expression, which is where a reason is worth reading.
     */
     expect(screen.queryByText("At least one scheduled job reports a failure.")).toBeNull();
+
+    /*
+      What it does print is the thing the operator can act on: which job failed and what its
+      receipt recorded. The Jobs tab still carries the per-row detail; the banner names it here
+      because this card is the first thing read, and "1 of 8 failed" with no name sends the
+      reader to another tab to learn which one.
+    */
+    expect(screen.getByText(/Notification delivery\. Last error: Provisioning tenant read failed\./u)).toBeInTheDocument();
+  });
+
+  it("names a failing job without a recorded error as such, rather than inventing one", () => {
+    const silent = {
+      ...health,
+      jobs: jobs.map((job) => job.state === "failed" ? { ...job, errorDetail: null } : job),
+      reporting: { state: "failed" as const, reason: null },
+    };
+    render(<AdminSystemHealth health={silent} />);
+
+    expect(screen.getByText(/Notification delivery\. No error detail was recorded\./u)).toBeInTheDocument();
+    expect(screen.queryByText(/Last error:/u)).toBeNull();
   });
 
   /**
@@ -293,9 +321,18 @@ describe("AdminSystemHealth", () => {
     const { container } = render(<AdminSystemHealth health={health} />);
 
     expect(screen.getByText("Booking created")).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(/[A-Z]+_[A-Z_]+/);
-    expect(container.textContent).not.toMatch(/[A-Z][A-Z0-9]{2,}(_[A-Z0-9]+)+/);
-    expect(container.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:/);
+    /*
+      The technical-detail fold is the one place a raw value belongs -- it already carries receipt
+      ids, and now the failed job's error code verbatim, so an operator can copy it into a log
+      search. Everything outside the fold is prose an operator reads, and that is what must not
+      contain a machine name.
+    */
+    const readable = () => Array.from(container.querySelectorAll("*"))
+      .filter((node) => !node.closest('[data-slot="technical-detail"]') && node.children.length === 0)
+      .map((node) => node.textContent ?? "").join(" ");
+    expect(readable()).not.toMatch(/[A-Z]+_[A-Z_]+/);
+    expect(readable()).not.toMatch(/[A-Z][A-Z0-9]{2,}(_[A-Z0-9]+)+/);
+    expect(readable()).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:/);
 
     await user.click(screen.getByRole("tab", { name: "Jobs" }));
     expect(
@@ -304,7 +341,44 @@ describe("AdminSystemHealth", () => {
 
     await user.click(screen.getByRole("tab", { name: "Integrations" }));
     expect(screen.getAllByText("Mock")).toHaveLength(8);
-    expect(container.textContent).not.toMatch(/[A-Z][A-Z0-9]{2,}(_[A-Z0-9]+)+/);
+    expect(readable()).not.toMatch(/[A-Z][A-Z0-9]{2,}(_[A-Z0-9]+)+/);
+  });
+
+  /**
+   * "Failed" with no reason was the production screen: the badge said a job was failing, the
+   * row said the report said so, and the receipt's `error_detail` -- the one field that says
+   * why -- was recorded and never rendered. The row now carries it in sentence case, the fold
+   * carries it verbatim for a log search, and a job that did not fail carries neither.
+   */
+  it("says why a failed job failed, on its row and verbatim behind the fold", async () => {
+    const user = userEvent.setup();
+    render(<AdminSystemHealth health={health} />);
+
+    await user.click(screen.getByRole("tab", { name: "Jobs" }));
+    const rows = screen.getAllByTestId("system-job-row");
+    const failedRow = rows.find((row) => within(row).queryByText("Notification delivery"));
+    expect(failedRow).toBeDefined();
+    expect(within(failedRow!).getByText("Last error")).toBeInTheDocument();
+    expect(within(failedRow!).getByText("Provisioning tenant read failed")).toBeInTheDocument();
+    expect(screen.getAllByText("Last error")).toHaveLength(1);
+
+    const fold = document.querySelector('[data-slot="technical-detail"]');
+    expect(fold?.textContent).toContain("Notification delivery last error");
+    expect(fold?.textContent).toContain("PROVISIONING_TENANT_READ_FAILED");
+  });
+
+  it("keeps a free-text error detail verbatim rather than mangling it as a machine code", async () => {
+    const user = userEvent.setup();
+    const detail = "fetch failed: getaddrinfo ENOTFOUND db.synthetic.test";
+    render(<AdminSystemHealth health={{
+      ...health,
+      jobs: jobs.map((job) => job.state === "failed" ? { ...job, errorDetail: detail } : job),
+    }} />);
+
+    await user.click(screen.getByRole("tab", { name: "Jobs" }));
+    const failedRow = screen.getAllByTestId("system-job-row")
+      .find((row) => within(row).queryByText("Notification delivery"));
+    expect(within(failedRow!).getByText(detail)).toBeInTheDocument();
   });
 
   /**

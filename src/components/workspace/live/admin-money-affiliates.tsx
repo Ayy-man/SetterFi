@@ -822,9 +822,18 @@ function LedgerTable({
         // the button keeps the kit's `soft` accent instead, so the page spends accent once and
         // spends no fill at all -- the resting state DESIGN.md calls correct rather than
         // unfinished. Raised rather than card-rung because it floats over the rows it acts on.
-        <Surface
+        //
+        // The card face is applied by class rather than through `Surface`, and the difference is
+        // the whole bar. `Surface` declares itself a size-query container, and inline-size
+        // containment gives a `w-fit` element no intrinsic width: on 2026-09-02 production drew
+        // this about sixty pixels wide, its words broken mid-word, with the count and both buttons
+        // stacked inside. A floating toolbar has no container-queried header to serve, so it takes
+        // the face and not the containment. The padding and shadow are `!` utilities because the
+        // face's own sheet is unlayered and would otherwise win with the card's 16px 17px and
+        // resting shadow, which is what the bar was silently drawing before.
+        <div
           aria-label="Selected payout actions"
-          className="sticky bottom-[var(--s-4)] z-[var(--z-sticky)] mx-auto mt-[var(--s-3)] flex w-fit max-w-full flex-wrap items-center gap-[var(--s-3)] px-[var(--s-4)] py-[var(--s-2)] [box-shadow:var(--shadow-raised)]"
+          className="surface-card sticky bottom-[var(--s-4)] z-[var(--z-sticky)] mx-auto mt-[var(--s-3)] flex w-fit max-w-full flex-wrap items-center gap-[var(--s-3)] px-[var(--s-4)]! py-[var(--s-2)]! [box-shadow:var(--shadow-raised)]!"
           role="toolbar"
         >
           <MonoMeta>
@@ -836,7 +845,7 @@ function LedgerTable({
           <KitButton onClick={() => setSelectedIds(new Set())} size="sm" variant="ghost">
             Clear
           </KitButton>
-        </Surface>
+        </div>
       ) : null}
     </div>
   );

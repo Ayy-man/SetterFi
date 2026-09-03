@@ -25,6 +25,7 @@ function receipt(input: Partial<SystemJobReceipt> & Pick<SystemJobReceipt, "job"
     startedAt: "2026-08-18T05:40:00.000Z",
     finishedAt: "2026-08-18T05:40:00.000Z",
     receiptId: `receipt-${input.job}`,
+    errorDetail: null,
     freshness: "fresh",
     freshnessWindowMs: 26 * 60 * 60_000,
     ...input,
@@ -78,6 +79,25 @@ describe("read-only system health", () => {
     expect(result.reporting?.state).toBe("failed");
   });
 
+  it("passes a failed receipt's error detail to the job row and keeps it off every other state", async () => {
+    const result = await loadSystemHealth({
+      source: source({ readJobReceipts: async () => [
+        receipt({ job: "provisioning-run", outcome: "failed", errorDetail: "PROVISIONING_TENANT_READ_FAILED" }),
+        receipt({ job: "engine-evals", outcome: "succeeded", errorDetail: "STALE_DETAIL_FROM_AN_EARLIER_ROW" }),
+        receipt({ job: "appointment-reconcile", outcome: "failed", errorDetail: "OLD_FAILURE", finishedAt: "2026-08-15T03:15:00.000Z", freshness: "stale" }),
+      ] }),
+      environment: {}, now: NOW,
+    });
+
+    const failed = result.jobs.find((job) => job.id === "provisioning-run");
+    expect(failed).toMatchObject({ state: "failed", errorDetail: "PROVISIONING_TENANT_READ_FAILED" });
+    // A succeeded receipt carrying a detail is a receipt-writer bug, not a failure to report.
+    expect(result.jobs.find((job) => job.id === "engine-evals")).toMatchObject({ state: "healthy", errorDetail: null });
+    // A stale row is reported as stale; its old reason would read as a current fault.
+    expect(result.jobs.find((job) => job.id === "appointment-reconcile")).toMatchObject({ state: "stale", errorDetail: null });
+    expect(result.jobs.filter((job) => job.state === "never-ran").every((job) => job.errorDetail === null)).toBe(true);
+  });
+
   it("uses the receipt reader's explicit per-job freshness rather than inventing one", async () => {
     const result = await loadSystemHealth({
       source: source({ readJobReceipts: async () => [
@@ -109,7 +129,7 @@ describe("read-only system health", () => {
     const jobs = [{
       id: "followups", label: "Followups", schedule: "*/5 * * * *", state: "healthy" as const,
       lastRunAt: "2026-08-18T05:55:00.000Z", reportedSinceYesterday: true,
-      receiptId: "receipt-followups", reason: null,
+      receiptId: "receipt-followups", reason: null, errorDetail: null,
     }];
 
     expect(deriveSystemReportingState({ queueState: "available", jobs })).toEqual({ state: "healthy", reason: null });

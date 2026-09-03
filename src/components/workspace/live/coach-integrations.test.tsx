@@ -236,11 +236,12 @@ describe("CoachIntegrations", () => {
     expect(navigation.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("refuses provider commands in impersonation and keeps reconnect on the working Setup path", () => {
+  it("refuses provider commands in impersonation and never starts a Meta sign-in on the coach's behalf", () => {
     render(
       <CoachIntegrations
         connections={[connection({ state: "error" })]}
         impersonating
+        metaConnect="ready"
         templates={[]}
       />,
     );
@@ -251,8 +252,92 @@ describe("CoachIntegrations", () => {
       .toBeInTheDocument();
     expect(within(sheet).queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
     expect(within(sheet).queryByRole("button", { name: "Check provider access" })).not.toBeInTheDocument();
-    expect(within(sheet).getByRole("link", { name: "Reconnect" }))
-      .toHaveAttribute("href", "/coach/get-started");
+    expect(within(sheet).queryByRole("button", { name: "Reconnect" })).not.toBeInTheDocument();
+    expect(within(sheet).queryByRole("link", { name: "Reconnect" })).not.toBeInTheDocument();
+    expect(within(sheet).getByText(/This impersonated view is read-only/)).toBeInTheDocument();
+    expect(within(sheet).queryByText("Awaiting Meta review")).not.toBeInTheDocument();
+  });
+
+  /*
+   * The loop this closes: Connections sent every Instagram and Messenger "Connect" to Setup, and
+   * Setup's channel strip sent them back to Connections, so no Meta login ever started (seen in
+   * production 2026-09-02). Connections now starts the sign-in itself when the deployment can, and
+   * says in words that it cannot when it cannot -- never a link to Setup for either.
+   */
+  describe("starting a Meta sign-in", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("offers no control and names the Meta review when the deployment cannot start a sign-in", () => {
+      renderConnections([]);
+
+      const instagram = document.querySelector('[data-row-id="channel:instagram"]') as HTMLElement;
+      const messenger = document.querySelector('[data-row-id="channel:messenger"]') as HTMLElement;
+      const whatsapp = document.querySelector('[data-row-id="channel:whatsapp"]') as HTMLElement;
+      expect(within(instagram).getByText("Awaiting Meta review")).toBeInTheDocument();
+      expect(within(messenger).getByText("Awaiting Meta review")).toBeInTheDocument();
+      expect(within(whatsapp).getByText("Not offered yet")).toBeInTheDocument();
+      for (const row of [instagram, messenger, whatsapp]) {
+        expect(within(row).queryByRole("link", { name: /Connect|Reconnect/ })).not.toBeInTheDocument();
+        expect(within(row).queryByRole("button", { name: /Connect|Reconnect/ })).not.toBeInTheDocument();
+        expect(within(row).getByText("SetterFi owns the next step.")).toBeInTheDocument();
+      }
+      expect(document.body.innerHTML).not.toContain('href="/coach/get-started"');
+    });
+
+    it("posts the channel to the Meta connect route and sends the browser to the authorization URL", async () => {
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+        authorizationUrl: "https://www.facebook.com/v21.0/dialog/oauth?state=abc",
+        expiresAt: "2026-08-24T12:10:00.000Z",
+        state: "connecting",
+      }), { status: 201, headers: { "content-type": "application/json" } }));
+      vi.stubGlobal("fetch", fetchMock);
+      const assign = vi.fn();
+      vi.stubGlobal("location", { ...window.location, assign });
+
+      render(<CoachIntegrations connections={[]} metaConnect="ready" nowIso="2026-08-24T12:00:00.000Z" templates={[]} />);
+
+      const instagram = document.querySelector('[data-row-id="channel:instagram"]') as HTMLElement;
+      expect(within(instagram).getByText("Not connected")).toBeInTheDocument();
+      fireEvent.click(within(instagram).getByRole("button", { name: "Connect" }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      expect(url).toBe("/api/channels/meta/connect");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(String(init.body))).toEqual({ channel: "instagram", returnPath: "/coach/integrations" });
+      await waitFor(() => expect(assign).toHaveBeenCalledWith("https://www.facebook.com/v21.0/dialog/oauth?state=abc"));
+      // The card was not opened by the click: the control stops propagation.
+      expect(screen.queryByRole("complementary", { name: "Instagram connection" })).not.toBeInTheDocument();
+    });
+
+    it("reads a refused start back in words and claims nothing was started", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Meta connection could not be started." }), {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      })));
+      const assign = vi.fn();
+      vi.stubGlobal("location", { ...window.location, assign });
+
+      render(<CoachIntegrations connections={[connection({ state: "expired" })]} metaConnect="ready" templates={[]} />);
+
+      const instagram = document.querySelector('[data-row-id="channel:instagram"]') as HTMLElement;
+      fireEvent.click(within(instagram).getByRole("button", { name: "Reconnect" }));
+
+      expect(await within(instagram).findByRole("alert")).toHaveTextContent(
+        "Meta sign-in is not available on this deployment right now. No connection was started.",
+      );
+      expect(assign).not.toHaveBeenCalled();
+      expect(within(instagram).getByRole("button", { name: "Reconnect" })).toBeEnabled();
+    });
+  });
+
+  it("sends the calendar row to the step that owns the calendar choice, not to Setup", () => {
+    renderConnections([]);
+
+    const calendar = document.querySelector('[data-row-id="calendar:primary"]') as HTMLElement;
+    expect(within(calendar).getByRole("link", { name: "Connect" })).toHaveAttribute("href", "/onboarding/calendar");
   });
 
   it("does not offer provider disconnect when the read model cannot positively identify a revocable provider", () => {
@@ -548,6 +633,7 @@ describe("CoachIntegrations", () => {
           },
         }}
         connections={[connection()]}
+        metaConnect="ready"
         nowIso="2026-08-24T16:00:00.000Z"
         templates={[]}
       />,
@@ -558,9 +644,10 @@ describe("CoachIntegrations", () => {
     expect(messenger).not.toBeNull();
     expect(sms).not.toBeNull();
     expect(messenger?.compareDocumentPosition(sms as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Messenger is the coach's; WhatsApp has no coach-facing sign-up, so it is never counted here.
     const waitingOnYou = screen.getByText("Waiting on you").parentElement;
     expect(waitingOnYou).not.toBeNull();
-    expect(within(waitingOnYou as HTMLElement).getByText("2")).toBeInTheDocument();
+    expect(within(waitingOnYou as HTMLElement).getByText("1")).toBeInTheDocument();
   });
 
   it.each([
@@ -929,12 +1016,17 @@ describe("CoachIntegrations", () => {
     const withWork = render(
       <CoachIntegrations
         connections={[connection()]}
+        metaConnect="ready"
         nowIso="2026-08-24T16:00:00.000Z"
         templates={[]}
       />,
     );
-    // Two rows are the coach's own required work here, and only the first of them is lit.
-    expect(screen.getAllByRole("link", { name: /Connect|Reconnect/ }).length).toBeGreaterThan(1);
+    // Two rows are the coach's own required work here (Messenger's sign-in button and the
+    // calendar's link), and only the first of them is lit.
+    expect([
+      ...screen.getAllByRole("button", { name: /^(Connect|Reconnect)$/ }),
+      ...screen.getAllByRole("link", { name: /Connect|Reconnect/ }),
+    ].length).toBeGreaterThan(1);
     expect(document.querySelectorAll('[class*="--accent-fill"]')).toHaveLength(1);
     withWork.unmount();
 

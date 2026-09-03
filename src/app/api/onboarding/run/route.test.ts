@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { accessToken } from "@/lib/access";
+import { createJobReceiptExecution } from "@/lib/jobs/job-receipts";
 
 import { approvedCampaignInput, createProvisioningRunHandler } from "./handler";
 
@@ -114,6 +115,30 @@ describe("/api/onboarding/run", () => {
     const response = await createProvisioningRunHandler({ enabled: () => true, secret: "synthetic-cron-secret", run })(request());
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({ code: "PHASE4_META_CONNECT_SEAM_MISSING" });
+  });
+
+  /**
+   * The generic 503 is deliberately blank on the wire -- "Provisioning run could not be
+   * completed." -- so the only place the cause survives is the receipt. The receipt wraps
+   * `work()` through `execute`, so the thrown message has to reach `error_detail` intact; this
+   * is what the Jobs tab's "Last error" line is built on.
+   */
+  it("records the underlying failure in the scheduled receipt while the response stays generic", async () => {
+    const finished: unknown[] = [];
+    const execute = createJobReceiptExecution({
+      start: async () => ({ id: "receipt-1", started_at: "2026-09-03T13:33:00.000Z" }),
+      finish: async (input) => { finished.push(input); },
+    });
+    const run = vi.fn().mockRejectedValue(new Error("PROVISIONING_TENANT_READ_FAILED"));
+    const response = await createProvisioningRunHandler({
+      enabled: () => true, secret: "synthetic-cron-secret", execute, run,
+    })(request("GET"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ error: "Provisioning run could not be completed." });
+    expect(finished).toEqual([expect.objectContaining({
+      id: "receipt-1", outcome: "failed", errorDetail: "PROVISIONING_TENANT_READ_FAILED",
+    })]);
   });
 
   it("uses the same digest path as the existing cron convention", async () => {

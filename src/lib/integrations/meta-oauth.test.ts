@@ -7,6 +7,7 @@ import { realArmSkipReason } from "@/lib/env-contract";
 import {
   createMetaOAuthService,
   createMockMetaOAuthService,
+  metaOAuthStartAvailable,
   selectMetaOAuthService,
   validateMetaReturnPath,
   type MetaOAuthRepositories,
@@ -343,3 +344,48 @@ describe.skipIf(Boolean(realSkipReason))(
     });
   },
 );
+
+describe("metaOAuthStartAvailable", () => {
+  const oauthNames = {
+    APP_BASE_URL: "https://setterfi.test",
+    META_APP_ID: "app",
+    META_APP_SECRET: "secret",
+    META_LOGIN_CONFIG_ID: "config",
+    SETTERFI_CREDENTIAL_ENCRYPTION_KEY: "key",
+  };
+
+  it("is false while the phase flag is off, whatever the driver says", () => {
+    expect(metaOAuthStartAvailable({ SETTERFI_META_DRIVER: "real", ...oauthNames })).toBe(false);
+  });
+
+  it("is false when the driver selector is unset or production refuses mock", () => {
+    expect(metaOAuthStartAvailable({ SETTERFI_PHASE4_LIVE: "true" })).toBe(false);
+    expect(metaOAuthStartAvailable({
+      SETTERFI_PHASE4_LIVE: "true",
+      SETTERFI_META_DRIVER: "mock",
+      NODE_ENV: "production",
+    })).toBe(false);
+  });
+
+  it("is false on the real arm until every OAuth credential name exists", () => {
+    expect(metaOAuthStartAvailable({
+      SETTERFI_PHASE4_LIVE: "true",
+      SETTERFI_META_DRIVER: "real",
+      APP_BASE_URL: oauthNames.APP_BASE_URL,
+      META_APP_ID: oauthNames.META_APP_ID,
+    })).toBe(false);
+    expect(metaOAuthStartAvailable({
+      SETTERFI_PHASE4_LIVE: "true",
+      SETTERFI_META_DRIVER: "real",
+      ...oauthNames,
+    })).toBe(true);
+  });
+
+  it("is true on the mock arm outside production", () => {
+    expect(metaOAuthStartAvailable({
+      SETTERFI_PHASE4_LIVE: "true",
+      SETTERFI_META_DRIVER: "mock",
+      NODE_ENV: "test",
+    })).toBe(true);
+  });
+});

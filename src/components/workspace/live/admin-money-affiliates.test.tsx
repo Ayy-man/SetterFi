@@ -223,6 +223,27 @@ describe("AdminMoneyAffiliates", () => {
     ).toBeVisible();
   });
 
+  /**
+   * 2026-09-02, production: the bar rendered about sixty pixels wide with its words broken
+   * mid-word. It was a `Surface`, and every `Surface` is a `@container` (inline-size containment),
+   * under which a `w-fit` element has no intrinsic width and collapses to its padding. The bar
+   * is a floating object over the rows, not a card carrying a container-queried header, so it
+   * must not be one.
+   */
+  it("floats the bulk approval bar without inline-size containment, so w-fit can measure it", async () => {
+    const user = userEvent.setup();
+    renderAffiliates();
+
+    await user.click(await screen.findByRole("checkbox", {
+      name: "Select commission row for Reid Funding Group, $45.00",
+    }));
+
+    const bulkBar = screen.getByRole("toolbar", { name: "Selected payout actions" });
+    expect(bulkBar).not.toHaveClass("@container");
+    expect(bulkBar).not.toHaveAttribute("data-slot", "surface");
+    expect(bulkBar).toHaveClass("surface-card", "w-fit", "max-w-full");
+  });
+
   it("lists one confirmation line for every selected ledger row", async () => {
     const user = userEvent.setup();
     renderAffiliates();

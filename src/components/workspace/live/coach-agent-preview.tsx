@@ -241,12 +241,12 @@ const REPLAY_BUTTON_CLASS =
  * **The faces stay token-spelled, and that is load-bearing.** Both of these sit on a drenched
  * panel, and `coach.css:816` re-declares `--well`, `--line`, `--body` and the four text roles for
  * that subtree so a face inside it is authored against the drench rather than the page; `:1002`
- * then inverts anything matching `bg-[var(--accent-fill)]` to a near-white face with dark ink,
+ * then inverts anything matching `[background:var(--accent-fill)]` to a near-white face with dark ink,
  * measured at 5.82:1 against the panel with the label at 13.62:1 on it.
  *
  * So the inversion this panel needs already exists and it is a stylesheet rule, not a class list.
  * Writing the inverted face here instead would be worse in three ways that are easy to miss from
- * inside this file: the rule matches on the literal text `bg-[var(--accent-fill)]`, so changing
+ * inside this file: the rule matches on the literal text `[background:var(--accent-fill)]`, so changing
  * the spelling silently un-styles the button; `coach-drench-controls.test.ts:217` exists to catch
  * exactly that rename and reads `PRIMARY_BUTTON_CLASS` by name; and the rule covers every accent
  * face on any drenched coach panel, where a local class covers one button. Hard-coding white
@@ -260,7 +260,7 @@ const SECONDARY_BUTTON_CLASS =
 
 const PRIMARY_BUTTON_CLASS =
   "inline-flex h-[56px] items-center justify-center gap-[12px] rounded-[12px]"
-  + " border border-[var(--accent-line)] bg-[var(--accent-fill)] px-[28px] text-[18px]"
+  + " border border-[var(--accent-line)] [background:var(--accent-fill)] px-[28px] text-[18px]"
   + ` leading-none font-semibold text-[color:var(--on-accent)] no-underline ${ACCENT_FILL_SHADOW_CLASS}`;
 
 /**

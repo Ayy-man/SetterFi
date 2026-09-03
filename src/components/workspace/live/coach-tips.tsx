@@ -69,7 +69,7 @@ const PANEL_SENTENCE_CLASS = `m-0 max-w-[var(--measure-deck)] text-[color:var(--
 const DURATION_CLASS =
   "font-[family-name:var(--font-mono)] text-[15px] leading-[1.4] text-[color:var(--faint)] [font-variant-numeric:tabular-nums_lining-nums]";
 const ACCENT_FILL_CLASS =
-  "inline-flex h-[56px] items-center justify-center gap-[12px] rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-fill)] px-[28px] text-[18px] leading-none font-semibold text-[color:var(--on-accent)] no-underline" +
+  "inline-flex h-[56px] items-center justify-center gap-[12px] rounded-[12px] border border-[var(--accent-line)] [background:var(--accent-fill)] px-[28px] text-[18px] leading-none font-semibold text-[color:var(--on-accent)] no-underline" +
   ` ${ACCENT_FILL_SHADOW_CLASS}`;
 const SECONDARY_BUTTON_CLASS =
   "inline-flex h-[56px] items-center justify-center rounded-[12px] border border-[var(--line)] bg-[var(--well)] px-[24px] text-[17px] leading-none font-medium text-[color:var(--body)] no-underline hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)]";

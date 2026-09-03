@@ -383,6 +383,14 @@ The full Vitest suite (568 files) surfaced 23 failures in the repo's tree-wide r
 
 > push all to main
 
+## Note 23 (2026-09-03)
+
+> did you even push anything tf
+
+## Note 24 (2026-09-03)
+
+> mf fuck the rehaul env var get rid of it and actually push rehaul to main
+
 ## Flags removed: 2026-09-03 13:10
 
 Per note 24, `SETTERFI_UI_REHAUL` and `SETTERFI_NAV_FOLD` are deleted from the env contract, `.env.example` and `docs/SETUP.md`. Every page renders the rehaul unconditionally; the folded 8-item rail is the only admin navigation; the 13 folded routes redirect unconditionally. Deleted with the flags: the legacy onboarding pages, five old admin components, the old coach offer/conversations/measurement components, the six offer-editor shells and coach-owned-sections. Surfaces that would otherwise have been lost were re-homed: the marketplace install panel and attempts table live on Clients as the Setup tab (`/admin/platform-clients?tab=setup`, provisioning redirects there); the cadence-purpose editor is Agent step 7 "If they go quiet"; the five coach server exports the rehaul had dropped are back; the login return-path field and signup referral prefill were ported. Full suite 551 files, 6607 tests green; tsc 0; eslint 0 errors (15 warnings, pre-existing).

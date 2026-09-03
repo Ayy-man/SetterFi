@@ -74,6 +74,20 @@ function displayDestination(value: string) {
     : value);
 }
 
+/**
+ * What a failed receipt recorded, in the register the row is written in.
+ *
+ * Most details are the thrown code -- `PROVISIONING_TENANT_READ_FAILED` -- and a screaming
+ * constant in a sentence-case row is a machine name on an operator screen, which the page rule
+ * forbids. Anything that is not a bare code (a provider's message, a network error) is kept
+ * verbatim, because lower-casing "ENOTFOUND db.example" would change what it says. The raw
+ * string is still on the page, under Technical detail, for a log search.
+ */
+function displayErrorDetail(value: string) {
+  const trimmed = value.trim().replace(/\.$/u, "");
+  return /^[A-Z0-9_]+$/u.test(trimmed) ? humanizeMachineValue(trimmed) : trimmed;
+}
+
 function deliveryState(state: string): { label: string; tone: StateTone } {
   if (["delivered", "sent", "succeeded"].includes(state)) {
     return { label: "Delivered", tone: "good" };
@@ -290,6 +304,23 @@ const REPORTING_ALARM_CONSEQUENCE = {
 const REPORTING_ALARM_NEXT = "Nothing on this page retries a schedule. The Jobs tab beside this one "
   + "lists every job, its cron expression, when it last reported, and what that report said.";
 
+/**
+ * The one cause this read CAN know: what a failed run wrote into its own receipt.
+ *
+ * The comment above rules out naming a cause for a run that never happened. A run that failed
+ * is the opposite case -- the runner caught the error and recorded its message -- so printing it
+ * here is reporting evidence rather than asserting a diagnosis. A failed job whose receipt holds
+ * no detail says so in those words; leaving it blank would read as though the field had not
+ * been looked at.
+ */
+function failedJobsSentence(health: SystemHealth) {
+  const failed = health.jobs.filter((job) => job.state === "failed");
+  if (failed.length === 0) return null;
+  return failed.map((job) => (job.errorDetail
+    ? `${job.label}. Last error: ${displayErrorDetail(job.errorDetail)}.`
+    : `${job.label}. No error detail was recorded.`)).join(" ");
+}
+
 function reportingAlarm(health: SystemHealth) {
   const state = health.reporting?.state;
   if (!state || !(state in REPORTING_ALARM)) return null;
@@ -306,7 +337,11 @@ function reportingAlarm(health: SystemHealth) {
     title: affected === 0
       ? SYSTEM_REPORTING_BADGE[alarmState].label
       : alarmHeadline(alarmState, affected, health.jobs.length),
-    body: `${REPORTING_ALARM_CONSEQUENCE[alarmState]} ${REPORTING_ALARM_NEXT}`,
+    body: [
+      REPORTING_ALARM_CONSEQUENCE[alarmState],
+      alarmState === "failed" ? failedJobsSentence(health) : null,
+      REPORTING_ALARM_NEXT,
+    ].filter(Boolean).join(" "),
   };
 }
 
@@ -460,13 +495,16 @@ function jobExportRows(health: SystemHealth) {
     reportedSinceYesterday: job.reportedSinceYesterday,
     receiptId: job.receiptId ?? "",
     reason: job.reason ?? "",
+    lastError: job.errorDetail ?? "",
   }));
 }
 
 function JobsTab({ health }: { health: SystemHealth }) {
-  const jobTechnicalDetail = health.jobs.flatMap((job) => job.receiptId
-    ? [{ label: `${job.label} receipt`, value: job.receiptId }]
-    : []);
+  const jobTechnicalDetail = health.jobs.flatMap((job) => [
+    ...(job.receiptId ? [{ label: `${job.label} receipt`, value: job.receiptId }] : []),
+    // Verbatim, because this is the string to paste into a log search; the row above reads it.
+    ...(job.errorDetail ? [{ label: `${job.label} last error`, value: job.errorDetail }] : []),
+  ]);
 
   return (
     <Surface aria-labelledby="jobs-title" className="min-w-0" variant="panel">
@@ -516,6 +554,19 @@ function JobsTab({ health }: { health: SystemHealth }) {
                   {job.reason ? (
                     <Prose className="mt-[var(--s-2)] text-[12.5px] leading-[1.5] text-[color:var(--muted)]">
                       {job.reason}
+                    </Prose>
+                  ) : null}
+                  {/*
+                    The reason line says the run failed; this says why, from the receipt the run
+                    wrote. Only a failed row has one, so the label appears exactly where there is
+                    something to act on, and the row stays on the muted ink -- the state beside
+                    it is already the only colour this row spends.
+                  */}
+                  {job.errorDetail ? (
+                    <Prose className="mt-[var(--s-1)] text-[12.5px] leading-[1.5] text-[color:var(--muted)]">
+                      <span className="font-medium text-[color:var(--ink)]">Last error</span>
+                      {" "}
+                      <span>{displayErrorDetail(job.errorDetail)}</span>
                     </Prose>
                   ) : null}
                 </div>

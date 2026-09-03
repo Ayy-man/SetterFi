@@ -16,6 +16,8 @@ export type SystemJobReceipt = {
   startedAt: string | null;
   finishedAt: string | null;
   receiptId: string | null;
+  /** What the runner recorded when the run failed; null on every other outcome. */
+  errorDetail: string | null;
   freshness: LatestJobReceipt["freshness"];
   freshnessWindowMs: number;
 };
@@ -41,6 +43,7 @@ function receiptProjection(receipt: LatestJobReceipt): SystemJobReceipt {
     startedAt: receipt.startedAt,
     finishedAt: receipt.finishedAt,
     receiptId: receipt.id,
+    errorDetail: receipt.errorDetail,
     freshness: receipt.freshness,
     freshnessWindowMs: receipt.freshnessWindowMs,
   };

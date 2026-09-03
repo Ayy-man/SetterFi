@@ -1020,12 +1020,19 @@ export function CoachBilling({
           title="Billing details could not load"
         />
       ) : null}
+      {/*
+        `snapshot: null` is an answer, not a failure. `loadOwnBilling` returns it when the tenant
+        has no `billing_subscriptions` row, or has one whose period does not cover today, and the
+        read itself succeeded. This used to render as "Billing details could not load" with a
+        Retry, which is false twice over: the details loaded, and retrying a successful read can
+        never produce a period that does not exist (seen on the demo coach 2026-09-02, whose seeded
+        period ended 2026-09-01). The transport failure keeps its own branch above.
+      */}
       {!loading && !loadError && !snapshot ? (
         <DataState
-          body={`${FAILURE_BODY.billingUnavailable} ${FAILURE_BODY.billing}`}
-          kind="unavailable"
-          retry={retryLoad}
-          title="Billing details could not load"
+          body={`This workspace has no subscription period that covers today, so there is no plan, allowance or invoice to show. ${FAILURE_BODY.billingUnavailable}`}
+          kind="empty"
+          title="No current billing period"
         />
       ) : null}
 

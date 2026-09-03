@@ -1086,7 +1086,7 @@
  * ## What this selector matches, and what it therefore misses
  *
  * It is an attribute selector over the class string: it matches an element whose `class` contains
- * the literal text `bg-[var(--accent-fill)]` or `bg-[var(--accent)]`, which are the two spellings
+ * the literal text `[background:var(--accent-fill)]` or `bg-[var(--accent)]`, which are the two spellings
  * Tailwind emits for an accent face and the two that exist in `src/` today. That is matching on
  * what a thing is *called* rather than on what it is, and the tradeoff is deliberate but real, so
  * it is written here rather than left to be discovered.
@@ -1120,7 +1120,7 @@
  * un-styling the button.
  */
 [data-shell-role="coach"] .coach-panel[data-drench]
-  :where([class*="bg-[var(--accent-fill)]"], [class*="bg-[var(--accent)]"]) {
+  :where([class*="[background:var(--accent-fill)]"], [class*="bg-[var(--accent)]"]) {
   border-color: rgba(255, 255, 255, 0.4);
   background: rgba(255, 255, 255, 0.96);
   color: oklch(0.28 0.06 232);

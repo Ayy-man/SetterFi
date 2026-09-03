@@ -61,6 +61,12 @@ export type SystemHealth = {
     reportedSinceYesterday: boolean;
     receiptId: string | null;
     reason: string | null;
+    /**
+     * The failed receipt's own `error_detail`, only on a job whose latest run failed. Every other
+     * state sets it null: a stale row's old failure would read as a current one, and a succeeded
+     * receipt carrying a detail is a writer bug rather than something to report.
+     */
+    errorDetail: string | null;
   }[];
   providers: readonly {
     id: string;
@@ -226,6 +232,7 @@ function jobInventory(
         reportedSinceYesterday: false,
         receiptId: null,
         reason: "Job receipts could not be read.",
+        errorDetail: null,
       };
     }
     if (!receipt) {
@@ -236,6 +243,7 @@ function jobInventory(
         reportedSinceYesterday: false,
         receiptId: null,
         reason: "No run report has been recorded.",
+        errorDetail: null,
       };
     }
     const lastRunAt = receipt.finishedAt ?? receipt.startedAt;
@@ -251,6 +259,7 @@ function jobInventory(
         reportedSinceYesterday: false,
         receiptId: null,
         reason: "No run report has been recorded.",
+        errorDetail: null,
       };
     }
     if (receipt.freshness === "stale") {
@@ -261,6 +270,7 @@ function jobInventory(
         reportedSinceYesterday,
         receiptId: receipt.receiptId,
         reason: "The latest run report is outside its expected window.",
+        errorDetail: null,
       };
     }
     if (receipt.freshness === "in_progress") {
@@ -271,15 +281,18 @@ function jobInventory(
         reportedSinceYesterday,
         receiptId: receipt.receiptId,
         reason: "The latest run has not recorded a terminal outcome.",
+        errorDetail: null,
       };
     }
+    const failed = receipt.outcome !== "succeeded";
     return {
       ...job,
-      state: receipt.outcome === "succeeded" ? "healthy" as const : "failed" as const,
+      state: failed ? "failed" as const : "healthy" as const,
       lastRunAt,
       reportedSinceYesterday,
       receiptId: receipt.receiptId,
-      reason: receipt.outcome === "failed" ? "The latest run report says this job failed." : null,
+      reason: failed ? "The latest run report says this job failed." : null,
+      errorDetail: failed ? receipt.errorDetail?.trim() || null : null,
     };
   });
 }

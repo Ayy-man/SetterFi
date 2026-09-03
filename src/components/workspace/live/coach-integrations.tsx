@@ -58,6 +58,12 @@ import {
 } from "@/components/workspace/live/coach-type";
 import { cn } from "@/lib/utils";
 import {
+  META_CONNECT_FAILURE_COPY,
+  startMetaConnection,
+  type MetaConnectChannel,
+  type MetaConnectStartResult,
+} from "./coach-meta-connect";
+import {
   COACH_MESSAGING_CONNECTION_NOTE,
   type CoachMessagingConnectionState,
 } from "./coach-messaging-connection-view-models";
@@ -123,7 +129,7 @@ export { CARRIER_TYPICAL_DAYS };
  * carriers own everything spends no fill at all.
  */
 const ACCENT_FILL_CLASS =
-  "inline-flex h-[var(--coach-target-primary)] items-center justify-center rounded-[12px] border border-[var(--accent-line)] bg-[var(--accent-fill)] px-[24px] text-[17px] leading-none font-semibold text-[color:var(--on-accent)] shadow-[0_1px_0_rgba(255,255,255,0.25)_inset,0_8px_20px_-8px_var(--accent)]";
+  "inline-flex h-[var(--coach-target-primary)] items-center justify-center rounded-[12px] border border-[var(--accent-line)] [background:var(--accent-fill)] px-[24px] text-[17px] leading-none font-semibold text-[color:var(--on-accent)] shadow-[0_1px_0_rgba(255,255,255,0.25)_inset,0_8px_20px_-8px_var(--accent)]";
 const QUIET_ACTION_CLASS =
   "inline-flex h-[var(--coach-target)] shrink-0 items-center rounded-[10px] border border-[var(--line)] bg-[rgba(255,255,255,0.04)] px-[16px] text-[16px] leading-none text-[color:var(--body)] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)]";
 
@@ -192,10 +198,26 @@ const CALENDAR_PROVIDER_LABELS: Readonly<Record<CalendarConnectionSnapshot["prov
   google: "Google Calendar",
 };
 
-type ConnectionAction = {
-  label: "Connect" | "Reconnect";
-  href: string;
-  required: boolean;
+/**
+ * Whether this deployment can start a Meta sign-in at all, decided on the server from the phase
+ * flag, the driver selector and the OAuth credential names (`metaOAuthStartAvailable`). The
+ * default is the honest one: a page that does not know cannot offer a button.
+ */
+export type MetaConnectAvailability = "ready" | "awaiting_meta";
+
+/**
+ * A row's one control. A `link` goes to the page that owns the next step; `meta-oauth` calls
+ * `POST /api/channels/meta/connect` and sends the browser to Meta. Both are "required" when the
+ * coach is the owner, which is what earns a row the page's single accent fill.
+ */
+type ConnectionAction =
+  | { kind: "link"; label: "Connect" | "Reconnect"; href: string; required: boolean }
+  | { kind: "meta-oauth"; label: "Connect" | "Reconnect"; channel: MetaConnectChannel; required: boolean };
+
+type MetaConnectState = {
+  channel: MetaConnectChannel;
+  phase: "pending" | "failed";
+  message: string;
 };
 
 type ProviderCommandTarget = "channel" | "google-calendar";
@@ -391,8 +413,12 @@ function socialRow(input: {
   registration: A2pRegistrationRead;
   now: Date;
   conversionTracking: ConversionTrackingState | null;
+  metaConnect: MetaConnectAvailability | "read_only";
 }): ConnectionRow {
-  const { channel, connection, activity, lastError, registration, now, conversionTracking } = input;
+  const { channel, connection, activity, lastError, registration, now, conversionTracking, metaConnect } = input;
+  const metaChannel: MetaConnectChannel | null = channel.channel === "instagram" || channel.channel === "messenger"
+    ? channel.channel
+    : null;
   const label = coachIntegrationLabel(channel.channel);
   const proof = connection ? receiptState(connection.receipts) : "connecting";
   const isSms = channel.channel === "sms";
@@ -453,7 +479,7 @@ function socialRow(input: {
       stateLabel = "Awaiting you";
       tone = "warning";
       owner = "you";
-      action = { label: "Connect", href: "/coach/get-started", required: true };
+      action = { kind: "link", label: "Connect", href: "/coach/get-started", required: true };
       detail = "Registration needs information from Setup before it can move to carrier review.";
       whatToTry = "Open Setup and complete the requested registration information.";
     } else if (registrationState === "awaiting_provider" || (registrationState === "running" && filed)) {
@@ -505,24 +531,72 @@ function socialRow(input: {
         : "Carrier review time could not be confirmed";
   } else {
     switch (connection?.state) {
+      /*
+       * The two states a coach can act on, and the three answers they get.
+       *
+       * Instagram and Messenger connect through Meta's login, which this page starts itself
+       * (`startMetaConnection`). Until 2026-09-02 both rows linked to Setup and Setup linked back
+       * here, so no login ever began. When the deployment cannot start one -- app review pending,
+       * driver still `mock`, credentials absent -- the row says that and offers nothing, because
+       * a button that can only ever fail is the fake affordance the honest-state rule forbids.
+       *
+       * WhatsApp has no coach-facing sign-up in the product yet (the embedded-signup route has no
+       * page caller), so it never offers a control either, and says so in words.
+       */
       case undefined:
       case "disconnected":
-        stateLabel = "Not connected";
-        tone = "neutral";
-        owner = "you";
-        action = { label: "Connect", href: "/coach/get-started", required: true };
         detail = "No connection receipt is stored yet.";
-        whatToTry = "Open Setup and connect the account you want your agent to use.";
+        if (metaChannel && metaConnect === "ready") {
+          stateLabel = "Not connected";
+          tone = "neutral";
+          owner = "you";
+          action = { kind: "meta-oauth", label: "Connect", channel: metaChannel, required: true };
+          whatToTry = `Press Connect to sign in with Meta and choose the ${label} account your agent should answer on.`;
+        } else if (metaChannel && metaConnect === "read_only") {
+          stateLabel = "Not connected";
+          tone = "neutral";
+          owner = "you";
+          whatToTry = "Connecting needs the coach's own session. This impersonated view is read-only.";
+        } else if (metaChannel) {
+          stateLabel = "Awaiting Meta review";
+          tone = "waiting";
+          owner = "setterfi";
+          detail = `${label} sign-in opens here once Meta approves SetterFi's app. No connection receipt is stored yet.`;
+          whatToTry = "There is nothing for you to press yet. SetterFi owns the Meta review and will turn this on when it clears.";
+        } else {
+          stateLabel = "Not offered yet";
+          tone = "neutral";
+          owner = "setterfi";
+          detail = `${label} connection is not offered from this page yet. No connection receipt is stored.`;
+          whatToTry = "There is nothing for you to press. SetterFi sets this channel up with you when it is available.";
+        }
         break;
       case "error":
       case "expired":
       case "restricted":
-        stateLabel = "Reconnect needed";
-        tone = "warning";
-        owner = "you";
-        action = { label: "Reconnect", href: "/coach/get-started", required: true };
         detail = "The saved connection no longer has enough current evidence to receive messages.";
-        whatToTry = "Reconnect the account from Setup, then run a signed test message.";
+        if (metaChannel && metaConnect === "ready") {
+          stateLabel = "Reconnect needed";
+          tone = "warning";
+          owner = "you";
+          action = { kind: "meta-oauth", label: "Reconnect", channel: metaChannel, required: true };
+          whatToTry = "Press Reconnect to sign in with Meta again, then run a signed test message.";
+        } else if (metaChannel && metaConnect === "read_only") {
+          stateLabel = "Reconnect needed";
+          tone = "warning";
+          owner = "you";
+          whatToTry = "Reconnecting needs the coach's own session. This impersonated view is read-only.";
+        } else if (metaChannel) {
+          stateLabel = "Reconnect needed";
+          tone = "warning";
+          owner = "setterfi";
+          whatToTry = "Reconnecting needs Meta sign-in, which opens here once Meta approves SetterFi's app. SetterFi owns that review.";
+        } else {
+          stateLabel = "Reconnect needed";
+          tone = "warning";
+          owner = "setterfi";
+          whatToTry = "SetterFi owns reconnecting this channel. There is nothing for you to press here.";
+        }
         break;
       case "ready":
         if (readyToTest) {
@@ -682,7 +756,8 @@ function calendarRow(read: CalendarConnectionRead): ConnectionRow {
       stateLabel: "Not connected",
       tone: "neutral",
       priority: 0,
-      action: { label: "Connect", href: "/coach/get-started", required: true },
+      // The calendar step owns the choice and carries the Google sign-in link; Setup does not.
+      action: { kind: "link", label: "Connect", href: "/onboarding/calendar", required: true },
       owner: "you",
       activity: { checked: true, at: null },
       activityLabel: "Last availability check",
@@ -693,7 +768,7 @@ function calendarRow(read: CalendarConnectionRead): ConnectionRow {
       lastError: { checked: true, message: null },
       history: [],
       technical: [],
-      whatToTry: "Open Setup and connect the calendar where your agent should book calls.",
+      whatToTry: "Open the calendar step and connect the calendar where your agent should book calls.",
       replyWindow: "Calendar availability is not governed by a messaging reply window.",
       conversionTracking: null,
     };
@@ -705,7 +780,7 @@ function calendarRow(read: CalendarConnectionRead): ConnectionRow {
   const needsReconnect = ["error", "disconnected", "expired"].includes(connection.state);
   const connecting = connection.state === "connecting";
   const action: ConnectionAction | null = needsReconnect
-    ? { label: "Reconnect", href: "/coach/get-started", required: true }
+    ? { kind: "link", label: "Reconnect", href: "/onboarding/calendar", required: true }
     : null;
   const history = connection.lastSlotFetchAt ? [{
     label: connection.lastSlotFetchOk ? "Availability check passed" : "Availability check failed",
@@ -816,6 +891,12 @@ function ActivityReadout({ activity, now }: { activity: ConnectionActivity; now:
  * whose SMS row said "The carrier owns the next step." on the card read "Nothing for you to do."
  * the moment they opened it, on the same row, in the same second.
  */
+/** A Meta sign-in readback belongs to one row: the one whose action names that channel. */
+function metaStateFor(row: ConnectionRow, state: MetaConnectState | null): MetaConnectState | null {
+  if (!state || row.action?.kind !== "meta-oauth") return null;
+  return row.action.channel === state.channel ? state : null;
+}
+
 function ownerSentence(owner: ConnectionRow["owner"]) {
   if (owner === "you") return "The next step is yours.";
   if (owner === "carrier") return "The carrier owns the next step.";
@@ -860,12 +941,16 @@ function ConnectionCard({
   selected,
   spendAccent,
   onOpen,
+  metaState,
+  onStartMeta,
 }: {
   row: ConnectionRow;
   now: Date;
   selected: boolean;
   spendAccent: boolean;
   onOpen: () => void;
+  metaState: MetaConnectState | null;
+  onStartMeta: (channel: MetaConnectChannel) => void;
 }) {
   const Icon = row.icon;
   // The carrier day counter arrives as the row's detail node; a plain sentence arrives as a
@@ -957,16 +1042,59 @@ function ConnectionCard({
           {ownerSentence(row.owner)}
         </span>
         {row.action ? (
-          <a
+          <ActionControl
+            action={row.action}
             className={spendAccent ? ACCENT_FILL_CLASS : QUIET_ACTION_CLASS}
-            href={row.action.href}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {row.action.label}
-          </a>
+            metaState={metaState}
+            onStartMeta={onStartMeta}
+          />
         ) : null}
       </div>
+      {metaState?.phase === "failed" ? (
+        <p className="m-0 text-[15px] leading-[1.5] text-[color:var(--failure-text)]" role="alert">
+          {metaState.message}
+        </p>
+      ) : null}
     </Surface>
+  );
+}
+
+/**
+ * The row's control, rendered as what it is: a link when the next step lives on another page, a
+ * button when this page starts the step itself. The button disables only while its own request is
+ * in flight, and says so in its label rather than greying out with no reason.
+ */
+function ActionControl({
+  action,
+  className,
+  metaState,
+  onStartMeta,
+}: {
+  action: ConnectionAction;
+  className: string;
+  metaState: MetaConnectState | null;
+  onStartMeta: (channel: MetaConnectChannel) => void;
+}) {
+  if (action.kind === "link") {
+    return (
+      <a className={className} href={action.href} onClick={(event) => event.stopPropagation()}>
+        {action.label}
+      </a>
+    );
+  }
+  const pending = metaState?.phase === "pending" && metaState.channel === action.channel;
+  return (
+    <button
+      className={className}
+      disabled={pending}
+      onClick={(event) => {
+        event.stopPropagation();
+        onStartMeta(action.channel);
+      }}
+      type="button"
+    >
+      {pending ? "Opening Meta sign-in" : action.label}
+    </button>
   );
 }
 
@@ -1051,6 +1179,8 @@ function InlineConnectionSheet({
   onRequestDisconnect,
   datasetCommandState,
   onSetupConversion,
+  metaState,
+  onStartMeta,
 }: {
   row: ConnectionRow;
   onClose: () => void;
@@ -1060,6 +1190,8 @@ function InlineConnectionSheet({
   onRequestDisconnect: () => void;
   datasetCommandState: DatasetCommandState | null;
   onSetupConversion: () => Promise<void>;
+  metaState: MetaConnectState | null;
+  onStartMeta: (channel: MetaConnectChannel) => void;
 }) {
   const Icon = row.icon;
   const commandPending = commandState?.phase === "pending";
@@ -1109,6 +1241,11 @@ function InlineConnectionSheet({
         <ConnectionDetail row={row} />
         {commandState ? <ProviderCommandReadback state={commandState} /> : null}
         {datasetCommandState ? <DatasetCommandReadback state={datasetCommandState} /> : null}
+        {metaState?.phase === "failed" ? (
+          <p className="mt-[var(--s-3)] text-[16px] leading-[1.55] text-[color:var(--failure-text)]" role="alert">
+            {metaState.message}
+          </p>
+        ) : null}
         {impersonating && row.connectionId ? (
           <Prose className="mt-[var(--s-3)] text-[16px] leading-[1.55] text-[color:var(--faint)]">
             Provider commands are unavailable in a read-only impersonated view.
@@ -1118,9 +1255,12 @@ function InlineConnectionSheet({
       {row.action || (!impersonating && (canCheckProvider || canDisconnect || canSetupConversion)) ? (
         <footer className="flex flex-wrap items-center gap-[var(--s-2)] border-t border-[var(--line)] px-[var(--s-5)] py-[var(--s-3)]">
           {row.action ? (
-            <a className={QUIET_ACTION_CLASS} href={row.action.href}>
-              {row.action.label}
-            </a>
+            <ActionControl
+              action={row.action}
+              className={QUIET_ACTION_CLASS}
+              metaState={metaState}
+              onStartMeta={onStartMeta}
+            />
           ) : null}
           {!impersonating && canCheckProvider ? (
             <KitButton disabled={commandPending} onClick={onCheckProvider} size="sm" variant="secondary">
@@ -1203,6 +1343,7 @@ export function CoachIntegrations({
   conversionTracking = { enabled: false, checked: true, datasets: [] },
   storedErrorsByConnection = {},
   nowIso = new Date().toISOString(),
+  metaConnect = "awaiting_meta",
 }: {
   connections: ChannelConnectionView[] | null;
   templates: MessageTemplateView[] | null;
@@ -1215,6 +1356,8 @@ export function CoachIntegrations({
   conversionTracking?: ConversionTrackingRead;
   storedErrorsByConnection?: Record<string, ConnectionErrorRead> | null;
   nowIso?: string;
+  /** Server-decided. An impersonated session never starts a sign-in on the coach's behalf. */
+  metaConnect?: MetaConnectAvailability;
 }) {
   const searchParams = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -1223,6 +1366,7 @@ export function CoachIntegrations({
   const [providerCommand, setProviderCommand] = useState<ProviderCommandState | null>(null);
   const [disconnectConnectionId, setDisconnectConnectionId] = useState<string | null>(null);
   const [datasetCommand, setDatasetCommand] = useState<DatasetCommandState | null>(null);
+  const [metaState, setMetaState] = useState<MetaConnectState | null>(null);
   const router = useRouter();
   const now = safeDate(nowIso) ?? new Date(0);
 
@@ -1284,6 +1428,9 @@ export function CoachIntegrations({
       registration: a2pRegistration,
       now,
       conversionTracking: conversionTrackingState(channel.channel, conversionTracking, connection?.id ?? null),
+      // An impersonated session never starts a sign-in on the coach's behalf, and says so rather
+      // than pretending the deployment is waiting on Meta.
+      metaConnect: impersonating && metaConnect === "ready" ? "read_only" : metaConnect,
     });
   });
   rows.push(calendarRow(calendar));
@@ -1308,6 +1455,19 @@ export function CoachIntegrations({
     datasetCommand?.channel === selected.conversionTracking.channel
     ? datasetCommand
     : null;
+
+  async function runMetaConnect(channel: MetaConnectChannel) {
+    setMetaState({ channel, phase: "pending", message: "Asking Meta for a sign-in link." });
+    const result: MetaConnectStartResult = await startMetaConnection({
+      channel,
+      fetch: (url, init) => fetch(url, init),
+      assign: (url) => window.location.assign(url),
+    });
+    if (result.status === "failed") {
+      setMetaState({ channel, phase: "failed", message: META_CONNECT_FAILURE_COPY[result.reason] });
+    }
+    // On "redirecting" the browser is leaving; the pending label stays until it does.
+  }
 
   async function runDatasetSetup(row: ConnectionRow) {
     const tracking = row.conversionTracking;
@@ -1642,8 +1802,10 @@ export function CoachIntegrations({
                       {bandRows.map((row) => (
                         <div className="flex min-w-0" key={row.id} role="listitem">
                           <ConnectionCard
+                            metaState={metaStateFor(row, metaState)}
                             now={now}
                             onOpen={() => setSelectedId(row.connectionId ?? row.id)}
+                            onStartMeta={(channel) => void runMetaConnect(channel)}
                             row={row}
                             selected={selected?.id === row.id}
                             spendAccent={row.id === accentRowId}
@@ -1666,7 +1828,9 @@ export function CoachIntegrations({
             onClose={() => setSelectedId(null)}
             onRequestDisconnect={() => setDisconnectConnectionId(selected.connectionId)}
             datasetCommandState={selectedDatasetCommand}
+            metaState={metaStateFor(selected, metaState)}
             onSetupConversion={() => runDatasetSetup(selected)}
+            onStartMeta={(channel) => void runMetaConnect(channel)}
             row={selected}
           />
         ) : null}
