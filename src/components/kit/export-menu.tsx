@@ -468,11 +468,9 @@ export function ExportMenu(props: ExportMenuProps) {
             <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
               {props.mode === "local" ? "Current rows" : "All matching rows"}
             </span>
-            {props.mode === "server" ? (
-              <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
-                {serverAuditAction.microcopy}
-              </span>
-            ) : null}
+            <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
+              {props.mode === "server" ? serverAuditAction.microcopy : "Rows already on screen, not logged"}
+            </span>
           </span>
         </DropdownMenuItem>
         <DropdownMenuItem
@@ -485,11 +483,9 @@ export function ExportMenu(props: ExportMenuProps) {
             <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
               Structured source data
             </span>
-            {props.mode === "server" ? (
-              <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
-                {serverAuditAction.microcopy}
-              </span>
-            ) : null}
+            <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
+              {props.mode === "server" ? serverAuditAction.microcopy : "Rows already on screen, not logged"}
+            </span>
           </span>
         </DropdownMenuItem>
         {failure ? (
