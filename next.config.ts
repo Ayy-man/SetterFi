@@ -10,6 +10,13 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
   // Phase 6: dedicated money pages use Next's server-side 403 interrupt before serializing data.
   experimental: { authInterrupts: true },
+  // The public marketing site is a static build under public/site (the scroll-craft page). When
+  // the landing flag is on, `/` serves it in place; the proxy already lets a signed-out browser
+  // have `/`, and `/site` is in PUBLIC_PREFIXES so the page's own script, styles and images load.
+  rewrites: async () =>
+    process.env.SETTERFI_PUBLIC_LANDING_LIVE === "true"
+      ? { beforeFiles: [{ source: "/", destination: "/site/index.html" }] }
+      : [],
   redirects: async () => [
     { source: "/admin", destination: "/admin/overview", permanent: false },
     { source: "/admin/agent-defaults", destination: "/admin/brain", permanent: false },

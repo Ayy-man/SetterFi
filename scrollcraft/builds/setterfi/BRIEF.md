@@ -67,7 +67,9 @@ owner should correct any inferred line before the build is treated as final.
 | 3 | The thread | Intimacy | The camera holds on the phone and the conversation runs under the wheel: five questions asked and answered at 02:14 while the coach sleeps. No headline. |
 | 4 | The answers | Clarity | The camera pulls back and the real console is there beside the phone, the five answers landed in their fields. |
 | 5 | Friday 11:00 | **Relief (the peak)** | The ground is fully morning. A line draws itself from the 02:14 bubble across the world and lands on the Friday 11:00 slot, which lights. The rest of the week stays dim. |
-| 6 | Your week | Resolve | The camera settles back on the wide shot it started from. The full week is now understood. The reply bubble is the way in. |
+| 6 | Meta hears about it | Leverage | Added 2026-09-04 at the owner's request. The camera crosses to a Meta Events Manager card and the QualifiedLead and Purchase events land in the coach's dataset. |
+| 7 | Then the numbers | Proof | The camera crosses the world to the coach's own home screen: leads, booked calls, time to book (the demo workspace, labelled as a sample). |
+| 8 | Your week | Resolve | The camera settles back on the wide shot it started from. The full week is now understood. The reply bubble is the way in. |
 
 Adjacent feelings are all different. The peak has the longest hold and the
 biggest visual change (the line, the light, the ground at its brightest).

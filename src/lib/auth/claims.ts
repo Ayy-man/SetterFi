@@ -128,6 +128,8 @@ export function canAccessWorkspace(
  * and the login/auth pair. Tenant onboarding itself requires a live session.
  */
 const PUBLIC_PREFIXES = [
+  // The static marketing site that `/` rewrites to when the public landing is live.
+  "/site",
   "/consumer",
   "/api/consumer-agent",
   "/api/webhooks",

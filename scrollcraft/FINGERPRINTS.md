@@ -28,7 +28,7 @@ changes only grammar and world will fail it.
 
 | Build | Grammar | Nav treatment | Hero device | Act-sequence shape | Close pattern | Signature move | World | Port |
 |---|---|---|---|---|---|---|---|---|
-| setterfi (2026-09-03) | Continuous world (worldflight, one DOM leg, camera = transform on the world) | Waypoint map: fixed rail of five clickable positions lit by track, wordmark beside it | Establishing wide shot of a DOM world (the two calendars, no clip) | Dive and return: wide, push into the night (dark ground), hold on the phone, pull back to the consoles, peak on Friday, settle back to the wide shot; 10vh track, 6 waypoints | Arrival back at the hero frame with the CTA as a world object (reply bubble) and a one-line footer | The provenance line: an SVG path draws from the 02:14 message across the world onto the Friday 11:00 slot, which lights only when it arrives | Pale blue-grey product world, Archivo + IBM Plex Mono, real console screenshots | 4531 |
+| setterfi (2026-09-03) | Continuous world (worldflight, one DOM leg, camera = transform on the world) | Wordmark plus Sign in and one CTA, no map (the owner removed the waypoint rail for production) | Establishing wide shot of a DOM world (the two calendars, no clip) | Dive and loop: wide, push into the night (dark ground), hold on the phone, pull back to the consoles, peak on Friday, then across the world to the Meta events card and the coach's numbers, settle back to the wide shot; 13vh track, 8 waypoints | Arrival back at the hero frame with the CTA as a world object (reply bubble) and a one-line footer | The provenance line: an SVG path draws from the 02:14 message across the world onto the Friday 11:00 slot, which lights only when it arrives | Pale blue-grey product world, Archivo + IBM Plex Mono, real console screenshots | 4531 |
 
 *(empty: your first build has nothing to clear, so build whatever the interview
 points at. From the second onwards, this table is the constraint.)*
@@ -43,7 +43,6 @@ act-count-and-length band. The shared columns are what the next build inherits
 as a constraint, so writing them down is the whole point.
 
 - Continuous world in worldflight with a DOM leg and a camera transform (setterfi).
-- Waypoint map nav lit by track position (setterfi).
 - Dive-and-return sequence that closes on the hero frame (setterfi).
 - The provenance line: a path that draws from a message to a calendar slot (setterfi).
 
