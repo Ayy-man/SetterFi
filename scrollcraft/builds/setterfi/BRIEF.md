@@ -123,4 +123,4 @@ night's story.
 - Hero is an establishing position in the world: the C6 composition seen wide.
 - Close is arrival back at the wide shot with the reply bubble as the object,
   and a one-line footer with privacy and contact.
-- One CTA label everywhere: "Give me that week".
+- One CTA label everywhere: "Get started".
