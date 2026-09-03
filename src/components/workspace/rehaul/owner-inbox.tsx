@@ -587,7 +587,7 @@ function ThreadMessage({ actorId, message }: { actorId: string; message: Platfor
           <span aria-hidden="true" className="h-px flex-1 bg-[var(--line-soft)]" />
         </div>
         <div className="rounded-lg border border-dashed border-[var(--line)] px-[12px] py-[8px] text-[12.5px] text-[color:var(--muted)]">
-          {message.body}
+          {displayName(message.body)}
         </div>
       </div>
     );
@@ -611,7 +611,7 @@ function ThreadMessage({ actorId, message }: { actorId: string; message: Platfor
               : "rounded-[12px_12px_12px_4px] border border-[var(--line)] bg-[var(--well)]",
           ].join(" ")}
         >
-          {message.body}
+          {displayName(message.body)}
         </div>
       </div>
     </div>
@@ -927,7 +927,7 @@ function NoticeDetail({
     >
       <div className="flex min-h-0 flex-1 flex-col gap-[14px] overflow-auto px-[18px] py-[16px]">
         <div className="rounded-[11px] border border-[var(--line-soft)] bg-[var(--well)] px-[14px] py-[12px] text-[13px] leading-[1.5] text-[color:var(--body)]">
-          {item?.body ?? item?.ruleDescription ?? "No detail is recorded on this notice."}
+          {displayName(item?.body ?? item?.ruleDescription ?? "No detail is recorded on this notice.")}
         </div>
         <FactList
           rows={[

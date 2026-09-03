@@ -7,7 +7,7 @@
  * search matches -- as plain functions a test can pin without mounting a router.
  */
 
-import { displayName } from "@/lib/format/display-name";
+import { displayName, displayNameOrNull } from "@/lib/format/display-name";
 import type { AttentionItem } from "@/lib/operations/attention-queue";
 import type { PlatformSupportThreadRead } from "@/lib/repositories/support";
 import type { InboxLanes } from "@/components/workspace/live/inbox-lanes";
@@ -82,7 +82,7 @@ export function inboxRows(
     .map((thread) => ({
       key: `client:${thread.id}`,
       lane: "client" as const,
-      title: thread.subject,
+      title: displayName(thread.subject),
       context: `${displayName(thread.tenantName)} · ${assigneeName(thread)}`,
       waitMinutes: minutesBetween(thread.updatedAt, now.asOf),
       mine: thread.assignedTo?.id === actorId,
@@ -93,8 +93,8 @@ export function inboxRows(
   const system = lanes.system.map((item) => ({
     key: `system:${item.id}`,
     lane: "system" as const,
-    title: item.title,
-    context: [item.tenantName ? displayName(item.tenantName) : "Platform", item.ruleDescription ?? item.body]
+    title: displayName(item.title),
+    context: [item.tenantName ? displayName(item.tenantName) : "Platform", displayNameOrNull(item.ruleDescription ?? item.body)]
       .filter((part): part is string => Boolean(part && part.trim()))
       .join(" · "),
     waitMinutes: item.openForMinutes,
