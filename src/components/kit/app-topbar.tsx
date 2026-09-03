@@ -33,6 +33,7 @@ import {
   type WorkspaceTheme,
 } from "@/lib/theme";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 
 import { cn } from "@/lib/utils";
 import { useWorkspaceEnv } from "@/components/workspace/workspace-env";
@@ -167,6 +168,17 @@ const THEME_CHOICES: ReadonlyArray<{ value: ThemePreference; label: string }> = 
   { value: "system", label: "System" },
 ];
 
+/**
+ * The rehaul's account sheet, loaded only where it is rendered.
+ *
+ * A static import would put the sheet -- and with it the notification view models, the guide
+ * catalogue and the Base UI dialog -- into the chunk every page of every role downloads, including
+ * the flag-off path that never renders it. `next/dynamic` keeps it in its own chunk, so with
+ * `SETTERFI_UI_REHAUL` off nothing about this bundle changes.
+ */
+const AccountSheet = dynamic(() =>
+  import("@/components/workspace/rehaul/account-sheet").then((module) => module.AccountSheet));
+
 function readRootTheme(): WorkspaceTheme {
   if (typeof document === "undefined") return "light";
   const explicitTheme =
@@ -232,7 +244,8 @@ export function AppTopbar({
   const helpHref = ROLE_HELP_HREF[role];
   const tipsHref = ROLE_TIPS_HREF[role];
   const billingHref = ROLE_BILLING_HREF[role];
-  const { account, mode } = useWorkspaceEnv();
+  const { account, mode, rehaulLive } = useWorkspaceEnv();
+  const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   /*
    * The chip only becomes the artboard's named one when there is a name to put in it. With no
    * name -- the open and password fixtures, a failed read, a workspace opened by somebody whose
@@ -297,6 +310,92 @@ export function AppTopbar({
   useEffect(() => {
     watchThemeTransitionOrigin();
   }, []);
+
+  /*
+   * The chip's face and its contents, hoisted so the rehaul's sheet trigger and the dropdown's
+   * trigger are literally the same control rather than two that have to be kept matching. Nothing
+   * moved: every class string below is the one the trigger already carried, including the coach's
+   * `data-[popup-open]` edge, which is inert on a plain button and is what draws the tether from
+   * the chip to the popup when there is one.
+   */
+  const accountChipClassName = cn(
+    "shrink-0 transition-none active:translate-y-0",
+    account?.firstName
+      ? isCoach
+        ? "h-[46px] gap-[11px] rounded-[12px] border-[var(--line)] bg-[var(--well)] pr-[14px] pl-[8px]"
+        : "h-[var(--s-8)] gap-[var(--s-2)] rounded-[var(--r-control)] px-[var(--s-2)]"
+      : isCoach
+        ? "size-[46px] rounded-[12px] border-[var(--line)] bg-[var(--well)]"
+        : "size-[var(--s-8)] rounded-[var(--r-full)]",
+    /*
+      The open state, which `CoachAccountMenu.dc.html:196` draws and the chip did not have: the
+      artboard's chip is mid-open with `border: 1px solid var(--accent-edge)` and its chevron in
+      `--accent-text`, rotated 180 degrees.
+
+      It matters more here than it would on a console control because Base UI renders no backdrop
+      and the menu is portalled to `document.body`, so with the chip inert there is nothing at all
+      on the page marking where the 340px panel came from -- the one artboard on the coach side
+      that draws a scrim (`CoachAccountMenu.dc.html:194`) is drawing what we deliberately do not
+      ship. The edge is the only remaining tether between the trigger and its popup.
+
+      Base UI puts `data-popup-open` on the trigger, which is the same hook
+      `data-table-column-header.tsx:62` and `admin-audit-log.tsx:1055` already press the same way.
+      Coach only: the console's chip is 32px chrome a team lives in and has no artboard asking
+      for this.
+    */
+    isCoach && "data-[popup-open]:border-[var(--accent-edge)]",
+  );
+  /*
+    A named chip is a content-sized control, not a 32px square: `size="icon"` is `size-8`, which
+    fixes the width and truncated the first name to nothing while the chevron squeezed against the
+    initials (reported 2026-09-03). The unnamed fallback keeps the square it always had.
+  */
+  const accountChipSize = account?.firstName ? "default" : "icon";
+  const accountChipContent = (
+    <>
+      <span
+        className={cn(
+          "tracking-normal",
+          isCoach ? "font-[family-name:var(--font-mono)] text-[13px]" : "text-over",
+          account?.firstName
+            && (isCoach
+              ? "inline-flex size-[32px] items-center justify-center rounded-[8px] border border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[var(--accent-text)]"
+              : "inline-flex size-[var(--s-6)] items-center justify-center rounded-[var(--r-full)] bg-[var(--band)]"),
+        )}
+      >
+        {initials}
+      </span>
+      {account?.firstName ? (
+        <>
+          <span
+            className={cn(
+              "max-w-[calc(var(--s-12)*2)] truncate",
+              isCoach ? "text-[16px] text-[var(--ink)]" : "text-body",
+            )}
+          >
+            {account.firstName}
+          </span>
+          {/*
+            `in-data-[popup-open]:` rather than a `group` on the trigger, because the trigger is a
+            `render=` Button and adding a group class to it would change what every other role's
+            chip matches. `in-*` compiles to `:where([data-popup-open]) .x`, which is an ancestor
+            match at zero added specificity, and Tailwind emits it after the unvariant
+            `text-[var(--faint)]` so the open colour wins on source order -- both checked against
+            this repo's own compiler rather than assumed.
+          */}
+          <ChevronDown
+            aria-hidden
+            className={
+              isCoach
+                ? "size-[17px] text-[var(--faint)] transition-[rotate,color] duration-[var(--duration-quick)] ease-[var(--ease-out)] in-data-[popup-open]:rotate-180 in-data-[popup-open]:text-[var(--accent-text)] motion-reduce:transition-none"
+                : undefined
+            }
+            strokeWidth={1.75}
+          />
+        </>
+      ) : null}
+    </>
+  );
 
   function chooseTheme(next: ThemePreference) {
     setPreference(next);
@@ -457,91 +556,51 @@ export function AppTopbar({
           </Link>
         ) : null}
 
+        {/*
+          The account chip, and the one place the rehaul reaches into this bar.
+
+          With `SETTERFI_UI_REHAUL` on, the chip opens the 520px account sheet instead of the
+          eleven-row dropdown: the same sections, over the page the reader is already on, rather
+          than six separate routes out of it. The chip itself is the same control in both branches
+          -- same face, same contents, same accessible name -- because the two share
+          `accountChipClassName` and `accountChipContent` above. With the flag off this whole
+          branch is dead and the dropdown below renders exactly what it always has.
+
+          Affiliate is excluded rather than folded into the owner variant. The rehaul canvas draws
+          two account panels, `OwnerSettings` and `CoachSettings`, and the owner one carries the
+          account terms registry and the operator runbooks -- platform sections an affiliate must
+          not be handed. With no artboard of its own, the affiliate portal keeps the menu it has.
+        */}
+        {rehaulLive && role !== "affiliate" ? (
+          <>
+            <Button
+              aria-label={ROLE_ACCOUNT_LABELS[role]}
+              className={accountChipClassName}
+              onClick={() => setAccountSheetOpen(true)}
+              size={accountChipSize}
+              variant="outline"
+            >
+              {accountChipContent}
+            </Button>
+            <AccountSheet
+              onOpenChange={setAccountSheetOpen}
+              open={accountSheetOpen}
+              variant={isCoach ? "coach" : "owner"}
+            />
+          </>
+        ) : (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
               <Button
                 aria-label={ROLE_ACCOUNT_LABELS[role]}
-                className={cn(
-                  "shrink-0 transition-none active:translate-y-0",
-                  account?.firstName
-                    ? isCoach
-                      ? "h-[46px] gap-[11px] rounded-[12px] border-[var(--line)] bg-[var(--well)] pr-[14px] pl-[8px]"
-                      : "h-[var(--s-8)] gap-[var(--s-2)] rounded-[var(--r-control)] px-[var(--s-2)]"
-                    : isCoach
-                      ? "size-[46px] rounded-[12px] border-[var(--line)] bg-[var(--well)]"
-                      : "size-[var(--s-8)] rounded-[var(--r-full)]",
-                  /*
-                    The open state, which `CoachAccountMenu.dc.html:196` draws and the chip did not
-                    have: the artboard's chip is mid-open with `border: 1px solid var(--accent-edge)`
-                    and its chevron in `--accent-text`, rotated 180 degrees.
-
-                    It matters more here than it would on a console control because Base UI renders
-                    no backdrop and the menu is portalled to `document.body`, so with the chip inert
-                    there is nothing at all on the page marking where the 340px panel came from --
-                    the one artboard on the coach side that draws a scrim
-                    (`CoachAccountMenu.dc.html:194`) is drawing what we deliberately do not ship.
-                    The edge is the only remaining tether between the trigger and its popup.
-
-                    Base UI puts `data-popup-open` on the trigger, which is the same hook
-                    `data-table-column-header.tsx:62` and `admin-audit-log.tsx:1055` already press
-                    the same way. Coach only: the console's chip is 32px chrome a team lives in and
-                    has no artboard asking for this.
-                  */
-                  isCoach && "data-[popup-open]:border-[var(--accent-edge)]",
-                )}
-                /*
-                  A named chip is a content-sized control, not a 32px square: `size="icon"` is
-                  `size-8`, which fixes the width and truncated the first name to nothing while the
-                  chevron squeezed against the initials (reported 2026-09-03). The unnamed fallback
-                  keeps the square it always had.
-                */
-                size={account?.firstName ? "default" : "icon"}
+                className={accountChipClassName}
+                size={accountChipSize}
                 variant="outline"
               />
             }
           >
-            <span
-              className={cn(
-                "tracking-normal",
-                isCoach ? "font-[family-name:var(--font-mono)] text-[13px]" : "text-over",
-                account?.firstName
-                  && (isCoach
-                    ? "inline-flex size-[32px] items-center justify-center rounded-[8px] border border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[var(--accent-text)]"
-                    : "inline-flex size-[var(--s-6)] items-center justify-center rounded-[var(--r-full)] bg-[var(--band)]"),
-              )}
-            >
-              {initials}
-            </span>
-            {account?.firstName ? (
-              <>
-                <span
-                  className={cn(
-                    "max-w-[calc(var(--s-12)*2)] truncate",
-                    isCoach ? "text-[16px] text-[var(--ink)]" : "text-body",
-                  )}
-                >
-                  {account.firstName}
-                </span>
-                {/*
-                  `in-data-[popup-open]:` rather than a `group` on the trigger, because the trigger
-                  is a `render=` Button and adding a group class to it would change what every
-                  other role's chip matches. `in-*` compiles to `:where([data-popup-open]) .x`,
-                  which is an ancestor match at zero added specificity, and Tailwind emits it after
-                  the unvariant `text-[var(--faint)]` so the open colour wins on source order --
-                  both checked against this repo's own compiler rather than assumed.
-                */}
-                <ChevronDown
-                  aria-hidden
-                  className={
-                    isCoach
-                      ? "size-[17px] text-[var(--faint)] transition-[rotate,color] duration-[var(--duration-quick)] ease-[var(--ease-out)] in-data-[popup-open]:rotate-180 in-data-[popup-open]:text-[var(--accent-text)] motion-reduce:transition-none"
-                      : undefined
-                  }
-                  strokeWidth={1.75}
-                />
-              </>
-            ) : null}
+            {accountChipContent}
           </DropdownMenuTrigger>
           {/*
             The coach's menu is portalled out of the coach shell, so it is told which shell it
@@ -692,6 +751,7 @@ export function AppTopbar({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
         </div>
       </header>
 

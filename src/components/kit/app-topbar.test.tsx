@@ -166,3 +166,64 @@ describe("the named account chip", () => {
     expect(chip.className.split(/\s+/u)).toContain("size-[46px]");
   });
 });
+
+/**
+ * The one place the 2026-09 rehaul reaches into this bar.
+ *
+ * `SETTERFI_UI_REHAUL` is not a `NEXT_PUBLIC_` variable, so a client component cannot read it: the
+ * flag arrives through `WorkspaceEnvProvider`, resolved once by the workspace layout above every
+ * shell mount. These two tests are the seam -- on, the chip opens the sheet and the eleven-row
+ * dropdown is gone; off, the dropdown is exactly what it was, which is the half worth guarding.
+ */
+describe("the account chip under the rehaul flag", () => {
+  function renderChip(rehaulLive: boolean) {
+    render(
+      <WorkspaceEnvProvider
+        account={{ fullName: "Dana Hart", firstName: "Dana", business: "Hart Credit" }}
+        demoAccountSwitching={false}
+        demoViews={demoViewTargets}
+        mode="supabase"
+        rehaulLive={rehaulLive}
+      >
+        <SidebarProvider>
+          <AppTopbar {...TOPBAR_PROPS} nav={COACH_NAV} role="coach" />
+        </SidebarProvider>
+      </WorkspaceEnvProvider>,
+    );
+    return screen.getByRole("button", { name: "Coach account" });
+  }
+
+  it("opens the account sheet instead of the dropdown when the flag is on", async () => {
+    const user = userEvent.setup();
+    const chip = renderChip(true);
+    // The chip is the same control either way: same face, same name, same initials and first name.
+    expect(chip.textContent).toContain("Dana");
+    expect(chip.textContent).toContain("DH");
+
+    await user.click(chip);
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-slot="account-sheet"]')).not.toBeNull();
+    });
+    expect(document.querySelector('[data-slot="dropdown-menu-content"]')).toBeNull();
+  });
+
+  it("leaves the dropdown untouched when the flag is off", async () => {
+    const user = userEvent.setup();
+    const chip = renderChip(false);
+
+    await user.click(chip);
+
+    let content: HTMLElement | null = null;
+    await waitFor(() => {
+      content = document.querySelector('[data-slot="dropdown-menu-content"]');
+      expect(content).not.toBeNull();
+    });
+    expect(document.querySelector('[data-slot="account-sheet"]')).toBeNull();
+    const labels = Array.from((content as unknown as HTMLElement).querySelectorAll("a")).map(
+      (link) => link.textContent?.trim(),
+    );
+    expect(labels).toContain("Billing");
+    expect(labels).toContain("Help");
+  });
+});
