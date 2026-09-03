@@ -78,9 +78,20 @@ function absenceLabel(state: MetricState | "missing") {
   return "Unavailable" as const;
 }
 
+/**
+ * A percentage, at the precision a rate is actually known to.
+ *
+ * Every other unit here rounds, and percent used to interpolate the raw number, which was invisible
+ * for as long as the console read the stored preview snapshot, because those values were written
+ * already rounded. Reading the real projection, a churn rate of one cancellation in twenty-four is
+ * 4.166666666666667, and the card printed all seventeen digits and overflowed. One decimal is what
+ * the shared formatter in `lib/format/metric.ts` uses and all the precision a cycle rate carries.
+ */
+const PERCENT_FORMATTER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+
 function formatMetric(evidence: MetricEvidence, value: number) {
   const definition = metricDefinition(evidence.metricKey);
-  if (definition.unit === "percent") return `${value}%`;
+  if (definition.unit === "percent") return `${PERCENT_FORMATTER.format(value)}%`;
   if (definition.unit === "cents") {
     return new Intl.NumberFormat("en-US", {
       style: "currency",

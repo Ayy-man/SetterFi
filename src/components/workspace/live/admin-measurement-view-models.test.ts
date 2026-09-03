@@ -152,6 +152,24 @@ describe("admin measurement view", () => {
     expect(booked?.descriptor.window).toBe(metricDefinition("platform.booked_appointments").window);
   });
 
+  /*
+   * One cancellation in twenty-four accounts is 4.166666666666667 percent, and the card printed
+   * every digit of it and overflowed. The stored preview snapshot hid this for months because its
+   * values were written already rounded, so the defect only appeared once the console read the
+   * real projection.
+   */
+  it("rounds a rate to one decimal instead of printing the raw quotient", () => {
+    const evidence = snapshot();
+    evidence.metrics = evidence.metrics.map((row) =>
+      row.metricKey === "platform.churn_rate"
+        ? { ...row, numerator: 1, denominator: 24, value: (1 / 24) * 100 }
+        : row);
+    const view = adminMeasurementView(evidence, "owner");
+    const churn = view.metrics.find((row) => row.key === "platform.churn_rate");
+
+    expect(churn?.value).toBe("4.2%");
+  });
+
   it("keeps gross MRR and commission separate while history gaps remain nonnumeric", () => {
     const evidence = snapshot();
     const commissionIndex = evidence.metrics.findIndex(
