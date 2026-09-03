@@ -8,7 +8,8 @@ import {
   AdminInboxUnavailable,
 } from "@/components/workspace/live/admin-inbox";
 import { inboxLanes } from "@/components/workspace/live/inbox-lanes";
-import { navFoldLive, phase8AlertsLive } from "@/lib/env-contract";
+import { OwnerInbox } from "@/components/workspace/rehaul/owner-inbox";
+import { navFoldLive, phase8AlertsLive, uiRehaulLive } from "@/lib/env-contract";
 import { loadAttentionQueue, type AttentionQueue } from "@/lib/operations/attention-queue";
 import {
   platformConversationQueueLive,
@@ -76,7 +77,11 @@ export default async function AdminAlertsPage() {
 
   return (
     <InboxShell>
-      <AdminInboxSurface actorId={actor.userId} lanes={lanes} queue={result.value} />
+      {uiRehaulLive() ? (
+        <OwnerInbox actorId={actor.userId} lanes={lanes} queue={result.value} />
+      ) : (
+        <AdminInboxSurface actorId={actor.userId} lanes={lanes} queue={result.value} />
+      )}
     </InboxShell>
   );
 }
