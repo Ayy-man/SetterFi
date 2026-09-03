@@ -142,6 +142,27 @@ function reviewClientIds(tenantIds) {
   return tenantIds;
 }
 
+/**
+ * The thirty delivery days the repository insists on, ending the day before the review window
+ * closes. Written out from an anchor rather than by hand because the parser refuses anything that
+ * is not thirty distinct `YYYY-MM-DD` days, and thirty literals would rot the first time one of
+ * them was edited.
+ */
+const DELIVERY_WINDOW_END = "2026-08-22";
+
+function deliveryDays() {
+  const end = Date.parse(`${DELIVERY_WINDOW_END}T00:00:00.000Z`);
+  return Array.from({ length: 30 }, (unused, index) => {
+    const day = new Date(end - (29 - index) * 86_400_000).toISOString().slice(0, 10);
+    // A weekday shape, because outreach does not send on Sunday and a flat line would read as a
+    // constant nobody measured. Failures stay a small share of the same day's volume.
+    const weekday = new Date(`${day}T00:00:00.000Z`).getUTCDay();
+    const delivered = weekday === 0 ? 0 : 44 + ((index * 7) % 23);
+    const failed = delivered === 0 ? 0 : (index % 5 === 0 ? 2 : 1);
+    return { day, delivered, failed };
+  });
+}
+
 /** Validated by the same repository parser as a real RPC result. */
 export function platformReviewSnapshot(tenantIds) {
   const [north, harbor, summit] = reviewClientIds(tenantIds);
@@ -188,6 +209,29 @@ export function platformReviewSnapshot(tenantIds) {
     history: [
       { periodStart: "2026-07-01T00:00:00.000Z", periodEnd: "2026-08-01T00:00:00.000Z", value: 2, state: "available" },
       { periodStart: "2026-08-01T00:00:00.000Z", periodEnd: "2026-09-01T00:00:00.000Z", value: 3, state: "available" },
+    ],
+    // The same two periods the signup history uses, so the three series on the overview are read
+    // off one calendar. The current period's count is the `platform.active_subscriptions`
+    // numerator, and the current period's revenue is the `platform.gross_mrr` value in cents,
+    // because a chart that disagreed with the tile above it would be the page arguing with itself.
+    activeSubscriptionsByPeriod: [
+      { periodStart: "2026-07-01T00:00:00.000Z", periodEnd: "2026-08-01T00:00:00.000Z", value: 5, state: "available" },
+      { periodStart: "2026-08-01T00:00:00.000Z", periodEnd: "2026-09-01T00:00:00.000Z", value: 6, state: "available" },
+    ],
+    revenueByPeriod: [
+      { periodStart: "2026-07-01T00:00:00.000Z", periodEnd: "2026-08-01T00:00:00.000Z", value: 248_500, state: "available" },
+      { periodStart: "2026-08-01T00:00:00.000Z", periodEnd: "2026-09-01T00:00:00.000Z", value: 298_200, state: "available" },
+    ],
+    deliveriesByDay: deliveryDays(),
+    // The registration posture of the same three clients the provisioning table above describes:
+    // one waiting on the carrier, one waiting on the coach, one whose step failed. `submittedAt`
+    // is left null on all three on purpose -- the repository derives `daysElapsed` from the
+    // caller's `asOf`, and this snapshot is written once and read back at whatever moment the
+    // reviewer opens the page, so any timestamp baked in here would be wrong by the next day.
+    textingRegistrationByTenant: [
+      { tenantId: north, registrationState: "awaiting_provider", submittedAt: null, daysElapsed: null },
+      { tenantId: harbor, registrationState: "awaiting_coach", submittedAt: null, daysElapsed: null },
+      { tenantId: summit, registrationState: "failed", submittedAt: null, daysElapsed: null },
     ],
   };
 }

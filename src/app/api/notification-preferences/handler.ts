@@ -215,7 +215,11 @@ export function createNotificationPreferenceHandlers(dependencies: Dependencies)
             destination: preference.destination,
             enabled: preference.enabled,
           });
-        } catch {
+        } catch (cause) {
+          console.error(
+            "/api/notification-preferences could not record a preference change.",
+            cause instanceof Error ? cause.message : "NON_ERROR_THROWN",
+          );
           return Response.json(
             { error: "Notification preference change could not be recorded.", preference },
             { status: 503, headers },
