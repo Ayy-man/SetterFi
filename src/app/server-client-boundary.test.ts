@@ -12,7 +12,7 @@
  * an inert string at the top of a file, so a render test exercises the real array and passes. The
  * failure appears only in a Next runtime, on the deployed page, as a 500.
  *
- * Two shipped to production together on 2026-09-03 and took two console tabs down:
+ * Four were live on 2026-09-03 and three of them threw on the same production deployment:
  *
  *   - `admin/billing/page.tsx` called `OWNER_MONEY_TABS.find(...)`, imported from the `"use
  *     client"` `owner-money.tsx`. Production threw `TypeError: OWNER_MONEY_TABS.find is not a
@@ -20,19 +20,28 @@
  *   - `admin/brain/page.tsx` called `ownerBrainTab(...)`, imported from the `"use client"`
  *     `owner-brain.tsx`. Production threw "Attempted to call ownerBrainTab() from the server but
  *     ownerBrainTab is on the client".
+ *   - `coach/integrations/page.tsx` called `calendarAvailabilityErrorCopy(...)` out of the `"use
+ *     client"` `coach-integrations.tsx`. It never threw in the logs only because that line runs
+ *     only for a calendar carrying a stored error.
+ *   - `admin-overview.tsx` read `ATTENTION_NOW` out of `./admin-measurement-tables`. That file
+ *     carries no directive of its own and is imported by `admin/overview/detail/page.tsx`, so it
+ *     is in the server graph without ever looking like it.
  *
- * Both were fixed by moving the identity into `src/lib/console-tabs.ts`, a module with no
- * directive, which both sides import. That is the shape to reach for: when a server page and a
- * client screen need the same constant, the constant belongs to neither of them.
+ * Every one was fixed the same way: the value moved to a module with no directive -- the tab
+ * identities to `src/lib/console-tabs.ts`, the two sentences to `src/lib/copy/`  -- and both sides
+ * import it from there. That is the shape to reach for. When a server page and a client screen
+ * need the same constant, the constant belongs to neither of them.
  *
- * **What this file checks and what it does not.** It reads every file under `src/app` that does
- * not itself carry the directive -- pages, layouts, route handlers, the server half of the tree --
- * resolves each `@/`-aliased named import to a file, and fails when the source carries `"use
- * client"` and the imported name is not a type-only import and not a React component. A component
- * is the legitimate case and the overwhelmingly common one: a server page rendering `<OwnerMoney
- * />` is exactly how the boundary is meant to be crossed. PascalCase is the signal, which is a
- * convention rather than a proof -- a PascalCase export that is not a component would slip
- * through, and a component named in camelCase would be reported here. Both are worth the trade.
+ * **What this file checks and what it does not.** It reads every file under `src/` that does not
+ * itself carry the directive, resolves each named import -- `@/`-aliased and relative both -- to a
+ * file, and fails when the source carries `"use client"` and the imported name is not a type-only
+ * import and not a React component. The scan is the whole tree rather than `src/app` on purpose:
+ * the fourth offender was a directive-free component two hops from the page that pulls it onto the
+ * server, and scoping to route files could not see it. A component import is the legitimate case
+ * and the overwhelmingly common one -- a server page rendering `<OwnerMoney />` is exactly how the
+ * boundary is meant to be crossed. PascalCase is the signal, which is a convention rather than a
+ * proof: a PascalCase export that is not a component would slip through, and a component named in
+ * camelCase would be reported here. Both are worth the trade.
  *
  * It does not follow re-exports: a directive-free barrel that re-exports a client module's value
  * launders it past this check, and there is no cheap way to see through one. It also says nothing
@@ -43,20 +52,19 @@
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 const SRC = join(process.cwd(), "src");
-const APP = join(SRC, "app");
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) return walk(full);
-    // Test files sitting under src/app are not part of the server graph: Vitest loads them in one
-    // plain module graph where the boundary does not exist, so importing a client value there is
-    // exactly how those modules are meant to be tested.
+    // Test files are not part of the server graph: Vitest loads them in one plain module graph
+    // where the boundary does not exist, so importing a client value there is exactly how those
+    // modules are meant to be tested.
     if (/\.test\.tsx?$/.test(full)) return [];
     return full.endsWith(".ts") || full.endsWith(".tsx") ? [full] : [];
   });
@@ -66,10 +74,19 @@ function hasUseClient(source: string) {
   return /^\s*["']use client["']/.test(source);
 }
 
-/** Resolve an `@/x/y` specifier to the file it loads, or null when it is not in this tree. */
-function resolveAlias(specifier: string): string | null {
-  if (!specifier.startsWith("@/")) return null;
-  const base = join(SRC, specifier.slice(2));
+/**
+ * Resolve a specifier to the file it loads, or null when it is not in this tree.
+ *
+ * Both forms have to resolve. The first cut of this file handled `@/x/y` only, and the one
+ * offender it could not see was a relative import: `admin-overview.tsx` pulling `ATTENTION_NOW`
+ * out of `./admin-measurement-tables`. Codex found it in review, which is the second time this
+ * bug class has been caught by something other than the gate meant to catch it.
+ */
+function resolveSpecifier(specifier: string, importer: string): string | null {
+  let base: string;
+  if (specifier.startsWith("@/")) base = join(SRC, specifier.slice(2));
+  else if (specifier.startsWith(".")) base = join(dirname(importer), specifier);
+  else return null;
   for (const candidate of [`${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")]) {
     try {
       if (statSync(candidate).isFile()) return candidate;
@@ -95,7 +112,7 @@ function offencesIn(file: string): Offence[] {
   for (const match of source.matchAll(importRe)) {
     const [, typeOnly, clause, specifier] = match;
     if (typeOnly) continue;
-    const target = resolveAlias(specifier);
+    const target = resolveSpecifier(specifier, file);
     if (!target) continue;
     if (!hasUseClient(readFileSync(target, "utf8"))) continue;
     for (const raw of clause.split(",")) {
@@ -109,9 +126,9 @@ function offencesIn(file: string): Offence[] {
   return found;
 }
 
-describe("the server half of src/app", () => {
+describe("every module that could be pulled into the server graph", () => {
   it("imports no runtime value out of a \"use client\" module", () => {
-    const offences = walk(APP).flatMap(offencesIn);
+    const offences = walk(SRC).flatMap(offencesIn);
     expect(
       offences.map((o) => `${o.file} imports \`${o.name}\` from the client module ${o.from}`),
     ).toEqual([]);

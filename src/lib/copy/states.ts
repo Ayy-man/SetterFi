@@ -98,3 +98,16 @@ export function receiptState(receipts: ChannelReceipts): "live" | "ready" | "con
   if (receipts.oauthCompletedAt !== null && receipts.assetVerifiedAt !== null) return "ready";
   return "connecting";
 }
+
+/**
+ * How soon, not what kind. The bands are the only ordering the operator actually acts on.
+ *
+ * They live here rather than in `admin-measurement-tables.tsx`, where they were written, because
+ * both the table that groups by them and `admin-overview.tsx`, which stamps one onto every
+ * exception row, have to agree on the string -- and `admin-overview.tsx` carries no directive, so
+ * it is pulled into the server graph by `admin/overview/detail/page.tsx`. Reading a `"use client"`
+ * export from there gets a client reference instead of the sentence. See
+ * `src/app/server-client-boundary.test.ts`.
+ */
+export const ATTENTION_NOW = "Needs a person now";
+export const ATTENTION_SOON = "Review when you can";

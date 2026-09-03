@@ -30,13 +30,12 @@ import {
   type MetricEvidence,
   type MetricUnit,
 } from "@/lib/analytics/metric-definitions";
+import { ATTENTION_NOW, ATTENTION_SOON } from "@/lib/copy/states";
 import { formatMetric } from "@/lib/format/metric";
 import { cn } from "@/lib/utils";
 import type { PlatformMeasurement } from "@/lib/repositories/platform-analytics";
 
 import {
-  ATTENTION_NOW,
-  ATTENTION_SOON,
   AttentionQueueTable,
   FollowupPerformanceTable,
   GuardrailRulesTable,

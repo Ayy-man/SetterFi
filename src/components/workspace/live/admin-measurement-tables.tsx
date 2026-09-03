@@ -21,6 +21,7 @@ import { RecordSheet } from "@/components/kit/record-sheet";
 import { Overline, Prose, STATE_TONE_TO_TONE, Status } from "@/components/kit/atomics";
 import type { StateTone } from "@/components/kit/state-badge";
 import type { TechnicalDetailItem } from "@/components/kit/technical-detail";
+import { ATTENTION_NOW, ATTENTION_SOON } from "@/lib/copy/states";
 
 const HUMAN_DATE = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -187,10 +188,6 @@ export type AttentionRow = {
    */
   reason?: string;
 };
-
-/** How soon, not what kind. The bands are the only ordering the operator actually acts on. */
-export const ATTENTION_NOW = "Needs a person now";
-export const ATTENTION_SOON = "Review when you can";
 
 function eraseColumnValue<TData, TValue>(column: ColumnDef<TData, TValue>) {
   return column as unknown as ColumnDef<TData>;
