@@ -115,16 +115,16 @@
   .week--full .booked { background: var(--sc-accent); color: var(--sc-accent-ink); border-color: transparent; }
   /* The Friday 11:00 slot waits dim until the provenance line reaches it. */
   .week--full .booked--friday {
-    background: color-mix(in oklab, var(--sc-accent) 18%, var(--card));
-    color: var(--accent-text);
-    border: 1px dashed color-mix(in oklab, var(--sc-accent) 45%, transparent);
+    background: var(--well);
+    color: transparent;
+    border: 1px solid var(--line-soft);
     transition: background 360ms ease, color 360ms ease, border-color 360ms ease, box-shadow 520ms ease;
   }
   @keyframes slotPop { 0% { transform: scale(0.94); } 55% { transform: scale(1.06); } 100% { transform: scale(1); } }
   .week--full .booked--friday.is-lit { animation: slotPop 480ms cubic-bezier(0.2, 1, 0.3, 1) both; }
   .week--full .booked--friday.is-lit {
     background: var(--sc-accent); color: var(--sc-accent-ink); border: 1px solid transparent;
-    box-shadow: 0 0 0 6px color-mix(in oklab, var(--sc-accent) 22%, transparent), 0 0 48px 8px color-mix(in oklab, var(--sc-accent) 35%, transparent);
+    box-shadow: 0 0 48px 8px color-mix(in oklab, var(--sc-accent) 35%, transparent);
   }
   .week--full.is-peak .booked:not(.booked--friday) { opacity: 0.32; }
   .week--full .booked:not(.booked--friday) { transition: opacity 420ms ease; }
@@ -201,6 +201,7 @@
 
   /* The provenance line. */
   .line { position: absolute; left: 0; top: 0; width: 2400px; height: 1700px; overflow: visible; pointer-events: none; }
+  .line #lineRing { transition: opacity 400ms ease; }
   .line path { fill: none; stroke: var(--sc-accent); stroke-width: 4; stroke-linecap: round; }
   .line circle { fill: var(--sc-accent); }
   .line .line__glow { stroke-width: 14; opacity: 0.18; }
@@ -336,7 +337,7 @@
         </section>
 
         <section class="obj week week--full" id="weekFull" aria-label="Your week with SetterFi">
-          <div class="week__head"><p class="over">With SetterFi</p><span class="tag">9 booked</span></div>
+          <div class="week__head"><p class="over">With SetterFi</p><span class="tag" id="fullTag">8 booked</span></div>
           <div class="grid">
             <span class="day">Mon</span><span class="day">Tue</span><span class="day">Wed</span><span class="day">Thu</span><span class="day">Fri</span>
             <span class="booked">09:30</span><span class="slot"></span><span class="booked">09:30</span><span class="slot"></span><span class="booked">09:00</span>
@@ -456,6 +457,8 @@
   var lineDot = document.getElementById('lineDot');
   var friday = document.getElementById('friday');
   var weekFull = document.getElementById('weekFull');
+  var fullTag = document.getElementById('fullTag');
+  var lineSvg = document.querySelector('.line');
   var cta = document.getElementById('cta');
   var mapBtns = Array.prototype.slice.call(document.querySelectorAll('[data-t]'));
   var copyLinks = Array.prototype.slice.call(document.querySelectorAll('[data-sc-copy] a')).map(function (el) {
@@ -649,7 +652,14 @@
     lineRing.style.strokeDashoffset = ringLen * (1 - rp);
     lineRing.setAttribute('opacity', rp > 0 ? 1 : 0);
     var arrived = rp >= 0.97;
-    if (arrived !== friday.classList.contains('is-lit')) friday.classList.toggle('is-lit', arrived);
+    if (arrived !== friday.classList.contains('is-lit')) {
+      friday.classList.toggle('is-lit', arrived);
+      fullTag.textContent = arrived ? '9 booked' : '8 booked';
+    }
+    // The ring has done its job once the slot is lit; the whole line leaves
+    // as the camera pulls back to the wide shot.
+    lineRing.style.opacity = arrived ? 0 : 1;
+    lineSvg.style.opacity = (1 - ramp(t, 8.9, 9.3)).toFixed(3);
     var peak = t >= 6.9 && t < 9.4;
     if (peak !== weekFull.classList.contains('is-peak')) weekFull.classList.toggle('is-peak', peak);
 
