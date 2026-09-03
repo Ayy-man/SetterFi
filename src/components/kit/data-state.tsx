@@ -22,7 +22,7 @@ export type DataStateKind =
   | {
       kind: "empty"
       title: string
-      body: string
+      body?: string
       action?: DataStateAction
       /**
        * `escalations` is the one empty state worth animating: an empty escalations queue is good
@@ -163,7 +163,7 @@ function EmptyState({
   variant,
 }: {
   action?: DataStateAction
-  body: string
+  body?: string
   className?: string
   title: string
   variant: EmptyVariant
@@ -196,7 +196,7 @@ function EmptyState({
       <h2 className="text-[length:var(--t-body)] leading-[1.35] font-semibold text-[var(--ink)]">
         {title}
       </h2>
-      <p className="t-muted max-w-[var(--measure-tight)]">{body}</p>
+      {body ? <p className="t-muted max-w-[var(--measure-tight)]">{body}</p> : null}
       {action ? (
         <div className="mt-[var(--s-1)] flex max-w-full flex-wrap">
           <ActionControl action={action} />
