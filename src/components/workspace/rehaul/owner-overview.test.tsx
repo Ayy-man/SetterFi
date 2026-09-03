@@ -110,6 +110,36 @@ function measurement(): PlatformMeasurement {
         state: "available",
       },
     ],
+    activeSubscriptionsByPeriod: [
+      {
+        periodStart: "2026-07-05T12:00:00.000Z",
+        periodEnd: "2026-08-04T12:00:00.000Z",
+        value: 4,
+        state: "available",
+      },
+      {
+        periodStart: "2026-08-04T12:00:00.000Z",
+        periodEnd: "2026-09-03T12:00:00.000Z",
+        value: 6,
+        state: "available",
+      },
+    ],
+    revenueByPeriod: [
+      {
+        periodStart: "2026-07-05T12:00:00.000Z",
+        periodEnd: "2026-08-04T12:00:00.000Z",
+        value: 210_000,
+        state: "available",
+      },
+      {
+        periodStart: "2026-08-04T12:00:00.000Z",
+        periodEnd: "2026-09-03T12:00:00.000Z",
+        value: 298_200,
+        state: "available",
+      },
+    ],
+    deliveriesByDay: [],
+    textingRegistrationByTenant: [],
   };
 }
 
@@ -173,12 +203,56 @@ describe("OwnerOverview", () => {
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Signups by period" }),
+      screen.getByRole("heading", { name: "Signups and active subscriptions, by period" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Subscriptions in this snapshot" })).toBeInTheDocument();
     // The delta names the period it was taken against, as the artboard's "+2 vs last month" does.
     expect(screen.getByText("+2 vs Jul 2026")).toBeInTheDocument();
     expect(screen.getByText("Demo and test rows excluded")).toBeInTheDocument();
+  });
+
+  it("draws the revenue and active-subscription series the snapshot carries", () => {
+    render(<OwnerOverview measurement={measurement()} role="owner" />);
+
+    expect(screen.getByRole("img", { name: "Gross MRR by 30-day period" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Active subscriptions by 30-day period" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No revenue period recorded yet")).toBeNull();
+  });
+
+  it("holds the absence when a period carries no measured reading", () => {
+    const base = measurement();
+    render(
+      <OwnerOverview
+        measurement={{
+          ...base,
+          revenueByPeriod: base.revenueByPeriod.map((period) => ({
+            ...period,
+            state: "needs_more_history" as const,
+          })),
+        }}
+        role="owner"
+      />,
+    );
+
+    expect(screen.getByText("No revenue period recorded yet")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Gross MRR by 30-day period" })).toBeNull();
+  });
+
+  it("draws signups and active subscriptions as two named lines in the dialog", async () => {
+    render(<OwnerOverview measurement={measurement()} role="owner" />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Expand New signups" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Signups and active subscriptions, by period" }),
+    ).toBeInTheDocument();
+    // The legend names both lines, and the sr-only table repeats them as columns.
+    expect(screen.getAllByText("Active subscriptions").length).toBeGreaterThan(1);
+    expect(
+      screen.queryByText("No active-subscription reading over these periods"),
+    ).toBeNull();
   });
 
   it("refuses revenue to a success reviewer rather than substituting a figure", () => {

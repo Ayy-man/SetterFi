@@ -11,8 +11,9 @@
  * (`loadPlatformMeasurement`) and is projected through `adminMeasurementView`, so a success
  * reviewer is refused revenue at the serialization boundary rather than by JSX. Nothing here
  * derives a figure the snapshot does not carry: where the artboard draws a series the RPC has no
- * evidence for (a revenue history, an active-subscription history, signup source attribution), the
- * slot renders its absence in words instead of an invented line.
+ * evidence for (signup source attribution), the slot renders its absence in words instead of an
+ * invented line, and a period the RPC marked `needs_more_history` is cut out of a series rather
+ * than drawn as a zero.
  */
 
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
@@ -25,7 +26,10 @@ import { LineChart } from "@/components/kit/line-chart";
 import { Sparkline, SPARKLINE_MIN_POINTS } from "@/components/kit/sparkline";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { formatMetric } from "@/lib/format/metric";
-import type { PlatformMeasurement } from "@/lib/repositories/platform-analytics";
+import type {
+  PlatformHistoryPeriod,
+  PlatformMeasurement,
+} from "@/lib/repositories/platform-analytics";
 import { cn } from "@/lib/utils";
 
 import {
@@ -45,9 +49,10 @@ const EXPORT_FILENAME = "setterfi-platform-operating-figures";
  *
  * The artboard draws 1D / 1W / 1M / 3M / All. Platform measurement is a point-in-time read at one
  * as-of instant with no window parameter, so four of those five would move nothing: a control that
- * reads as broken is worse than no control. What the RPC does emit is a contiguous run of 30-day
- * signup periods, so the switch picks how many of them the signup series draws, and every figure
- * beside it keeps naming its own window so the switch cannot be read as governing them.
+ * reads as broken is worse than no control. What the RPC does emit is contiguous runs of 30-day
+ * periods (signups, active subscriptions, revenue), so the switch picks how many of them the
+ * series draw, and every figure beside it keeps naming its own window so the switch cannot be read
+ * as governing them.
  */
 const HISTORY_WINDOWS = [
   { key: "3m", label: "3M", periods: 3 },
@@ -134,12 +139,48 @@ export function resolveHistoryWindow(value: string | undefined): HistoryWindowKe
 }
 
 function windowedHistory(
-  history: PlatformMeasurement["history"],
+  history: readonly PlatformHistoryPeriod[],
   key: HistoryWindowKey,
-): PlatformMeasurement["history"] {
+): readonly PlatformHistoryPeriod[] {
   const entry = HISTORY_WINDOWS.find((row) => row.key === key);
   if (!entry || entry.periods === null) return history;
   return history.slice(-entry.periods);
+}
+
+/**
+ * The measured tail of a history series.
+ *
+ * `needs_more_history` marks a period the RPC has no evidence for -- the platform had not started
+ * yet, or the revenue receipts for it are missing -- which is not the same claim as a zero. Drawing
+ * it would put an invented floor at the left of every line, so the series is cut back to the
+ * contiguous run of measured periods at its end and the caller renders the absence when what is
+ * left is too short to be a trend.
+ */
+function measuredSeries(
+  series: readonly PlatformHistoryPeriod[],
+): readonly PlatformHistoryPeriod[] {
+  let start = series.length;
+  while (start > 0 && series[start - 1]?.state === "available") start -= 1;
+  return series.slice(start);
+}
+
+/**
+ * A second series lined up against the first, or nothing.
+ *
+ * Two lines on one axis only mean anything if their points sit over the same periods, so the
+ * companion series is accepted only when its own measured tail covers every period the base series
+ * draws. A shorter or offset run is reported absent rather than stretched to fit.
+ */
+function alignedSeries(
+  base: readonly PlatformHistoryPeriod[],
+  other: readonly PlatformHistoryPeriod[],
+): readonly PlatformHistoryPeriod[] | null {
+  if (base.length === 0 || other.length < base.length) return null;
+  const tail = other.slice(other.length - base.length);
+  const matches = tail.every(
+    (row, index) => Date.parse(row.periodStart) === Date.parse(base[index]?.periodStart ?? ""),
+  );
+  return matches ? tail : null;
 }
 
 /**
@@ -383,7 +424,13 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
   }, [projected.metrics]);
 
   const activeWindow = resolveHistoryWindow(historyWindow);
-  const history = windowedHistory(measurement.history, activeWindow);
+  const history = measuredSeries(windowedHistory(measurement.history, activeWindow));
+  const activeByPeriod = measuredSeries(
+    windowedHistory(measurement.activeSubscriptionsByPeriod, activeWindow),
+  );
+  const revenueByPeriod = measuredSeries(
+    windowedHistory(measurement.revenueByPeriod, activeWindow),
+  );
   const active = activeSubscriptions(measurement);
   const trialing = trialingSubscriptions(measurement);
   const pastDue = pastDueSubscriptions(measurement);
@@ -399,6 +446,12 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
 
   const barsDrawable = history.length >= 2 && history.some((period) => period.value > 0);
   const { measure: measureBars, width: barsWidth } = useMeasuredWidth(640);
+  const { measure: measurePulse, width: pulseWidth } = useMeasuredWidth(420);
+
+  // The pulse draws the series belonging to the figure it leads on, so a role refused revenue is
+  // refused the revenue line with it rather than being shown a shape it cannot read a value off.
+  const pulseSeries = pulseKey === "platform.gross_mrr" ? revenueByPeriod : history;
+  const pulseSeriesDrawable = pulseSeries.length >= SPARKLINE_MIN_POINTS;
 
   return (
     <div className="flex min-w-0 flex-col gap-[var(--s-4)]">
@@ -478,12 +531,23 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
                 : "trailing 30 days"
               : absenceText(pulse)}
           </p>
-          <p
-            className="mt-auto pt-[var(--s-4)] font-mono text-[11px]"
-            style={{ color: "oklch(0.70 0.02 262)" }}
-          >
-            No revenue history recorded
-          </p>
+          <div className="mt-auto pt-[var(--s-4)]" ref={measurePulse}>
+            {pulseSeriesDrawable ? (
+              <Sparkline
+                className="h-[44px] w-full"
+                height={44}
+                label={`${pulse?.label ?? "Gross MRR"} by 30-day period`}
+                points={pulseSeries.map((period) => period.value)}
+                width={pulseWidth}
+              />
+            ) : (
+              <p className="m-0 font-mono text-[11px]" style={{ color: "oklch(0.70 0.02 262)" }}>
+                {pulseKey === "platform.gross_mrr"
+                  ? "No revenue period recorded yet"
+                  : "No period series recorded"}
+              </p>
+            )}
+          </div>
         </div>
         <dl
           className="m-0 grid min-w-[260px] flex-1 grid-cols-3 content-end gap-[var(--s-5)] pl-[var(--s-6)]"
@@ -543,19 +607,16 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
               )}
             </div>
             <div className="mt-[10px] h-[36px]">
-              {key === "platform.new_signups" && history.length >= SPARKLINE_MIN_POINTS ? (
-                <Sparkline
-                  className="h-[36px] w-full"
-                  height={36}
-                  label={`${view.label} by 30-day period`}
-                  points={history.map((period) => period.value)}
-                  width={220}
-                />
-              ) : (
-                <p className="m-0 font-mono text-[11px] text-[var(--faint)]">
-                  No period series recorded
-                </p>
-              )}
+              <KpiSparkline
+                label={`${view.label} by 30-day period`}
+                series={
+                  key === "platform.new_signups"
+                    ? history
+                    : key === "platform.active_subscriptions"
+                      ? activeByPeriod
+                      : []
+                }
+              />
             </div>
             <button
               aria-label={`Expand ${view.label}`}
@@ -665,6 +726,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
 
       <FiguresDialog
         active={active}
+        activeByPeriod={activeByPeriod}
         history={history}
         kpis={kpis}
         measurement={measurement}
@@ -681,6 +743,35 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
           copy="Every figure here is read from one platform measurement snapshot at a single as-of instant. Gross MRR and active subscriptions are point-in-time; signups and booked calls are trailing 30 days; churn is the most recent complete billing cycle. Demo tenants and test rows are excluded at the source."
         />
     </div>
+  );
+}
+
+/**
+ * A card's 36px trend, or the sentence that says there isn't one.
+ *
+ * Churn and time to live carry no period series in the snapshot, so their slot holds the absence
+ * rather than a line borrowed from a neighbouring measure.
+ */
+function KpiSparkline({
+  label,
+  series,
+}: {
+  label: string;
+  series: readonly PlatformHistoryPeriod[];
+}) {
+  if (series.length < SPARKLINE_MIN_POINTS) {
+    return (
+      <p className="m-0 font-mono text-[11px] text-[var(--faint)]">No period series recorded</p>
+    );
+  }
+  return (
+    <Sparkline
+      className="h-[36px] w-full"
+      height={36}
+      label={label}
+      points={series.map((period) => period.value)}
+      width={220}
+    />
   );
 }
 
@@ -730,6 +821,7 @@ function subscriptionTone(status: string): "good" | "amber" | "wait" | "grey" {
 
 function FiguresDialog({
   active,
+  activeByPeriod,
   history,
   kpis,
   measurement,
@@ -739,7 +831,8 @@ function FiguresDialog({
   subscriptions,
 }: {
   active: number;
-  history: PlatformMeasurement["history"];
+  activeByPeriod: readonly PlatformHistoryPeriod[];
+  history: readonly PlatformHistoryPeriod[];
   kpis: readonly { key: string; view: PlatformMetricView }[];
   measurement: PlatformMeasurement;
   metrics: readonly PlatformMetricView[];
@@ -751,6 +844,23 @@ function FiguresDialog({
   const delta = signupDelta(history);
   const drawable = history.length >= 2;
   const { measure: measureLine, width: lineWidth } = useMeasuredWidth(700);
+  // The second line is drawn only over the same periods as the first: one axis, one scale, and no
+  // point that sits over a period the other series has no reading for.
+  const alignedActive = alignedSeries(history, activeByPeriod);
+  const chartHeading = alignedActive
+    ? "Signups and active subscriptions, by period"
+    : "Signups by period";
+  const chartSeries = [
+    { name: "Signups", values: history.map((period) => period.value) },
+    ...(alignedActive
+      ? [
+          {
+            name: "Active subscriptions",
+            values: alignedActive.map((period) => period.value),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <Dialog onOpenChange={onOpenChange} open={openMetric !== null}>
@@ -818,19 +928,15 @@ function FiguresDialog({
         <div className="grid min-h-0 flex-1 gap-[20px] overflow-y-auto px-[24px] py-[20px] lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex min-w-0 flex-col gap-[18px]">
             <div className="flex flex-wrap items-center gap-[16px] text-[12.5px]">
-              <h3 className="m-0 text-[13px] font-semibold text-[var(--ink)]">
-                Signups by period
-              </h3>
+              <h3 className="m-0 text-[13px] font-semibold text-[var(--ink)]">{chartHeading}</h3>
             </div>
             {drawable ? (
               <div ref={measureLine}>
                 <LineChart
                   height={260}
-                  label="Signups by 30-day period"
+                  label={`${chartHeading}, each period 30 days`}
                   labels={history.map((period) => periodLabel(period.periodStart))}
-                  series={[
-                    { name: "Signups", values: history.map((period) => period.value) },
-                  ]}
+                  series={chartSeries}
                   width={lineWidth}
                 />
               </div>
@@ -839,9 +945,11 @@ function FiguresDialog({
                 One closed period recorded
               </p>
             )}
-            <p className="m-0 font-mono text-[11px] text-[var(--faint)]">
-              No active-subscription history recorded
-            </p>
+            {alignedActive ? null : (
+              <p className="m-0 font-mono text-[11px] text-[var(--faint)]">
+                No active-subscription reading over these periods
+              </p>
+            )}
             <div className="mt-auto grid gap-[12px] sm:grid-cols-2 xl:grid-cols-4">
               {kpis.map(({ key, view }) => (
                 <div
