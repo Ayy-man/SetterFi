@@ -350,4 +350,16 @@ describe("CalendarOnboardingPage", () => {
     expect(await screen.findByText(/authorization ran out before this calendar could be saved/)).toBeVisible();
     expect(screen.queryByText("Availability verified")).not.toBeInTheDocument();
   });
+
+  /** Flag off, and the route hands back the pre-rehaul screen with its own disclosure intact. */
+  it("renders the pre-rehaul screen while the rehaul flag is off", async () => {
+    vi.stubEnv("SETTERFI_UI_REHAUL", "false");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ connection: null })));
+    render(<CalendarOnboardingPage />);
+
+    await screen.findByText("Authorize a calendar with its provider before recording its receipt here.");
+    expect(screen.getByText("Set up manually")).toBeVisible();
+    expect(screen.queryByText("Step 4 of 5")).toBeNull();
+    vi.unstubAllEnvs();
+  });
 });

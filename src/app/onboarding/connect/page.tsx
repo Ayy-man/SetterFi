@@ -9,8 +9,9 @@ import {
 } from "@/components/onboarding/connect-view-models";
 import { OnboardingStage } from "@/components/onboarding/onboarding-stage";
 import { SetupSteps } from "@/components/onboarding/setup-steps";
+import { OnboardingConnectRehaul } from "@/components/workspace/rehaul/onboarding-connect";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { phase5Live } from "@/lib/env-contract";
+import { phase5Live, uiRehaulLive } from "@/lib/env-contract";
 import { listChannelConnections } from "@/lib/repositories/channel-connections";
 import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -99,6 +100,12 @@ export default async function OnboardingConnectPage() {
   }
 
   const complete = connectStepComplete(connections);
+  const cards = connectCards({ connections, registration });
+
+  // Same cards, same completion evidence; the rehaul screen only draws them differently.
+  if (uiRehaulLive()) {
+    return <OnboardingConnectRehaul cards={cards} nextEnabled={complete} />;
+  }
 
   return (
     <OnboardingStage
@@ -107,7 +114,7 @@ export default async function OnboardingConnectPage() {
       title={TITLE}
       width="wide"
     >
-      <ConnectChannels cards={connectCards({ connections, registration })} nextEnabled={complete} />
+      <ConnectChannels cards={cards} nextEnabled={complete} />
     </OnboardingStage>
   );
 }

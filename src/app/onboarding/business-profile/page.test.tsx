@@ -62,4 +62,19 @@ describe("BusinessProfilePage", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByRole("button", { name: "Save business profile" }).getAttribute("aria-describedby")).toBeNull();
   });
+
+  /**
+   * The route is a server component now, and the flag decides which screen it hands back. With the
+   * flag off it must be the pre-rehaul form, unchanged, including the submit's own words.
+   */
+  it("renders the pre-rehaul form while the rehaul flag is off", async () => {
+    vi.stubEnv("SETTERFI_UI_REHAUL", "false");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ profile: null })));
+    render(<BusinessProfilePage />);
+
+    await screen.findByText("Enter the legal business details used for A2P filing.");
+    expect(screen.getByRole("button", { name: "Save business profile" })).toBeVisible();
+    expect(screen.queryByText("Step 1 of 5")).toBeNull();
+    vi.unstubAllEnvs();
+  });
 });

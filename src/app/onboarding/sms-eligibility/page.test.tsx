@@ -124,4 +124,18 @@ describe("SmsEligibilityPage", () => {
     expect(screen.queryByText(/A2P registration has not been filed with carriers/)).toBeNull();
     expect(screen.queryByText(/^Day \d+$/u)).toBeNull();
   });
+
+  /** Flag off, and the route hands back the pre-rehaul screen with its own acknowledgement verb. */
+  it("renders the pre-rehaul screen while the rehaul flag is off", async () => {
+    vi.stubEnv("SETTERFI_UI_REHAUL", "false");
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => json({
+      screen: { screenId: "screen-1", state: "flagged", matches: [{ phrase: "credit repair" }], coachAcknowledgedAt: null, adminConfirmedAt: null },
+      registration: { submittedAt: null, state: null },
+    })));
+    render(<SmsEligibilityPage />);
+
+    expect(await screen.findByRole("button", { name: "Record acknowledgement" })).toBeVisible();
+    expect(screen.queryByText("Step 5 of 5")).toBeNull();
+    vi.unstubAllEnvs();
+  });
 });

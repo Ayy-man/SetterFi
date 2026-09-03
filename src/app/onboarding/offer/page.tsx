@@ -7,7 +7,8 @@ import { offerReview } from "@/components/onboarding/offer-view-models";
 import { OnboardingStage } from "@/components/onboarding/onboarding-stage";
 import { SetupSteps } from "@/components/onboarding/setup-steps";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { phase2Live, phase5Live } from "@/lib/env-contract";
+import { OnboardingOfferRehaul } from "@/components/workspace/rehaul/onboarding-offer";
+import { phase2Live, phase5Live, uiRehaulLive } from "@/lib/env-contract";
 import { connectStepComplete } from "@/components/onboarding/connect-view-models";
 import { listChannelConnections } from "@/lib/repositories/channel-connections";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
@@ -90,6 +91,11 @@ export default async function OnboardingOfferPage() {
         />
       </OnboardingStage>
     );
+  }
+
+  // The same review the pre-rehaul panels read; the rehaul screen only draws it differently.
+  if (uiRehaulLive()) {
+    return <OnboardingOfferRehaul review={review} />;
   }
 
   const completed = [
