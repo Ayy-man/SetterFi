@@ -329,7 +329,7 @@ function localExportRows(rows: readonly CorrectionEvidence[]) {
   }));
 }
 
-function CorrectionQueue({
+export function CorrectionQueue({
   actorRole,
   initialCorrections,
 }: Pick<AdminMoneyCorrectionsProps, "actorRole" | "initialCorrections">) {

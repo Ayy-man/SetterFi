@@ -41,7 +41,7 @@ const CURRENT_SUBSCRIPTION_STATES = new Set([
   "unpaid",
 ]);
 
-async function loadStripeReadinessReceipt(): Promise<StripeReadinessReceipt | null> {
+export async function loadStripeReadinessReceipt(): Promise<StripeReadinessReceipt | null> {
   try {
     if (
       !phase6StripeLive() ||
@@ -73,7 +73,7 @@ async function loadStripeReadinessReceipt(): Promise<StripeReadinessReceipt | nu
   }
 }
 
-async function loadTierImpactById(): Promise<TierImpactById | null> {
+export async function loadTierImpactById(): Promise<TierImpactById | null> {
   try {
     const client = await createSupabaseServerClient();
     const [tiers, subscriptions, tenants] = await Promise.all([
@@ -130,7 +130,7 @@ async function loadTierImpactById(): Promise<TierImpactById | null> {
  * `tenant_price_overrides` -- started and not yet ended -- and its `reason` is required by that
  * table's own check, which is why the surface can promise a "why" on every override row.
  */
-async function loadClientPricing(): Promise<ClientPricingByTenantId | null> {
+export async function loadClientPricing(): Promise<ClientPricingByTenantId | null> {
   try {
     const client = await createSupabaseServerClient();
     const now = new Date().toISOString();
@@ -199,7 +199,7 @@ const PRICING_HISTORY_LIMIT = 100;
  * page's own RLS. A name that cannot be resolved stays null rather than becoming an id dressed up
  * as a person.
  */
-async function loadPricingHistory(): Promise<PricingHistoryEntry[] | null> {
+export async function loadPricingHistory(): Promise<PricingHistoryEntry[] | null> {
   try {
     const client = await createSupabaseServerClient();
     const [versions, tiers] = await Promise.all([

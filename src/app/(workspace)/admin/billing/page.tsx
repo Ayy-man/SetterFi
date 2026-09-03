@@ -1,73 +1,243 @@
 import type { Metadata } from "next";
 import { forbidden, redirect } from "next/navigation";
 
+import { GET as loadCorrections } from "@/app/api/platform/billing/route";
+import {
+  STRIPE_SETTINGS_HREF,
+  loadClientPricing,
+  loadPricingHistory,
+  loadStripeReadinessReceipt,
+  loadTierImpactById,
+} from "@/app/(workspace)/admin/tiers/render-tiers-page";
 import { AdminMoneyBilling } from "@/components/workspace/live/admin-money-billing";
-import { moneyPageAccessStatus } from "@/components/workspace/live/view-models";
+import {
+  moneyPageAccessStatus,
+  type CorrectionEvidence,
+} from "@/components/workspace/live/view-models";
+import {
+  OWNER_MONEY_TABS,
+  OwnerMoney,
+  type OwnerMoneyTab,
+  type OwnerMoneyTiersData,
+} from "@/components/workspace/rehaul/owner-money";
+import type { PageSearchParams } from "@/lib/admin-route-fold";
 import { loadPlatformActor } from "@/lib/auth/actors";
-import { phase6Live } from "@/lib/env-contract";
+import { phase6AffiliatesLive, phase6Live, uiRehaulLive } from "@/lib/env-contract";
 import { createBillingRepository, type MrrMovementRead } from "@/lib/repositories/billing";
 import { logMoneyPageRefusal } from "@/lib/repositories/money-page-audit";
+import type { MoneyTabId } from "@/components/workspace/live/admin-money-shell";
 
 export const metadata: Metadata = { title: "Revenue and subscriptions" };
 export const dynamic = "force-dynamic";
 
-export default async function AdminBillingPage() {
+type PageProps = { searchParams: Promise<PageSearchParams> };
+
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function tabOf(value: string | undefined): OwnerMoneyTab {
+  return OWNER_MONEY_TABS.find((candidate) => candidate === value) ?? "billing";
+}
+
+/**
+ * Which access rule the folded tab is answerable to.
+ *
+ * The four Money routes did not become one rule when they became one page: Costs is still part of
+ * the Billing surface, Tiers and Affiliates are still their own, and Corrections is still the one
+ * a success reviewer carries. The tab decides which of them `moneyPageAccessStatus` is asked
+ * about, so folding the routes changed the URL and nothing about who is refused.
+ */
+const TAB_SURFACE: Record<OwnerMoneyTab, MoneyTabId> = {
+  affiliates: "affiliates",
+  billing: "billing",
+  corrections: "corrections",
+  costs: "billing",
+  tiers: "tiers",
+};
+
+type CorrectionsResult =
+  | { ok: true; value: CorrectionEvidence[] }
+  | { ok: false; code: "BILLING_CORRECTIONS_READ_FAILED"; reason: string }
+  | { ok: false; unauthorized: true };
+
+async function loadCorrectionsResult(): Promise<CorrectionsResult> {
+  try {
+    const response = await loadCorrections();
+    if (response.status === 401) return { ok: false, unauthorized: true };
+    if (!response.ok) {
+      return {
+        ok: false,
+        code: "BILLING_CORRECTIONS_READ_FAILED",
+        reason: "Billing corrections could not load. Try again in a moment.",
+      };
+    }
+    const payload = await response.json() as { corrections?: CorrectionEvidence[] };
+    return {
+      ok: true,
+      value: Array.isArray(payload.corrections) ? payload.corrections : [],
+    };
+  } catch {
+    return {
+      ok: false,
+      code: "BILLING_CORRECTIONS_READ_FAILED",
+      reason: "Billing corrections could not load. Try again in a moment.",
+    };
+  }
+}
+
+async function loadTiersData(): Promise<OwnerMoneyTiersData> {
+  const [stripeReadinessReceipt, tierImpactById, clientPricingByTenantId, pricingHistory] =
+    await Promise.all([
+      loadStripeReadinessReceipt(),
+      loadTierImpactById(),
+      loadClientPricing(),
+      loadPricingHistory(),
+    ]);
+  return {
+    clientPricingByTenantId,
+    pricingHistory,
+    stripeActionHref: STRIPE_SETTINGS_HREF,
+    stripeReadinessReceipt,
+    tierImpactById,
+  };
+}
+
+export default async function AdminBillingPage({ searchParams }: PageProps) {
+  const rehaul = uiRehaulLive();
+
   if (!phase6Live()) {
-    return (
-      <AdminMoneyBilling
-        actorRole="admin"
-        authorized
-        enabled={false}
-        surface="billing"
-      />
-    );
+    return rehaul
+      ? (
+        <OwnerMoney
+          actorRole="admin"
+          authorized
+          enabled={false}
+          tab={tabOf(first((await searchParams).tab))}
+        />
+      )
+      : (
+        <AdminMoneyBilling
+          actorRole="admin"
+          authorized
+          enabled={false}
+          surface="billing"
+        />
+      );
   }
 
   const actor = await loadPlatformActor();
   if (!actor) redirect("/login?next=%2Fadmin%2Fbilling");
 
-  const authorized = moneyPageAccessStatus(actor.role, "billing") === 200;
-  if (!authorized) {
-    const refusalRecord = await logMoneyPageRefusal(actor.userId, "billing");
-  /*
-   * One refusal for the Money group, drawn inside the console rather than four different ones.
-   *
-   * A success reviewer following a link from a client thread is a reader of this console who took
-   * a wrong turn inside it; `forbidden()` answered them with a bare centred page -- no rail, no
-   * eyebrow, no route onwards, and no mention of the one Money page they do carry. They get
-   * `MoneySurfaceGuard`'s panel instead, which is the screen the canvas draws for this. A coach or
-   * an affiliate has no business anywhere under /admin, so their refusal stays the bare page: the
-   * panel's whole shape assumes a console reader.
-   *
-   * The audit row is written for both, because the boundary was hit either way.
-   */
-    if (actor.role !== "success") forbidden();
+  if (!rehaul) {
+    const authorized = moneyPageAccessStatus(actor.role, "billing") === 200;
+    if (!authorized) {
+      const refusalRecord = await logMoneyPageRefusal(actor.userId, "billing");
+      /*
+       * One refusal for the Money group, drawn inside the console rather than four different
+       * ones. A success reviewer following a link from a client thread is a reader of this
+       * console who took a wrong turn inside it; a coach or an affiliate has no business anywhere
+       * under /admin, so their refusal stays the bare page. The audit row is written for both,
+       * because the boundary was hit either way.
+       */
+      if (actor.role !== "success") forbidden();
+      return (
+        <AdminMoneyBilling
+          actorRole="success"
+          authorized={false}
+          enabled
+          refusalRecord={refusalRecord}
+          surface="billing"
+        />
+      );
+    }
+
+    const actorRole = actor.role === "owner" || actor.role === "admin" ? actor.role : "success";
+    let movement: MrrMovementRead | null = null;
+    try {
+      movement = await createBillingRepository().loadMrrMovement(new Date().toISOString());
+    } catch {
+      movement = null;
+    }
+
     return (
       <AdminMoneyBilling
-        actorRole="success"
-        authorized={false}
+        actorRole={actorRole}
+        authorized={authorized}
         enabled
-        refusalRecord={refusalRecord}
+        movement={movement}
         surface="billing"
       />
     );
   }
 
+  const tab = tabOf(first((await searchParams).tab));
+  const surface = TAB_SURFACE[tab];
+  const authorized = moneyPageAccessStatus(actor.role, surface) === 200;
   const actorRole = actor.role === "owner" || actor.role === "admin" ? actor.role : "success";
-  let movement: MrrMovementRead | null = null;
-  try {
-    movement = await createBillingRepository().loadMrrMovement(new Date().toISOString());
-  } catch {
-    movement = null;
+
+  if (!authorized) {
+    const refusalRecord = await logMoneyPageRefusal(actor.userId, surface);
+    // Corrections is the one Money tab a success reviewer carries, so nobody reading this console
+    // is refused it: every actor who fails that check is a coach or an affiliate, and they get the
+    // bare page the other four give them too.
+    if (actor.role !== "success" || surface === "corrections") forbidden();
+    return (
+      <OwnerMoney
+        actorRole="success"
+        authorized={false}
+        enabled
+        refusalRecord={refusalRecord}
+        tab={tab}
+      />
+    );
   }
 
-  return (
-    <AdminMoneyBilling
-      actorRole={actorRole}
-      authorized={authorized}
-      enabled
-      movement={movement}
-      surface="billing"
-    />
-  );
+  // The page loads the active tab's data and nothing else: four of the five reads are somebody
+  // else's tab, and a tab nobody opened is a query nobody asked for.
+  if (tab === "billing") {
+    let movement: MrrMovementRead | null = null;
+    try {
+      movement = await createBillingRepository().loadMrrMovement(new Date().toISOString());
+    } catch {
+      movement = null;
+    }
+    return <OwnerMoney actorRole={actorRole} authorized enabled movement={movement} tab={tab} />;
+  }
+
+  if (tab === "tiers") {
+    return (
+      <OwnerMoney actorRole={actorRole} authorized enabled tab={tab} tiers={await loadTiersData()} />
+    );
+  }
+
+  if (tab === "affiliates") {
+    return (
+      <OwnerMoney
+        actorRole={actorRole}
+        affiliatesEnabled={phase6AffiliatesLive()}
+        authorized
+        enabled
+        tab={tab}
+      />
+    );
+  }
+
+  if (tab === "corrections") {
+    const result = await loadCorrectionsResult();
+    if (!result.ok && "unauthorized" in result) redirect("/login?next=%2Fadmin%2Fbilling");
+    return (
+      <OwnerMoney
+        actorRole={actor.role === "success" ? "success" : actorRole}
+        authorized
+        corrections={result.ok ? result.value : undefined}
+        correctionsReadFailure={result.ok ? null : { code: result.code, reason: result.reason }}
+        enabled
+        openCorrections={result.ok ? result.value.filter((row) => row.decision === null).length : null}
+        tab={tab}
+      />
+    );
+  }
+
+  return <OwnerMoney actorRole={actorRole} authorized enabled tab={tab} />;
 }

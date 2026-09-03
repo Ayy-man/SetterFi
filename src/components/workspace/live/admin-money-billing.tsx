@@ -70,12 +70,12 @@ const seedingOf = (row: { dataLabel: string | null }) =>
 
 
 type PlatformRole = "owner" | "admin" | "success";
-type AccountState = "active" | "overdue" | "suspended";
+export type AccountState = "active" | "overdue" | "suspended";
 export type SubscriptionView = "all" | "past-due" | "cancelling" | "trial" | "paused";
 type LoadState = "loading" | "ready" | "error";
 type ExportRow = Record<string, unknown>;
 
-type SubscriptionRow = {
+export type SubscriptionRow = {
   rowKey: string;
   tenantId: string;
   businessName: string;
@@ -111,7 +111,7 @@ export type AdminMoneyBillingProps = {
 
 const EXPORT_REASON = "admin-billing-read";
 
-const SUBSCRIPTION_EXPORT: ServerExportMenuProps = {
+export const SUBSCRIPTION_EXPORT: ServerExportMenuProps = {
   mode: "server",
   filename: "setterfi-platform-billing",
   resource: "platform-billing",
@@ -234,7 +234,7 @@ function displayBusinessName(name: string, dataLabel: string | null) {
   return stripped.length > 0 ? stripped : name;
 }
 
-function normalizeSubscriptionRows(value: unknown): SubscriptionRow[] {
+export function normalizeSubscriptionRows(value: unknown): SubscriptionRow[] {
   if (!Array.isArray(value)) throw new Error("Subscription rows could not be read.");
 
   return value.map((candidate, index) => {
@@ -259,7 +259,7 @@ function normalizeSubscriptionRows(value: unknown): SubscriptionRow[] {
   });
 }
 
-async function exportSubscriptionRows(signal: AbortSignal) {
+export async function exportSubscriptionRows(signal: AbortSignal) {
   const response = await fetch(
     `/api/exports/platform-billing?format=json&reason=${encodeURIComponent(EXPORT_REASON)}`,
     { cache: "no-store", signal },
@@ -268,7 +268,7 @@ async function exportSubscriptionRows(signal: AbortSignal) {
   return response.json() as Promise<unknown>;
 }
 
-async function postStatus(input: {
+export async function postStatus(input: {
   tenantId: string;
   status: AccountState;
   reason: string;
@@ -297,7 +297,7 @@ function accountStatePresentation(value: string) {
   return { label: "State not classified", tone: "neutral" as const };
 }
 
-function subscriptionStatePresentation(value: string | null) {
+export function subscriptionStatePresentation(value: string | null) {
   if (value === "active") return { label: "Active", tone: "good" as const };
   if (value === "trialing") return { label: "Trial", tone: "info" as const };
   if (value === "past_due") return { label: "Past due", tone: "critical" as const };
@@ -308,28 +308,28 @@ function subscriptionStatePresentation(value: string | null) {
   return { label: "No provider state", tone: "neutral" as const };
 }
 
-function accountStateLabel(value: string) {
+export function accountStateLabel(value: string) {
   return accountStatePresentation(value).label;
 }
 
-function displayDate(value: string | null) {
+export function displayDate(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : workspaceDateFormat.format(date);
 }
 
-function daysPastDue(currentPeriodEnd: string | null) {
+export function daysPastDue(currentPeriodEnd: string | null) {
   const end = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
   if (!end || Number.isNaN(end.getTime())) return null;
   const days = Math.floor((Date.now() - end.getTime()) / 86_400_000);
   return days > 0 ? days : null;
 }
 
-function providerEvidenceLabel(row: SubscriptionRow) {
+export function providerEvidenceLabel(row: SubscriptionRow) {
   return displayDate(row.providerUpdatedAt) ?? "No provider receipt";
 }
 
-function renewalMovementLabel(row: SubscriptionRow) {
+export function renewalMovementLabel(row: SubscriptionRow) {
   if (!row.pendingTierId || !row.pendingEffectiveAt) return "No scheduled change";
   const date = displayDate(row.pendingEffectiveAt);
   return date ? `Plan change on ${date}` : "Scheduled date not recorded";
@@ -366,7 +366,7 @@ export function subscriptionMovementLabel(row: SubscriptionRow) {
  * state read as two states at once ("Active State not classified"), so both raw fields now live
  * in the record sheet and behind the Account state column instead.
  */
-function subscriptionStateView(row: SubscriptionRow) {
+export function subscriptionStateView(row: SubscriptionRow) {
   const provider = subscriptionStatePresentation(row.subscriptionStatus);
 
   if (row.accountStatus === "suspended") {
@@ -474,7 +474,7 @@ function countValue(count: number | null): ReactNode {
  * A seeded row never appears here: the card is read as a work queue, and a demo account in it
  * would send an admin after a client that is not actually in trouble.
  */
-function atRiskFrom(rows: readonly SubscriptionRow[]): readonly AtRiskAccount[] {
+export function atRiskFrom(rows: readonly SubscriptionRow[]): readonly AtRiskAccount[] {
   const accounts: AtRiskAccount[] = [];
   for (const row of rows) {
     if (row.dataLabel !== null) continue;
@@ -522,7 +522,7 @@ function atRiskFrom(rows: readonly SubscriptionRow[]): readonly AtRiskAccount[] 
   return accounts;
 }
 
-function AccountStateConfirmFlow({
+export function AccountStateConfirmFlow({
   open,
   onOpenChange,
   onConfirm,
@@ -748,7 +748,7 @@ function CostComposition({ row }: { row: CostRow }) {
  * zero the client never billed -- and with fewer than two points left the line is not drawn at
  * all, because two readings is the least a direction can honestly be claimed from.
  */
-function CostRevenueTrend({ rows }: { rows: readonly CostRow[] }) {
+export function CostRevenueTrend({ rows }: { rows: readonly CostRow[] }) {
   const dated = rows
     .filter((row): row is CostRow & { revenueCents: number; windowStart: string } =>
       row.revenueCents !== null && row.windowStart !== null)
@@ -772,7 +772,7 @@ function CostRevenueTrend({ rows }: { rows: readonly CostRow[] }) {
   );
 }
 
-function costSummary(row: CostRow) {
+export function costSummary(row: CostRow) {
   const margin = costMarginValue(row);
   return (
     <dl className="grid gap-[var(--s-2)]" key={row.rowKey}>
