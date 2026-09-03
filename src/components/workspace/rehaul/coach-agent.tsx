@@ -28,7 +28,7 @@ import {
 
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { DayCounter } from "@/components/kit/day-counter";
-import { ShieldCheck } from "@/components/kit/icons";
+import { ArrowDown, ArrowUp, ShieldCheck } from "@/components/kit/icons";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { LoggedButton } from "@/components/kit/logged-button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,7 @@ import { money } from "@/lib/format/metric";
 import { DURABLE_TOUCHES } from "@/lib/followups/touch-lists";
 import { CARRIER_TYPICAL_DAYS } from "@/lib/onboarding/contracts";
 import type { CoachOfferDraftInput, PersistedOfferLayer } from "@/lib/offer/types";
+import type { CoachQuestion } from "@/lib/repositories/coach-questions";
 import type { KeywordGoal, KeywordGoalMode } from "@/lib/repositories/keyword-goals";
 
 /* ------------------------------------------------------------------ *
@@ -94,6 +95,11 @@ export type RehaulCoachAgentProps = {
   tab: "ladder" | "connections";
   /** `phase7MeetAgentLive()`; the lead test lives on `/meet-agent` and is gated with it. */
   testEnabled: boolean;
+  /**
+   * The merged question list for this tenant, in its stored order, or null when the read refused.
+   * Null is not an empty library: the panel says it could not read rather than drawing no rows.
+   */
+  questions: readonly CoachQuestion[] | null;
   /** Test seam. Omit and the component loads goals from the tenant-scoped route. */
   initialKeywordGoals?: readonly KeywordGoal[];
 };
@@ -161,6 +167,83 @@ function LoggedNote({ actionKey }: { actionKey: keyof typeof AUDIT_ACTIONS }) {
     </span>
   );
 }
+
+/**
+ * The accountability line for the two question writes.
+ *
+ * `LoggedNote` above reads its words from `AUDIT_ACTIONS`, and the two keys these controls write --
+ * `coach.question_order.saved` and `coach.question.enabled.changed` -- are seeded by
+ * `20261009000004_tenant_question_settings.sql` but are not yet mirrored into that TypeScript
+ * registry, which is a shared file this pass may not edit. The strings below are copied from that
+ * migration verbatim so the caption and the audit row say the same words; once the two keys reach
+ * `POST_SEED_UI_ACTIONS` this collapses back into two `LoggedNote`s.
+ */
+const QUESTION_AUDIT_MICROCOPY = "Question order logged · Question setting logged";
+const QUESTION_AUDIT_ARIA =
+  "Qualification-question order and setting recorded in the audit log";
+
+function QuestionLoggedNote() {
+  return (
+    <span
+      aria-label={QUESTION_AUDIT_ARIA}
+      className="inline-flex shrink-0 items-center gap-[6px] text-[14px] text-[color:var(--muted)]"
+    >
+      <ShieldCheck aria-hidden className="size-[14px]" />
+      {QUESTION_AUDIT_MICROCOPY}
+    </span>
+  );
+}
+
+/**
+ * The 52x30 track `_coach.css` draws for an on/off row, as a real `role="switch"` button.
+ *
+ * The artboard's `.sw` is a decorative span; a coach has to be able to reach it with a keyboard,
+ * so this is a button that reports its own state rather than a div with a click handler.
+ */
+function Switch({
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  label: string;
+  onChange(next: boolean): void;
+}) {
+  return (
+    <button
+      aria-checked={checked}
+      aria-label={label}
+      className={
+        "relative h-[30px] w-[52px] shrink-0 rounded-full border transition-colors " +
+        "disabled:opacity-60 " +
+        (checked
+          ? "border-[var(--accent-line)] bg-[var(--accent-fill)]"
+          : "border-[var(--line-input)] bg-[var(--line-input)]")
+      }
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      role="switch"
+      type="button"
+    >
+      <span
+        aria-hidden
+        className={
+          "absolute top-[2px] size-[24px] rounded-full bg-[var(--card)] transition-all " +
+          (checked ? "left-[25px]" : "left-[2px]")
+        }
+      />
+    </button>
+  );
+}
+
+/** The move controls beside a question row; disabled at the end of the list they cannot leave. */
+const MOVE_BUTTON_CLASS =
+  "inline-flex size-[36px] shrink-0 items-center justify-center rounded-[10px] border " +
+  "border-[var(--line-input)] bg-[var(--control-fill)] text-[color:var(--body)] " +
+  "hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] " +
+  "disabled:opacity-40 disabled:hover:border-[var(--line-input)]";
 
 function Panel({
   children,
@@ -305,17 +388,13 @@ function editableOffer(offer: PersistedOfferLayer | null): CoachOfferDraftInput 
 }
 
 /**
- * What the agent may ask about, and why these six rows are the rung rather than a question list.
+ * The six numbers the answers are judged against, which is what step 4's tiers are computed from.
  *
- * `CoachAgent.body.html` draws step 3 as five draggable questions with an on/off switch each. No
- * such storage exists: `coach-offer.tsx` records that the questions and their order live in the
- * platform brain, "admin edited, with no tenant column", so a control here would offer a setting
- * a coach cannot have. What a coach does own is the six numbers the answers are judged against,
- * and those are the rows below -- the same columns the old page's qualification card wrote, in the
- * same order, with the same save path. Each row is named for the fact it stores rather than for a
- * question, because the question's wording is the brain's and printing one here would put words in
- * the agent's mouth that no payload supplies. A row with a saved value is a fact the agent reads; a
- * row left empty stays unknown and the agent never guesses at it.
+ * These rows used to stand in for step 3 while no per-tenant question storage existed. It exists
+ * now -- `tenant_question_settings` and the merged read in `@/lib/repositories/coach-questions` --
+ * so step 3 draws the real questions and these thresholds moved to the rung that reads them. Each
+ * row is named for the fact it stores. A row with a saved value is a fact the agent judges
+ * against; a row left empty stays unknown and the agent never guesses at it.
  */
 const FACT_ROWS: readonly {
   key: string;
@@ -504,6 +583,7 @@ export function CoachAgent({
   initialKeywordGoals,
   initialState,
   publishedDateLabel,
+  questions,
   tab,
   testEnabled,
 }: RehaulCoachAgentProps) {
@@ -521,6 +601,10 @@ export function CoachAgent({
   const [goalNotice, setGoalNotice] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [newKeyword, setNewKeyword] = useState("");
+
+  const [questionRows, setQuestionRows] = useState<readonly CoachQuestion[] | null>(questions);
+  const [questionNotice, setQuestionNotice] = useState<string | null>(null);
+  const [questionBusy, setQuestionBusy] = useState(false);
 
   useEffect(() => {
     if (initialKeywordGoals !== undefined) return;
@@ -699,6 +783,70 @@ export function CoachAgent({
     setNewKeyword("");
     setGoalNotice("Saved and logged.");
   }, [newKeyword]);
+
+  /**
+   * The one write path for step 3: send the request, then redraw from what the route read back.
+   *
+   * Both writes return the canonical merged list, so nothing here reorders or flips a row locally
+   * first. A refused write leaves the rows exactly as storage last reported them and says so.
+   */
+  const writeQuestions = useCallback(
+    async (method: "PUT" | "PATCH", body: unknown, actionKey: string) => {
+      setQuestionBusy(true);
+      setQuestionNotice(null);
+      try {
+        const response = await fetch("/api/coach/questions", {
+          method,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const value: unknown = await response.json().catch(() => null);
+        const payload = value as
+          | { questions?: CoachQuestion[]; audit?: { actionKey?: string; auditId?: string } }
+          | null;
+        if (
+          !response.ok ||
+          !Array.isArray(payload?.questions) ||
+          payload.audit?.actionKey !== actionKey ||
+          !payload.audit.auditId
+        ) {
+          setQuestionNotice("This question was not changed. Try again.");
+          return;
+        }
+        setQuestionRows(payload.questions);
+        setQuestionNotice("Saved and logged.");
+      } catch {
+        setQuestionNotice("This question was not changed. Try again.");
+      } finally {
+        setQuestionBusy(false);
+      }
+    },
+    [],
+  );
+
+  const moveQuestion = useCallback(
+    async (questionId: string, direction: -1 | 1) => {
+      const current = questionRows ?? [];
+      const index = current.findIndex((question) => question.id === questionId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= current.length) return;
+      const ids = current.map((question) => question.id);
+      [ids[index], ids[target]] = [ids[target], ids[index]];
+      await writeQuestions("PUT", { questionIds: ids }, "coach.question_order.saved");
+    },
+    [questionRows, writeQuestions],
+  );
+
+  const toggleQuestion = useCallback(
+    async (questionId: string, enabled: boolean) => {
+      await writeQuestions(
+        "PATCH",
+        { questionId, enabled },
+        "coach.question.enabled.changed",
+      );
+    },
+    [writeQuestions],
+  );
 
   const statusTone: "good" | "amber" = offers.published ? "good" : "amber";
   const statusLabel = offers.published
@@ -990,7 +1138,83 @@ export function CoachAgent({
               icon={<Glyph d="M9 9a3 3 0 1 1 4 2.8c-.7.3-1 .9-1 1.7V15M12 18h.01" />}
               tone="good"
             >
-              <Panel eyebrow="Step 3 · SetterFi writes the questions" name="What your agent asks about">
+              <Panel
+                action={<QuestionLoggedNote />}
+                eyebrow="Step 3 · reorder or turn off"
+                name="Questions your agent asks"
+              >
+                {questionRows === null ? (
+                  <p className="m-0 px-[20px] py-[16px] text-[length:var(--coach-body)] text-[color:var(--muted)]">
+                    {"Your agent's questions could not be read just now."}
+                  </p>
+                ) : questionRows.length === 0 ? (
+                  <p className="m-0 px-[20px] py-[16px] text-[length:var(--coach-body)] text-[color:var(--muted)]">
+                    No questions are published yet.
+                  </p>
+                ) : (
+                  <div className="flex flex-col">
+                    {questionRows.map((question, index) => (
+                      <div
+                        className={`${ROW_CLASS} ${question.enabled ? "" : "text-[color:var(--muted)]"}`}
+                        key={question.id}
+                      >
+                        <span
+                          className={
+                            "min-w-[220px] flex-1 text-[length:var(--coach-body)] " +
+                            (question.enabled
+                              ? "text-[color:var(--ink)]"
+                              : "text-[color:var(--muted)]")
+                          }
+                        >
+                          {question.text}
+                        </span>
+                        <span className={`${MONO_CLASS} text-[14px] text-[color:var(--muted)]`}>
+                          {question.tag}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-[8px]">
+                          <button
+                            aria-label={`Move "${question.text}" earlier`}
+                            className={MOVE_BUTTON_CLASS}
+                            disabled={questionBusy || index === 0}
+                            onClick={() => void moveQuestion(question.id, -1)}
+                            type="button"
+                          >
+                            <ArrowUp aria-hidden className="size-[16px]" />
+                          </button>
+                          <button
+                            aria-label={`Move "${question.text}" later`}
+                            className={MOVE_BUTTON_CLASS}
+                            disabled={questionBusy || index === questionRows.length - 1}
+                            onClick={() => void moveQuestion(question.id, 1)}
+                            type="button"
+                          >
+                            <ArrowDown aria-hidden className="size-[16px]" />
+                          </button>
+                          <Switch
+                            checked={question.enabled}
+                            disabled={questionBusy}
+                            label={`Ask "${question.text}"`}
+                            onChange={(next) => void toggleQuestion(question.id, next)}
+                          />
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {questionNotice ? (
+                  <p
+                    className="m-0 border-t border-[var(--line-soft)] px-[20px] py-[14px] text-[length:var(--coach-body)] text-[color:var(--body)]"
+                    role="status"
+                  >
+                    {questionNotice}
+                  </p>
+                ) : null}
+              </Panel>
+            </Step>
+
+            {/* Step 4 */}
+            <Step icon={<Glyph d="M12 3v6m0 0-5 5m5-5 5 5M7 14v7m10-7v7" />} tone="violet">
+              <Panel eyebrow="Step 4" name="How qualified are they?">
                 <div className="flex flex-col">
                   {FACT_ROWS.map((row) => {
                     const value = form[row.field];
@@ -1063,13 +1287,7 @@ export function CoachAgent({
                     );
                   })}
                 </div>
-              </Panel>
-            </Step>
-
-            {/* Step 4 */}
-            <Step icon={<Glyph d="M12 3v6m0 0-5 5m5-5 5 5M7 14v7m10-7v7" />} tone="violet">
-              <Panel eyebrow="Step 4" name="How qualified are they?">
-                <div className="grid grid-cols-1 md:grid-cols-3">
+                <div className="grid grid-cols-1 border-t border-[var(--line-soft)] md:grid-cols-3">
                   {tiers(form).map((tier, index) => (
                     <div
                       className={
@@ -1299,7 +1517,7 @@ export function CoachAgent({
         page states facts and controls; the eye carries the words about them.
       */}
       <ContextEye
-        copy="This is your setter read top to bottom, in the order a lead meets it. You set the keywords, the resource it sends, the facts it asks about, your voice and your prices. SetterFi sets the questions and the order they come in, checks in if a lead goes quiet on our own schedule, decides when it stops, and checks every reply against what you are allowed to claim. A qualified lead and a booked call are sent to Meta when they happen, never twice. Texting registration sits with the carrier, who owns that review, so there is nothing on this page to test or press while it runs. Saving keeps a draft; publishing is what your leads meet, and it is logged."
+        copy="This is your setter read top to bottom, in the order a lead meets it. You set the keywords, the resource it sends, which questions it asks and the order they come in, the facts an answer is judged against, your voice and your prices. SetterFi writes the questions themselves, checks in if a lead goes quiet on our own schedule, decides when it stops, and checks every reply against what you are allowed to claim. A qualified lead and a booked call are sent to Meta when they happen, never twice. Texting registration sits with the carrier, who owns that review, so there is nothing on this page to test or press while it runs. Saving keeps a draft; publishing is what your leads meet, and it is logged."
         screen="coach-agent"
       />
     </div>

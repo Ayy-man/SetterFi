@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CoachAgent,
@@ -7,6 +8,7 @@ import {
 } from "@/components/workspace/rehaul/coach-agent";
 import { rehaulConnectionSurface } from "@/components/workspace/rehaul/coach-agent-connection-view";
 import type { PersistedOfferLayer } from "@/lib/offer/types";
+import type { CoachQuestion } from "@/lib/repositories/coach-questions";
 import type { KeywordGoal } from "@/lib/repositories/keyword-goals";
 
 /** A published offer with every rung's storage actually filled, so the ladder has facts to draw. */
@@ -72,6 +74,13 @@ const goals: KeywordGoal[] = [
   },
 ];
 
+/** The merged read step 3 draws: platform wording, this tenant's order and on/off overrides. */
+const questions: CoachQuestion[] = [
+  { id: "q-1", text: "What's the funding for?", tag: "funding purpose", enabled: true, position: 0 },
+  { id: "q-2", text: "Roughly how much?", tag: "funding amount", enabled: true, position: 1 },
+  { id: "q-3", text: "Are you running a business today?", tag: "business stage", enabled: false, position: 2 },
+];
+
 const surface: RehaulConnectionSurface = rehaulConnectionSurface({
   calendar: {
     name: "Consults",
@@ -125,6 +134,7 @@ describe("rehaul coach agent", () => {
         initialKeywordGoals={goals}
         initialState={{ draft: null, published }}
         publishedDateLabel="Mon 1 Sept"
+        questions={questions}
         tab="ladder"
         testEnabled
       />,
@@ -165,6 +175,7 @@ describe("rehaul coach agent", () => {
         initialKeywordGoals={goals}
         initialState={{ draft: null, published }}
         publishedDateLabel="Mon 1 Sept"
+        questions={questions}
         tab="connections"
         testEnabled
       />,
@@ -201,6 +212,7 @@ describe("rehaul coach agent", () => {
         initialKeywordGoals={goals}
         initialState={{ draft: null, published }}
         publishedDateLabel={null}
+        questions={questions}
         tab="connections"
         testEnabled={false}
       />,
@@ -226,6 +238,7 @@ describe("rehaul coach agent", () => {
         initialKeywordGoals={goals}
         initialState={{ draft: null, published }}
         publishedDateLabel={null}
+        questions={questions}
         tab="connections"
         testEnabled={false}
       />,
@@ -246,6 +259,7 @@ describe("rehaul coach agent", () => {
         initialKeywordGoals={goals}
         initialState={{ draft: null, published }}
         publishedDateLabel={null}
+        questions={questions}
         tab="connections"
         testEnabled={false}
       />,
@@ -255,5 +269,106 @@ describe("rehaul coach agent", () => {
       screen.getByText("Your connections could not be read just now."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Not connected")).not.toBeInTheDocument();
+  });
+});
+
+describe("CoachAgent step 3", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function ladder(rows: readonly CoachQuestion[] | null) {
+    return (
+      <CoachAgent
+        connections={surface}
+        initialKeywordGoals={goals}
+        initialState={{ draft: null, published }}
+        publishedDateLabel={null}
+        questions={rows}
+        tab="ladder"
+        testEnabled={false}
+      />
+    );
+  }
+
+  it("draws the stored questions in their stored order with a switch and move controls", () => {
+    render(ladder(questions));
+
+    const asked = screen.getAllByRole("switch").map((control) => control.getAttribute("aria-label"));
+    expect(asked).toEqual([
+      'Ask "What\'s the funding for?"',
+      'Ask "Roughly how much?"',
+      'Ask "Are you running a business today?"',
+    ]);
+    // The disabled row is drawn off, not hidden, and the enabled ones are not drawn off.
+    expect(screen.getAllByRole("switch").map((control) => control.getAttribute("aria-checked")))
+      .toEqual(["true", "true", "false"]);
+    expect(screen.getByText("funding purpose")).toBeInTheDocument();
+
+    // The ends of the list cannot move past themselves.
+    expect(screen.getByRole("button", { name: 'Move "What\'s the funding for?" earlier' }))
+      .toBeDisabled();
+    expect(screen.getByRole("button", { name: 'Move "Are you running a business today?" later' }))
+      .toBeDisabled();
+    expect(screen.getByLabelText(
+      "Qualification-question order and setting recorded in the audit log",
+    )).toBeInTheDocument();
+  });
+
+  it("says the question read did not answer instead of drawing an empty library", () => {
+    render(ladder(null));
+    expect(screen.getByText("Your agent's questions could not be read just now."))
+      .toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  });
+
+  it("sends the full order to the route and redraws from the list it reads back", async () => {
+    const reordered = [
+      { ...questions[1], position: 0 },
+      { ...questions[0], position: 1 },
+      questions[2],
+    ];
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        questions: reordered,
+        audit: { auditId: "91", actionKey: "coach.question_order.saved" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(ladder(questions));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: 'Move "Roughly how much?" earlier' }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/coach/questions");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(String(init.body))).toEqual({ questionIds: ["q-2", "q-1", "q-3"] });
+    await waitFor(() =>
+      expect(screen.getAllByRole("switch")[0]).toHaveAttribute(
+        "aria-label",
+        'Ask "Roughly how much?"',
+      ));
+    expect(screen.getByText("Saved and logged.")).toBeInTheDocument();
+  });
+
+  it("toggles through the route and leaves the row alone when the write is refused", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ code: "COACH_QUESTION_TOGGLE_REFUSED" }, { status: 409 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(ladder(questions));
+
+    await userEvent.click(screen.getByRole("switch", { name: 'Ask "Roughly how much?"' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/coach/questions");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(String(init.body))).toEqual({ questionId: "q-2", enabled: false });
+    await waitFor(() =>
+      expect(screen.getByText("This question was not changed. Try again.")).toBeInTheDocument());
+    expect(screen.getByRole("switch", { name: 'Ask "Roughly how much?"' }))
+      .toHaveAttribute("aria-checked", "true");
   });
 });

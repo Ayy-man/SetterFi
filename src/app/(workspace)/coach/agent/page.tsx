@@ -38,6 +38,7 @@ import {
   type ChannelConnectionView,
 } from "@/lib/repositories/channel-connections";
 import { listCapiDatasets } from "@/lib/repositories/capi-datasets";
+import { readCoachQuestions } from "@/lib/repositories/coach-questions";
 import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
 import { resolveChannelCapability } from "@/lib/sends/channel-capabilities";
@@ -307,13 +308,22 @@ export default async function CoachAgentPage({ searchParams }: CoachAgentPagePro
       ? ("connections" as const)
       : ("ladder" as const);
     const connectionsEnabled = phase1Live() && phase4Live();
-    const [channelRows, registration, calendar, datasets] = await Promise.all([
+    const [channelRows, registration, calendar, datasets, questions] = await Promise.all([
       connectionsEnabled
         ? listChannelConnections(tenantId).catch(() => null)
         : Promise.resolve(null),
       loadCoachA2pRegistration(tenantId).catch(() => null),
       rehaulCalendar(tenantId).catch(() => null),
       capiLive() ? listCapiDatasets(tenantId).catch(() => null) : Promise.resolve(null),
+      /*
+       * Step 3's rows. Read here rather than fetched by the component because the merged list is
+       * tenant-scoped and the browser has no business naming a tenant for it. A refusal stays null
+       * so the panel says it could not read, which is not the same claim as an empty library. The
+       * writes go back through `/api/coach/questions`, which re-derives the actor from the session.
+       */
+      actorId
+        ? readCoachQuestions({ tenantId, userId: actorId }).catch(() => null)
+        : Promise.resolve(null),
     ]);
 
     return (
@@ -332,6 +342,7 @@ export default async function CoachAgentPage({ searchParams }: CoachAgentPagePro
               ? publicationDateLabel(publicationReceipt.publishedAt)
               : null
           }
+          questions={questions}
           tab={tab}
           testEnabled={phase7MeetAgentLive()}
         />
