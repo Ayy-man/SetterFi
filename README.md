@@ -59,6 +59,10 @@ For a contractor:
 6. `docs/LAUNCH-CHECKLIST.md` and `docs/operations/README.md`: what stands between the current
    deployment and real coaches, and how to operate the platform.
 
+Before redesigning any coach surface, read `docs/COACH-REDESIGN-PLAYBOOK.md`: the rules the owner
+console rehaul was built on, why the coach side is the larger job, and the traps that have already
+cost several sessions.
+
 For the owner:
 
 1. `docs/RETRIEVAL-EXPLAINER.md`: how the agent answers from The Brain.
