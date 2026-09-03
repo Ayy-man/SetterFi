@@ -241,10 +241,8 @@
     background: linear-gradient(to top, #000 60%, rgba(0, 0, 0, 0));
     display: flex; align-items: center; gap: 10px; padding: 0 12px 18px;
   }
-  .composer i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #0a84ff; display: inline-block; flex: none; }
-  .composer i.sq { border-radius: 5px; }
   .composer__field { flex: 1; height: 36px; border-radius: 18px; background: #262628; color: #8e8e93; font-size: 14px; display: flex; align-items: center; padding: 0 14px; }
-  .composer__mic { width: 22px; height: 22px; border-radius: 50%; background: #0a84ff; flex: none; }
+  .composer__send { width: 30px; height: 30px; border-radius: 50%; background: #0a84ff; flex: none; display: grid; place-items: center; }
   .homebar { position: absolute; left: 50%; bottom: 6px; width: 110px; height: 4px; margin-left: -55px; border-radius: 2px; background: #fff; opacity: 0.85; z-index: 6; }
 
   /* Consoles: real screenshots from the product. */
@@ -435,7 +433,7 @@
           <div class="phone__screen" id="screen">
             <div class="island"></div>
             <div class="status"><span>2:14</span><span class="status__right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="bat">81</span></span></div>
-            <div class="mhead"><span class="mhead__back"></span><span class="mhead__ava">NH</span><span class="mhead__name"><b>Nathaniel Holloway</b><span>Active now</span></span><span class="mhead__acts"><i></i><i></i></span></div>
+            <div class="mhead"><span class="mhead__back"></span><span class="mhead__ava">NH</span><span class="mhead__name"><b>Nathaniel Holloway</b><span>Active now</span></span></div>
             <div class="thread" id="thread">
               <span class="stamp">SUN 2:14 AM</span>
               <p class="b b--lead">Hi, a friend said you help people get funded. Is that right?</p>
@@ -455,7 +453,7 @@
               <span class="seen">Seen 2:21 AM</span>
               <span class="typing" id="typing"><i></i><i></i><i></i></span>
             </div>
-            <div class="composer"><i></i><i class="sq"></i><i class="sq"></i><span class="composer__field">Aa</span><span class="composer__mic"></span></div>
+            <div class="composer"><span class="composer__field">Aa</span><span class="composer__send"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
             <div class="homebar"></div>
           </div>
         </div>
