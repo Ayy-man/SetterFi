@@ -9,10 +9,11 @@ import {
   type AppointmentEvidenceByContact,
   type NextSetterTouchByContact,
 } from "@/components/workspace/live/leads-surface";
+import { CoachLeads } from "@/components/workspace/rehaul/coach-leads";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
-import { phase1Live, pipelineWriteLive } from "@/lib/env-contract";
+import { phase1Live, pipelineWriteLive, uiRehaulLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import { listContacts } from "@/lib/repositories/contacts";
 import { listFollowups } from "@/lib/repositories/followups";
@@ -188,8 +189,23 @@ export default async function CoachContactsPage() {
     loadAppointmentEvidence(context.tenantId, contactIds),
     loadNextSetterTouch(context.tenantId, contactIds),
   ]);
+  const navCounts = await coachNavCounts(context.tenantId);
+  if (uiRehaulLive()) {
+    return (
+      <LeadsShell navCounts={navCounts}>
+        <CoachLeads
+          appointmentEvidence={appointmentEvidence}
+          defaultView="table"
+          impersonation={context.impersonation}
+          initialContacts={items}
+          nextSetterTouch={nextSetterTouch}
+          nowIso={nowIso}
+        />
+      </LeadsShell>
+    );
+  }
   return (
-    <LeadsShell navCounts={await coachNavCounts(context.tenantId)}>
+    <LeadsShell navCounts={navCounts}>
       <LeadsSurface
         appointmentEvidence={appointmentEvidence}
         nextSetterTouch={nextSetterTouch}
