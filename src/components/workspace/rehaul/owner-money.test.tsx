@@ -110,3 +110,60 @@ describe("OwnerMoney, billing tab", () => {
     expect(tabs.textContent?.replace(/[A-Za-z· ]/g, "")).toBe("");
   });
 });
+
+describe("OwnerMoney, honest states", () => {
+  it("counts only active rows as live, so past due sits outside the number above it", () => {
+    const { container } = renderBilling();
+
+    const book = container.querySelector('[data-slot="owner-money-book"]');
+    const figures = [...(book?.querySelectorAll("span.font-mono") ?? [])]
+      .map((node) => node.textContent?.trim());
+    // Two receipt-backed rows, one active and one past due: Live is 1, not 2.
+    expect(figures.slice(0, 3)).toEqual(["1", "1", "0"]);
+  });
+
+  it("paints no bar for a slice the projection resolved at zero", () => {
+    const { container } = render(
+      <OwnerMoney
+        actorRole="owner"
+        authorized
+        enabled
+        initialRows={ROWS}
+        movement={{ ...MOVEMENT, upgradeCents: 0 }}
+        tab="billing"
+      />,
+    );
+
+    const card = container.querySelector('[data-slot="owner-money-net-mrr"]');
+    const filled = [...(card?.querySelectorAll("div.h-1\\.5.rounded-\\[3px\\]") ?? [])]
+      .filter((node) => !node.className.includes("bg-[oklch(0.4_0.03_262)]"));
+    // Four slices, three bars: the resolved-but-zero upgrade slice draws nothing.
+    expect(filled).toHaveLength(3);
+  });
+
+  it("keeps the green off a net movement that is not positive", () => {
+    const { container } = render(
+      <OwnerMoney
+        actorRole="owner"
+        authorized
+        enabled
+        initialRows={ROWS}
+        movement={{ ...MOVEMENT, newCents: 0, upgradeCents: 0 }}
+        tab="billing"
+      />,
+    );
+
+    const net = [...container.querySelectorAll('[data-slot="owner-money-net-mrr"] span')]
+      .find((node) => node.textContent?.includes("this month"));
+    expect(net?.className).toContain("oklch(0.82_0.10_32)");
+  });
+
+  it("says only that no subscription row came back", () => {
+    const { container } = render(
+      <OwnerMoney actorRole="owner" authorized enabled initialRows={[]} movement={MOVEMENT} tab="billing" />,
+    );
+
+    expect(screen.getByText("No subscription rows returned")).toBeTruthy();
+    expect(container.textContent).not.toContain("after the billing mirror returns a matching row");
+  });
+});

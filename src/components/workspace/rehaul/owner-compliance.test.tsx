@@ -203,3 +203,51 @@ describe("OwnerCompliance", () => {
       .toBeNull();
   });
 });
+
+describe("OwnerCompliance, review fixes", () => {
+  it("keeps a vendor out of the Why column as well as the Source column", () => {
+    const records = complianceRecords(
+      [suppression({ id: "block-ghl", source: "ghl_stop_sync", channel: "ghl_sms" })],
+      [],
+    );
+    expect(records[0]?.reason).toBe("Recorded on the texting channel");
+    expect(channelLabel("ghl_sms")).toBe("SMS");
+    expect(records[0]?.reason.toLowerCase()).not.toContain("ghl");
+  });
+
+  it("draws the awaiting-confirmation tile amber while a confirmation is outstanding", () => {
+    renderPage();
+    const tile = screen.getByText("awaiting confirmation").parentElement;
+    expect(tile?.className).toContain("--warning-line");
+  });
+
+  it("gives the blocks table its own export, under impersonation too", () => {
+    render(
+      <OwnerCompliance
+        actions={actions}
+        impersonation={{ sessionId: "session-1", tenantId: "workspace-1" }}
+        initialContacts={contacts}
+        suppressions={suppressions}
+        tombstones={tombstones}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Export blocks/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export every deletion record/ })).toBeNull();
+  });
+
+  it("prints the empty states without an explainer sentence under them", () => {
+    render(
+      <OwnerCompliance actions={actions} initialContacts={[]} suppressions={[]} tombstones={[]} />,
+    );
+    expect(screen.getByText("No contact blocks recorded")).toBeInTheDocument();
+    expect(screen.queryByText(/after an opt-out or another verified compliance event/)).toBeNull();
+  });
+
+  it("keeps the green dot off a header that only means the table is empty", () => {
+    const { container } = render(
+      <OwnerCompliance actions={actions} initialContacts={[]} suppressions={[]} tombstones={[]} />,
+    );
+    const dot = container.querySelector('[data-slot="status-dot"]');
+    expect(dot?.getAttribute("data-tone")).toBe("grey");
+  });
+});

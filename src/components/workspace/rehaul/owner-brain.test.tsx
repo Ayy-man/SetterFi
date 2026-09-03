@@ -149,3 +149,67 @@ describe("OwnerBrain", () => {
     expect(screen.queryByText("Folded evals surface")).not.toBeInTheDocument();
   });
 });
+
+describe("OwnerBrain, review fixes", () => {
+  it("gives the publish preview table an export", () => {
+    render(<OwnerBrain initialState={state()} tab="overview" />);
+
+    expect(screen.getByRole("button", { name: /Export publish preview/ })).toBeInTheDocument();
+  });
+
+  it("shows the logged microcopy beside the draft save", () => {
+    render(<OwnerBrain initialState={state()} tab="overview" />);
+
+    const save = screen.getByRole("button", { name: /Save draft from current rows/ });
+    expect(within(save.parentElement!).getByText("Logged")).toBeInTheDocument();
+  });
+
+  it("shows the logged microcopy beside the import", () => {
+    render(<OwnerBrain initialState={state()} tab="review" />);
+
+    const importNow = screen.getByRole("button", { name: /Import now/ });
+    expect(within(importNow.parentElement!).getByText("Logged")).toBeInTheDocument();
+  });
+
+  it("starts the synthetic turn empty rather than prefilling an invented question", () => {
+    render(<OwnerBrain initialState={state()} tab="overview" />);
+
+    const input = screen.getByLabelText("Synthetic test turn") as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe("Type a message a lead might send");
+  });
+
+  it("keeps green off an unsaved flag decision and off the synthetic-turn explainer", () => {
+    const withFlag = state({
+      importRows: [{
+        id: "row-1",
+        batchId: "batch-1",
+        sourceRef: "notion-row-1",
+        operation: "new" as const,
+        category: "pricing",
+        inboundMessage: "Inbound row-1",
+        responseTemplate: "Response row-1",
+        disposition: null,
+        decision: "pending" as const,
+        flags: [{
+          id: "flag-1",
+          code: "first_person_pii",
+          field: "responseTemplate",
+          offset: 0,
+          resolved: false,
+        }],
+      }],
+    });
+    render(<OwnerBrain initialState={withFlag} tab="review" />);
+
+    expect(screen.getByText("Blocking")).toBeInTheDocument();
+    expect(screen.queryByText("Resolved")).not.toBeInTheDocument();
+  });
+
+  it("titles the objection callout without the explainer sentence", () => {
+    render(<OwnerBrain initialState={state()} tab="knowledge" />);
+
+    expect(screen.getByText("Hard-gated objections")).toBeInTheDocument();
+    expect(screen.queryByText("The agent cannot invent a number")).not.toBeInTheDocument();
+  });
+});

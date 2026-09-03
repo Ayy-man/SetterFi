@@ -146,6 +146,7 @@ export const OWNER_BRAIN_EYE_COPY = [
   "The evaluation must match this exact saved draft before publishing, and the reason you type is recorded against the published version.",
   "A rollback appends the selected payload as a new version and keeps the prior history. It reaches every agent exactly as a publish does.",
   "No Brain table records who changed a row, so nothing here names one. Attribution for every edit is in the audit log.",
+  "A synthetic test turn runs against test data and never reaches a real lead, but the turn itself is recorded.",
 ].join(" ");
 
 /** What each changed entity type is called, in the reader's words rather than its column name. */
@@ -332,11 +333,12 @@ function SectionHead({ aside, title }: { aside?: ReactNode; title: string }) {
   );
 }
 
-function CardHead({ pill, title }: { pill?: ReactNode; title: string }) {
+function CardHead({ aside, pill, title }: { aside?: ReactNode; pill?: ReactNode; title: string }) {
   return (
     <div className="flex items-center gap-[10px] border-b border-[var(--line)] px-[14px] py-[10px]">
       <span className="text-[13px] font-[600] text-[color:var(--ink)]">{title}</span>
       {pill ? <span className="ml-auto">{pill}</span> : null}
+      {aside ? <span className={pill ? "" : "ml-auto"}>{aside}</span> : null}
     </div>
   );
 }
@@ -359,14 +361,14 @@ function Tile({
         tone === "amber" ? "border-[var(--warning-line)]" : "border-[var(--line)]",
       ].join(" ")}
     >
-      <div className="text-[11.5px] font-[500] tracking-[0.02em] text-[color:var(--faint)]">{label}</div>
+      <div className="text-[12.5px] font-[500] text-[color:var(--faint)]">{label}</div>
       <Figure
-        className={["mt-[6px]", tone === "amber" ? "text-[var(--warning-text)]" : "text-[color:var(--ink)]"].join(" ")}
-        size="lg"
+        className={["mt-[6px] text-[34px]", tone === "amber" ? "text-[var(--warning-text)]" : "text-[color:var(--ink)]"].join(" ")}
+        size="md"
       >
         {figure}
       </Figure>
-      <div className="mt-[6px] text-[11.5px] text-[color:var(--faint)]">{caption}</div>
+      <div className="mt-[6px] text-[12.5px] font-[400] text-[color:var(--faint)]">{caption}</div>
     </div>
   );
 }
@@ -397,7 +399,7 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
   const [publishResponse, setPublishResponse] = useState<BrainPublishResponse | null>(null);
   const [rollbackResponse, setRollbackResponse] = useState<unknown>(null);
   const [acceptedRows, setAcceptedRows] = useState<string[]>([]);
-  const [testMessage, setTestMessage] = useState("How does the synthetic demo program work?");
+  const [testMessage, setTestMessage] = useState("");
   const [objectionFilter, setObjectionFilter] = useState<ObjectionCategoryFilter>("all");
   const [knowledgeSheet, setKnowledgeSheet] = useState<KnowledgeRow | null>(null);
   const [objectionSheet, setObjectionSheet] = useState<BrainObjectionView | null>(null);
@@ -671,6 +673,23 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
 
         <div className={`${CARD_TABLE.card} flex min-w-0 flex-1 flex-col`}>
           <CardHead
+            aside={
+              /*
+               * The publish-preview rows are computed on this page from the loaded state, so the
+               * export is local: no server resource returns "live versus draft per section".
+               */
+              <ExportMenu
+                filename="setterfi-brain-publish-preview"
+                label="Export publish preview"
+                mode="local"
+                rows={sectionRows.map((row) => ({
+                  section: row.title,
+                  live: row.live,
+                  draft: row.total,
+                  change: row.changeLabel,
+                }))}
+              />
+            }
             pill={
               state.draft ? (
                 <Pill tone="amber">
@@ -721,15 +740,22 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
               tone={STATE_TONE_TO_TONE[importSummary.tone]}
               treatment="bare"
             />
-            <Button
-              className="ml-auto"
-              disabled={busy !== null}
-              onClick={() => void createDraft()}
-              type="button"
-              variant="outline"
-            >
-              {busy === "draft" ? "Saving draft" : "Save draft from current rows"}
-            </Button>
+            <div className="ml-auto flex flex-col items-end gap-[2px]">
+              <Button
+                disabled={busy !== null}
+                onClick={() => void createDraft()}
+                type="button"
+                variant="outline"
+              >
+                {busy === "draft" ? "Saving draft" : "Save draft from current rows"}
+              </Button>
+              {/*
+                * Not a `LoggedButton`: `AUDIT_ACTIONS` has no key for a draft revision and
+                * `src/lib/audit/actions.ts` is not this page's file to add one to. The microcopy
+                * is the part a reader needs, so it goes beside the button on its own.
+                */}
+              <MonoMeta aria-label="Draft revision recorded in the audit log">Logged</MonoMeta>
+            </div>
           </div>
         </div>
 
@@ -763,13 +789,13 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
 
       <div className="flex min-w-0 flex-col gap-[14px] rounded-[14px] border border-[var(--line)] bg-[linear-gradient(180deg,var(--card-top),var(--card))] px-[20px] py-[18px] shadow-[var(--shadow-card)]">
         <div>
-          <div className="text-[11.5px] font-[500] tracking-[0.02em] text-[color:var(--faint)]">
+          <div className="text-[12.5px] font-[500] text-[color:var(--faint)]">
             Evals on this draft
           </div>
           <div className="mt-[6px] flex items-baseline gap-[8px]">
             <Figure
-              className={state.eval.state === "blocked" ? "text-[var(--warning-text)]" : "text-[color:var(--ink)]"}
-              size="lg"
+              className={`text-[34px] ${state.eval.state === "blocked" ? "text-[var(--warning-text)]" : "text-[color:var(--ink)]"}`}
+              size="md"
             >
               {workspaceCountFormat.format(state.eval.blockers.length)}
             </Figure>
@@ -829,12 +855,13 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
         </Field>
 
         <div className="mt-auto rounded-[11px] border border-[var(--line-soft)] bg-[var(--well)] px-[14px] py-[12px]">
-          <div className="text-[11.5px] font-[500] tracking-[0.02em] text-[color:var(--faint)]">Try a turn</div>
+          <div className="text-[12.5px] font-[500] text-[color:var(--faint)]">Try a turn</div>
           <div className="mt-[6px] flex flex-wrap items-center gap-[8px]">
             <Input
               aria-label="Synthetic test turn"
               className="min-w-0 flex-1"
               onChange={(event) => setTestMessage(event.target.value)}
+              placeholder="Type a message a lead might send"
               value={testMessage}
             />
             <Button
@@ -856,14 +883,17 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
     <div className="relative flex min-w-0 flex-col gap-[var(--s-4)]">
       <SectionHead
         aside={
-          <Button
-            disabled={busy !== null}
-            onClick={() => void runAction("import", async () => { await api.importConfigured(); router.refresh(); })}
-            type="button"
-            variant="outline"
-          >
-            {busy === "import" ? "Importing" : "Import now"}
-          </Button>
+          <div className="flex flex-col items-end gap-[2px]">
+            <Button
+              disabled={busy !== null}
+              onClick={() => void runAction("import", async () => { await api.importConfigured(); router.refresh(); })}
+              type="button"
+              variant="outline"
+            >
+              {busy === "import" ? "Importing" : "Import now"}
+            </Button>
+            <MonoMeta aria-label="Import batch recorded in the audit log">Logged</MonoMeta>
+          </div>
         }
         title="Knowledge import review"
       />
@@ -927,9 +957,15 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
                             <span className="text-[length:var(--t-row)] font-[var(--t-row-w)] text-[color:var(--ink)]">
                               {copy.title}
                             </span>
+                            {/*
+                              * Amber on both arms until acceptance returns. `resolved` is true as
+                              * soon as a checkbox is ticked or a binding chosen, and none of that
+                              * is persisted until `accept()` runs, so the only green here is the
+                              * one the server confirmed: `flag.resolved` off the loaded row.
+                              */}
                             <Status
-                              label={resolved ? "Resolved" : "Blocking"}
-                              tone={resolved ? "good" : "warning"}
+                              label={flag.resolved ? "Resolved" : resolved ? "Marked, not saved" : "Blocking"}
+                              tone={flag.resolved ? "good" : "warning"}
                               treatment="bare"
                             />
                           </div>
@@ -1104,7 +1140,7 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
           body={hardGateCount
             ? `${hardGateCount} of ${state.objections.length} ${state.objections.length === 1 ? "objection is" : "objections are"} hard-gated.`
             : "No objection is hard-gated yet."}
-          title="The agent cannot invent a number"
+          title="Hard-gated objections"
           tone={hardGateCount ? "good" : "warning"}
         />
         <ViewSwitch
@@ -1282,8 +1318,12 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
       <Surface aria-labelledby="test-turn-title" className="min-w-0" variant="panel">
         <SurfaceHeader overline="Test data" title={<span id="test-turn-title">Synthetic test turn</span>} />
         <PanelBody className="flex flex-col gap-[var(--s-3)]">
-          <Field hint="This uses test data and does not reach a real lead." label="Synthetic test turn">
-            <Input onChange={(event) => setTestMessage(event.target.value)} value={testMessage} />
+          <Field label="Synthetic test turn">
+            <Input
+              onChange={(event) => setTestMessage(event.target.value)}
+              placeholder="Type a message a lead might send"
+              value={testMessage}
+            />
           </Field>
           <Button
             className="self-start"
@@ -1328,7 +1368,7 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
           <Callout
             body={
               <>
-                Nothing was saved. The response detail below is the whole of what came back.
+                Nothing was saved.
                 <TechnicalDetail className="mt-[var(--s-2)]" items={[{ label: "Response detail", value: error }]} />
               </>
             }

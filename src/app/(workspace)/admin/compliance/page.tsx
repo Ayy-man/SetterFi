@@ -34,6 +34,9 @@ const COMPLIANCE_CRUMBS = [
   { label: "Compliance" },
 ] as const;
 
+/* The rehaul rail's group for this route. The flag-off arm keeps the crumb it shipped with. */
+const REHAUL_COMPLIANCE_CRUMBS = [{ label: "Platform" }, { label: "Compliance" }] as const;
+
 /**
  * `failedConfirmations` is the rail's number, and it is deliberately narrower than "blocks on the
  * page": a confirmed block is finished work and a pending one is a provider taking its time, so
@@ -51,7 +54,7 @@ function ComplianceShell({
   return (
     <AppShell
       activePath="/admin/compliance"
-      crumbs={COMPLIANCE_CRUMBS}
+      crumbs={uiRehaulLive() ? REHAUL_COMPLIANCE_CRUMBS : COMPLIANCE_CRUMBS}
       navCounts={{ "/admin/compliance": failedConfirmations }}
       role="admin"
     >

@@ -194,6 +194,20 @@ type MovementBar = {
   tone: "good" | "bad" | "amber";
 };
 
+/**
+ * The net movement line sits on the dark card, so it cannot use `--muted` / `--warning-text`:
+ * those tokens are tuned for ink on a light ground. These are the dark-card equivalents of the
+ * same three meanings, and only a positive net gets the green.
+ */
+type NetTone = "up" | "flat" | "down" | "unresolved";
+
+const NET_INK: Record<NetTone, string> = {
+  down: "text-[oklch(0.82_0.10_32)]",
+  flat: "text-[oklch(0.78_0.02_262)]",
+  unresolved: "text-[oklch(0.78_0.02_262)]",
+  up: "text-[oklch(0.78_0.12_164)]",
+};
+
 const BAR_TONE: Record<MovementBar["tone"], string> = {
   amber: "bg-[oklch(0.6409_0.115_71)]",
   bad: "bg-[oklch(0.6503_0.135_32)]",
@@ -228,6 +242,14 @@ function NetMrrCard({ movement }: { movement: MrrMovementRead | null }) {
   const view = deriveRevenueMovement(movement);
   const bars = movementBars(movement);
   const net = view ? signedMoney(view.netCents) : null;
+  const netCents = view ? view.netCents : null;
+  const netTone: NetTone = net === null || netCents === null
+    ? "unresolved"
+    : netCents < 0
+      ? "down"
+      : netCents === 0
+        ? "flat"
+        : "up";
   const headline = movement && movement.mrrCents !== null ? money(movement.mrrCents, "USD") : null;
 
   return (
@@ -237,7 +259,7 @@ function NetMrrCard({ movement }: { movement: MrrMovementRead | null }) {
     >
       <div className="flex items-baseline gap-2.5">
         <span className="text-[12.5px] font-medium text-[oklch(0.78_0.02_262)]">Net MRR</span>
-        <span className="ml-auto font-mono text-[12px] text-[oklch(0.78_0.12_164)]">
+        <span className={`ml-auto font-mono text-[12px] ${NET_INK[netTone]}`}>
           {net === null ? "movement not resolved" : `${net} this month`}
         </span>
       </div>
@@ -250,10 +272,10 @@ function NetMrrCard({ movement }: { movement: MrrMovementRead | null }) {
         {bars.map((bar) => (
           <div key={bar.key}>
             <div className="h-1.5 rounded-[3px] bg-[oklch(0.4_0.03_262)]">
-              {bar.amount === null ? null : (
+              {bar.width === 0 ? null : (
                 <div
                   className={`h-1.5 rounded-[3px] ${BAR_TONE[bar.tone]}`}
-                  style={{ width: `${Math.max(bar.width * 100, 4)}%` }}
+                  style={{ width: `${bar.width * 100}%` }}
                 />
               )}
             </div>
@@ -271,6 +293,24 @@ function NetMrrCard({ movement }: { movement: MrrMovementRead | null }) {
   );
 }
 
+/**
+ * "Live" is the green line on the card, so it counts only what the provider says is `active`.
+ *
+ * `receiptBackedCount("all", …)` is every receipt-backed row whatever its state, which would put
+ * the past-due and cancelling rows listed underneath inside the number above them, and paint a
+ * trial green before a payment was ever collected. The receipt test is the same one
+ * `receiptBackedCount` applies, so a row without provider evidence is counted by neither.
+ */
+function liveCount(rows: readonly SubscriptionRow[]) {
+  const receiptBacked = rows.filter((row) =>
+    row.dataLabel === null &&
+    row.subscriptionStatus !== null &&
+    row.providerUpdatedAt !== null,
+  );
+  if (receiptBacked.length === 0) return null;
+  return receiptBacked.filter((row) => row.subscriptionStatus === "active" && !row.cancelAtPeriodEnd).length;
+}
+
 function BookCard({
   movement,
   rows,
@@ -280,7 +320,7 @@ function BookCard({
 }) {
   const retention = deriveRevenueMovement(movement)?.netRevenueRetention ?? null;
   const lines: readonly { label: string; tone: StatusTone; value: number | null; ink?: string }[] = [
-    { label: "Live", tone: "good", value: receiptBackedCount("all", rows) },
+    { label: "Live", tone: "good", value: liveCount(rows) },
     {
       ink: "text-[var(--failure-text)]",
       label: "Past due",
@@ -300,7 +340,7 @@ function BookCard({
       className={`${CARD_TABLE.card} flex min-w-0 flex-col gap-2.5 px-5 py-[18px]`}
       data-slot="owner-money-book"
     >
-      <span className="text-[12.5px] font-medium text-[var(--muted)]">The book</span>
+      <span className="text-[12.5px] font-medium text-[var(--faint)]">The book</span>
       {lines.map((line) => {
         const text = countText(line.value);
         return (
@@ -314,7 +354,7 @@ function BookCard({
         );
       })}
       <div className="mt-auto flex items-baseline gap-2.5 border-t border-[var(--line-soft)] pt-2">
-        <span className="text-[12.5px] text-[var(--muted)]">Net revenue retention</span>
+        <span className="text-[12.5px] text-[var(--faint)]">Net revenue retention</span>
         <span className="ml-auto font-mono text-[13px] text-[var(--ink)]">
           {retention === null ? absentValue("no priced opening balance") : formatMetric(retention, "percent")}
         </span>
@@ -335,7 +375,7 @@ function NeedsHumanCard({
       className={`${CARD_TABLE.card} flex min-w-0 flex-col gap-2 border-[var(--warning-line)] px-5 py-[18px]`}
       data-slot="owner-money-needs-human"
     >
-      <span className="text-[12.5px] font-medium text-[var(--muted)]">Needs a human</span>
+      <span className="text-[12.5px] font-medium text-[var(--faint)]">Needs a human</span>
       {accounts.length === 0 ? (
         <p className="m-0 text-[12.5px] text-[var(--muted)]">
           Nothing is past due, suspended, cancelling, or carrying a scheduled plan change.
@@ -496,7 +536,16 @@ function MoneyBillingTab({
             <span className="font-mono text-[11.5px] text-[var(--faint)]">
               {workspaceCountFormat.format(ordered.length)}
             </span>
-            <span className="ml-auto text-[11.5px] text-[var(--faint)]">Worst first</span>
+            {/*
+              * The artboard's three-cell order control is one cell. The subscription mirror
+              * carries neither a plan nor a created date per row, so "By plan" and "Newest" would
+              * be orders over columns this page cannot read.
+              */}
+            <Seg
+              className="ml-auto"
+              items={[{ active: true, label: "Worst first" }]}
+              label="Subscription order"
+            />
           </div>
           {loadFailed ? (
             <DataState
@@ -505,11 +554,9 @@ function MoneyBillingTab({
               title="Subscriptions could not load"
             />
           ) : ordered.length === 0 ? (
-            <DataState
-              body="Accounts appear here after the billing mirror returns a matching row."
-              kind="empty"
-              title="No subscriptions yet"
-            />
+            // `DataState` requires a `body`; the empty string is how a title-only empty state
+            // is drawn without printing an explainer sentence under it.
+            <DataState body="" kind="empty" title="No subscription rows returned" />
           ) : (
             <table className={CARD_TABLE.table}>
               <thead>

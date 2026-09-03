@@ -42,11 +42,18 @@ export const dynamic = "force-dynamic";
 
 const CRUMBS = [{ label: "Brain" }, { label: "The Brain" }] as const;
 
+/*
+ * The rehaul rail files The Brain under a "Platform" group, so the crumb says Platform too. The
+ * old crumb stays on the flag-off arm untouched: this is chrome the rehaul changed, not a fix to
+ * the page that shipped.
+ */
+const REHAUL_CRUMBS = [{ label: "Platform" }, { label: "The Brain" }] as const;
+
 function BrainShell({ children }: { children: React.ReactNode }) {
   return (
     <AppShell
       activePath="/admin/brain"
-      crumbs={CRUMBS}
+      crumbs={uiRehaulLive() ? REHAUL_CRUMBS : CRUMBS}
       role="admin"
     >
       {children}

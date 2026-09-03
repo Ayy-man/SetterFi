@@ -124,14 +124,26 @@ function humanize(value: string) {
     .replace(/^./, (character) => character.toLocaleUpperCase());
 }
 
+/**
+ * The vendor guard, applied before any enum falls through to `humanize`.
+ *
+ * `humanize` swaps separators and capitalises, so an unmapped `ghl_*` value reaches a reader
+ * verbatim. Every column that can print a raw enum runs this first, not only Source: the whole
+ * point of the guard is that the enum is not trusted, and a value the Source column rewrites
+ * should not appear untouched in Why or Channel beside it.
+ */
+function withoutVendor(value: string) {
+  return /ghl|highlevel|leadconnector|twilio/iu.test(value) ? "SMS" : null;
+}
+
 export function channelLabel(channel: string) {
-  return channel.toLowerCase() === "sms" ? "SMS" : humanize(channel);
+  if (channel.toLowerCase() === "sms") return "SMS";
+  return withoutVendor(channel) ?? humanize(channel);
 }
 
 /** The source enum never carries a vendor, and the guard keeps one from reaching a reader if it ever does. */
 export function sourceLabel(source: string) {
-  if (source.toLowerCase().includes("ghl")) return "SMS";
-  return BLOCK_SOURCE[source] ?? humanize(source);
+  return withoutVendor(source) ?? BLOCK_SOURCE[source] ?? humanize(source);
 }
 
 function identifierLabel(value: string | null) {
@@ -146,7 +158,8 @@ function displayTime(value: string) {
 }
 
 function blockReason(row: LiveSuppressionRow) {
-  const base = BLOCK_REASON[row.source] ?? humanize(row.source);
+  const base = BLOCK_REASON[row.source]
+    ?? (withoutVendor(row.source) ? "Recorded on the texting channel" : humanize(row.source));
   const recorded = row.reason?.trim();
   return recorded ? `${base} (${recorded})` : base;
 }
@@ -420,19 +433,25 @@ export function OwnerCompliance({
     (row) => row.providerSyncState === "failed",
   ).length;
 
+  /*
+   * Green only where the provider confirmed every block. Zero blocks is a fact about an empty
+   * table, not a confirmation, so it takes the grey dot rather than the good one.
+   */
   const headerState = failedConfirmations > 0
     ? {
       amber: true,
       label: `${workspaceCountFormat.format(failedConfirmations)} confirmation${failedConfirmations === 1 ? "" : "s"} failed`,
+      tone: "amber" as const,
     }
     : pendingConfirmations > 0
       ? {
         amber: true,
         label: `${workspaceCountFormat.format(pendingConfirmations)} awaiting confirmation`,
+        tone: "amber" as const,
       }
       : suppressions.length > 0
-        ? { amber: false, label: "Every block confirmed" }
-        : { amber: false, label: "No blocks recorded" };
+        ? { amber: false, label: "Every block confirmed", tone: "good" as const }
+        : { amber: false, label: "No blocks recorded", tone: "grey" as const };
 
   const everyRowIsSeeded = [
     { count: suppressions.length, all: everyRowIsTest(suppressions, (row) => row.isDemo || row.isTest) },
@@ -544,7 +563,7 @@ export function OwnerCompliance({
           Compliance
         </h1>
         <Pill className="mb-[3px]" tone={headerState.amber ? "amber" : "neutral"}>
-          <StatusDot tone={headerState.amber ? "amber" : "good"} />
+          <StatusDot tone={headerState.tone} />
           {headerState.label}
         </Pill>
         {impersonation ? (
@@ -589,6 +608,7 @@ export function OwnerCompliance({
             <Tile label="current blocks" value={workspaceCountFormat.format(suppressions.length)} />
             <Tile
               label="awaiting confirmation"
+              tone={pendingConfirmations > 0 ? "warning" : undefined}
               value={workspaceCountFormat.format(pendingConfirmations)}
             />
             <Tile
@@ -620,13 +640,32 @@ export function OwnerCompliance({
                 type="search"
                 value={search}
               />
+              {/*
+                * The table's own export. The header's `suppression-tombstones` export covers the
+                * deletion records only, so every suppression row was unreachable, and it is hidden
+                * under impersonation, which left this table with no export at all. This one is
+                * over the rows already on screen, so an impersonated reader can take what they can
+                * already see.
+                */}
+              <ExportMenu
+                filename="setterfi-contact-blocks"
+                label="Export blocks"
+                mode="local"
+                rows={visibleRecords.map((row) => ({
+                  contact: row.contactName ?? identifierLabel(row.identifierLast4),
+                  channel: channelLabel(row.channel),
+                  workspace: row.tenantName,
+                  why: row.reason,
+                  confirmation: recordConfirmation(row).label,
+                  recorded: row.recordedAt,
+                  source: sourceLabel(row.source),
+                }))}
+              />
             </div>
             {visibleRecords.length === 0 ? (
               <div className="px-[14px] py-[20px]">
                 <DataState
-                  body={records.length === 0
-                    ? "A block is recorded here after an opt-out or another verified compliance event."
-                    : "Clear the filter or the search term to see the rest."}
+                  body={records.length === 0 ? "" : "Clear the filter or the search term to see the rest."}
                   kind="empty"
                   title={records.length === 0 ? "No contact blocks recorded" : "No blocks match this filter"}
                 />
@@ -692,11 +731,7 @@ export function OwnerCompliance({
           columns={contactColumns}
           data={contacts}
           emptyState={(
-            <DataState
-              body="Contacts appear here when this workspace has records eligible for a privacy action."
-              kind="empty"
-              title="No contacts available"
-            />
+            <DataState body="" kind="empty" title="No contacts available" />
           )}
           exportResource={{
             filename: "setterfi-compliance-contacts",
