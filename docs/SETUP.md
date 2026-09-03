@@ -63,6 +63,12 @@ npm run dev
 - `npm run db:migrate` applies migrations (`supabase migration up --include-all`). Migrations live in
   `supabase/migrations/*.sql` and must be reproducible from a clean database. Never edit a shipped
   migration, always add a new one.
+- `--include-all` is load-bearing, not decoration. Without it the CLI applies only migrations newer
+  than the last one recorded in `supabase_migrations.schema_migrations`, and silently skips any file
+  whose timestamp sits below that mark. Two people working in parallel produce that gap routinely:
+  on 2026-09-03 `20261012000002` was applied while `20261012000001` was still pending, so the
+  earlier file now has to go in behind it. Keep the flag on any command that applies migrations,
+  and read the applied list rather than the directory listing when you need to know what has run.
 - `npm run test:rls:clean` resets the local database and runs the row-level-security suite against
   it. A change that ships a migration should run this before it is considered done. `npm run
   test:rls` runs the same suite without the reset, and residue from earlier seeds can fail it; a
