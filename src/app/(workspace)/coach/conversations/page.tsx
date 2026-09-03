@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { CoachConversations } from "@/components/workspace/live/coach-conversations";
+import { CoachInbox } from "@/components/workspace/rehaul/coach-inbox";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { brainObjectionsLive, inboxVerbsLive, phase1Live } from "@/lib/env-contract";
+import { brainObjectionsLive, inboxVerbsLive, phase1Live, uiRehaulLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import { loadCoachTopObjections } from "@/lib/repositories/analytics";
 import {
@@ -156,8 +157,11 @@ function requestedObjection(params: Record<string, string | string[] | undefined
 }
 
 export default async function CoachConversationsPage({ searchParams }: PageProps) {
+  const rehaul = uiRehaulLive();
   if (!phase1Live()) {
-    return <CoachConversations enabled={false} initialConversations={[]} />;
+    return rehaul
+      ? <CoachInbox enabled={false} initialConversations={[]} />
+      : <CoachConversations enabled={false} initialConversations={[]} />;
   }
 
   const context = await liveCoachContext();
@@ -181,6 +185,21 @@ export default async function CoachConversationsPage({ searchParams }: PageProps
     activeObjection = row
       ? { id: directObjectionId, label: row.label }
       : { id: directObjectionId, label: "Selected objection, no recorded matches in the last 30 days" };
+  }
+
+  // The rehaul inbox takes the same rows, the same server-side narrowing and the same clock; the
+  // objection label has no home on the three-pane layout, so only the old surface is handed it.
+  if (rehaul) {
+    return (
+      <CoachInbox
+        filteredConversationIds={filteredConversationIds(conversations, params)}
+        impersonation={context.impersonation}
+        initialConversations={conversations}
+        key={queryIdentity(params)}
+        nowIso={new Date().toISOString()}
+        viewerId={context.actorId ?? null}
+      />
+    );
   }
 
   return (
