@@ -310,9 +310,18 @@ describe("CoachAgent step 3", () => {
       .toBeDisabled();
     expect(screen.getByRole("button", { name: 'Move "Are you running a business today?" later' }))
       .toBeDisabled();
+    /*
+     * Two notes, not one joined string: the arrows write `coach.question_order.saved` and the
+     * switch writes `coach.question.enabled.changed`, and both labels come from the registry
+     * entries mirroring `20261009000004_tenant_question_settings.sql`, so a caption that drifted
+     * from the row it describes fails here.
+     */
     expect(screen.getByLabelText(
-      "Qualification-question order and setting recorded in the audit log",
-    )).toBeInTheDocument();
+      "Qualification-question order recorded in the audit log",
+    )).toHaveTextContent("Question order logged");
+    expect(screen.getByLabelText(
+      "Qualification-question setting recorded in the audit log",
+    )).toHaveTextContent("Question setting logged");
   });
 
   it("says the question read did not answer instead of drawing an empty library", () => {

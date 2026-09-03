@@ -110,6 +110,8 @@ const AUDIT_KEYS = [
   "channel.messaging_install.started",
   "channel.provider.switched",
   "channel.went_live",
+  "coach.question.enabled.changed",
+  "coach.question_order.saved",
   "compliance.control_reply.published",
   "consent.opt_in",
   "consent.opt_out",

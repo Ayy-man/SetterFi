@@ -446,11 +446,28 @@ const SEED_AUDIT_ACTIONS = {
  * transaction, so the save and its record land together or neither does. That is why the coach
  * offer route has no audit insert of its own to add: a second write here would log the same save
  * twice. Scope is tenant, unlike the two above, because an offer belongs to a tenant.
+ *
+ * `coach.question_order.saved` and `coach.question.enabled.changed` are both seeded by
+ * `20261009000004_tenant_question_settings.sql` and written inside `save_coach_question_order` and
+ * `set_coach_question_enabled`, in the same statement as the `tenant_question_settings` row each
+ * one upserts. They stay two keys rather than one because a coach reading their own log needs to
+ * tell a reordering apart from a question being switched off, which are different decisions about
+ * what a lead is asked. Tenant scope, because the settings row is per tenant.
  */
 const POST_SEED_UI_ACTIONS = {
   "auth.signed_out": {
     actorKind: "human", scope: "platform", reasonRequired: false, coachVisible: false,
     microcopy: "Sign-out logged", ariaLabel: "Sign-out recorded in the audit log",
+  },
+  "coach.question.enabled.changed": {
+    actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
+    microcopy: "Question setting logged",
+    ariaLabel: "Qualification-question setting recorded in the audit log",
+  },
+  "coach.question_order.saved": {
+    actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
+    microcopy: "Question order logged",
+    ariaLabel: "Qualification-question order recorded in the audit log",
   },
   "notification.preference.changed": {
     actorKind: "human", scope: "platform", reasonRequired: false, coachVisible: true,

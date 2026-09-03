@@ -126,10 +126,6 @@ const QUIET_BUTTON_CLASS =
   "border-[var(--line-input)] bg-[var(--control-fill)] px-[20px] text-[length:var(--coach-body)] " +
   "leading-none font-medium text-[color:var(--body)] hover:border-[var(--accent-edge)] " +
   "hover:text-[color:var(--ink)]";
-const PRIMARY_BUTTON_CLASS =
-  "inline-flex h-[46px] shrink-0 items-center justify-center gap-[8px] rounded-[12px] border " +
-  "border-[var(--accent-line)] bg-[var(--accent-fill)] px-[20px] text-[length:var(--coach-body)] " +
-  "leading-none font-semibold text-[color:var(--on-accent)]";
 
 const DOT_TONE: Record<"good" | "amber" | "grey", string> = {
   amber: "bg-[var(--warning)]",
@@ -171,25 +167,17 @@ function LoggedNote({ actionKey }: { actionKey: keyof typeof AUDIT_ACTIONS }) {
 /**
  * The accountability line for the two question writes.
  *
- * `LoggedNote` above reads its words from `AUDIT_ACTIONS`, and the two keys these controls write --
- * `coach.question_order.saved` and `coach.question.enabled.changed` -- are seeded by
- * `20261009000004_tenant_question_settings.sql` but are not yet mirrored into that TypeScript
- * registry, which is a shared file this pass may not edit. The strings below are copied from that
- * migration verbatim so the caption and the audit row say the same words; once the two keys reach
- * `POST_SEED_UI_ACTIONS` this collapses back into two `LoggedNote`s.
+ * The reorder arrows and the per-row switch write two different keys --
+ * `coach.question_order.saved` and `coach.question.enabled.changed` -- so the header carries two
+ * notes rather than one joined string. Both now live in `POST_SEED_UI_ACTIONS`, mirrored from
+ * `20261009000004_tenant_question_settings.sql`, so `LoggedNote` reads the words from the registry
+ * and there is nothing hand-copied left here to drift from the row it describes.
  */
-const QUESTION_AUDIT_MICROCOPY = "Question order logged · Question setting logged";
-const QUESTION_AUDIT_ARIA =
-  "Qualification-question order and setting recorded in the audit log";
-
 function QuestionLoggedNote() {
   return (
-    <span
-      aria-label={QUESTION_AUDIT_ARIA}
-      className="inline-flex shrink-0 items-center gap-[6px] text-[14px] text-[color:var(--muted)]"
-    >
-      <ShieldCheck aria-hidden className="size-[14px]" />
-      {QUESTION_AUDIT_MICROCOPY}
+    <span className="inline-flex shrink-0 items-center gap-[12px]">
+      <LoggedNote actionKey="coach.question_order.saved" />
+      <LoggedNote actionKey="coach.question.enabled.changed" />
     </span>
   );
 }
@@ -898,14 +886,23 @@ export function CoachAgent({
               Test as a lead
             </Link>
           ) : null}
-          <button
-            className={dirty ? PRIMARY_BUTTON_CLASS : QUIET_BUTTON_CLASS}
+          {/*
+            * Save writes an `offer.draft.saved` row inside `save_offer_draft` itself, in the same
+            * transaction as the draft, so the caption under it is a fact about what a successful
+            * press leaves behind rather than a promise. It sits on a `LoggedButton` for the same
+            * reason Publish does, and at the same `coach` scale, so the pair reads as one row of
+            * controls that both record.
+            */}
+          <LoggedButton
+            actionKey="offer.draft.saved"
             disabled={busy || !dirty}
             onClick={saveOffer}
+            scale="coach"
             type="button"
+            variant={dirty ? "primary" : "secondary"}
           >
             {busy ? "Saving..." : "Save"}
-          </button>
+          </LoggedButton>
           <LoggedButton
             actionKey="offer.published"
             disabled={publishBlocked}

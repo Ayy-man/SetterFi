@@ -181,6 +181,8 @@ const EVENT_PHRASES: Record<AuditActionKey, EventPhrase> = {
   "channel.disconnected": { verb: "disconnected", object: "a channel" },
   "channel.provider.switched": { verb: "switched", object: "a channel to another provider" },
   "channel.went_live": { verb: "activated", object: "a channel" },
+  "coach.question.enabled.changed": { verb: "changed", object: "whether a qualifying question is asked" },
+  "coach.question_order.saved": { verb: "saved", object: "the order of the qualifying questions" },
   "compliance.control_reply.published": { verb: "published", object: "an approved STOP, HELP or START reply" },
   "consent.opt_in": { verb: "recorded", object: "a consent opt-in" },
   "consent.opt_out": { verb: "recorded", object: "an opt-out" },
