@@ -194,6 +194,7 @@ describe("OwnerBrain, review fixes", () => {
         flags: [{
           id: "flag-1",
           code: "first_person_pii",
+          severity: "blocking" as const,
           field: "responseTemplate",
           offset: 0,
           resolved: false,

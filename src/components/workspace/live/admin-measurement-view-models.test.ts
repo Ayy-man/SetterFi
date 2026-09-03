@@ -68,6 +68,10 @@ function snapshot() {
       value: 5,
       state: "available",
     }],
+    activeSubscriptionsByPeriod: [],
+    revenueByPeriod: [],
+    deliveriesByDay: [],
+    textingRegistrationByTenant: [],
   } satisfies PlatformMeasurement;
 }
 

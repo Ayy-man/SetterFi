@@ -112,6 +112,10 @@ function measurement(): PlatformMeasurement {
         state: "available",
       },
     ],
+    activeSubscriptionsByPeriod: [],
+    revenueByPeriod: [],
+    deliveriesByDay: [],
+    textingRegistrationByTenant: [],
   };
 }
 

@@ -123,6 +123,10 @@ function measurement(
     followupPerformance,
     provisioningPerformance: [],
     history: [],
+    activeSubscriptionsByPeriod: [],
+    revenueByPeriod: [],
+    deliveriesByDay: [],
+    textingRegistrationByTenant: [],
   };
 }
 

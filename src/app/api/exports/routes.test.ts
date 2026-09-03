@@ -1556,6 +1556,10 @@ describe("Phase 7 platform export route", () => {
       followupPerformance: [{ touchNo: 1, sent: 3, replied: 2, crossChannel: 1, exhausted: 0 }],
       provisioningPerformance: [{ stepKey: "a2p", state: "registering", attempts: 1, failures: 0, medianDaysToClear: null }],
       history: [],
+      activeSubscriptionsByPeriod: [],
+      revenueByPeriod: [],
+      deliveriesByDay: [],
+      textingRegistrationByTenant: [],
     };
     expect(phase7PlatformExportRows("platform-subscriptions", snapshot)).toEqual(snapshot.subscriptions.map((row) => ({ dataOrigin: "Real analytics", ...row })));
     expect(phase7PlatformExportRows("platform-tenant-performance", snapshot)).toEqual(snapshot.tenantPerformance.map((row) => ({ dataOrigin: "Real analytics", ...row })));

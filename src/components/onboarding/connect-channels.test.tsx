@@ -32,6 +32,7 @@ function card(overrides: Partial<ConnectCard> = {}): ConnectCard {
     key: "instagram",
     name: "Instagram",
     note: "Answering within a day of you connecting it.",
+    provedAt: null,
     status: null,
     wait: null,
     ...overrides,

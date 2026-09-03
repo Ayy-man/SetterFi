@@ -37,6 +37,7 @@ function repositoryDependencies(
     readCheckoutTierPrices: vi.fn(),
     readAllowedPrices: vi.fn(),
     readCheckoutSession: vi.fn(),
+    readMoneyBilling: vi.fn(),
     ...overrides,
   };
 }
