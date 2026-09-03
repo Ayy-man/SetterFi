@@ -314,6 +314,42 @@ async function ensureTier(database, id, rung) {
   );
 }
 
+/**
+ * The opening price version for a seeded plan.
+ *
+ * `tiers.price_cents` is what a plan costs today; Money prices a subscription from
+ * `tier_price_versions`, the dated ledger `update_billing_tier` appends to, because a month-end
+ * MRR has to use the price in force that month rather than the current one. A plan that was
+ * never repriced has no ledger row, so every seeded subscription read as unpriced and Money's MRR
+ * came out null. One version per plan, dated before the trailing twelve months Money draws,
+ * carrying the plan's current terms, gives the ledger the opening entry a real plan would have
+ * received on the day it was created. The ledger is append-only, so a run that finds any version
+ * for the plan leaves it alone.
+ */
+async function ensureTierOpeningPrice(database, tierId, rung, actorId) {
+  const existing = await database.query(
+    `select 1 from public.tier_price_versions where tier_id = $1 limit 1`, [tierId],
+  );
+  if ((existing.rowCount ?? 0) > 0) return;
+  const auditId = await ensureAudit(database, {
+    action: "billing.tier.updated",
+    actorId,
+    tenantId: null,
+    targetType: "tier",
+    targetId: tierId,
+    reason: "Opening price version for the seeded demo book",
+  });
+  await database.query(
+    `insert into public.tier_price_versions
+       (tier_id, price_cents, call_allowance, fair_use_cap, fair_use_note, effective_at,
+        actor_id, reason, audit_id)
+     values ($1, $2, $3, $4, $5, '2025-10-01T00:00:00Z', $6, $7, $8)
+     on conflict (tier_id, effective_at) do nothing`,
+    [tierId, rung.priceCents, rung.callAllowance, rung.fairUseCap, DEMO_FAIR_USE_NOTE, actorId,
+      "Opening price version for the seeded demo book", auditId],
+  );
+}
+
 async function ensureSignup(database, {
   intentId, userId, email, business, person, slug, tierId, referralCode = null, affiliateOptIn = false,
 }) {
@@ -497,6 +533,9 @@ export async function seedPhase6Demo({ argumentsList = process.argv.slice(2) } =
     }));
     await releaseStaleTierPriceIds(database, tierOwners);
     for (const owner of tierOwners) await ensureTier(database, owner.id, owner.rung);
+    for (const owner of tierOwners) {
+      await ensureTierOpeningPrice(database, owner.id, owner.rung, PHASE2_ADMIN_ID);
+    }
 
     const affiliateTenantId = await ensureSignup(database, {
       intentId: PHASE6_DEMO_IDS.affiliateIntent,

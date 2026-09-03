@@ -52,10 +52,16 @@ describe("billing repository", () => {
         row({ tenantId: "tenant-cancelling", cancelAtPeriodEnd: true }),
         row({ tenantId: "tenant-cancelled", subscriptionStatus: "canceled", status: "canceled", countsAsLive: false }),
         row({ tenantId: "tenant-test", isTest: true }),
+        // A demo tenant's row only reaches the RPC output when the database's demo switch admitted
+        // it, so it is kept and labelled; the inherited test flag on it is not a reason to drop it.
+        row({ tenantId: "tenant-demo", isTest: true, isDemo: true }),
       ])),
     }));
 
     const billing = await repository.loadMoneyBilling("2026-01-15T00:00:00.000Z");
+
+    expect(billing.rows.find((client) => client.tenantId === "tenant-demo")?.dataLabel).toBe("Demo");
+    expect(billing.rows.find((client) => client.tenantId === "tenant-test")).toBeUndefined();
 
     expect(billing.mrrByPeriod).toHaveLength(12);
     expect(billing.mrrByPeriod.at(-1)).toEqual({
@@ -63,15 +69,16 @@ describe("billing repository", () => {
       periodEnd: "2026-01-01T00:00:00.000Z",
       mrrCents: 30_000,
     });
-    expect(billing.rows).toHaveLength(5);
+    expect(billing.rows).toHaveLength(6);
     expect(billing.rows.map((client) => client.plan)).toEqual([
-      "Growth", "Growth", "Growth", "Growth", "Growth",
+      "Growth", "Growth", "Growth", "Growth", "Growth", "Growth",
     ]);
     expect(billing.rows.map((client) => client.monthlyAmountCents)).toEqual([
-      30_000, 30_000, 30_000, 30_000, 30_000,
+      30_000, 30_000, 30_000, 30_000, 30_000, 30_000,
     ]);
     expect(billing.rows.map((client) => [client.status, client.countsAsLive])).toEqual([
       ["active", true], ["trialing", false], ["past_due", false], ["active", true], ["canceled", false],
+      ["active", true],
     ]);
     expect(billing.rows.map((client) => client.tenantId)).not.toContain("tenant-test");
   });

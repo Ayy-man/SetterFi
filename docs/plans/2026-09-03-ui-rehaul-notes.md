@@ -412,3 +412,16 @@ new additive `also` prop on ExportMenu. Names on screen go through `displayName`
 the column, the pill carries the fact). ContextEye gained `placement="header"` (32px owner / 46px
 coach control at the end of the page-header row) and thirteen screens dock it there; screens without
 a header row keep the floating eye over a 72px gutter; five screens that had no eye gained one.
+
+## Note 26 (2026-09-04)
+
+Demo data on the console the owner actually opens. Two changes. `platformPreviewDataEnabled` no
+longer refuses a production deployment, so the synthetic Overview snapshot shows wherever demo
+logins and the explicit flag are on. And the database gained one switch,
+`platform_review_settings.demo_visible` read through `platform_demo_visible()`, which every
+`analytics_*` view and Money's `read_money_mrr_history` consult before excluding demo tenants
+(migrations 20261011000001 and 20261011000002, applied to the hosted project by psql and recorded
+in the migration history; the switch is on there). Test rows inside real tenants stay excluded.
+The seeded plans had no `tier_price_versions` entry, so Money priced nothing; the phase 6 seeder
+now writes an opening version per plan dated 2025-10-01, and the hosted rows were written by hand
+the same way. Money's TypeScript read keeps a demo row and labels it instead of dropping it.

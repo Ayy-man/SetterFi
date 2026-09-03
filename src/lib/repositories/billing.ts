@@ -776,9 +776,11 @@ function parseMoneyBilling(value: unknown): MoneyBillingRead {
     if (typeof persisted.isTest !== "boolean" || typeof persisted.isDemo !== "boolean") {
       throw new BillingRepositoryError("MONEY_BILLING_READ_INVALID");
     }
-    // The database projection excludes both cases. Keeping this defensive filter makes a widened
-    // RPC response fail safe rather than allowing a fixture or future query change onto Money.
-    if (persisted.isTest || persisted.isDemo) return [];
+    // A test row inside a real tenant never reaches Money, whatever the projection returned. A
+    // demo tenant's rows do reach it when the database's platform_demo_visible() switch admitted
+    // them (20261011000002): that is the only way the RPC ever returns one, so the row is kept and
+    // labelled rather than dropped, and the label is what the table shows beside the name.
+    if (persisted.isTest && !persisted.isDemo) return [];
     if (typeof persisted.cancelAtPeriodEnd !== "boolean" || typeof persisted.countsAsLive !== "boolean") {
       throw new BillingRepositoryError("MONEY_BILLING_READ_INVALID");
     }
@@ -796,7 +798,9 @@ function parseMoneyBilling(value: unknown): MoneyBillingRead {
       cancelAtPeriodEnd: persisted.cancelAtPeriodEnd,
       pendingTierId: nullableString(persisted.pendingTierId, "MONEY_BILLING_READ_INVALID"),
       pendingEffectiveAt: nullableString(persisted.pendingEffectiveAt, "MONEY_BILLING_READ_INVALID"),
-      dataLabel: nullableString(persisted.dataLabel, "MONEY_BILLING_READ_INVALID"),
+      dataLabel: persisted.isDemo
+        ? "Demo"
+        : nullableString(persisted.dataLabel, "MONEY_BILLING_READ_INVALID"),
       plan: nullableString(persisted.plan, "MONEY_BILLING_READ_INVALID"),
       monthlyAmountCents: nullableInteger(persisted.monthlyAmountCents, "MONEY_BILLING_READ_INVALID"),
       status,
