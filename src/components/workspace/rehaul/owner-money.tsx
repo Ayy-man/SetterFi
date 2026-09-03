@@ -556,7 +556,7 @@ function MoneyBillingTab({
           ) : ordered.length === 0 ? (
             // `DataState` requires a `body`; the empty string is how a title-only empty state
             // is drawn without printing an explainer sentence under it.
-            <DataState body="" kind="empty" title="No subscription rows returned" />
+            <DataState kind="empty" title="No subscription rows returned" />
           ) : (
             <table className={CARD_TABLE.table}>
               <thead>

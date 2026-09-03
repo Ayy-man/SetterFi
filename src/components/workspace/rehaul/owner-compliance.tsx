@@ -731,7 +731,7 @@ export function OwnerCompliance({
           columns={contactColumns}
           data={contacts}
           emptyState={(
-            <DataState body="" kind="empty" title="No contacts available" />
+            <DataState kind="empty" title="No contacts available" />
           )}
           exportResource={{
             filename: "setterfi-compliance-contacts",
