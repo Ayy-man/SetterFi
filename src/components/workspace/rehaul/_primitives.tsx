@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils";
 export type RehaulTabItem = {
   label: string;
   count?: number;
+  /** "warning" (default) is the amber "this needs you" figure; "neutral" is a plain size, like Knowledge or Versions. */
+  countTone?: "warning" | "neutral";
   active?: boolean;
   href?: string;
 };
@@ -54,7 +56,7 @@ export function RehaulTabs({ className, items, label }: RehaulTabsProps) {
           <>
             {item.label}
             {typeof item.count === "number" ? (
-              <span className="ml-1.5 font-mono text-[11.5px] text-[var(--warning-text)]">
+              <span className={cn("ml-1.5 font-mono text-[11.5px]", item.countTone === "neutral" ? "text-[var(--faint)]" : "text-[var(--warning-text)]")}>
                 {item.count}
               </span>
             ) : null}

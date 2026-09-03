@@ -1427,8 +1427,8 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
           href: tabHref(id),
           label: TAB_LABELS[id],
           ...(id === "review" && pendingReviewCount ? { count: pendingReviewCount } : {}),
-          ...(id === "knowledge" && state.knowledge.length ? { count: state.knowledge.length } : {}),
-          ...(id === "versions" && state.snapshots.length ? { count: state.snapshots.length } : {}),
+          ...(id === "knowledge" && state.knowledge.length ? { count: state.knowledge.length, countTone: "neutral" as const } : {}),
+          ...(id === "versions" && state.snapshots.length ? { count: state.snapshots.length, countTone: "neutral" as const } : {}),
         }))}
         label="Brain sections"
       />
