@@ -221,7 +221,18 @@ const COMPONENT_ROOT = "src/components";
 // worth. A native select cannot exhibit the wrap defect, so this is a scope note rather than
 // an open instance of R4-14. Delete this entry once 10-03 merges.
 // The brain import review was the last holdout; nothing on a live surface may hand-roll a select.
-const NATIVE_SELECT_ALLOWLIST: string[] = [];
+//
+// The two legacy files are the pre-rehaul `/onboarding/business-profile` and `/onboarding/calendar`
+// client pages, moved out of `src/app` byte for byte so the flag-off arm of `uiRehaulLive()` keeps
+// rendering exactly what it rendered before. They were never in scope for R4-14 -- they sat under
+// `src/app` and this walk only reads `src/components` -- and they entered it by being moved, not by
+// being written. Migrating them would change the arm whose whole purpose is to be unchanged, so
+// they are allowed here until the flag comes out and both files are deleted with it. The rehaul
+// screens that replace them use the shared Select.
+const NATIVE_SELECT_ALLOWLIST: string[] = [
+  "src/components/onboarding/legacy-business-profile.tsx",
+  "src/components/onboarding/legacy-calendar.tsx",
+];
 
 function jsxElementsNamed(file: ts.SourceFile, tagName: string) {
   return collect(

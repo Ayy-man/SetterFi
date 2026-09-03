@@ -156,8 +156,13 @@ export function RehaulSignupForm({
       }
       title="Start with SetterFi"
     >
-      <form action={submit} className={`flex flex-col gap-[18px] ${AUTH_FIELDS_CLASS}`}>
-        <div className="grid gap-[14px] @min-[380px]:grid-cols-2">
+      {/*
+        The two-up rows measure the form, and they name it. `AuthCard` declares an anonymous
+        `@container` on its body, which resolves today and binds to whichever bare container is
+        nearest the moment anything wraps this form.
+      */}
+      <form action={submit} className={`@container/signup flex flex-col gap-[18px] ${AUTH_FIELDS_CLASS}`}>
+        <div className="grid gap-[14px] @min-[380px]/signup:grid-cols-2">
           <Field label="Full name" required><KitInput autoComplete="name" name="fullName" required /></Field>
           <Field label="Business name" required><KitInput autoComplete="organization" name="businessName" required /></Field>
         </div>
@@ -166,7 +171,7 @@ export function RehaulSignupForm({
 
         <PasswordField autoComplete="new-password" minLength={8} />
 
-        <div className="grid gap-[14px] @min-[380px]:grid-cols-2">
+        <div className="grid gap-[14px] @min-[380px]/signup:grid-cols-2">
           <Field label="Workspace address" required>
             <KitInput className="mono" name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required />
           </Field>

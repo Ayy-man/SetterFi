@@ -49,7 +49,7 @@ export function OnboardingOfferRehaul({ review }: { review: OfferReview }) {
       title="Tell us about your offer"
       width={1160}
     >
-      <div className="grid grid-cols-1 items-start gap-[20px] @min-[860px]:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-[20px] @min-[860px]/onboarding:grid-cols-2">
         {review.rows.map((row) => (
           <DeckPanel
             dataSlot={`rehaul-offer-${row.key}`}

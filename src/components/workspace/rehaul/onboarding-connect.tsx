@@ -111,7 +111,7 @@ export function OnboardingConnectRehaul({
 
   return (
     <OnboardingShell status={status} step={2} title="Where your leads message you">
-      <div className="grid grid-cols-1 items-start gap-[20px] @min-[900px]:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-[20px] @min-[900px]/onboarding:grid-cols-3">
         {cards.map((card) => {
           const state = card.status ?? UNCONNECTED;
           return (

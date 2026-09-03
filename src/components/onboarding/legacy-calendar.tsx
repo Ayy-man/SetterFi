@@ -307,7 +307,7 @@ export function LegacyCalendarOnboarding() {
 
   const manualFootnote = verified
     ? "Nothing further is needed from you here."
-    : "If your calendar still is not connected, your SetterFi contact will finish it with you \u2014 it takes a couple of minutes on a call.";
+    : "If your calendar still is not connected, your SetterFi contact will finish it with you. It takes a couple of minutes on a call.";
 
   return (
     <OnboardingStage

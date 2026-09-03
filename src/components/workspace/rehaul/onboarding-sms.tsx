@@ -75,7 +75,7 @@ async function fetchEligibility() {
 
 function DarkRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-t border-[rgba(255,255,255,0.12)] py-[13px] text-[15px]">
+    <div className="flex items-center justify-between border-t border-[var(--coach-on-drench-line)] py-[13px] text-[15px]">
       <span className="text-[color:var(--coach-on-drench-sub)]">{label}</span>
       <span className={`${ONBOARDING_MONO_CLASS} text-[color:var(--on-accent)]`}>{value}</span>
     </div>
@@ -193,7 +193,7 @@ export function OnboardingSmsRehaul() {
       step={5}
       title="Can your business send texts"
     >
-      <div className="grid grid-cols-1 items-stretch gap-[20px] @min-[900px]:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-stretch gap-[20px] @min-[900px]/onboarding:grid-cols-[420px_minmax(0,1fr)]">
         <DeckPanel
           className="flex flex-col"
           dataSlot="rehaul-sms-review"
@@ -218,7 +218,7 @@ export function OnboardingSmsRehaul() {
               was the eye's own wording about carriers publishing no schedule.
             */}
             {waitingSentence ? (
-              <p className="m-0 max-w-[36ch] text-[16px] leading-[1.5] text-[color:var(--coach-on-drench-sub)]">
+              <p className="m-0 max-w-[var(--measure-deck)] text-[16px] leading-[1.5] text-[color:var(--coach-on-drench-sub)]">
                 {waitingSentence}
               </p>
             ) : null}

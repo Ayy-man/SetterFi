@@ -43,7 +43,7 @@ export const ONBOARDING_LABEL_CLASS =
   "mb-[6px] block text-[14px] leading-[1.4] font-medium text-[color:var(--muted)]";
 
 export const ONBOARDING_SENTENCE_CLASS =
-  "m-0 max-w-[58ch] text-[16px] leading-[1.5] text-[color:var(--muted)]";
+  "m-0 max-w-[var(--measure-prose)] text-[16px] leading-[1.5] text-[color:var(--muted)]";
 
 export const ONBOARDING_MONO_CLASS =
   "font-[family-name:var(--font-mono)] [font-variant-numeric:tabular-nums_lining-nums]";
@@ -117,11 +117,11 @@ export function OnboardingFooter({
 }) {
   return (
     <div
-      className="flex flex-col items-start gap-[16px] rounded-[17px] border border-[var(--line)] bg-[var(--pane)] px-[20px] py-[16px] @min-[720px]:flex-row @min-[720px]:items-center"
+      className="flex flex-col items-start gap-[16px] rounded-[17px] border border-[var(--line)] bg-[var(--pane)] px-[20px] py-[16px] @min-[720px]/onboarding:flex-row @min-[720px]/onboarding:items-center"
       data-slot="onboarding-footer"
     >
       <p className={ONBOARDING_SENTENCE_CLASS}>{sentence}</p>
-      <div className="flex shrink-0 flex-wrap items-center gap-[12px] @min-[720px]:ml-auto">
+      <div className="flex shrink-0 flex-wrap items-center gap-[12px] @min-[720px]/onboarding:ml-auto">
         {actions}
       </div>
     </div>
@@ -181,8 +181,13 @@ export function OnboardingShell({
         </Link>
       </div>
 
+      {/*
+        Named, not bare. Every two-up and three-up on the five step screens measures this column,
+        and an anonymous container would bind them to whichever `@container` happens to be nearest
+        at runtime -- which changes the day a step wraps its body in a `Surface`.
+      */}
       <div
-        className="@container relative mx-auto flex w-full flex-col gap-[24px] px-[var(--s-4)] pt-[34px] sm:px-[40px]"
+        className="@container/onboarding relative mx-auto flex w-full flex-col gap-[24px] px-[var(--s-4)] pt-[34px] sm:px-[40px]"
         style={{ maxWidth: `${width}px` }}
       >
         <header className="flex flex-col gap-[12px]">

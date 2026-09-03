@@ -14,8 +14,15 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
-import { FieldShell, KitButton, KitInput, SelectCaret } from "@/components/kit/atomics";
+import { KitButton, KitInput } from "@/components/kit/atomics";
 import { DeckPanel } from "@/components/kit/deck-panel";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ShieldCheck } from "@/components/kit/icons";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import {
@@ -127,7 +134,7 @@ export function OnboardingProfileRehaul() {
           </p>
 
           <div className="flex flex-col gap-[20px]">
-            <div className="grid gap-[20px] @min-[720px]:grid-cols-2">
+            <div className="grid gap-[20px] @min-[720px]/onboarding:grid-cols-2">
               <OnboardingField id="legal-name" label="Legal business name">
                 <KitInput
                   className="text-[16px]"
@@ -140,23 +147,23 @@ export function OnboardingProfileRehaul() {
               </OnboardingField>
 
               <OnboardingField id="entity-type" label="Entity type">
-                <FieldShell className={`relative ${ONBOARDING_FIELD_CLASS}`}>
-                  <select
-                    className="min-w-0 flex-1 appearance-none bg-transparent text-[16px] text-[color:var(--ink)]"
-                    id="entity-type"
-                    onChange={(event) => change("entityType", event.target.value)}
-                    value={profile.entityType}
-                  >
+                <Select
+                  onValueChange={(value) => change("entityType", value ?? profile.entityType)}
+                  value={profile.entityType}
+                >
+                  <SelectTrigger className={ONBOARDING_FIELD_CLASS} id="entity-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="start" alignItemWithTrigger={false}>
                     {ENTITY_TYPES.map((entity) => (
-                      <option key={entity.value} value={entity.value}>{entity.label}</option>
+                      <SelectItem key={entity.value} value={entity.value}>{entity.label}</SelectItem>
                     ))}
-                  </select>
-                  <SelectCaret />
-                </FieldShell>
+                  </SelectContent>
+                </Select>
               </OnboardingField>
             </div>
 
-            <div className="grid items-end gap-[20px] @min-[720px]:grid-cols-2">
+            <div className="grid items-end gap-[20px] @min-[720px]/onboarding:grid-cols-2">
               <OnboardingField id="website-url" label="Website URL">
                 <KitInput
                   className={`text-[16px] ${ONBOARDING_MONO_CLASS}`}
@@ -200,7 +207,7 @@ export function OnboardingProfileRehaul() {
               </p>
             ) : null}
 
-            <div className="grid gap-[20px] @min-[720px]:grid-cols-2">
+            <div className="grid gap-[20px] @min-[720px]/onboarding:grid-cols-2">
               <OnboardingField id="address-1" label="Address line 1">
                 <KitInput
                   className="text-[16px]"
@@ -224,7 +231,7 @@ export function OnboardingProfileRehaul() {
               </OnboardingField>
             </div>
 
-            <div className="grid gap-[20px] @min-[720px]:grid-cols-[1.4fr_1fr_0.9fr_0.7fr]">
+            <div className="grid gap-[20px] @min-[720px]/onboarding:grid-cols-[1.4fr_1fr_0.9fr_0.7fr]">
               <OnboardingField id="city" label="City">
                 <KitInput
                   className="text-[16px]"

@@ -18,14 +18,15 @@
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
-import {
-  FieldShell,
-  KitButton,
-  KitInput,
-  SelectCaret,
-  kitButtonClass,
-} from "@/components/kit/atomics";
+import { KitButton, KitInput, kitButtonClass } from "@/components/kit/atomics";
 import { DeckPanel } from "@/components/kit/deck-panel";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ShieldCheck } from "@/components/kit/icons";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import {
@@ -219,7 +220,7 @@ export function OnboardingCalendarRehaul() {
       step={4}
       title="Connect your booking calendar"
     >
-      <div className="grid grid-cols-1 items-start gap-[20px] @min-[900px]:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid grid-cols-1 items-start gap-[20px] @min-[900px]/onboarding:grid-cols-[minmax(0,1fr)_420px]">
         <div className="flex min-w-0 flex-col gap-[20px]">
           <DeckPanel
             dataSlot="rehaul-calendar-provider"
@@ -234,7 +235,7 @@ export function OnboardingCalendarRehaul() {
             name="Calendar provider"
           >
             <div className="flex flex-col gap-[16px]">
-              <div className="grid gap-[16px] @min-[640px]:grid-cols-2">
+              <div className="grid gap-[16px] @min-[640px]/onboarding:grid-cols-2">
                 <div className="min-w-0">
                   <p className="mb-[6px] text-[14px] font-medium text-[color:var(--muted)]">Provider</p>
                   <OnboardingReadback absent={!connection}>
@@ -347,18 +348,18 @@ export function OnboardingCalendarRehaul() {
             </p>
 
             <OnboardingField id="calendar-provider" label="Calendar provider">
-              <FieldShell className={`relative ${ONBOARDING_FIELD_CLASS}`}>
-                <select
-                  className="min-w-0 flex-1 appearance-none bg-transparent text-[16px] text-[color:var(--ink)]"
-                  id="calendar-provider"
-                  onChange={(event) => change("provider", event.target.value)}
-                  value={form.provider}
-                >
-                  <option value="ghl">{PROVIDER_LABELS.ghl}</option>
-                  <option value="google">{PROVIDER_LABELS.google}</option>
-                </select>
-                <SelectCaret />
-              </FieldShell>
+              <Select
+                onValueChange={(value) => change("provider", value ?? form.provider)}
+                value={form.provider}
+              >
+                <SelectTrigger className={ONBOARDING_FIELD_CLASS} id="calendar-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start" alignItemWithTrigger={false}>
+                  <SelectItem value="ghl">{PROVIDER_LABELS.ghl}</SelectItem>
+                  <SelectItem value="google">{PROVIDER_LABELS.google}</SelectItem>
+                </SelectContent>
+              </Select>
             </OnboardingField>
 
             <OnboardingField id="account-reference" label="Provider account reference">
