@@ -385,14 +385,19 @@ export function phase7MeetAgentLive(environment: EnvironmentSource = process.env
 }
 
 /**
- * Review-only platform metrics. Production deployments never select this source, even when both
- * review flags were copied into their environment: platform measurements must be real or report
- * unavailable there. Non-production review deployments retain the explicit synthetic label.
+ * Synthetic platform metrics for a demo-login build.
+ *
+ * The opt-in is the explicit `SETTERFI_PLATFORM_PREVIEW_DATA=true`, and it only counts on a build
+ * that also runs demo logins: a deployment serving real customers without demo logins can never
+ * select this source, whatever else was copied into its environment. Until 2026-09-04 a production
+ * deployment was refused as well, which left the owner console reading zeros on the one URL the
+ * owner actually opens while the seeded review data sat on a preview branch. The owner asked for
+ * the numbers where they look, so the deployment target no longer decides; the two flags do. The
+ * snapshot keeps its synthetic label on every surface that reads it.
  */
 export function platformPreviewDataEnabled(environment: EnvironmentSource = process.env) {
   return phase7AnalyticsLive(environment)
     && demoLoginsEnabled(environment)
-    && !isProductionDeployment(environment)
     && environmentValue("SETTERFI_PLATFORM_PREVIEW_DATA", environment) === "true";
 }
 

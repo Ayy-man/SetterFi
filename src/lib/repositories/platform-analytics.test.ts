@@ -131,12 +131,15 @@ function snapshot() {
 }
 
 describe("platform measurement repository", () => {
-  it("uses real analytics in production even when the demo preview flags are on", async () => {
+  // A production build without demo logins is a real customer build, and the preview flag alone
+  // must not move it off real analytics. The deployment target itself stopped being a gate on
+  // 2026-09-04; see platformPreviewDataEnabled.
+  it("uses real analytics in production when demo logins are off, whatever the preview flag says", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("SETTERFI_PHASE7_LIVE", "true");
     vi.stubEnv("SETTERFI_PHASE7_ANALYTICS_LIVE", "true");
-    vi.stubEnv("SETTERFI_DEMO_LOGINS", "true");
+    vi.stubEnv("SETTERFI_DEMO_LOGINS", "");
     vi.stubEnv("SETTERFI_PLATFORM_PREVIEW_DATA", "true");
     rpc.mockResolvedValue({ data: snapshot(), error: null });
 
@@ -157,7 +160,7 @@ describe("platform measurement repository", () => {
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("SETTERFI_PHASE7_LIVE", "true");
     vi.stubEnv("SETTERFI_PHASE7_ANALYTICS_LIVE", "true");
-    vi.stubEnv("SETTERFI_DEMO_LOGINS", "true");
+    vi.stubEnv("SETTERFI_DEMO_LOGINS", "");
     vi.stubEnv("SETTERFI_PLATFORM_PREVIEW_DATA", "true");
     rpc.mockResolvedValue({ data: null, error: { message: "database unavailable" } });
 
@@ -170,7 +173,7 @@ describe("platform measurement repository", () => {
     expect(rpc).toHaveBeenCalledWith("read_platform_measurement_for_actor", expect.any(Object));
   });
 
-  it("uses and labels the synthetic preview only on a non-production review deployment", async () => {
+  it("uses and labels the synthetic preview on a demo-login build", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("VERCEL_ENV", "preview");
     vi.stubEnv("SETTERFI_PHASE7_LIVE", "true");

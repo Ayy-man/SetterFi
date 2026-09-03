@@ -205,8 +205,9 @@ on for a watched tenant first.
 a visible unapproved label, and the real filing paths reject a placeholder outright. They are
 `SETTERFI_DEMO_PLACEHOLDER_CONSENT_VERSION`, `_CAMPAIGN_COPY_VERSION`, `_TIER_PRICES`,
 `_ALLOWANCE_NOTICE`, `_DISPUTE_PATH`, and `_AFFILIATE_TERMS`.
-`SETTERFI_PLATFORM_PREVIEW_DATA` holds synthetic platform metrics for the demo-login review build
-only; real analytics always reads the `analytics_*` projection and never includes that snapshot.
+`SETTERFI_PLATFORM_PREVIEW_DATA` selects the synthetic platform snapshot on any build that also
+runs demo logins, production included since 2026-09-04 (the owner reads the console there); real
+analytics always reads the `analytics_*` projection and never includes that snapshot.
 
 **A2P probe pins.** `SETTERFI_A2P_PROBE_TARGET` and `SETTERFI_A2P_PROBE_TARGET_HASH` name the phone
 number the readiness probe sends to. See chapter 4.

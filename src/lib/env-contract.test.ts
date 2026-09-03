@@ -223,7 +223,7 @@ describe("environment contract", () => {
     })).toBe(false);
   });
 
-  it("permits synthetic platform data only on the non-production analytics-enabled demo-login review build", () => {
+  it("permits synthetic platform data only on an analytics-enabled demo-login build, on any deployment target", () => {
     const enabled = {
       SETTERFI_PHASE7_LIVE: "true",
       SETTERFI_PHASE7_ANALYTICS_LIVE: "true",
@@ -234,8 +234,11 @@ describe("environment contract", () => {
     expect(platformPreviewDataEnabled({ ...enabled, SETTERFI_DEMO_LOGINS: "" })).toBe(false);
     expect(platformPreviewDataEnabled({ ...enabled, SETTERFI_PHASE7_ANALYTICS_LIVE: "" })).toBe(false);
     expect(platformPreviewDataEnabled({ ...enabled, SETTERFI_PLATFORM_PREVIEW_DATA: "TRUE" })).toBe(false);
-    expect(platformPreviewDataEnabled({ ...enabled, NODE_ENV: "production" })).toBe(false);
-    expect(platformPreviewDataEnabled({ ...enabled, VERCEL_ENV: "production" })).toBe(false);
+    // The deployment target is not a gate: the owner reads the console on production, and the
+    // demo-login requirement is what keeps a real customer build from ever selecting this source.
+    expect(platformPreviewDataEnabled({ ...enabled, NODE_ENV: "production" })).toBe(true);
+    expect(platformPreviewDataEnabled({ ...enabled, VERCEL_ENV: "production" })).toBe(true);
+    expect(platformPreviewDataEnabled({ ...enabled, VERCEL_ENV: "production", SETTERFI_DEMO_LOGINS: "" })).toBe(false);
   });
 
   // Phase 8
