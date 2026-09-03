@@ -34,6 +34,39 @@ const testing: TestingView = {
 };
 
 describe("AdminBrainTesting", () => {
+  it("renders the test bench without page chrome when embedded", () => {
+    render(
+      <AdminBrainTesting
+        chrome="embedded"
+        tenant={{
+          id: "81000000-0000-4000-8000-000000000001",
+          name: "Synthetic Demo Funding",
+          isDemo: true,
+        }}
+        testing={testing}
+      />,
+    );
+
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.queryByText(/Try The Brain, then compare saved configurations/)).toBeNull();
+    expect(screen.getByLabelText("Test bench summary")).toBeInTheDocument();
+  });
+
+  it("keeps the Evals heading by default", () => {
+    render(
+      <AdminBrainTesting
+        tenant={{
+          id: "81000000-0000-4000-8000-000000000001",
+          name: "Synthetic Demo Funding",
+          isDemo: true,
+        }}
+        testing={testing}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Evals" })).toBeInTheDocument();
+  });
+
   it("keeps adjacent sentences separated in the known empty-arm fixture", () => {
     const { container } = render(
       <AdminBrainTesting

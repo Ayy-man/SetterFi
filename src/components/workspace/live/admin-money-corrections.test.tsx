@@ -10,7 +10,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AdminMoneyCorrections } from "@/components/workspace/live/admin-money-corrections";
+import {
+  AdminMoneyCorrections,
+  CorrectionQueue,
+} from "@/components/workspace/live/admin-money-corrections";
 import type { CorrectionEvidence } from "@/components/workspace/live/view-models";
 
 vi.mock("next/navigation", () => ({
@@ -69,6 +72,26 @@ const decided: CorrectionEvidence = {
 };
 
 describe("AdminMoneyCorrections", () => {
+  it("renders the correction strip without page chrome when embedded", () => {
+    render(
+      <CorrectionQueue
+        actorRole="admin"
+        chrome="embedded"
+        initialCorrections={[correction]}
+      />,
+    );
+
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.queryByText("Coach disputes against billable call evidence, and the receipt-backed decision.")).toBeNull();
+    expect(screen.getByLabelText("Open correction summary")).toBeInTheDocument();
+  });
+
+  it("keeps the correction page heading by default", () => {
+    render(<CorrectionQueue actorRole="admin" initialCorrections={[correction]} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Corrections" })).toBeInTheDocument();
+  });
+
   it("never renders a UUID-shaped select option label", () => {
     render(
       <AdminMoneyCorrections

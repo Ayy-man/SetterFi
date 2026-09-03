@@ -77,6 +77,7 @@ function measurement(): CoachMeasurement {
 
 function composition(): CoachLeadComposition {
   return {
+    bookedByPeriod: [],
     asOf: "2026-08-20T12:00:00.000Z",
     months: [
       { active: 2, disqualified: 1, label: "Jul 2026", month: "2026-07-01", partial: false, qualified: 5, total: 8 },

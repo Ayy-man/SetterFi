@@ -118,6 +118,7 @@ function jsonResponse(value: unknown) {
 function renderAffiliates(
   actorRole: "admin" | "success" = "admin",
   rows: readonly unknown[] = ledgerRows,
+  chrome?: "page" | "embedded",
 ) {
   const fetchMock = vi.fn(async () => jsonResponse(rows));
   vi.stubGlobal("fetch", fetchMock);
@@ -126,6 +127,7 @@ function renderAffiliates(
       actorRole={actorRole}
       affiliatesEnabled
       authorized={actorRole === "admin"}
+      chrome={chrome}
       enabled
       surface="affiliates"
     />,
@@ -155,6 +157,20 @@ afterEach(() => {
 });
 
 describe("AdminMoneyAffiliates", () => {
+  it("renders the payout strip without page chrome when embedded", async () => {
+    renderAffiliates("admin", ledgerRows, "embedded");
+
+    await screen.findByLabelText("Affiliate payout summary");
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.queryByText("Every commission entry, banded by what is waiting on whom. SetterFi never moves the money; this page records what your bank did.")).toBeNull();
+  });
+
+  it("keeps the affiliate page heading by default", () => {
+    renderAffiliates();
+
+    expect(screen.getByRole("heading", { level: 1, name: "Affiliates and payouts" })).toBeInTheDocument();
+  });
+
   it("carries the demo claim at page level once every ledger row is seeded", async () => {
     // Once every row is seeded the table drops its per-row chip, so the page-level claim is the
     // only thing on screen saying the ledger is demo. No per-row assertion can catch its removal.

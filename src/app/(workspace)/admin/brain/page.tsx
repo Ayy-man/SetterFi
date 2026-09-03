@@ -368,6 +368,7 @@ async function renderEvalsTab(claims: AppClaims) {
 
   return (
     <AdminBrainTesting
+      chrome="embedded"
       comparison={{ enabled: comparisonsEnabled, configs: comparisonConfigs, draft: comparisonDraft }}
       tenant={{ id: tenantId, name: tenantName, isDemo }}
       testing={testing}

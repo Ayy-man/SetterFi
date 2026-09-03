@@ -169,6 +169,7 @@ describe("coachMeasurementView", () => {
 
 function composition(): CoachLeadComposition {
   return {
+    bookedByPeriod: [],
     tenantId: "tenant-synthetic",
     timezone: "America/New_York",
     asOf: "2026-08-15T12:00:00.000Z",

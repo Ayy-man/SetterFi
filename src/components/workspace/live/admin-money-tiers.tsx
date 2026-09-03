@@ -92,6 +92,7 @@ export type ClientPricingByTenantId = Readonly<
 export type AdminMoneyTiersProps = {
   surface: "tiers";
   actorRole: PlatformRole;
+  chrome?: "page" | "embedded";
   enabled: boolean;
   authorized: boolean;
   /**
@@ -894,6 +895,7 @@ function PricingHistoryPanel({
 
 export function AdminMoneyTiers({
   actorRole,
+  chrome = "page",
   authorized,
   refusalRecord,
   enabled,
@@ -1267,34 +1269,8 @@ export function AdminMoneyTiers({
     return counted[0].id;
   })();
 
-  return (
-    <ListPage
-      /*
-       * The canvas reads "The three tiers a coach can buy, and the per-call price past the
-       * included allowance. Changing one is audit-logged."
-       *
-       * Two changes, both forced by what exists. "The three tiers" is a hard-coded count and this
-       * page renders however many rows `billing_tiers` returns, so it says "plans". And there is
-       * no per-call price past the allowance to state: `TierRow` carries `callAllowance` and a
-       * `fairUseCap`, which is a soft cap rather than a rate, and no column anywhere records an
-       * overage price per call. The fair-use half is what the schema actually has.
-       *
-       * "Changing one is audit-logged" is kept because it is true: `billing.tier.updated` is a
-       * real key in `src/lib/audit/actions.ts` and the tier editor writes it.
-       */
-      {...moneyPageHeader({
-        authorized: authorized && accessStatus === 200,
-        description: "The plans a coach can buy, what each one includes, and the fair-use cap past that. Changing one is audit-logged.",
-        enabled,
-      })}
-      provenance={
-        hasDemoData && pageProvenanceKind === null
-          ? "Demo rows are labelled and excluded from analytics."
-          : undefined
-      }
-      provenanceKind={pageProvenanceKind ?? undefined}
-      title="Plans and pricing"
-    >
+  const body = (
+    <>
       <MoneySurfaceGuard
         actorRole={actorRole}
         authorized={authorized && accessStatus === 200}
@@ -1623,6 +1599,25 @@ export function AdminMoneyTiers({
         }}
         title={`Review override for ${selectedClient?.businessName ?? "client"}`}
       />
+    </>
+  );
+
+  return chrome === "embedded" ? body : (
+    <ListPage
+      {...moneyPageHeader({
+        authorized: authorized && accessStatus === 200,
+        description: "The plans a coach can buy, what each one includes, and the fair-use cap past that. Changing one is audit-logged.",
+        enabled,
+      })}
+      provenance={
+        hasDemoData && pageProvenanceKind === null
+          ? "Demo rows are labelled and excluded from analytics."
+          : undefined
+      }
+      provenanceKind={pageProvenanceKind ?? undefined}
+      title="Plans and pricing"
+    >
+      {body}
     </ListPage>
   );
 }

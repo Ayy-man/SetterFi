@@ -27,11 +27,12 @@ function rollup(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderCosts(rows: readonly unknown[]) {
+function renderCosts(rows: readonly unknown[], chrome?: "page" | "embedded") {
   return render(
     <AdminMoneyBillingCosts
       actorRole="admin"
       authorized
+      chrome={chrome}
       enabled
       initialCostRows={rows}
     />,
@@ -39,6 +40,20 @@ function renderCosts(rows: readonly unknown[]) {
 }
 
 describe("AdminMoneyBillingCosts", () => {
+  it("renders the cost table without page chrome when embedded", () => {
+    renderCosts([rollup()], "embedded");
+
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.queryByText("Cost against revenue per billing period. Margin appears only where every required source is present.")).toBeNull();
+    expect(screen.getByLabelText("Cost evidence")).toBeInTheDocument();
+  });
+
+  it("keeps the cost page heading by default", () => {
+    renderCosts([rollup()]);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Cost evidence" })).toBeInTheDocument();
+  });
+
   it("derives a margin only where every source is present", () => {
     renderCosts([rollup()]);
     // 49,700 revenue less 12,400 of cost.

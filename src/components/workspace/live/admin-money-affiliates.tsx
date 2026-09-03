@@ -77,6 +77,7 @@ type EntryKind = "accrual" | "offset" | "recovery";
 export type AdminMoneyAffiliatesProps = {
   surface: "affiliates";
   actorRole: PlatformRole;
+  chrome?: "page" | "embedded";
   enabled: boolean;
   authorized: boolean;
   /**
@@ -924,6 +925,7 @@ export function AdminMoneyAffiliates({
   actorRole,
   affiliatesEnabled = false,
   authorized,
+  chrome = "page",
   refusalRecord,
   enabled,
 }: AdminMoneyAffiliatesProps) {
@@ -1180,49 +1182,15 @@ export function AdminMoneyAffiliates({
     }
   }
 
-  return (
-    <ListPage
-      {...moneyPageHeader({
-        authorized: canRead,
-        description: "Every commission entry, banded by what is waiting on whom. SetterFi never moves the money; this page records what your bank did.",
-        enabled,
-      })}
-      /*
-       * What the other side of this ledger can see, stated where the operator is looking at it.
-       *
-       * It is a product rule from CLAUDE.md rather than a nicety, and it is enforced in
-       * `affiliate-money.tsx`, which is the affiliate's own portal -- so this sentence is a
-       * description of code that exists, not a promise made on this page. It belongs here because
-       * this is the screen where somebody decides what to tell an affiliate, and the answer to
-       * "can I just send them the numbers" is on the page rather than in their memory.
-       */
-      note="An affiliate sees only the referred coach's name, their status, and their own commission. Never that coach's performance."
-      // Every row seeded is a claim about the page and takes the chip above the title; a mixed
-      // ledger keeps the sentence, because the chip would say the whole commission ledger is
-      // demo on a page carrying real commission. `assertOneProvenanceClaim` fails on both.
-      provenance={pageProvenanceKind === null && labelledWords.length > 0
-        ? `${labelledWords.join(" and ")} rows are labelled in the table and excluded from analytics.`
-        : undefined}
-      provenanceKind={pageProvenanceKind ?? undefined}
-      // The strip goes in the template's own slot rather than being hand-placed above the table
-      // with a margin. `ListPage` widens the break under the head when it carries one, so the
-      // page reads as a summary block over tight rows instead of three stacked things at the same
-      // spacing, and the strip stops carrying a `mb-` the template already owns.
-      stats={canRead && !loading && !loadError ? (
-        /*
-         * One drenched panel on the page and it is "Approved, not sent": that is the band with
-         * money in it that a person still has to move, which is the only reason this screen gets
-         * opened on a payout day. Pending approval is somebody else's queue and Recorded sent is
-         * finished work, so neither earns the fill.
-         */
+  const body = (
+    <>
+      {chrome === "embedded" && canRead && !loading && !loadError ? (
         <ConsoleStatDeck
           ariaLabel="Affiliate payout summary"
           heroLabel="Approved, not sent"
           items={tiles}
         />
-      ) : undefined}
-      title="Affiliates and payouts"
-    >
+      ) : null}
       <MoneySurfaceGuard
         actorRole={actorRole}
         authorized={canRead}
@@ -1409,6 +1377,31 @@ export function AdminMoneyAffiliates({
         open={sentConfirmOpen}
         title={`Record sent for ${selectedPayout?.affiliateName ?? "affiliate"}`}
       />
+    </>
+  );
+
+  return chrome === "embedded" ? body : (
+    <ListPage
+      {...moneyPageHeader({
+        authorized: canRead,
+        description: "Every commission entry, banded by what is waiting on whom. SetterFi never moves the money; this page records what your bank did.",
+        enabled,
+      })}
+      note="An affiliate sees only the referred coach's name, their status, and their own commission. Never that coach's performance."
+      provenance={pageProvenanceKind === null && labelledWords.length > 0
+        ? `${labelledWords.join(" and ")} rows are labelled in the table and excluded from analytics.`
+        : undefined}
+      provenanceKind={pageProvenanceKind ?? undefined}
+      stats={canRead && !loading && !loadError ? (
+        <ConsoleStatDeck
+          ariaLabel="Affiliate payout summary"
+          heroLabel="Approved, not sent"
+          items={tiles}
+        />
+      ) : undefined}
+      title="Affiliates and payouts"
+    >
+      {body}
     </ListPage>
   );
 }

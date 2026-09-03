@@ -107,6 +107,51 @@ describe("AdminMoneyTiers", () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
+  it("renders the plans body without page chrome when embedded", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("billing-tiers")) return jsonResponse(tierRows);
+      if (url.includes("platform-billing")) return jsonResponse(clientRows);
+      return new Response(null, { status: 404 });
+    }));
+
+    render(
+      <AdminMoneyTiers
+        actorRole="admin"
+        authorized
+        chrome="embedded"
+        clientPricingByTenantId={clientPricing}
+        enabled
+        stripeActionHref="https://dashboard.stripe.com/settings/account"
+        stripeReadinessReceipt={stripeReadinessReceipt}
+        surface="tiers"
+        tierImpactById={tierImpactById}
+      />,
+    );
+
+    await screen.findByRole("heading", { level: 2, name: "Growth" });
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.queryByText("The plans a coach can buy, what each one includes, and the fair-use cap past that. Changing one is audit-logged.")).toBeNull();
+  });
+
+  it("keeps the plans page heading by default", () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(
+      <AdminMoneyTiers
+        actorRole="admin"
+        authorized
+        clientPricingByTenantId={clientPricing}
+        enabled
+        stripeActionHref="https://dashboard.stripe.com/settings/account"
+        stripeReadinessReceipt={stripeReadinessReceipt}
+        surface="tiers"
+        tierImpactById={tierImpactById}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Plans and pricing" })).toBeInTheDocument();
+  });
+
   it("does not confirm a tier update without the required reason", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(

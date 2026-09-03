@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/kit/toolti
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   MODERATOR_STATE_COPY,
@@ -222,10 +223,12 @@ function suiteArmSection(label: string, arm: ComparisonSuite["armA"]) {
 }
 
 export function AdminBrainTesting({
+  chrome = "page",
   comparison,
   testing,
   tenant,
 }: {
+  chrome?: "page" | "embedded";
   comparison?: ComparisonPanelInput;
   testing: TestingView;
   // `isTest` used to sit here beside these and was read nowhere, which is the exact shape of a
@@ -594,15 +597,46 @@ export function AdminBrainTesting({
     { id: "runs", label: "Latest run", content: latestRunTab, ...(latestTrace ? { count: 1 } : {}) },
   ];
 
+  const pageBody = chrome === "embedded" ? (
+    <Tabs className="flex min-h-0 min-w-0 flex-1 flex-col" defaultValue={tabs[0]?.id}>
+      <TabsList className="shrink-0" variant="line">
+        {tabs.map((tab) => (
+          <TabsTrigger key={tab.id} value={tab.id}>
+            {tab.label}
+            {tab.count !== undefined ? (
+              <span
+                aria-hidden="true"
+                className="[font-family:var(--font-mono)] [font-size:var(--t-mono-crumb)] [font-weight:var(--t-mono-crumb-w)] [line-height:var(--t-mono-crumb-lh)] [color:var(--faint)] tabular-nums"
+              >
+                {tab.count}
+              </span>
+            ) : null}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {tabs.map((tab) => (
+        <TabsContent
+          className="relative min-h-0 min-w-0 flex-1 overflow-y-auto"
+          key={tab.id}
+          value={tab.id}
+        >
+          {tab.content}
+        </TabsContent>
+      ))}
+    </Tabs>
+  ) : (
+    <DetailPage
+      actions={<TechnicalDetail items={[{ label: "Tenant ID", value: tenant.id }]} />}
+      provenanceKind={tenant.isDemo ? "test" : undefined}
+      subtitle={`${tenant.name} · ${PAGE_DESCRIPTION}`}
+      tabs={tabs}
+      title="Evals"
+    />
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <DetailPage
-        actions={<TechnicalDetail items={[{ label: "Tenant ID", value: tenant.id }]} />}
-        provenanceKind={tenant.isDemo ? "test" : undefined}
-        subtitle={`${tenant.name} · ${PAGE_DESCRIPTION}`}
-        tabs={tabs}
-        title="Evals"
-      />
+      {pageBody}
 
       <RecordSheet
         onOpenChange={(open) => { if (!open) setSuiteSheet(null); }}

@@ -739,23 +739,11 @@ export function OwnerMoney({
           />
         ) : null}
 
-        {/*
-          * The four folded tabs render the surfaces that already exist, each of which carries its
-          * own `MoneySurfaceGuard` and its own role gate -- so the gate is kept by reuse rather
-          * than re-stated here.
-          *
-          * TODO(rehaul): each of these still draws its own `ListPage` heading and description
-          * inside this page's chrome, so the tab prints a second title and one explainer
-          * sentence. Removing them needs a prop on the three surfaces --
-          * `AdminMoneyBillingCosts`, `AdminMoneyTiers`, `AdminMoneyAffiliates` and
-          * `CorrectionQueue` -- along the lines of `chrome?: "page" | "embedded"`, defaulting to
-          * `"page"` so the folded routes are untouched. Not added here because those files are
-          * owned by the live surface, not by the rehaul.
-          */}
         {tab === "costs" ? (
           <AdminMoneyBillingCosts
             actorRole={actorRole}
             authorized={billingAuthorized}
+            chrome="embedded"
             enabled={enabled}
             initialCostRows={initialCostRows}
             refusalRecord={refusalRecord}
@@ -766,6 +754,7 @@ export function OwnerMoney({
           <AdminMoneyTiers
             actorRole={actorRole}
             authorized={billingAuthorized}
+            chrome="embedded"
             clientPricingByTenantId={tiers?.clientPricingByTenantId ?? null}
             enabled={enabled}
             pricingHistory={tiers?.pricingHistory ?? null}
@@ -782,6 +771,7 @@ export function OwnerMoney({
             actorRole={actorRole}
             affiliatesEnabled={affiliatesEnabled}
             authorized={billingAuthorized}
+            chrome="embedded"
             enabled={enabled}
             refusalRecord={refusalRecord}
             surface="affiliates"
@@ -803,7 +793,11 @@ export function OwnerMoney({
                 />
               </>
             ) : (
-              <CorrectionQueue actorRole={actorRole} initialCorrections={corrections ?? []} />
+              <CorrectionQueue
+                actorRole={actorRole}
+                chrome="embedded"
+                initialCorrections={corrections ?? []}
+              />
             )}
           </MoneySurfaceGuard>
         ) : null}

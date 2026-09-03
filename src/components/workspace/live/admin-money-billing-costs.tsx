@@ -342,6 +342,7 @@ export function costColumns(): ColumnDef<CostRow>[] {
 export type AdminMoneyBillingCostsProps = {
   actorRole: PlatformRole;
   authorized: boolean;
+  chrome?: "page" | "embedded";
   /**
    * The audit-write outcome for a role-boundary refusal, handed straight to `MoneySurfaceGuard`.
    * Absent on every arm that is not a refusal; the guard treats absence as "not recorded", which
@@ -355,6 +356,7 @@ export type AdminMoneyBillingCostsProps = {
 export function AdminMoneyBillingCosts({
   actorRole,
   authorized,
+  chrome = "page",
   refusalRecord,
   enabled,
   initialCostRows,
@@ -411,44 +413,8 @@ export function AdminMoneyBillingCosts({
     },
   ];
 
-  return (
-    <ListPage
-      /*
-       * Through `moneyPageHeader` for the reason its docstring gives: the guard below wraps this
-       * page's children, so on a refusal this description promised cost-against-revenue figures
-       * the reader was not shown, and this back-link pointed at `/admin/billing`, which refuses
-       * the same reader. The two Money routes that carry a header action pointed at each other's
-       * refusals.
-       */
-      {...moneyPageHeader({
-        actions: (
-          <a
-            className="inline-flex items-center gap-[var(--s-1)] text-[length:var(--t-body)] font-medium text-[var(--muted)] underline-offset-[var(--s-1)] hover:text-[var(--ink)] hover:underline"
-            href="/admin/billing"
-          >
-            <ChevronLeft aria-hidden className="size-[var(--s-4)]" />
-            Revenue and subscriptions
-          </a>
-        ),
-        authorized: authorized && actorRole !== "success",
-        description: "Cost against revenue per billing period. Margin appears only where every required source is present.",
-        enabled,
-      })}
-      // The whole-page claim is the chip; the mixed-rows claim stays a sentence and the table
-      // keeps labelling the row. Never both -- `assertOneProvenanceClaim` enforces it.
-      provenance={
-        pageProvenanceKind !== null || labelledWords.length === 0
-          ? undefined
-          : `${labelledWords.join(" and ")} rows are labelled in the table and excluded from analytics.`
-      }
-      provenanceKind={pageProvenanceKind ?? undefined}
-      // A strip of zeros over an empty table claims three measurements that were never made. With
-      // no rows the empty state is the whole answer, so the strip stays off the page.
-      stats={canRead && !loading && !loadError && rows.length > 0 ? (
-        <FigureStrip items={tiles} label="Cost evidence summary" />
-      ) : undefined}
-      title="Cost evidence"
-    >
+  const body = (
+    <>
       <MoneySurfaceGuard
         actorRole={actorRole}
         authorized={authorized && actorRole !== "success"}
@@ -491,9 +457,6 @@ export function AdminMoneyBillingCosts({
             options: Object.values(MARGIN_BANDS).map((label) => ({ label, value: label })),
           }]}
           getRowId={(row) => row.rowKey}
-          // Incomplete evidence is the lifecycle this page turns on, and it reads as two bands
-          // rather than as a pill repeated down a column. Incomplete sits first: it is the band
-          // that has work in it.
           footerNote="Every figure here is what SetterFi recorded for the period. Nothing on this page is reconciled against the payment provider."
           groupBy={evidenceBand}
           groups={EVIDENCE_GROUPS}
@@ -579,6 +542,55 @@ export function AdminMoneyBillingCosts({
           title={selected?.businessName ?? ""}
         />
       </MoneySurfaceGuard>
+    </>
+  );
+
+  return chrome === "embedded" ? (
+    <>
+      {canRead && !loading && !loadError && rows.length > 0 ? (
+        <FigureStrip items={tiles} label="Cost evidence summary" />
+      ) : null}
+      {body}
+    </>
+  ) : (
+    <ListPage
+      /*
+       * Through `moneyPageHeader` for the reason its docstring gives: the guard below wraps this
+       * page's children, so on a refusal this description promised cost-against-revenue figures
+       * the reader was not shown, and this back-link pointed at `/admin/billing`, which refuses
+       * the same reader. The two Money routes that carry a header action pointed at each other's
+       * refusals.
+       */
+      {...moneyPageHeader({
+        actions: (
+          <a
+            className="inline-flex items-center gap-[var(--s-1)] text-[length:var(--t-body)] font-medium text-[var(--muted)] underline-offset-[var(--s-1)] hover:text-[var(--ink)] hover:underline"
+            href="/admin/billing"
+          >
+            <ChevronLeft aria-hidden className="size-[var(--s-4)]" />
+            Revenue and subscriptions
+          </a>
+        ),
+        authorized: authorized && actorRole !== "success",
+        description: "Cost against revenue per billing period. Margin appears only where every required source is present.",
+        enabled,
+      })}
+      // The whole-page claim is the chip; the mixed-rows claim stays a sentence and the table
+      // keeps labelling the row. Never both -- `assertOneProvenanceClaim` enforces it.
+      provenance={
+        pageProvenanceKind !== null || labelledWords.length === 0
+          ? undefined
+          : `${labelledWords.join(" and ")} rows are labelled in the table and excluded from analytics.`
+      }
+      provenanceKind={pageProvenanceKind ?? undefined}
+      // A strip of zeros over an empty table claims three measurements that were never made. With
+      // no rows the empty state is the whole answer, so the strip stays off the page.
+      stats={canRead && !loading && !loadError && rows.length > 0 ? (
+        <FigureStrip items={tiles} label="Cost evidence summary" />
+      ) : undefined}
+      title="Cost evidence"
+    >
+      {body}
     </ListPage>
   );
 }

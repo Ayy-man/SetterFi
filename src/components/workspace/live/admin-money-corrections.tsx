@@ -331,8 +331,11 @@ function localExportRows(rows: readonly CorrectionEvidence[]) {
 
 export function CorrectionQueue({
   actorRole,
+  chrome = "page",
   initialCorrections,
-}: Pick<AdminMoneyCorrectionsProps, "actorRole" | "initialCorrections">) {
+}: Pick<AdminMoneyCorrectionsProps, "actorRole" | "initialCorrections"> & {
+  chrome?: "page" | "embedded";
+}) {
   const [corrections, setCorrections] = useState<CorrectionEvidence[]>([
     ...(initialCorrections ?? []),
   ]);
@@ -451,33 +454,17 @@ export function CorrectionQueue({
     },
   ] : [];
 
-  return (
-    <ListPage
-      actions={actorRole === "success" ? (
-        <Status label="Read only" tone="neutral" treatment="bare" />
-      ) : undefined}
-      description="Coach disputes against billable call evidence, and the receipt-backed decision."
-      /*
-       * Verified against the schema before it was written: `billing_correction_decisions` has a
-       * `shape_chk` constraint requiring `offset_event_id` on every approval, and nothing in the
-       * decision path updates `billable_events`. The sentence is a fact about the write, not a
-       * reassurance.
-       */
-      note="Approving writes an offset event against the billed count. The original billable event is never edited."
-      /*
-       * "Open requests" is the one panel that fills. It is the only figure on the page that is
-       * somebody's queue -- coaches waiting is the same queue counted by person, and Decided is
-       * finished work -- and a console screen spends its fill once.
-       */
-      stats={(
+  const stats = (
         <ConsoleStatDeck
           ariaLabel="Open correction summary"
           heroLabel="Open requests"
           items={tiles}
         />
-      )}
-      title="Corrections"
-    >
+  );
+
+  const body = (
+    <>
+      {chrome === "embedded" ? stats : null}
       <DataTable
         ariaLabel="Billing correction requests"
         columns={columns}
@@ -663,6 +650,20 @@ export function CorrectionQueue({
           title={pendingDecision === "approved" ? "Approve correction" : "Reject correction"}
         />
       ) : null}
+    </>
+  );
+
+  return chrome === "embedded" ? body : (
+    <ListPage
+      actions={actorRole === "success" ? (
+        <Status label="Read only" tone="neutral" treatment="bare" />
+      ) : undefined}
+      description="Coach disputes against billable call evidence, and the receipt-backed decision."
+      note="Approving writes an offset event against the billed count. The original billable event is never edited."
+      stats={stats}
+      title="Corrections"
+    >
+      {body}
     </ListPage>
   );
 }
