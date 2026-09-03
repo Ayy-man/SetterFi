@@ -163,6 +163,9 @@ export const ENV_CONTRACT_NAMES = [
   // Folds the admin nav from 19 items in 5 groups down to 8 items in 2 groups. Off, the config
   // in workspace-navigation.ts renders unchanged.
   "SETTERFI_NAV_FOLD",
+  // Renders the 2026-09 UI rehaul (the redesigned coach and owner screens) in place of the
+  // current pages. Off, every page renders exactly as before; the new components are unreachable.
+  "SETTERFI_UI_REHAUL",
 ] as const;
 
 export type EnvironmentName = (typeof ENV_CONTRACT_NAMES)[number];
@@ -731,4 +734,13 @@ export function assertSupabaseProjectAgreement(environment: EnvironmentSource = 
  */
 export function navFoldLive(environment: EnvironmentSource = process.env) {
   return environmentValue("SETTERFI_NAV_FOLD", environment) === "true";
+}
+
+/**
+ * Renders the 2026-09 UI rehaul: each page that has a redesigned component under
+ * `src/components/workspace/rehaul/` renders it instead of the current surface. Off, nothing
+ * changes; the redesigned components are never imported on the request path.
+ */
+export function uiRehaulLive(environment: EnvironmentSource = process.env) {
+  return environmentValue("SETTERFI_UI_REHAUL", environment) === "true";
 }
