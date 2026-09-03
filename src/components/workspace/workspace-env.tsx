@@ -41,6 +41,15 @@ export type WorkspaceAccount = {
   firstName: string | null;
   /** The tenant's own name, for the line under the person's. */
   business: string | null;
+  /**
+   * Whether this is a seeded account: `tenants.is_demo`, and false where there is no tenant.
+   *
+   * Display only, and specifically so that a surface which strips the seeders' "(demo)" marker out
+   * of a name has something true to put in its place. `lib/format/display-name.ts` is explicit
+   * that the marker may only be dropped where the demo state is shown some other way, and the
+   * pill that shows it needs a flag rather than the text it just removed.
+   */
+  isDemo?: boolean;
 };
 
 // The default is today's behaviour exactly, so a shell mounted outside the provider

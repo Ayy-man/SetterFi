@@ -36,6 +36,13 @@ import { ListPage } from "@/components/kit/templates/list-page";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { workspaceNavigationFor } from "@/lib/workspace-navigation";
 
+/*
+ * The category and scope words live in one module now. This file, the coach settings page it also
+ * renders, and the account sheet were each carrying their own copy of the mapping from
+ * `alert_rules.category` to a heading, which is how the sheet ended up with an entry for
+ * "channels", a value the column has never held.
+ */
+import { categoryLabel, scopeLabel } from "./notification-taxonomy";
 import {
   alertRuleViews,
   applyPreferenceReadBack,
@@ -188,25 +195,9 @@ const NOTIFICATION_EXPORT_COLUMNS = [
   "required",
 ] as const;
 
-function humanScope(scope: AlertRuleView["scope"]) {
-  return scope === "platform" ? "Platform" : "Client account";
-}
-
 function destinationState(preference: Preference) {
   return preference.enabled ? "On" : "Off";
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  agent: "Your setter",
-  billing: "Billing",
-  brain: "The Brain",
-  booking: "Bookings",
-  channel: "Channels",
-  compliance: "Compliance",
-  conversation: "Conversations",
-  onboarding: "Setup",
-  safety: "Safety",
-};
 
 /**
  * What a category is about, in one line, for the section header.
@@ -248,21 +239,6 @@ const CATEGORY_ICONS: Record<string, typeof Info> = {
   onboarding: ShieldCheck,
   safety: ShieldAlert,
 };
-
-/**
- * A category the seed data has not named yet still needs a heading, and printing the raw column
- * value would put a database identifier on a coach's screen. Title-casing the words is the honest
- * fallback: it says exactly what the row says, in the reader's alphabet.
- */
-function categoryLabel(category: string) {
-  const known = CATEGORY_LABELS[category];
-  if (known) return known;
-  const words = category.split(/[_\s-]+/u).filter(Boolean);
-  if (words.length === 0) return "Other notices";
-  return words
-    .map((word, index) => (index === 0 ? word[0].toUpperCase() + word.slice(1) : word))
-    .join(" ");
-}
 
 /**
  * The row's one-line consequence when the rule carries no authored sentence of its own.
@@ -696,7 +672,7 @@ export function AlertSettings({
     },
     {
       id: "scope",
-      accessorFn: (rule) => humanScope(rule.scope),
+      accessorFn: (rule) => scopeLabel(rule.scope),
       filterFn: "arrIncludesSome",
       header: "Scope",
       meta: { cellKind: "secondary", defaultHidden: true, label: "Scope" },
@@ -942,7 +918,7 @@ export function AlertSettings({
             title: "Rule",
             body: (
               <div className="flex flex-wrap items-center gap-[var(--s-2)]">
-                <span className="text-[var(--body)]">{humanScope(selectedRule.scope)}</span>
+                <span className="text-[var(--body)]">{scopeLabel(selectedRule.scope)}</span>
                 <RequiredState rule={selectedRule} />
               </div>
             ),

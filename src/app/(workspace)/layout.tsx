@@ -79,7 +79,7 @@ async function sessionAccount() {
     const [user, tenant] = await Promise.all([
       service.from("users").select("full_name").eq("id", actor.userId).maybeSingle(),
       actor.tenantId
-        ? service.from("tenants").select("name").eq("id", actor.tenantId).maybeSingle()
+        ? service.from("tenants").select("name,is_demo").eq("id", actor.tenantId).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
     const fullName = typeof user.data?.full_name === "string" ? user.data.full_name.trim() : "";
@@ -89,6 +89,10 @@ async function sessionAccount() {
       fullName: fullName || null,
       firstName: fullName.split(/\s+/u)[0] || null,
       business: business || null,
+      // The same read, one column wider. The account sheet strips the seeders' "(demo)" marker out
+      // of the name it prints, and the hard rule on test data is that it stays labelled on screen,
+      // so the sheet needs the column the marker stands for rather than the marker.
+      isDemo: tenant.data?.is_demo === true,
     };
   } catch {
     return undefined;

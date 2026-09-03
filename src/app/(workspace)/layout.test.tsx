@@ -33,8 +33,12 @@ vi.mock("@/components/kit/impersonation-frame", () => ({
 }));
 vi.mock("@/components/ui/sonner", () => ({ Toaster: () => null }));
 vi.mock("@/components/workspace/workspace-env", () => ({
-  WorkspaceEnvProvider: ({ account }: { account?: { fullName: string | null; business: string | null } }) => (
-    <p data-testid="account">{`${account?.fullName ?? "none"} / ${account?.business ?? "none"}`}</p>
+  WorkspaceEnvProvider: (
+    { account }: { account?: { fullName: string | null; business: string | null; isDemo?: boolean } },
+  ) => (
+    <p data-testid="account">
+      {`${account?.fullName ?? "none"} / ${account?.business ?? "none"} / ${account?.isDemo === true ? "demo" : "real"}`}
+    </p>
   ),
 }));
 
@@ -74,6 +78,32 @@ describe("the workspace shell's account read", () => {
 
     expect(screen.getByTestId("account")).toHaveTextContent("Marcus Reid / Reid Funding Group");
     expect(from).toHaveBeenCalledTimes(2);
+  });
+
+  /*
+   * The tenant's own `is_demo`, carried down so the account sheet can strip the seeders' "(demo)"
+   * marker out of the name it prints and still say that the account is seeded. Stripping the marker
+   * without the flag would hide test data on a live screen, which is a hard rule.
+   */
+  it("carries the tenant's demo flag, and reports a real account as real", async () => {
+    loadCapabilityActor.mockResolvedValue({ userId: "user-4", role: "coach", tenantId: "tenant-2" });
+    answers({ full_name: "Theo Brightwell (demo)" }, { name: "Brightwell Capital (demo)", is_demo: true });
+
+    render(await WorkspaceLayout({ children: null }));
+
+    // The marker stays in the string the layout hands down: stripping it is the reading surface's
+    // job, and an export or a log search still has to match the stored value.
+    expect(screen.getByTestId("account"))
+      .toHaveTextContent("Theo Brightwell (demo) / Brightwell Capital (demo) / demo");
+  });
+
+  it("reports a tenant that is not seeded as real", async () => {
+    loadCapabilityActor.mockResolvedValue({ userId: "user-5", role: "coach", tenantId: "tenant-3" });
+    answers({ full_name: "Marcus Reid" }, { name: "Reid Funding Group", is_demo: false });
+
+    render(await WorkspaceLayout({ children: null }));
+
+    expect(screen.getByTestId("account")).toHaveTextContent("Marcus Reid / Reid Funding Group / real");
   });
 
   it("resolves no account at all when the row carries no name and no business", async () => {

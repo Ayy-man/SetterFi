@@ -13,13 +13,21 @@ import {
   MessageSquare,
   Monitor,
   Shield,
+  ShieldCheck,
+  Sparkles,
   X,
 } from "lucide-react";
 
 import type { Preference } from "@/app/api/notification-preferences/handler";
-import { LoggedPill } from "@/components/kit/confirm-flow";
 import { MatrixCheckbox } from "@/components/kit/matrix-checkbox";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  COACH_DESTINATION_LABELS,
+  destinationColumns,
+  groupRulesByCategory,
+  scopeQualifiers,
+  type DestinationColumn,
+} from "@/components/workspace/live/notification-taxonomy";
 import {
   alertRuleViews,
   applyPreferenceReadBack,
@@ -30,8 +38,10 @@ import {
 import { useWorkspaceEnv } from "@/components/workspace/workspace-env";
 import { Pill, StatusDot } from "@/components/workspace/rehaul/_primitives";
 import { ADMIN_GUIDES } from "@/lib/admin-help-guides";
+import { AUDIT_ACTIONS, type AuditActionKey } from "@/lib/audit/actions";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { workspaceDateFormat } from "@/lib/format/datetime";
+import { displayName } from "@/lib/format/display-name";
 import type { CoachSupportThreadRead } from "@/lib/repositories/support";
 import {
   applyTheme,
@@ -168,8 +178,14 @@ const COACH_ROW =
  * Identity
  * ------------------------------------------------------------------------------------------- */
 
+/*
+ * Initials come off the read name, not the stored one. A seeded person is stored as
+ * "Theo Brightwell (demo)", and the raw string's first two whitespace tokens are "Theo" and
+ * "Brightwell" only by luck of where the marker sits; a one-word seeded name would have produced
+ * "T(" here.
+ */
 function initialsFor(fullName: string | null | undefined, fallback: string) {
-  const tokens = (fullName ?? "").split(/\s+/u).filter(Boolean).slice(0, 2);
+  const tokens = displayName(fullName ?? "").split(/\s+/u).filter(Boolean).slice(0, 2);
   if (tokens.length === 0) return fallback;
   return tokens.map((token) => token[0]!.toUpperCase()).join("");
 }
@@ -202,18 +218,14 @@ function ExitControl({
   }
 
   /*
-   * The receipt is the true word rather than a decoration: `/auth/signout` writes an
-   * `auth.signed_out` row through `writeAuthAuditEvent` and refuses the sign-out outright when
-   * that write fails, so the pill's words come from the registry entry for that exact key.
-   *
-   * It hangs off the supabase branch alone. The open and password modes end no session and write
-   * no row, so a receipt there would claim a record that was never made.
+   * The receipt this control used to carry is now one line at the foot of the sheet. It said the
+   * true thing -- `/auth/signout` writes an `auth.signed_out` row through `writeAuthAuditEvent`
+   * and refuses the sign-out outright when that write fails -- but it said it in an uppercase
+   * badge beside the person's own name, which is the loudest place on the panel and the last thing
+   * a reader opening their account came to find out. See `AuditNote`.
    */
   return (
     <form action="/auth/signout?next=%2Flogin" className="flex items-center gap-2" method="post">
-      <span data-slot="account-sheet-signout-logged">
-        <LoggedPill actionKey="auth.signed_out" />
-      </span>
       <button className={face} type="submit">
         <LogOut aria-hidden="true" className="size-[15px]" strokeWidth={2} />
         Sign out
@@ -223,31 +235,97 @@ function ExitControl({
 }
 
 /* ---------------------------------------------------------------------------------------------
+ * The audit line
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * What this sheet writes to the audit log, said once, quietly, at the foot.
+ *
+ * The hard rule is that a privileged action carries visible "Logged" microcopy, and it still does:
+ * every word here is the registry's own `microcopy` for the key, so the screen cannot claim a
+ * record whose words the backend does not use. What changed is where it sits and how loudly. Two
+ * uppercase pills at the top of the panel spent the two most valuable rows on the sheet saying
+ * something no reader opens their account to learn, and the second of them sat beside the
+ * Notifications heading where the destination columns needed to be.
+ *
+ * The sign-out key is only listed where there is a session to end: the open and password modes end
+ * nothing and write no row, so naming it there would claim a record that was never made.
+ */
+function AuditNote({ actions, variant }: { actions: readonly AuditActionKey[]; variant: AccountSheetVariant }) {
+  if (actions.length === 0) return null;
+
+  return (
+    <footer
+      className={cn(
+        "flex items-start gap-2 border-t border-[var(--line)] text-[var(--faint)]",
+        variant === "owner" ? "-mx-5 px-5 py-3 text-[12px]" : "px-6 py-4 text-[14px]",
+      )}
+      data-slot="account-sheet-audit-note"
+    >
+      <ShieldCheck aria-hidden="true" className="mt-px size-3.5 shrink-0" strokeWidth={1.75} />
+      <p className="m-0">
+        Kept in the audit log:{" "}
+        {actions.map((action, index) => (
+          <span data-slot={`account-sheet-audit-${action}`} key={action}>
+            {index > 0 ? ", " : null}
+            <span aria-label={AUDIT_ACTIONS[action].ariaLabel}>
+              {AUDIT_ACTIONS[action].microcopy}
+            </span>
+          </span>
+        ))}
+        .
+      </p>
+    </footer>
+  );
+}
+
+/* ---------------------------------------------------------------------------------------------
  * Notifications
  * ------------------------------------------------------------------------------------------- */
 
 type LoadState = "loading" | "ready" | "error";
 
-const OWNER_DESTINATIONS = [
-  { destination: "bell" as const, label: "Bell" },
-  { destination: "email" as const, label: "Email" },
-];
+/** Every stored preference, keyed `${ruleId}:${destination}`. */
+type PreferenceIndex = ReadonlyMap<string, Preference>;
 
-const COACH_DESTINATIONS = [
-  { destination: "bell" as const, label: "In the app" },
-  { destination: "email" as const, label: "Email" },
-];
-
-const COACH_CATEGORY_ICON: Record<string, typeof Bot> = {
+/*
+ * One glyph per seeded `alert_rules.category`.
+ *
+ * The keys are the column's own values. This map used to carry "channels", which the column has
+ * never held: every channel rule is seeded as `channel`, so those rows all fell through to the
+ * conversation glyph while the entry that was meant for them matched nothing.
+ */
+const CATEGORY_ICON: Record<string, typeof Bot> = {
   agent: Bot,
   billing: CreditCard,
   booking: CalendarCheck,
-  brain: Bot,
-  channels: Monitor,
+  brain: Sparkles,
+  channel: Monitor,
+  compliance: ShieldCheck,
   conversation: MessageSquare,
   onboarding: Monitor,
   safety: Shield,
 };
+
+function categoryIcon(category: string) {
+  return CATEGORY_ICON[category] ?? MessageSquare;
+}
+
+/**
+ * The one sentence that replaced sixteen "Required" pills and their padlocks.
+ *
+ * Both facts a reader needed from that repetition are here: that some notices cannot be changed,
+ * and how many. Both numbers are counted off the rules on screen, so this stays true as
+ * `alert_rules` grows, and a set with nothing required says nothing at all rather than printing a
+ * sentence about an absence.
+ */
+function lockedSentence(rules: readonly AlertRuleView[]) {
+  const required = rules.filter((rule) => rule.required).length;
+  if (required === 0) return null;
+  const noun = rules.length === 1 ? "notice" : "notices";
+  const verb = required === 1 ? "is" : "are";
+  return `${required} of the ${rules.length} ${noun} below ${verb} required. SetterFi fixes where a required notice arrives, so its boxes cannot be changed.`;
+}
 
 function useNotificationPreferences(active: boolean) {
   const [preferences, setPreferences] = useState<Preference[]>([]);
@@ -309,7 +387,20 @@ function useNotificationPreferences(active: boolean) {
   }, []);
 
   const rules = useMemo(() => alertRuleViews(preferences), [preferences]);
-  return { rules, saving, state, update };
+  /*
+   * Every stored preference by rule and destination.
+   *
+   * The cells read from this rather than from `AlertRuleView`'s own `bell` and `email` fields,
+   * which are two fixed keys: a destination the view model does not name would draw a column with
+   * nothing behind it. Indexed, a column drawn from the payload is filled from the same payload,
+   * and a rule with no row for that destination renders an empty cell rather than crashing.
+   */
+  const index = useMemo(() => {
+    const byKey = new Map<string, Preference>();
+    for (const item of preferences) byKey.set(`${item.ruleId}:${item.destination}`, item);
+    return byKey;
+  }, [preferences]);
+  return { index, preferences, rules, saving, state, update };
 }
 
 /**
@@ -336,28 +427,101 @@ function NotificationsUnavailable({
   );
 }
 
+/**
+ * The name a row shows, and the qualifier that keeps two rows apart.
+ *
+ * `alert_rules` is unique on (event_key, scope), so a platform-scoped rule and its tenant-scoped
+ * twin are two rules with two audiences and two sets of stored preferences. Three pairs were
+ * seeded with the same `name` on both halves, and the console shows both scopes, so the matrix
+ * printed what looked like one notification twice with two independent sets of boxes. The rows
+ * were never duplicates. See `scopeQualifiers`.
+ */
+function RuleName({
+  className,
+  qualifier,
+  rule,
+  variant,
+}: {
+  className: string;
+  qualifier: string | null;
+  rule: AlertRuleView;
+  variant: AccountSheetVariant;
+}) {
+  return (
+    <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+      <span className={cn("min-w-0 truncate", className)}>{rule.name}</span>
+      {qualifier ? (
+        <span
+          className={cn(
+            "shrink-0 font-mono text-[var(--faint)]",
+            // The coach surface holds a 14px floor; the console runs its metadata at 10.5px.
+            variant === "owner" ? "text-[10.5px]" : "text-[14px]",
+          )}
+        >
+          {qualifier}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * The console matrix: a sticky column head, a section per category, and a checkbox per stored
+ * destination.
+ *
+ * Three things about it are deliberate.
+ *
+ * **The columns are read off the payload.** `destinationColumns` returns the distinct destinations
+ * the preferences API actually sent, in the order it sent them, so this component holds no list of
+ * destinations to keep in step with the database. A destination that stops being stored stops
+ * being drawn here with no edit; one that is added draws with its own label. The previous version
+ * carried a literal, which is why removing Slack meant editing this file, the coach list, the
+ * console table and the export columns.
+ *
+ * **The head sticks.** The full rule set is around forty rows inside a 520px panel, so the column
+ * words used to scroll out of sight within the first section and every box below that was an
+ * unlabelled square. The category band sticks under it at the head's own height.
+ *
+ * **A locked row is a disabled box and nothing else.** Sixteen "Required" pills and their padlocks
+ * repeated one fact down the whole panel; the fact is now the sentence above the sections, said
+ * once and counted.
+ */
 function OwnerNotificationMatrix({
+  columns,
+  index,
   rules,
   saving,
   state,
   onChange,
 }: {
+  columns: readonly DestinationColumn[];
+  index: PreferenceIndex;
   rules: readonly AlertRuleView[];
   saving: string | null;
   state: LoadState;
   onChange(preference: Preference, enabled: boolean): void;
 }) {
+  const groups = useMemo(() => groupRulesByCategory(rules), [rules]);
+  const qualifiers = useMemo(() => scopeQualifiers(rules), [rules]);
+  const locked = lockedSentence(rules);
+
   if (state !== "ready" || rules.length === 0) {
     return <NotificationsUnavailable state={state} variant="owner" />;
   }
 
   return (
     <div data-slot="account-sheet-matrix">
-      <div className="mb-1.5 flex h-[34px] items-center gap-2.5 border-b border-[var(--line)]">
+      <div
+        className={cn(
+          "sticky top-0 z-20 -mx-5 flex h-[34px] items-center gap-2.5 px-5",
+          "border-b border-[var(--line)] bg-[var(--card)]",
+        )}
+        data-slot="account-sheet-matrix-head"
+      >
         <span className="text-[13px] text-[var(--muted)]">Notifications</span>
-        <LoggedPill actionKey="notification.preference.changed" />
+        <MonoMeta>{rules.length}</MonoMeta>
         <div className="ml-auto flex">
-          {OWNER_DESTINATIONS.map((column) => (
+          {columns.map((column) => (
             <span
               className="w-11 text-center font-mono text-[10.5px] uppercase tracking-[0.06em] text-[var(--faint)]"
               key={column.destination}
@@ -367,106 +531,187 @@ function OwnerNotificationMatrix({
           ))}
         </div>
       </div>
-      {rules.map((rule) => (
-        <div className={OWNER_ROW} key={rule.ruleId}>
-          <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink)]">{rule.name}</span>
-          {rule.required ? (
-            <Pill className="px-1.5 py-px text-[11px]">Required</Pill>
-          ) : null}
-          <div className="flex">
-            {OWNER_DESTINATIONS.map((column) => (
-              <span className="flex w-11 justify-center" key={column.destination}>
-                <MatrixCheckbox
-                  busy={saving === `${rule.ruleId}:${column.destination}`}
-                  checked={rule[column.destination].enabled}
-                  columnLabel={column.label}
-                  locked={rule[column.destination].locked}
-                  lockedReason="Required notice"
-                  onCheckedChange={(next) => onChange(rule[column.destination], next)}
-                  rowLabel={rule.name}
-                />
-              </span>
-            ))}
+      {locked ? (
+        <p
+          className="m-0 py-2 text-[12.5px] leading-[1.45] text-[var(--muted)]"
+          data-slot="account-sheet-locked-note"
+        >
+          {locked}
+        </p>
+      ) : null}
+      {groups.map((group) => (
+        <section data-category={group.category} key={group.category}>
+          <div
+            className={cn(
+              "sticky top-[34px] z-10 -mx-5 flex h-[26px] items-center gap-2 px-5",
+              "bg-[var(--card)]",
+            )}
+            data-slot="account-sheet-matrix-group"
+          >
+            <span className={OWNER_OVERLINE}>{group.label}</span>
+            <MonoMeta>{group.rules.length}</MonoMeta>
           </div>
-        </div>
+          {group.rules.map((rule) => (
+            <div className={OWNER_ROW} key={rule.ruleId}>
+              <RuleName
+                className="text-[13px] text-[var(--ink)]"
+                qualifier={qualifiers.get(rule.ruleId) ?? null}
+                rule={rule}
+                variant="owner"
+              />
+              <div className="flex">
+                {columns.map((column) => {
+                  const preference = index.get(`${rule.ruleId}:${column.destination}`);
+                  return (
+                    <span className="flex w-11 justify-center" key={column.destination}>
+                      {preference ? (
+                        <MatrixCheckbox
+                          busy={saving === `${rule.ruleId}:${column.destination}`}
+                          checked={preference.enabled}
+                          columnLabel={column.label}
+                          disabled={preference.locked}
+                          onCheckedChange={(next) => onChange(preference, next)}
+                          rowLabel={rule.name}
+                        />
+                      ) : null}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </section>
       ))}
     </div>
   );
 }
 
+/**
+ * The coach's list: one destination at a time, in sections, with the picker in the sticky head.
+ *
+ * A coach reads one question at a time, so this side asks "where does this arrive" for the
+ * destination they picked rather than drawing a grid. The picker's options are the same
+ * payload-derived columns the console matrix draws, under the coach's words for them, so this side
+ * gains and loses destinations with the store exactly as the console does.
+ */
 function CoachNotificationList({
+  columns,
+  index,
   rules,
   saving,
   state,
   onChange,
 }: {
+  columns: readonly DestinationColumn[];
+  index: PreferenceIndex;
   rules: readonly AlertRuleView[];
   saving: string | null;
   state: LoadState;
   onChange(preference: Preference, enabled: boolean): void;
 }) {
-  const [destination, setDestination] = useState<"bell" | "email">("bell");
+  const [picked, setPicked] = useState<string | null>(null);
+  const groups = useMemo(() => groupRulesByCategory(rules), [rules]);
+  const qualifiers = useMemo(() => scopeQualifiers(rules), [rules]);
+  const locked = lockedSentence(rules);
+  // The picked destination, or the first column, so the list is never asking about a destination
+  // the store has stopped holding.
+  const column = columns.find((option) => option.destination === picked) ?? columns[0] ?? null;
 
   return (
     <>
-      <div className="flex h-[60px] flex-[0_0_60px] items-center gap-3 border-b border-[var(--line)] px-6">
+      <div
+        className={cn(
+          "sticky top-0 z-20 flex h-[60px] flex-[0_0_60px] items-center gap-3 px-6",
+          "border-b border-[var(--line)] bg-[var(--card)]",
+        )}
+        data-slot="account-sheet-matrix-head"
+      >
         <span className={COACH_SECTION_NAME}>Notifications</span>
-        <LoggedPill actionKey="notification.preference.changed" />
-        <div
-          aria-label="Where notices arrive"
-          className="ml-auto inline-flex rounded-[10px] border border-[var(--line)] bg-[var(--card)] p-[3px]"
-          role="group"
-        >
-          {COACH_DESTINATIONS.map((option) => (
-            <button
-              aria-pressed={destination === option.destination}
-              className={cn(
-                "inline-flex h-[38px] items-center rounded-lg px-4 text-[15px]",
-                destination === option.destination
-                  ? "bg-[var(--accent-wash)] font-medium text-[var(--accent-text)]"
-                  : "text-[var(--muted)]",
-              )}
-              key={option.destination}
-              onClick={() => setDestination(option.destination)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        {columns.length > 0 ? (
+          <div
+            aria-label="Where notices arrive"
+            className="ml-auto inline-flex rounded-[10px] border border-[var(--line)] bg-[var(--card)] p-[3px]"
+            role="group"
+          >
+            {columns.map((option) => (
+              <button
+                aria-pressed={option.destination === column?.destination}
+                className={cn(
+                  "inline-flex h-[38px] items-center rounded-lg px-4 text-[15px]",
+                  option.destination === column?.destination
+                    ? "bg-[var(--accent-wash)] font-medium text-[var(--accent-text)]"
+                    : "text-[var(--muted)]",
+                )}
+                key={option.destination}
+                onClick={() => setPicked(option.destination)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
-      {state !== "ready" || rules.length === 0 ? (
+      {state !== "ready" || rules.length === 0 || !column ? (
         <div className="px-6">
           <NotificationsUnavailable state={state} variant="coach" />
         </div>
       ) : (
-        rules.map((rule) => {
-          const Glyph = COACH_CATEGORY_ICON[rule.category] ?? MessageSquare;
-          const preference = rule[destination];
-          return (
-            <div className={COACH_ROW} key={rule.ruleId}>
-              <Glyph
-                aria-hidden="true"
+        <>
+          {locked ? (
+            <p
+              className="m-0 border-b border-[var(--line-soft)] px-6 py-3 text-[15px] leading-[1.45] text-[var(--muted)]"
+              data-slot="account-sheet-locked-note"
+            >
+              {locked}
+            </p>
+          ) : null}
+          {groups.map((group) => (
+            <section data-category={group.category} key={group.category}>
+              <div
                 className={cn(
-                  "size-[19px]",
-                  rule.required ? "text-[var(--warning-text)]" : "text-[var(--accent-text)]",
+                  "sticky top-[60px] z-10 flex h-[38px] items-center gap-2 px-6",
+                  // 14px, not the console's 10.5px overline: the coach shell holds a 14px floor.
+                  "bg-[var(--band)] text-[14px] uppercase tracking-[0.06em] text-[var(--faint)]",
                 )}
-                strokeWidth={1.75}
-              />
-              <span className="min-w-0 flex-1 truncate text-[var(--ink)]">{rule.name}</span>
-              <MatrixCheckbox
-                busy={saving === `${rule.ruleId}:${destination}`}
-                checked={preference.enabled}
-                className="min-h-[44px] gap-3 px-3 text-[16px]"
-                columnLabel={COACH_DESTINATIONS.find((o) => o.destination === destination)!.label}
-                locked={preference.locked}
-                lockedReason="Required notice"
-                onCheckedChange={(next) => onChange(preference, next)}
-                rowLabel={rule.name}
-              />
-            </div>
-          );
-        })
+                data-slot="account-sheet-matrix-group"
+              >
+                <span className="font-mono">{group.label}</span>
+                <MonoMeta>{group.rules.length}</MonoMeta>
+              </div>
+              {group.rules.map((rule) => {
+                const Glyph = categoryIcon(rule.category);
+                const preference = index.get(`${rule.ruleId}:${column.destination}`);
+                return (
+                  <div className={COACH_ROW} key={rule.ruleId}>
+                    <Glyph
+                      aria-hidden="true"
+                      className="size-[19px] shrink-0 text-[var(--accent-text)]"
+                      strokeWidth={1.75}
+                    />
+                    <RuleName
+                      className="text-[var(--ink)]"
+                      qualifier={qualifiers.get(rule.ruleId) ?? null}
+                      rule={rule}
+                      variant="coach"
+                    />
+                    {preference ? (
+                      <MatrixCheckbox
+                        busy={saving === `${rule.ruleId}:${column.destination}`}
+                        checked={preference.enabled}
+                        className="min-h-[44px] gap-3 px-3 text-[16px]"
+                        columnLabel={column.label}
+                        disabled={preference.locked}
+                        onCheckedChange={(next) => onChange(preference, next)}
+                        rowLabel={rule.name}
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </section>
+          ))}
+        </>
       )}
     </>
   );
@@ -559,8 +804,33 @@ export function AccountSheet({
   const isOwner = variant === "owner";
   const { account, mode } = useWorkspaceEnv();
   const initials = initialsFor(account?.fullName, isOwner ? "SF" : "ME");
-  const { rules, saving, state, update } = useNotificationPreferences(open);
+  const { index, preferences, rules, saving, state, update } = useNotificationPreferences(open);
+  const columns = useMemo(
+    () => destinationColumns(preferences, isOwner ? undefined : COACH_DESTINATION_LABELS),
+    [isOwner, preferences],
+  );
   const openRequests = useOpenSupportRequests(open && !isOwner);
+
+  /*
+   * The name as a person reads it, and the seeded marker it carried said once beside it.
+   *
+   * `scripts/fixtures/names.mjs` staples "(demo)" onto every seeded person and tenant, and this
+   * panel printed the raw column: at 520px with a sign-out button and an uppercase audit badge on
+   * the same line, "Theo Brightwell (demo)" truncated to "Theo Brightwell (de...", which is a name
+   * cut mid-word to make room for a marker that a pill says better. Every other console surface
+   * already strips it and shows a Demo pill; this one now does the same.
+   *
+   * The demo state is the tenant's `is_demo` column, resolved by the workspace layout. The marker
+   * in the text is a fallback rather than the authority, because it is the only signal a platform
+   * account has: an owner has no tenant to carry the flag, so a seeded owner would otherwise have
+   * their marker stripped and nothing put in its place, which is the one thing
+   * `lib/format/display-name.ts` says a stripping surface must not do.
+   */
+  const rawName = account?.fullName ?? null;
+  const personName = rawName ? displayName(rawName) : null;
+  const isDemoAccount = account?.isDemo === true
+    || (rawName !== null && displayName(rawName) !== rawName.trim())
+    || (account?.business != null && displayName(account.business) !== account.business.trim());
 
   // Null until the stored preference has been read after paint, exactly as the topbar does it: the
   // boot script in the root layout has already painted from it, so reading during render would be
@@ -652,14 +922,25 @@ export function AccountSheet({
             >
               {initials}
             </span>
-            <span className="min-w-0">
-              <span
-                className={cn(
-                  "block truncate font-semibold tracking-[-0.01em] text-[var(--ink)]",
-                  isOwner ? "text-[15px]" : "text-[17px]",
-                )}
-              >
-                {account?.fullName ?? (isOwner ? "Platform account" : "Your account")}
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className={cn(
+                    "min-w-0 truncate font-semibold tracking-[-0.01em] text-[var(--ink)]",
+                    isOwner ? "text-[15px]" : "text-[17px]",
+                  )}
+                  data-slot="account-sheet-person"
+                >
+                  {personName ?? (isOwner ? "Platform account" : "Your account")}
+                </span>
+                {isDemoAccount ? (
+                  <Pill
+                    className={cn("shrink-0 px-1.5 py-px", isOwner ? "text-[11px]" : null)}
+                    density={isOwner ? "owner" : "coach"}
+                  >
+                    Demo
+                  </Pill>
+                ) : null}
               </span>
               <span
                 className={cn(
@@ -667,10 +948,12 @@ export function AccountSheet({
                   isOwner ? "text-[12.5px]" : "text-[15px]",
                 )}
               >
-                {account?.business ?? (isOwner ? "SetterFi platform" : "Your business")}
+                {account?.business
+                  ? displayName(account.business)
+                  : (isOwner ? "SetterFi platform" : "Your business")}
               </span>
             </span>
-            <span className="ml-auto">
+            <span className="ml-auto shrink-0">
               <ExitControl mode={mode} variant={variant} />
             </span>
           </section>
@@ -705,6 +988,8 @@ export function AccountSheet({
                 </div>
               </div>
               <OwnerNotificationMatrix
+                columns={columns}
+                index={index}
                 onChange={update}
                 rules={rules}
                 saving={saving}
@@ -714,6 +999,8 @@ export function AccountSheet({
           ) : (
             <section data-section="notifications" id={sectionDomId("notifications")}>
               <CoachNotificationList
+                columns={columns}
+                index={index}
                 onChange={update}
                 rules={rules}
                 saving={saving}
@@ -831,6 +1118,13 @@ export function AccountSheet({
               </>
             )}
           </section>
+
+          <AuditNote
+            actions={mode === "supabase"
+              ? ["auth.signed_out", "notification.preference.changed"]
+              : ["notification.preference.changed"]}
+            variant={variant}
+          />
         </div>
       </SheetContent>
     </Sheet>
