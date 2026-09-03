@@ -19,6 +19,25 @@ function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
   return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 
+/**
+ * The menu popup.
+ *
+ * **Width.** A menu is sized by what is in it. This used to be `w-(--anchor-width)`, the trigger's
+ * own width, which makes an icon trigger produce an unreadable column and invites callers to
+ * override it -- `export-menu` overrode it with `--drawer-w`, 480px, and hung a slab 370px to the
+ * left of a 110px button. The trigger's width is now the floor, the content decides, and 20rem or
+ * the viewport is the ceiling.
+ *
+ * **Motion.** The menu has to read as the trigger opening rather than as a panel arriving. Three
+ * things carry that and the old values undersold all three: 250ms finished after the eye had left
+ * the button, and a 0.97 pre-scale is a 3% delta the eye reads as a fade, not as growth. The scale
+ * now starts far enough back to be seen travelling, over a duration short enough to stay attached
+ * to the click, on an exponential ease-out that spends most of its distance in the first third.
+ * Base UI sets `--transform-origin` to the anchored corner, so the growth starts at the trigger
+ * instead of at the popup's middle. Closing is not opening reversed: a menu on its way out has
+ * nothing left to say, so it goes in two thirds the time over a shorter distance. Every value is
+ * a token, and the reduced-motion block in `globals.css` collapses all four to a cut.
+ */
 function DropdownMenuContent({
   align = "start",
   alignOffset = 0,
@@ -42,7 +61,7 @@ function DropdownMenuContent({
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
-          className={cn("z-50 max-h-(--available-height) w-(--anchor-width) min-w-32 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 data-open:duration-[var(--dropdown-open-dur)] data-closed:duration-[var(--dropdown-close-dur)] ease-[var(--ease-smooth-out)] outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-[var(--dropdown-pre-scale)] data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-[var(--dropdown-closing-scale)]", className )}
+          className={cn("z-50 max-h-(--available-height) min-w-(--anchor-width) w-max max-w-[min(20rem,calc(100vw-2*var(--s-4)))] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 data-open:duration-[var(--dropdown-open-dur)] data-closed:duration-[var(--dropdown-close-dur)] ease-[var(--dropdown-ease)] outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-[var(--dropdown-pre-scale)] data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-[var(--dropdown-closing-scale)]", className )}
           {...props}
         />
       </MenuPrimitive.Positioner>
@@ -136,7 +155,7 @@ function DropdownMenuSubContent({
   return (
     <DropdownMenuContent
       data-slot="dropdown-menu-sub-content"
-      className={cn("w-auto min-w-[96px] rounded-lg bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10 data-open:duration-[var(--dropdown-open-dur)] data-closed:duration-[var(--dropdown-close-dur)] ease-[var(--ease-smooth-out)] data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-[var(--dropdown-pre-scale)] data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[var(--dropdown-closing-scale)]", className )}
+      className={cn("w-auto min-w-[96px] rounded-lg bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10 data-open:duration-[var(--dropdown-open-dur)] data-closed:duration-[var(--dropdown-close-dur)] ease-[var(--dropdown-ease)] data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-[var(--dropdown-pre-scale)] data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-[var(--dropdown-closing-scale)]", className )}
       align={align}
       alignOffset={alignOffset}
       side={side}

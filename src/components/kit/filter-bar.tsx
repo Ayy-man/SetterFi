@@ -319,7 +319,7 @@ export function FilterBar({
           <PopoverContent
             align="start"
             aria-label="Filters"
-            className="w-[calc(var(--s-12)*6)] gap-0 rounded-[var(--r-card)] [border-width:calc(var(--s-1)/4)] border-[var(--line)] bg-[var(--raised)] p-[var(--s-2)] text-[var(--body)] shadow-[var(--shadow-raised)] duration-[var(--duration-quick)] ease-[var(--ease-out)] motion-reduce:animate-none motion-reduce:transition-none"
+            className="w-[calc(var(--s-12)*6)] gap-0 rounded-[var(--r-card)] [border-width:calc(var(--s-1)/4)] border-[var(--line)] bg-[var(--raised)] p-[var(--s-2)] text-[var(--body)] shadow-[var(--shadow-raised)] duration-[var(--dropdown-open-dur)] ease-[var(--dropdown-ease)] motion-reduce:animate-none motion-reduce:transition-none"
             role="dialog"
           >
             <PopoverHeader className="sr-only">
@@ -396,7 +396,7 @@ export function FilterBar({
             <DropdownMenuContent
               align="start"
               aria-label="Display options"
-              className="min-w-[calc(var(--s-12)*4)] rounded-[var(--r-card)] bg-[var(--raised)] p-[var(--s-1)] shadow-[var(--shadow-raised)] duration-[var(--duration-quick)] ease-[var(--ease-out)] motion-reduce:animate-none motion-reduce:transition-none"
+              className="min-w-[calc(var(--s-12)*4)] rounded-[var(--r-card)] bg-[var(--raised)] p-[var(--s-1)] shadow-[var(--shadow-raised)] duration-[var(--dropdown-open-dur)] ease-[var(--dropdown-ease)] motion-reduce:animate-none motion-reduce:transition-none"
             >
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="text-over [color:var(--faint)]">

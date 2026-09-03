@@ -142,7 +142,7 @@ export function NotificationBell({
       <PopoverContent
         align="end"
         aria-label={heading}
-        className="w-[calc(var(--s-12)*6)] gap-0 rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--raised)] p-[var(--s-2)] text-[length:var(--t-body)] text-[var(--body)] shadow-[var(--shadow-raised)] duration-[var(--duration-quick)] ease-[var(--ease-out)] motion-reduce:animate-none motion-reduce:transition-none"
+        className="w-[calc(var(--s-12)*6)] gap-0 rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--raised)] p-[var(--s-2)] text-[length:var(--t-body)] text-[var(--body)] shadow-[var(--shadow-raised)] duration-[var(--dropdown-open-dur)] ease-[var(--dropdown-ease)] motion-reduce:animate-none motion-reduce:transition-none"
       >
         <PopoverHeader className="flex-row items-center justify-between gap-[var(--s-2)] px-[var(--s-2)] py-[var(--s-2)]">
           <PopoverTitle className="font-[var(--t-row-w)] text-[var(--ink)]">{heading}</PopoverTitle>

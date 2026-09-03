@@ -430,7 +430,15 @@ export function ExportMenu(props: ExportMenuProps) {
       <DropdownMenuContent
         align="end"
         aria-label="Export options"
-        className="w-[var(--drawer-w)] max-w-[calc(100vw-var(--s-6))] rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--raised)] p-[var(--s-1)] shadow-[var(--shadow-raised)] duration-[var(--duration-quick)] ease-[var(--ease-out)] motion-reduce:animate-none motion-reduce:transition-none"
+        /*
+            Sized by its own two rows, not by `--drawer-w`. That token is 480px, a drawer width,
+            and on a 110px "Export" trigger anchored `align="end"` it hung the panel 370px to the
+            left of the button it belongs to: the menu read as a slab that had arrived from
+            somewhere else rather than as the trigger opening. `DropdownMenuContent` now sizes
+            every menu to its content between the trigger's width and a 20rem cap, so this needs
+            no width of its own.
+          */
+          className="rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--raised)] p-[var(--s-1)] shadow-[var(--shadow-raised)] duration-[var(--duration-quick)] ease-[var(--ease-out)] motion-reduce:animate-none motion-reduce:transition-none"
         role="menu"
       >
         {requiredReason ? (

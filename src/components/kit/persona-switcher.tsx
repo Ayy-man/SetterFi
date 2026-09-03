@@ -53,7 +53,7 @@ export function PersonaSwitcher({ targets, current }: PersonaSwitcherProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--raised)] p-[var(--s-1)] shadow-[var(--shadow-raised)] [animation-duration:var(--duration-quick)] [animation-timing-function:var(--ease-smooth-out)] motion-reduce:animate-none"
+        className="rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--raised)] p-[var(--s-1)] shadow-[var(--shadow-raised)] [animation-duration:var(--dropdown-open-dur)] [animation-timing-function:var(--dropdown-ease)] motion-reduce:animate-none"
       >
         <DropdownMenuGroup>
           <DropdownMenuLabel>
