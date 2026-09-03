@@ -439,6 +439,13 @@ const SEED_AUDIT_ACTIONS = {
  * `20261010000001_notification_preference_audit_action.sql` and by the notification-preferences
  * PUT. Both carry a control in the account panel, and a control that claims a record has to say
  * which words the record uses. Every field here is copied from the migration that seeds it.
+ *
+ * `offer.draft.saved` is seeded by `20260929000001_offer_change_trail.sql` and written inside the
+ * `save_offer_draft` function itself, not by the route -- the row, the `offer.changed` row beside
+ * it and the `offer_change_trail` entry that foreign-keys to both are one statement in one
+ * transaction, so the save and its record land together or neither does. That is why the coach
+ * offer route has no audit insert of its own to add: a second write here would log the same save
+ * twice. Scope is tenant, unlike the two above, because an offer belongs to a tenant.
  */
 const POST_SEED_UI_ACTIONS = {
   "auth.signed_out": {
@@ -449,6 +456,11 @@ const POST_SEED_UI_ACTIONS = {
     actorKind: "human", scope: "platform", reasonRequired: false, coachVisible: true,
     microcopy: "Notification change logged",
     ariaLabel: "Notification preference change recorded in the audit log",
+  },
+  "offer.draft.saved": {
+    actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
+    microcopy: "Offer draft save logged",
+    ariaLabel: "Offer draft save recorded in the audit log",
   },
 } as const satisfies Record<string, AuditActionDefinition>;
 

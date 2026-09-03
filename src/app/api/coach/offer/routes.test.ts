@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import type { PersistedOfferLayer } from "@/lib/offer/types";
 
 import { createCoachOfferHandlers } from "./handler";
@@ -138,6 +139,51 @@ describe("coach offer route contracts", () => {
     const response = await PUT(put(body));
     expect(response.status).toBe(409);
     expect(save).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The `offer.draft.saved` audit row is written by `save_offer_draft` itself, in the same
+   * transaction as the draft, and `offer_change_trail.audit_id` is a not-null foreign key onto it.
+   * So a save whose record does not land cannot return a draft at all: the function raises, the
+   * repository throws, and the route has to refuse rather than answer 200 with a draft the pill
+   * would then caption as logged. This pins that the refusal reaches the client.
+   */
+  it("refuses the save when the draft and its audit row fail to land together", async () => {
+    const save = vi.fn(async () => {
+      throw new Error("SAVE_OFFER_DRAFT_FAILED:audit row not written");
+    });
+    const { PUT } = createCoachOfferHandlers({
+      enabled: () => true,
+      session: async () => actor,
+      load: async () => ({ draft: null, published: null }),
+      save,
+    });
+    const response = await PUT(put({
+      draftId: null,
+      expectedContentHash: null,
+      offer: offerInput,
+    }));
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      state: "awaiting_review",
+      code: "OFFER_SAVE_REFUSED",
+    });
+  });
+
+  /*
+   * The caption over the save control reads its words from the registry, and the registry entry is
+   * a mirror of the migration that seeds the row `save_offer_draft` writes. If the key ever leaves
+   * the registry the pill stops compiling; if its words drift from the SQL the pill starts lying.
+   */
+  it("carries the registry words the save control's Logged caption renders", () => {
+    expect(AUDIT_ACTIONS["offer.draft.saved"]).toMatchObject({
+      scope: "tenant",
+      coachVisible: true,
+      microcopy: "Offer draft save logged",
+      ariaLabel: "Offer draft save recorded in the audit log",
+    });
   });
 
   it("refuses platform roles before tenant reads or writes", async () => {

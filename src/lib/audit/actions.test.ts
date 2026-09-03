@@ -124,6 +124,7 @@ const SEEDED_ACTION_MICROCOPY = [
 const POST_SEED_UI_ACTION_SOURCES = [
   ["auth.signed_out", "20260909000001_auth_recovery_audit_actions.sql"],
   ["notification.preference.changed", "20261010000001_notification_preference_audit_action.sql"],
+  ["offer.draft.saved", "20260929000001_offer_change_trail.sql"],
 ] as const;
 
 const PHASE3_AUDIT_KEYS = [

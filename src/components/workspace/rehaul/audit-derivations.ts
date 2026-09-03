@@ -86,6 +86,7 @@ const EVENT_PHRASES: Record<AuditActionKey, EventPhrase> = {
   "message_template.rejected": { verb: "recorded", object: "a rejected message template" },
   "message_template.submitted": { verb: "submitted", object: "a message template" },
   "notification.preference.changed": { verb: "changed", object: "where a notice reaches them" },
+  "offer.draft.saved": { verb: "saved", object: "an offer draft" },
   "offer.published": { verb: "published", object: "an offer" },
   "onboarding.a2p_blocked_permanent": { verb: "recorded", object: "a permanent block on text message registration" },
   "onboarding.a2p_filing_confirmed": { verb: "confirmed", object: "the text message registration filing" },
