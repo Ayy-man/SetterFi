@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
 import {
-  calendarAvailabilityErrorCopy,
   CoachIntegrations,
   type A2pRegistrationRead,
   type CalendarConnectionRead,
@@ -18,7 +17,7 @@ import {
 } from "@/components/workspace/live/coach-messaging-connection-view-models";
 import { PHASE4_CHANNELS, type Phase4Channel } from "@/components/workspace/live/view-models";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { humanError } from "@/lib/copy/errors";
+import { calendarAvailabilityErrorCopy, humanError } from "@/lib/copy/errors";
 import { capiLive, phase1Live, phase4Live, phase9GhlOAuthLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import {

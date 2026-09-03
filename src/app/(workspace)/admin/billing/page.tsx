@@ -14,12 +14,13 @@ import {
   type CorrectionEvidence,
 } from "@/components/workspace/live/view-models";
 import {
-  OWNER_MONEY_TABS,
   OwnerMoney,
-  type OwnerMoneyTab,
   type OwnerMoneyTiersData,
 } from "@/components/workspace/rehaul/owner-money";
 import type { PageSearchParams } from "@/lib/admin-route-fold";
+// Server-side: the tab list has to come from the directive-free module, never from the
+// "use client" screen. See src/lib/console-tabs.ts.
+import { OWNER_MONEY_TABS, type OwnerMoneyTab } from "@/lib/console-tabs";
 import { loadPlatformActor } from "@/lib/auth/actors";
 import { phase6AffiliatesLive, phase6Live } from "@/lib/env-contract";
 import {

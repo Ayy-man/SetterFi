@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { calendarAvailabilityErrorCopy } from "@/components/workspace/live/coach-integrations";
+import { calendarAvailabilityErrorCopy } from "@/lib/copy/errors";
 import { COACH_INTEGRATION_LABELS } from "@/lib/integrations/coach-integration-labels";
 
 function source(path: string) {

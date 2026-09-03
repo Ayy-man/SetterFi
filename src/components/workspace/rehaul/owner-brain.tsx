@@ -87,26 +87,11 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import type { ImportDisposition } from "@/lib/brain/contracts";
 import { FIGURE_BINDING_FIELDS } from "@/lib/brain/import/flags";
+import { OWNER_BRAIN_TABS, type OwnerBrainTab } from "@/lib/console-tabs";
 import { QUALIFICATION_OUTCOME_COPY } from "@/lib/copy/states";
 import { workspaceCountFormat, workspaceDateTimeFormat } from "@/lib/format/datetime";
 
 const api = createBrainApiClient();
-
-export const OWNER_BRAIN_TABS = [
-  "overview",
-  "review",
-  "defaults",
-  "knowledge",
-  "versions",
-  "evals",
-  "diagnostics",
-] as const;
-
-export type OwnerBrainTab = (typeof OWNER_BRAIN_TABS)[number];
-
-export function ownerBrainTab(value: string | null | undefined): OwnerBrainTab {
-  return OWNER_BRAIN_TABS.includes(value as OwnerBrainTab) ? (value as OwnerBrainTab) : "overview";
-}
 
 export type OwnerBrainProps = {
   initialState: AdminBrainInitialState;

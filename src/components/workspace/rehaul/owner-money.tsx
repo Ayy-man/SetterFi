@@ -86,6 +86,7 @@ import {
   type StatusTone,
 } from "@/components/workspace/rehaul/_primitives";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
+import { OWNER_MONEY_TABS, type OwnerMoneyTab } from "@/lib/console-tabs";
 import { workspaceCountFormat } from "@/lib/format/datetime";
 import { formatMetric, money } from "@/lib/format/metric";
 import type {
@@ -94,10 +95,6 @@ import type {
   MrrMovementRead,
 } from "@/lib/repositories/billing";
 import type { MoneyRefusalRecord } from "@/lib/repositories/money-page-audit";
-
-export const OWNER_MONEY_TABS = ["billing", "costs", "tiers", "affiliates", "corrections"] as const;
-
-export type OwnerMoneyTab = (typeof OWNER_MONEY_TABS)[number];
 
 const TAB_LABELS: Record<OwnerMoneyTab, string> = {
   affiliates: "Affiliates",

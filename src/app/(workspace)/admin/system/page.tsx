@@ -10,7 +10,6 @@ import {
 import { phase7AnalyticsLive, phase8Live } from "@/lib/env-contract";
 import { loadSystemHealth } from "@/lib/operations/system-health";
 import { loadSupportSession } from "@/lib/support/service";
-import { withWorkspaceNavCounts, workspaceNavigationFor } from "@/lib/workspace-navigation";
 
 export const metadata: Metadata = { title: "System" };
 export const dynamic = "force-dynamic";
@@ -55,9 +54,7 @@ export default async function AdminSystemPage() {
     <AppShell
       activePath="/admin/system"
       crumbs={CRUMBS}
-      nav={withWorkspaceNavCounts(workspaceNavigationFor("admin"), {
-        "/admin/system": health.queue.failedAttempts ?? 0,
-      })}
+      navCounts={{ "/admin/system": health.queue.failedAttempts ?? 0 }}
       role="admin"
     >
       <OwnerSystem health={health} nowIso={new Date().toISOString()} platform={platform} />

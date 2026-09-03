@@ -13,7 +13,7 @@ import {
   type MessageTraceRead,
   type TestingArmInput,
 } from "@/components/workspace/live/view-models";
-import { OwnerBrain, ownerBrainTab } from "@/components/workspace/rehaul/owner-brain";
+import { OwnerBrain } from "@/components/workspace/rehaul/owner-brain";
 import type {
   AdminBrainInitialState,
   BrainEvalView,
@@ -21,6 +21,9 @@ import type {
   ObjectionCategory,
 } from "@/components/workspace/live/brain-view-models";
 import type { PageSearchParams } from "@/lib/admin-route-fold";
+// Server-side: the resolver has to come from the directive-free module, never from the
+// "use client" screen. See src/lib/console-tabs.ts.
+import { ownerBrainTab } from "@/lib/console-tabs";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole, type AppClaims } from "@/lib/auth/claims";
 import { figuresInResponse } from "@/lib/brain/import/flags";
 import {

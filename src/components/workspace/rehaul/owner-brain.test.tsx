@@ -10,9 +10,9 @@ vi.mock("next/navigation", () => ({
 import {
   OwnerBrain,
   brainSectionRows,
-  ownerBrainTab,
 } from "@/components/workspace/rehaul/owner-brain";
 import type { AdminBrainInitialState } from "@/components/workspace/live/brain-view-models";
+import { ownerBrainTab } from "@/lib/console-tabs";
 
 /** One sentence the live surface printed under a heading. It must not survive the rehaul. */
 const OLD_EXPLAINER =

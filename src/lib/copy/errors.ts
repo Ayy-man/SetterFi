@@ -120,3 +120,28 @@ export function humanError(code: string, context?: { field?: string }): UserFaci
     code,
   };
 }
+
+/**
+ * What a coach reads when the availability check did not verify, and why it does not come from
+ * `humanError`.
+ *
+ * The select path stores `AVAILABILITY_NOT_VERIFIED:<reason>` in `calendar_connections.last_error`
+ * on the arm where the authorization was recorded and the read was not. Two things are wrong with
+ * letting that reach the shared error copy. The reason is one of several codes the verification
+ * path can produce -- a calendar Google did not return, a per-calendar errors array, a missing busy
+ * array, a failed request -- and none of them is a sentence a coach can act on, so they collapse to
+ * one answer here rather than being spelled out or, worse, printed raw. And `humanError` has no
+ * entry for this code, so it would fall through to the generic line, which says nothing changed:
+ * something did change, the connection is stored and only the read did not verify.
+ *
+ * Returns null for everything else, so the shared copy keeps every error that is not this one.
+ *
+ * It lives beside `humanError` rather than in `coach-integrations.tsx`, where it was written,
+ * because `/coach/integrations` is a server page and that file is a `"use client"` module: calling
+ * this across the boundary throws at request time and nothing before deploy says so. See
+ * `src/app/server-client-boundary.test.ts`.
+ */
+export function calendarAvailabilityErrorCopy(code: string): string | null {
+  if (code.split(":", 1)[0] !== "AVAILABILITY_NOT_VERIFIED") return null;
+  return "SetterFi could not read this calendar's availability. The connection is stored, and booking stays off until a read succeeds.";
+}
