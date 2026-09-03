@@ -160,6 +160,9 @@ export const ENV_CONTRACT_NAMES = [
   // production deploy fail; the debt stays visible in each build's log until the credential list
   // is filled, and deleting this variable re-arms the gate.
   "SETTERFI_FIRST_CUSTOMER_ENFORCE",
+  // Folds the admin nav from 19 items in 5 groups down to 8 items in 2 groups. Off, the config
+  // in workspace-navigation.ts renders unchanged.
+  "SETTERFI_NAV_FOLD",
 ] as const;
 
 export type EnvironmentName = (typeof ENV_CONTRACT_NAMES)[number];
@@ -718,4 +721,14 @@ export function supabaseProjectRefMismatches(
 export function assertSupabaseProjectAgreement(environment: EnvironmentSource = process.env) {
   const mismatches = supabaseProjectRefMismatches(environment);
   if (mismatches.length > 0) throw new SupabaseProjectRefMismatchError(mismatches);
+}
+
+/**
+ * Folds the admin nav from 19 items in 5 groups down to 8 items in 2 groups. Off, the full
+ * 19-item config in workspace-navigation.ts renders unchanged; on, `workspaceNavigationFor`
+ * swaps in the folded groups and `withWorkspaceNavCounts` sums a folded destination's queue
+ * depth into the item that absorbed it.
+ */
+export function navFoldLive(environment: EnvironmentSource = process.env) {
+  return environmentValue("SETTERFI_NAV_FOLD", environment) === "true";
 }

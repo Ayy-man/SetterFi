@@ -1,5 +1,5 @@
 import type { UserRole } from "@/lib/auth/claims";
-import { phase5Live, phase6Live, type EnvironmentSource } from "@/lib/env-contract";
+import { navFoldLive, phase5Live, phase6Live, type EnvironmentSource } from "@/lib/env-contract";
 
 export type WorkspaceRole = "admin" | "coach" | "affiliate";
 
@@ -326,6 +326,73 @@ export const workspaceNavigation: Record<WorkspaceRole, readonly WorkspaceNavGro
 };
 
 /**
+ * The admin nav behind `SETTERFI_NAV_FOLD`: 19 items in 5 groups folded down to 8 items in 2
+ * groups. Every destination here is a real admin route, not a new page -- the fold is a rail
+ * change, not a product change, so `workspaceNavigationFor` swaps this in wholesale for `admin`
+ * rather than filtering the full config down. `FOLDED_NAV_TARGETS` below is what keeps the
+ * demoted routes themselves resolving: a bookmark to /admin/support still lands somewhere real.
+ */
+const foldedAdminNavigation: readonly WorkspaceNavGroup[] = [
+  {
+    label: "Run",
+    items: [
+      { label: "Overview", href: "/admin/overview", glyph: "square" },
+      { label: "Inbox", href: "/admin/alerts", queue: true, attention: true, glyph: "diamond" },
+      { label: "Clients", href: "/admin/platform-clients", queue: true, glyph: "circle" },
+      {
+        label: "Money",
+        href: "/admin/billing",
+        liveWhen: phase6Live,
+        roles: MONEY_ROLES,
+        queue: true,
+        glyph: "bar",
+      },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      { label: "The Brain", href: "/admin/brain", queue: true, glyph: "diamond" },
+      {
+        label: "Compliance",
+        href: "/admin/compliance",
+        short: "CP",
+        queue: true,
+        attention: true,
+        glyph: "bar",
+      },
+      { label: "System", href: "/admin/system", queue: true, glyph: "diamond" },
+      { label: "Audit", href: "/admin/audit", glyph: "bar" },
+    ],
+  },
+];
+
+/**
+ * Where a route folded off the rail still lives. Keyed by the demoted href, valued by the folded
+ * item's href that absorbs it -- so a link, a bookmark, or a queue count pointed at the old route
+ * keeps resolving to somewhere real instead of a dead destination. An href with no entry here maps
+ * to itself, which covers both the 8 folded destinations and every non-admin route.
+ */
+const FOLDED_NAV_TARGETS: Readonly<Record<string, string>> = {
+  "/admin/support": "/admin/alerts",
+  "/admin/channel-health": "/admin/platform-clients",
+  "/admin/provisioning": "/admin/platform-clients",
+  "/admin/agents": "/admin/platform-clients",
+  "/admin/agent-performance": "/admin/platform-clients",
+  "/admin/tiers": "/admin/billing",
+  "/admin/affiliates": "/admin/billing",
+  "/admin/corrections": "/admin/billing",
+  "/admin/brain/testing": "/admin/brain",
+  "/admin/account-terms": "/account",
+  "/admin/help": "/account",
+};
+
+/** The folded destination a demoted href resolves to, or the href itself when nothing folded it. */
+export function foldedNavTarget(href: string): string {
+  return FOLDED_NAV_TARGETS[href] ?? href;
+}
+
+/**
  * Queue depths, keyed by the destination's own href: `{ "/admin/support": 4 }`.
  *
  * A page that already counted its own rows hands them straight to the shell, so the rail and the
@@ -340,15 +407,28 @@ export type WorkspaceNavCounts = Readonly<Record<string, number>>;
  * marked `queue`, so a number cannot appear beside Help or Plans and pricing, where it would read
  * as unread mail rather than as work. And a zero is dropped rather than rendered: an empty queue
  * is said by the page being empty when you open it, not by a grey 0 sitting in the rail all day.
+ *
+ * While `SETTERFI_NAV_FOLD` is on, a queue item's count is the sum of every href that folds onto
+ * it (`foldedNavTarget(href) === item.href`), itself included -- so `{ "/admin/support": 4,
+ * "/admin/alerts": 2 }` lands on Inbox as 6, because both hrefs fold onto /admin/alerts.
  */
 export function withWorkspaceNavCounts(
   groups: readonly WorkspaceNavGroup[],
   counts: WorkspaceNavCounts,
+  environment: EnvironmentSource = process.env,
 ): readonly WorkspaceNavGroup[] {
+  const folded = navFoldLive(environment);
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => {
-      const count = item.queue ? counts[item.href] : undefined;
+      if (!item.queue) return item;
+      const count = folded
+        ? Object.entries(counts).reduce(
+            (total, [href, value]) =>
+              foldedNavTarget(href) === item.href ? total + (value ?? 0) : total,
+            0,
+          )
+        : counts[item.href];
       return typeof count === "number" && count > 0 ? { ...item, count } : item;
     }),
   }));
@@ -369,6 +449,7 @@ const NAV_ENVIRONMENT_NAMES = [
   "SETTERFI_PHASE5_LIVE",
   "SETTERFI_PHASE6_LIVE",
   "SETTERFI_PHASE6_AFFILIATES_LIVE",
+  "SETTERFI_NAV_FOLD",
 ] as const;
 
 /** Server-only: the nav flags, picked out for handing to the browser. */
@@ -408,7 +489,10 @@ export function workspaceNavigationFor(
   environment: EnvironmentSource = defaultNavigationEnvironment(),
   platformRole?: UserRole,
 ): readonly WorkspaceNavGroup[] {
-  return workspaceNavigation[role]
+  const groups = role === "admin" && navFoldLive(environment)
+    ? foldedAdminNavigation
+    : workspaceNavigation[role];
+  return groups
     .map((group) => ({
       ...group,
       items: group.items.filter(

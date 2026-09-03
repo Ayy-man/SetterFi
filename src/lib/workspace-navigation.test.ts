@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   demoViewTargetsFor,
+  foldedNavTarget,
   getWorkspaceActiveItem,
   isWorkspaceNavItemActive,
   navigationEnvironment,
@@ -512,5 +513,131 @@ describe("role-scoped admin navigation", () => {
     const corrections = items.find((item) => item.href === "/admin/corrections");
     expect(compliance?.short).toBe("CP");
     expect(corrections?.short).toBe("CR");
+  });
+});
+
+describe("admin nav fold", () => {
+  const foldOn = { ...allLive, SETTERFI_NAV_FOLD: "true" };
+  const foldOff = { ...allLive, SETTERFI_NAV_FOLD: "false" };
+
+  it("returns the original 19-item, 5-group config when the flag is unset or false", () => {
+    for (const environment of [allLive, foldOff]) {
+      const groups = workspaceNavigationFor("admin", environment);
+      expect(groups.map((group) => group.label)).toEqual(["Run", "Clients", "Money", "Brain", "Platform"]);
+      expect(groups.flatMap((group) => group.items).map((item) => item.href)).toEqual(
+        workspaceNavigation.admin.flatMap((group) => group.items.map((item) => item.href)),
+      );
+    }
+  });
+
+  it("folds to exactly 8 items in 2 groups, in order, with the queue and attention flags carried", () => {
+    const groups = workspaceNavigationFor("admin", foldOn);
+    expect(groups.map((group) => group.label)).toEqual(["Run", "Platform"]);
+
+    const items = groups.flatMap((group) => group.items);
+    expect(items).toHaveLength(8);
+    expect(items.map((item) => [item.label, item.href, Boolean(item.queue), Boolean(item.attention)])).toEqual([
+      ["Overview", "/admin/overview", false, false],
+      ["Inbox", "/admin/alerts", true, true],
+      ["Clients", "/admin/platform-clients", true, false],
+      ["Money", "/admin/billing", true, false],
+      ["The Brain", "/admin/brain", true, false],
+      ["Compliance", "/admin/compliance", true, true],
+      ["System", "/admin/system", true, false],
+      ["Audit", "/admin/audit", false, false],
+    ]);
+  });
+
+  it("leaves coach and affiliate navigation untouched by the flag", () => {
+    const coachOn = workspaceNavigationFor("coach", foldOn);
+    const coachOff = workspaceNavigationFor("coach", foldOff);
+    expect(coachOn).toEqual(coachOff);
+
+    const affiliateOn = workspaceNavigationFor("affiliate", foldOn);
+    const affiliateOff = workspaceNavigationFor("affiliate", foldOff);
+    expect(affiliateOn).toEqual(affiliateOff);
+  });
+
+  it("still gates the folded Money item behind Phase 6 and the money roles", () => {
+    const live = workspaceNavigationFor("admin", foldOn).flatMap((group) => group.items);
+    expect(live.map((item) => item.href)).toContain("/admin/billing");
+
+    const phase6Off = workspaceNavigationFor("admin", { ...foldOn, SETTERFI_PHASE6_LIVE: "false" })
+      .flatMap((group) => group.items);
+    expect(phase6Off.map((item) => item.href)).not.toContain("/admin/billing");
+
+    const success = workspaceNavigationFor("admin", foldOn, "success").flatMap((group) => group.items);
+    expect(success.map((item) => item.href)).not.toContain("/admin/billing");
+  });
+
+  it("sums a folded href's count into the item that absorbed it", () => {
+    const groups = workspaceNavigationFor("admin", foldOn);
+    const counted = withWorkspaceNavCounts(groups, { "/admin/support": 4, "/admin/alerts": 2 }, foldOn);
+    const inbox = counted.flatMap((group) => group.items).find((item) => item.href === "/admin/alerts");
+    expect(inbox?.count).toBe(6);
+  });
+
+  it("sums every route folded onto Clients and onto Money", () => {
+    const groups = workspaceNavigationFor("admin", foldOn);
+    const clientsCounted = withWorkspaceNavCounts(groups, {
+      "/admin/channel-health": 1,
+      "/admin/provisioning": 2,
+      "/admin/agents": 3,
+      "/admin/agent-performance": 4,
+      "/admin/platform-clients": 5,
+    }, foldOn);
+    const clients = clientsCounted.flatMap((group) => group.items).find((item) => item.href === "/admin/platform-clients");
+    expect(clients?.count).toBe(15);
+
+    const moneyCounted = withWorkspaceNavCounts(groups, {
+      "/admin/tiers": 1,
+      "/admin/affiliates": 2,
+      "/admin/corrections": 3,
+      "/admin/billing": 4,
+    }, foldOn);
+    const money = moneyCounted.flatMap((group) => group.items).find((item) => item.href === "/admin/billing");
+    expect(money?.count).toBe(10);
+  });
+
+  it("does not fold counts when the flag is off, keeping the per-href behaviour", () => {
+    const groups = workspaceNavigationFor("admin", foldOff);
+    const counted = withWorkspaceNavCounts(groups, { "/admin/support": 4 }, foldOff);
+    const support = counted.flatMap((group) => group.items).find((item) => item.href === "/admin/support");
+    expect(support?.count).toBe(4);
+  });
+
+  it("maps every folded href to its target and leaves unmapped hrefs as identity", () => {
+    const mappings: ReadonlyArray<[string, string]> = [
+      ["/admin/support", "/admin/alerts"],
+      ["/admin/channel-health", "/admin/platform-clients"],
+      ["/admin/provisioning", "/admin/platform-clients"],
+      ["/admin/agents", "/admin/platform-clients"],
+      ["/admin/agent-performance", "/admin/platform-clients"],
+      ["/admin/tiers", "/admin/billing"],
+      ["/admin/affiliates", "/admin/billing"],
+      ["/admin/corrections", "/admin/billing"],
+      ["/admin/brain/testing", "/admin/brain"],
+      ["/admin/account-terms", "/account"],
+      ["/admin/help", "/account"],
+    ];
+    for (const [from, to] of mappings) {
+      expect(foldedNavTarget(from)).toBe(to);
+    }
+
+    const unmapped = [
+      "/admin/overview",
+      "/admin/alerts",
+      "/admin/platform-clients",
+      "/admin/billing",
+      "/admin/brain",
+      "/admin/compliance",
+      "/admin/system",
+      "/admin/audit",
+      "/coach/home",
+      "/affiliate",
+    ];
+    for (const href of unmapped) {
+      expect(foldedNavTarget(href)).toBe(href);
+    }
   });
 });
