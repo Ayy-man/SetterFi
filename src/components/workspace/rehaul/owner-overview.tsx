@@ -20,7 +20,6 @@ import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
 import { BarChart } from "@/components/kit/bar-chart";
-import { DataState } from "@/components/kit/data-state";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { LineChart } from "@/components/kit/line-chart";
 import { Sparkline, SPARKLINE_MIN_POINTS } from "@/components/kit/sparkline";
@@ -143,9 +142,18 @@ function windowedHistory(
   return history.slice(-entry.periods);
 }
 
-/** Revenue-bearing subscriptions, counted off the rows rather than asserted. */
+/**
+ * Revenue-bearing subscriptions, counted off the rows rather than asserted.
+ *
+ * A trial has collected nothing, so it is counted apart rather than folded in: "active" on this
+ * screen means a subscription the billing mirror has confirmed is paying.
+ */
 function activeSubscriptions(measurement: PlatformMeasurement) {
-  return measurement.subscriptions.filter((row) => /^(active|trialing)$/iu.test(row.status)).length;
+  return measurement.subscriptions.filter((row) => /^active$/iu.test(row.status)).length;
+}
+
+function trialingSubscriptions(measurement: PlatformMeasurement) {
+  return measurement.subscriptions.filter((row) => /^trialing$/iu.test(row.status)).length;
 }
 
 function pastDueSubscriptions(measurement: PlatformMeasurement) {
@@ -154,17 +162,19 @@ function pastDueSubscriptions(measurement: PlatformMeasurement) {
   ).length;
 }
 
-type SignupDelta = { text: string; tone: "good" | "bad" | "neutral" };
+type SignupDelta = { text: string; against: string; tone: "good" | "bad" | "neutral" };
 
 function signupDelta(history: PlatformMeasurement["history"]): SignupDelta | null {
   const previous = history.at(-2);
   const current = history.at(-1);
   if (!previous || !current) return null;
+  const against = periodLabel(previous.periodStart);
   const difference = current.value - previous.value;
   if (difference === 0) {
-    return { text: `level with ${periodLabel(previous.periodStart)}`, tone: "neutral" };
+    return { against, text: `level with ${against}`, tone: "neutral" };
   }
   return {
+    against,
     text: `${difference > 0 ? "+" : "−"}${formatMetric(Math.abs(difference), "count")}`,
     tone: difference > 0 ? "good" : "bad",
   };
@@ -282,8 +292,9 @@ function Pill({
     <span
       className={cn(
         "inline-flex items-center gap-[var(--s-1)] rounded-[6px] border px-[var(--s-2)] py-[2px] text-[12px]",
-        tone === "good" && "border-[var(--good)] text-[var(--good)]",
-        tone === "bad" && "border-[var(--warning-line)] text-[var(--warning-text)]",
+        tone === "good" && "border-[var(--good-line)] bg-[var(--good-wash)] text-[var(--good-text)]",
+        tone === "bad"
+          && "border-[var(--warning-line)] bg-[var(--warning-wash)] text-[var(--warning-text)]",
         tone === "neutral" && "border-[var(--line)] text-[var(--muted)]",
       )}
     >
@@ -374,6 +385,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
   const activeWindow = resolveHistoryWindow(historyWindow);
   const history = windowedHistory(measurement.history, activeWindow);
   const active = activeSubscriptions(measurement);
+  const trialing = trialingSubscriptions(measurement);
   const pastDue = pastDueSubscriptions(measurement);
   const delta = signupDelta(history);
   const decisions = overviewDecisions(measurement).filter((row) => row.count > 0).slice(0, 5);
@@ -462,7 +474,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
           <p className="m-0" style={{ color: "oklch(0.78 0.02 262)" }}>
             {pulse && pulse.value !== null
               ? pulseKey === "platform.gross_mrr"
-                ? `across ${formatMetric(active, "count")} active ${active === 1 ? "subscription" : "subscriptions"}`
+                ? `across ${formatMetric(active, "count")} active ${active === 1 ? "subscription" : "subscriptions"}${trialing > 0 ? ` · ${formatMetric(trialing, "count")} trialing` : ""}`
                 : "trailing 30 days"
               : absenceText(pulse)}
           </p>
@@ -470,7 +482,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
             className="mt-auto pt-[var(--s-4)] font-mono text-[11px]"
             style={{ color: "oklch(0.70 0.02 262)" }}
           >
-            No revenue history series is recorded in this snapshot
+            No revenue history recorded
           </p>
         </div>
         <dl
@@ -589,11 +601,9 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
                 width={barsWidth}
               />
             ) : (
-              <DataState
-                body="The chart appears once a full 30-day period has closed with a recorded signup."
-                kind="empty"
-                title="No completed signup period yet"
-              />
+              <p className="m-0 flex h-[150px] items-center font-mono text-[11px] text-[var(--faint)]">
+                No closed 30-day period yet
+              </p>
             )}
           </div>
         </section>
@@ -614,7 +624,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
               className="ml-auto text-[12.5px] font-medium text-[var(--accent-text)] no-underline hover:underline"
               href={SUPPORT_HREF}
             >
-              Open the queue
+              Open inbox
             </Link>
           </div>
           {decisions.length === 0 ? (
@@ -711,7 +721,8 @@ const DIALOG_TABS = [
 ] as const;
 
 function subscriptionTone(status: string): "good" | "amber" | "wait" | "grey" {
-  if (/^(active|trialing)$/iu.test(status)) return "good";
+  if (/^active$/iu.test(status)) return "good";
+  if (/^trialing$/iu.test(status)) return "wait";
   if (/past_due|unpaid|incomplete/iu.test(status)) return "amber";
   if (/canceled|cancelled/iu.test(status)) return "grey";
   return "wait";
@@ -769,13 +780,13 @@ function FiguresDialog({
                   className={cn(
                     "font-mono text-[13px]",
                     delta.tone === "good"
-                      ? "text-[var(--good)]"
+                      ? "text-[var(--good-text)]"
                       : delta.tone === "bad"
                         ? "text-[var(--warning-text)]"
                         : "text-[var(--muted)]",
                   )}
                 >
-                  {delta.text}
+                  {delta.tone === "neutral" ? delta.text : `${delta.text} vs ${delta.against}`}
                 </span>
               ) : null}
             </div>
@@ -808,7 +819,7 @@ function FiguresDialog({
           <div className="flex min-w-0 flex-col gap-[18px]">
             <div className="flex flex-wrap items-center gap-[16px] text-[12.5px]">
               <h3 className="m-0 text-[13px] font-semibold text-[var(--ink)]">
-                Signups and active subscriptions
+                Signups by period
               </h3>
             </div>
             {drawable ? (
@@ -824,14 +835,12 @@ function FiguresDialog({
                 />
               </div>
             ) : (
-              <DataState
-                body="Two closed periods are the fewest a line can honestly be drawn from."
-                kind="empty"
-                title="Not enough signup history yet"
-              />
+              <p className="m-0 flex h-[260px] items-center font-mono text-[11px] text-[var(--faint)]">
+                One closed period recorded
+              </p>
             )}
             <p className="m-0 font-mono text-[11px] text-[var(--faint)]">
-              No active-subscription history series is recorded, so only signups are drawn
+              No active-subscription history recorded
             </p>
             <div className="mt-auto grid gap-[12px] sm:grid-cols-2 xl:grid-cols-4">
               {kpis.map(({ key, view }) => (
@@ -904,7 +913,7 @@ function FiguresDialog({
               </ul>
             )}
             <p className="m-0 mt-auto border-t border-[var(--line-soft)] px-[14px] py-[10px] font-mono text-[11px] text-[var(--faint)]">
-              Demo and test rows are excluded at the source
+              Demo and test rows excluded
             </p>
           </section>
         </div>

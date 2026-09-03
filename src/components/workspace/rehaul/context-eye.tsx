@@ -13,9 +13,10 @@ import { cn } from "@/lib/utils";
  * to go, and this is it. A page passes the sentences it used to print as `copy` and they become a
  * thing a reviewer opens on purpose rather than a thing every reader scrolls past forever.
  *
- * Hiding is deliberately weak. "Hide for now" writes to sessionStorage, not localStorage, so the
- * eye comes back on the next page load: this exists for a review pass, and a reviewer who dismissed
- * it on Tuesday should still see it on Wednesday.
+ * Hiding is deliberately weak, and the artboard says how weak: hide keeps it closed for this
+ * visit, a refresh brings it back. So the hide lives in this module and nowhere else -- it
+ * survives a client-side navigation between screens, and a reload throws it away with the module.
+ * Persisting it would outlive the review pass it exists for.
  */
 
 export type ContextEyeProps = {
@@ -38,18 +39,13 @@ export type ContextEyeProps = {
  */
 export const CONTEXT_EYE_SCREENS: readonly string[] = [];
 
-export function contextEyeStorageKey(screen: string) {
-  return `setterfi.eye.hidden.${screen}`;
-}
-
 /**
- * Hidden screens for this visit, held in the module as well as in storage.
+ * Hidden screens for this visit.
  *
- * Storage is the part that survives a client-side navigation, but it is also the part that can
- * fail: Safari's private mode throws on `sessionStorage` rather than returning null, and a browser
- * set to block site data throws on both read and write. When it does, this set still carries the
- * hide for as long as the tab lives, so pressing "Hide for now" always hides something. An eye that
- * takes the page down, or one that ignores the button it just rendered, are both worse.
+ * A module-level set rather than browser storage: it is scoped per screen so hiding one leaves the
+ * others alone, it survives every client-side navigation the module stays loaded across, and a
+ * reload clears it. Nothing here can throw, so a browser set to block site data behaves the same
+ * as every other one.
  */
 const hiddenThisVisit = new Set<string>();
 const listeners = new Set<() => void>();
@@ -62,25 +58,17 @@ function subscribe(listener: () => void) {
 }
 
 function isHidden(screen: string): boolean {
-  if (hiddenThisVisit.has(screen)) {
-    return true;
-  }
+  return hiddenThisVisit.has(screen);
+}
 
-  try {
-    return window.sessionStorage.getItem(contextEyeStorageKey(screen)) === "1";
-  } catch {
-    return false;
-  }
+/** Test seam: drops every hide, so one spec's dismissal cannot leak into the next. */
+export function resetContextEyeHides() {
+  hiddenThisVisit.clear();
+  for (const listener of listeners) listener();
 }
 
 function hide(screen: string) {
   hiddenThisVisit.add(screen);
-
-  try {
-    window.sessionStorage.setItem(contextEyeStorageKey(screen), "1");
-  } catch {
-    // Unwritable storage costs the reviewer a re-hide after a reload, nothing more.
-  }
 
   for (const listener of listeners) {
     listener();
@@ -94,16 +82,12 @@ export function ContextEye({
   screen,
 }: ContextEyeProps) {
   /**
-   * `useSyncExternalStore` rather than state seeded in an effect. The server has no sessionStorage,
-   * so the server snapshot is always "visible" and React re-renders with the real one after
-   * hydration -- which is the same one-frame flash a state-in-effect version would give, without
-   * the cascading render the lint rule is right to flag.
+   * `useSyncExternalStore` rather than state seeded in an effect. The server snapshot is always
+   * "visible" and React re-renders with the real one after hydration -- the same one-frame flash a
+   * state-in-effect version would give, without the cascading render the lint rule is right to
+   * flag.
    */
-  const hidden = useSyncExternalStore(
-    subscribe,
-    () => isHidden(screen),
-    () => false,
-  );
+  const hidden = useSyncExternalStore(subscribe, () => isHidden(screen), () => false);
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);

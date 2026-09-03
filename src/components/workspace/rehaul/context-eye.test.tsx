@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CONTEXT_EYE_SCREENS,
   ContextEye,
-  contextEyeStorageKey,
+  resetContextEyeHides,
 } from "@/components/workspace/rehaul/context-eye";
 
 const COPY =
@@ -17,7 +17,7 @@ function eyeButton() {
 
 describe("ContextEye", () => {
   beforeEach(() => {
-    window.sessionStorage.clear();
+    resetContextEyeHides();
   });
 
   afterEach(() => {
@@ -61,27 +61,13 @@ describe("ContextEye", () => {
     expect(eyeButton()).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("hides the eye for this screen and records it in sessionStorage", async () => {
+  it("hides the eye for this screen, and only that screen, for the rest of the visit", async () => {
     const user = userEvent.setup();
-    render(<ContextEye copy={COPY} screen="eye-hide" />);
+    const { unmount } = render(<ContextEye copy={COPY} screen="eye-hide" />);
 
     await user.click(eyeButton());
     await user.click(screen.getByRole("button", { name: "Hide for now" }));
 
-    await waitFor(() => {
-      expect(
-        screen.queryByRole("button", { name: "About this screen" }),
-      ).not.toBeInTheDocument();
-    });
-    expect(window.sessionStorage.getItem(contextEyeStorageKey("eye-hide"))).toBe(
-      "1",
-    );
-  });
-
-  it("stays hidden on a later mount of the same screen, and only that screen", async () => {
-    window.sessionStorage.setItem(contextEyeStorageKey("eye-stored"), "1");
-
-    const { unmount } = render(<ContextEye copy={COPY} screen="eye-stored" />);
     await waitFor(() => {
       expect(
         screen.queryByRole("button", { name: "About this screen" }),
@@ -89,23 +75,22 @@ describe("ContextEye", () => {
     });
     unmount();
 
-    render(<ContextEye copy={COPY} screen="eye-stored-sibling" />);
+    // A client-side navigation back to the same screen keeps it hidden.
+    const again = render(<ContextEye copy={COPY} screen="eye-hide" />);
+    expect(
+      screen.queryByRole("button", { name: "About this screen" }),
+    ).not.toBeInTheDocument();
+    again.unmount();
+
+    render(<ContextEye copy={COPY} screen="eye-hide-sibling" />);
     expect(eyeButton()).toBeInTheDocument();
   });
 
-  it("renders the eye rather than throwing when sessionStorage is unavailable", async () => {
+  it("writes no browser storage, so a refresh brings the eye back", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window.sessionStorage, "getItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-    vi.spyOn(window.sessionStorage, "setItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
+    const setSession = vi.spyOn(window.sessionStorage, "setItem");
 
-    render(<ContextEye copy={COPY} screen="eye-throws" />);
-    expect(eyeButton()).toBeInTheDocument();
-
-    // Hiding still works for this visit; it just cannot be remembered.
+    const { unmount } = render(<ContextEye copy={COPY} screen="eye-refresh" />);
     await user.click(eyeButton());
     await user.click(screen.getByRole("button", { name: "Hide for now" }));
     await waitFor(() => {
@@ -113,6 +98,14 @@ describe("ContextEye", () => {
         screen.queryByRole("button", { name: "About this screen" }),
       ).not.toBeInTheDocument();
     });
+
+    expect(setSession).not.toHaveBeenCalled();
+    unmount();
+
+    // A reload re-evaluates the module, which is the whole of the hide.
+    resetContextEyeHides();
+    render(<ContextEye copy={COPY} screen="eye-refresh" />);
+    expect(eyeButton()).toBeInTheDocument();
   });
 
   it("pins itself to the page container by default and to the viewport on request", () => {

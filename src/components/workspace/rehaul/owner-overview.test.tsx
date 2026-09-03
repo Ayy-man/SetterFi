@@ -55,6 +55,14 @@ function measurement(): PlatformMeasurement {
         periodEnd: "2026-10-01T00:00:00.000Z",
       },
       {
+        tenantId: "tenant-northstar",
+        subscriptionId: "subscription-northstar",
+        status: "trialing",
+        stripePriceId: "price-starter",
+        periodStart: "2026-08-20T00:00:00.000Z",
+        periodEnd: "2026-09-20T00:00:00.000Z",
+      },
+      {
         tenantId: "tenant-reid-funding",
         subscriptionId: "subscription-reid",
         status: "past_due",
@@ -113,7 +121,8 @@ describe("OwnerOverview", () => {
     expect(screen.getByText("Thursday 3 September 2026")).toBeInTheDocument();
     // Gross MRR leads the pulse for an owner: 298,200 cents read back as money.
     expect(screen.getByText("$2,982")).toBeInTheDocument();
-    expect(screen.getByText("across 1 active subscription")).toBeInTheDocument();
+    // The trialing row has collected nothing, so it is named apart rather than counted active.
+    expect(screen.getByText("across 1 active subscription · 1 trialing")).toBeInTheDocument();
   });
 
   it("counts the past due subscription into the decision queue", () => {
@@ -123,8 +132,28 @@ describe("OwnerOverview", () => {
     expect(screen.getByRole("heading", { name: "Needs a decision" })).toBeInTheDocument();
   });
 
+  it("routes the decision queue at the folded inbox with the artboard's own wording", () => {
+    render(<OwnerOverview measurement={measurement()} role="owner" />);
+
+    expect(screen.getByRole("link", { name: "Open inbox" })).toHaveAttribute(
+      "href",
+      "/admin/support",
+    );
+  });
+
   it("carries no explainer sentence from the old surface", () => {
     render(<OwnerOverview measurement={measurement()} role="owner" />);
+
+    expect(
+      screen.queryByText(
+        "The chart appears once a full 30-day period has closed with a recorded signup.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.queryByText(
+        "No active-subscription history series is recorded, so only signups are drawn",
+      ),
+    ).toBeNull();
 
     expect(
       screen.queryByText(
@@ -144,9 +173,12 @@ describe("OwnerOverview", () => {
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Signups and active subscriptions" }),
+      screen.getByRole("heading", { name: "Signups by period" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Subscriptions in this snapshot" })).toBeInTheDocument();
+    // The delta names the period it was taken against, as the artboard's "+2 vs last month" does.
+    expect(screen.getByText("+2 vs Jul 2026")).toBeInTheDocument();
+    expect(screen.getByText("Demo and test rows excluded")).toBeInTheDocument();
   });
 
   it("refuses revenue to a success reviewer rather than substituting a figure", () => {
