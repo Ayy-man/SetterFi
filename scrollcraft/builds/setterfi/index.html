@@ -7,12 +7,11 @@
 <meta name="description" content="SetterFi answers, qualifies and books your Instagram and Messenger leads while you sleep. Every booking carries the message it came from.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Roboto:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%232e5cc8%27/%3E%3Ccircle cx=%2711%27 cy=%2716%27 r=%272.4%27 fill=%27white%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%272.4%27 fill=%27white%27/%3E%3Ccircle cx=%2721%27 cy=%2716%27 r=%272.4%27 fill=%27white%27/%3E%3C/svg%3E">
 <link rel="stylesheet" href="scrollcraft.css">
 <style>
   :root {
-    /* C6 Reply palette, lifted from the locked header. */
     --sc-canvas: oklch(0.9612 0.0042 262);
     --sc-surface: oklch(0.9905 0.0026 262);
     --sc-ink: oklch(0.2325 0.023 262);
@@ -22,15 +21,15 @@
     --sc-font-display: "Archivo", system-ui, sans-serif;
     --sc-font-text: "Archivo", system-ui, sans-serif;
 
-    --card-top: oklch(0.9975 0.0016 262);
     --card: oklch(0.9905 0.0026 262);
     --well: oklch(0.983 0.0048 262);
     --faint: oklch(0.4349 0.039 262);
     --overline: oklch(0.5261 0.041 262);
     --accent-text: oklch(0.44 0.165 264);
     --line: rgba(60, 90, 150, 0.13);
-    --line-soft: rgba(60, 90, 150, 0.08);
     --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    --ui: "Inter", -apple-system, "SF Pro Text", "Roboto", system-ui, sans-serif;
+    --gsans: "Roboto", "Google Sans", "Inter", system-ui, sans-serif;
 
     /* The ground is written by the page from the track. Everything that has to
        agree with it (scrims, nav, copy) reads this one value. */
@@ -58,127 +57,195 @@
   .ground { position: absolute; inset: 0; background: var(--ground); }
   .cam {
     position: absolute; left: 0; top: 0;
-    width: 2400px; height: 1700px;
+    width: 2600px; height: 1700px;
     transform-origin: 0 0;
     will-change: transform;
   }
   .obj { position: absolute; }
-
-  /* Weeks: the locked header's two calendars, as world objects. */
-  .week {
-    left: 160px; top: 260px; width: 940px; height: 560px;
-    box-sizing: border-box;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    box-shadow: 0 1px 0 var(--card-top) inset, 0 24px 60px -30px rgba(30, 50, 100, 0.25);
-    padding: 26px 28px 28px;
-    display: flex; flex-direction: column; gap: 18px;
-  }
-  .week--full { left: 1300px; }
-  .week { transition: opacity 600ms ease; }
-  html[data-phase="night"] .week { opacity: 0.22; }
-  html[data-quiet-weeks] .week { opacity: 0.35; }
-  .phone { opacity: 0; }
-  .week__head { display: flex; align-items: center; justify-content: space-between; }
   .over {
     margin: 0;
     font-family: var(--mono); font-size: 13px; font-weight: 600;
     letter-spacing: 0.09em; text-transform: uppercase; color: var(--overline);
   }
-  .week--full .over { color: var(--accent-text); }
-  .tag {
-    font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
-    padding: 6px 12px; border-radius: 999px;
-    background: var(--well); color: var(--faint); border: 1px solid var(--line);
-  }
-  .week--full .tag { background: var(--sc-accent); color: var(--sc-accent-ink); border-color: transparent; }
-  .grid {
-    flex: 1; display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    grid-template-rows: auto repeat(6, minmax(0, 1fr));
-    gap: 8px; min-height: 0;
-  }
-  .day {
-    font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.07em;
-    text-transform: uppercase; color: var(--overline); text-align: center; padding-bottom: 4px;
-  }
-  .slot { border-radius: 10px; background: var(--well); border: 1px solid var(--line-soft); min-height: 0; }
-  .booked {
-    border-radius: 10px; min-height: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: 0.02em;
-    background: color-mix(in oklab, var(--sc-accent) 14%, var(--card));
-    color: var(--accent-text);
-    border: 1px solid color-mix(in oklab, var(--sc-accent) 30%, transparent);
-  }
-  .week--full .booked { background: var(--sc-accent); color: var(--sc-accent-ink); border-color: transparent; }
-  /* The Friday 11:00 slot waits dim until the provenance line reaches it. */
-  .week--full .booked--friday {
-    background: var(--well);
-    color: transparent;
-    border: 1px solid var(--line-soft);
-    transition: background 360ms ease, color 360ms ease, border-color 360ms ease, box-shadow 520ms ease;
-  }
-  @keyframes slotPop { 0% { transform: scale(0.94); } 55% { transform: scale(1.06); } 100% { transform: scale(1); } }
-  .week--full .booked--friday.is-lit { animation: slotPop 480ms cubic-bezier(0.2, 1, 0.3, 1) both; }
-  .week--full .booked--friday.is-lit {
-    background: var(--sc-accent); color: var(--sc-accent-ink); border: 1px solid transparent;
-    box-shadow: 0 0 48px 8px color-mix(in oklab, var(--sc-accent) 35%, transparent);
-  }
-  .week--full.is-peak .booked:not(.booked--friday) { opacity: 0.32; }
-  .week--full .booked:not(.booked--friday) { transition: opacity 420ms ease; }
 
-  /* Phone: the night object. */
-  .phone {
-    left: 1050px; top: 900px; width: 300px; height: 600px;
+  /* ---------------------------------------- the browser window, Chrome -- */
+  .win {
+    left: 100px; top: 240px; width: 1100px; height: 720px;
     box-sizing: border-box;
-    border-radius: 44px;
-    background: oklch(0.22 0.02 262);
-    box-shadow: 0 0 0 2px oklch(0.32 0.02 262) inset, 0 40px 90px -30px rgba(0, 0, 0, 0.7);
-    padding: 14px;
+    border-radius: 12px; overflow: hidden;
+    background: #1b1b1b;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(10, 20, 50, 0.18), 0 40px 90px -30px rgba(10, 20, 50, 0.45);
+    transition: opacity 600ms ease;
+    display: flex; flex-direction: column;
   }
-  .phone::before {
-    content: ""; position: absolute; inset: 0; border-radius: 44px; pointer-events: none; z-index: 3;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, 0 -1px 0 rgba(255, 255, 255, 0.14) inset;
+  .win--full { left: 1300px; }
+  .win__label { position: absolute; left: 4px; top: -40px; }
+  .win--full .win__label { color: var(--accent-text); }
+  html[data-phase="night"] .win { opacity: 0.22; }
+  html[data-quiet-weeks] .win { opacity: 0.35; }
+  .chrome {
+    height: 40px; flex: none; background: #202124;
+    display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    font-family: var(--gsans); font-size: 12px; color: #bdc1c6;
+    border-bottom: 1px solid #000;
   }
-  .phone::after {
-    content: ""; position: absolute; left: 50%; top: 24px; width: 92px; height: 26px; margin-left: -46px;
-    border-radius: 14px; background: oklch(0.14 0.015 262); z-index: 4;
+  .chrome__lights { display: flex; gap: 7px; margin-right: 6px; }
+  .chrome__lights i { width: 11px; height: 11px; border-radius: 50%; background: #5f6368; }
+  .chrome__lights i:nth-child(1) { background: #ff5f57; }
+  .chrome__lights i:nth-child(2) { background: #febc2e; }
+  .chrome__lights i:nth-child(3) { background: #28c840; }
+  .chrome__tab {
+    display: flex; align-items: center; gap: 8px;
+    background: #35363a; color: #e8eaed; padding: 0 14px; height: 30px; border-radius: 8px 8px 0 0;
+    margin-top: 10px; white-space: nowrap;
+  }
+  .chrome__tab i { width: 14px; height: 14px; border-radius: 3px; background: #1a73e8; display: inline-block; }
+  .chrome__url {
+    margin-left: auto; flex: 1; max-width: 520px; height: 26px; border-radius: 13px; background: #303134;
+    display: flex; align-items: center; gap: 8px; padding: 0 12px; color: #9aa0a6; white-space: nowrap;
+  }
+  .chrome__url b { color: #e8eaed; font-weight: 400; }
+  .chrome__url i { width: 10px; height: 10px; border: 1.5px solid #9aa0a6; border-radius: 2px; display: inline-block; }
+
+  /* ------------------------------------- Google Calendar, dark, week view -- */
+  .gcal { flex: 1; display: flex; flex-direction: column; background: #1b1b1b; color: #e3e3e3; font-family: var(--gsans); min-height: 0; }
+  .gcal__top { height: 56px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 16px; font-size: 14px; }
+  .gcal__menu { width: 18px; height: 12px; border-top: 2px solid #e3e3e3; border-bottom: 2px solid #e3e3e3; position: relative; }
+  .gcal__menu::after { content: ""; position: absolute; left: 0; right: 0; top: 5px; border-top: 2px solid #e3e3e3; }
+  .gcal__logo { display: flex; align-items: center; gap: 8px; font-size: 20px; color: #e3e3e3; margin-right: 10px; }
+  .gcal__logo i { width: 26px; height: 26px; border-radius: 5px; background: #4285f4; color: #fff; font-size: 14px; font-weight: 500; display: grid; place-items: center; font-style: normal; box-shadow: 0 0 0 2px #1b1b1b inset; }
+  .gcal__btn { border: 1px solid #5f6368; border-radius: 20px; padding: 7px 16px; color: #e3e3e3; }
+  .gcal__arrows { color: #e3e3e3; letter-spacing: 12px; font-size: 16px; }
+  .gcal__title { font-size: 20px; color: #e3e3e3; }
+  .gcal__right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  .gcal__icons { display: flex; gap: 14px; }
+  .gcal__icons i { width: 16px; height: 16px; border-radius: 50%; border: 1.6px solid #c4c7c5; display: inline-block; }
+  .gcal__ava { width: 30px; height: 30px; border-radius: 50%; background: #b3261e; color: #fff; display: grid; place-items: center; font-size: 14px; }
+  .gcal__days { display: grid; grid-template-columns: 64px repeat(7, 1fr); align-items: end; padding-bottom: 6px; border-bottom: 1px solid #3c4043; flex: none; }
+  .gcal__gmt { font-size: 10px; color: #c4c7c5; padding: 0 0 4px 6px; }
+  .gcal__day { text-align: center; }
+  .gcal__day span { display: block; font-size: 11px; letter-spacing: 0.8px; color: #c4c7c5; margin-bottom: 4px; }
+  .gcal__day b { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; font-weight: 400; color: #e3e3e3; }
+  .gcal__day.is-today span { color: #a8c7fa; }
+  .gcal__day.is-today b { background: #a8c7fa; color: #062e6f; }
+  .gcal__body { flex: 1; display: grid; grid-template-columns: 64px repeat(7, 1fr); min-height: 0; --row: 68px; overflow: hidden; }
+  .gcal__hours { position: relative; }
+  .gcal__hours span { position: absolute; right: 8px; font-size: 10px; color: #c4c7c5; transform: translateY(-6px); }
+  .gcal__col {
+    position: relative; border-left: 1px solid #3c4043;
+    background-image: linear-gradient(#3c4043 1px, transparent 1px);
+    background-size: 100% var(--row);
+  }
+  .gcal__col.is-today { background-color: rgba(168, 199, 250, 0.035); }
+  .ev {
+    position: absolute; left: 2px; right: 6px;
+    top: calc((var(--h) - 8) * var(--row));
+    height: calc(var(--d) * var(--row) - 2px);
+    box-sizing: border-box;
+    border-radius: 4px; padding: 3px 6px;
+    font-size: 11px; line-height: 1.25; color: #062e6f;
+    background: #a8c7fa;
+    box-shadow: 0 0 0 1px #1b1b1b;
+    overflow: hidden;
+    transition: opacity 420ms ease;
+  }
+  .ev b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev span { display: block; opacity: 0.9; white-space: nowrap; }
+  .ev--grey { background: #9aa0a6; color: #1f1f1f; }
+  .ev--green { background: #6dd58c; color: #0a3818; }
+  /* Friday 11:00 is not there until the ring closes around where it will be. */
+  .ev--friday { opacity: 0; }
+  .ev--friday.is-lit { opacity: 1; animation: slotPop 480ms cubic-bezier(0.2, 1, 0.3, 1) both; box-shadow: 0 0 0 1px #1b1b1b, 0 0 36px 4px rgba(138, 180, 248, 0.45); }
+  @keyframes slotPop { 0% { transform: scale(0.9); } 55% { transform: scale(1.05); } 100% { transform: scale(1); } }
+  .win--full.is-peak .ev:not(.ev--friday) { opacity: 0.3; }
+
+  /* ------------------------------------------- the phone: iPhone, Messenger -- */
+  .phone {
+    left: 1100px; top: 1000px; width: 300px; height: 620px;
+    box-sizing: border-box;
+    border-radius: 48px;
+    background: #2a2a2c;
+    box-shadow:
+      0 0 0 1.5px #4a4a4d inset,
+      0 0 0 5px #0d0d0f,
+      0 0 0 6px #3a3a3d,
+      0 50px 100px -30px rgba(0, 0, 0, 0.75);
+    opacity: 0;
+  }
+  .phone::before { /* side buttons */
+    content: ""; position: absolute; left: -9px; top: 120px; width: 3px; height: 34px; border-radius: 2px; background: #3a3a3d;
+    box-shadow: 0 54px 0 #3a3a3d, 0 108px 0 #3a3a3d, 309px -30px 0 #3a3a3d, 309px 20px 0 #3a3a3d, 309px 70px 0 #3a3a3d;
   }
   .phone__screen {
-    position: absolute; inset: 12px; border-radius: 34px; overflow: hidden;
-    background: oklch(0.985 0.003 262);
+    position: absolute; inset: 7px; border-radius: 42px; overflow: hidden;
+    background: #000; color: #fff; font-family: var(--ui);
     opacity: 0;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
   }
-  .phone__bar {
-    position: absolute; left: 0; right: 0; top: 0; height: 66px; z-index: 2;
-    background: oklch(0.985 0.003 262);
-    border-bottom: 1px solid var(--line);
-    display: flex; align-items: flex-end; justify-content: space-between; padding: 0 18px 10px;
-    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint);
+  .island { position: absolute; left: 50%; top: 10px; width: 96px; height: 28px; margin-left: -48px; border-radius: 16px; background: #000; z-index: 6; box-shadow: 0 0 0 1px #111 inset; }
+  .island::after { content: ""; position: absolute; right: 10px; top: 9px; width: 10px; height: 10px; border-radius: 50%; background: #0b0f1a; box-shadow: 0 0 0 1px #1c2434 inset; }
+  .status { position: absolute; left: 0; right: 0; top: 0; height: 48px; z-index: 5; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(14px); display: flex; justify-content: space-between; align-items: center; padding: 6px 26px 0 30px; font-size: 14px; font-weight: 600; }
+  .status__right { display: flex; align-items: center; gap: 6px; }
+  .sig { display: inline-flex; gap: 1.5px; align-items: flex-end; height: 10px; }
+  .sig i { width: 3px; background: #fff; border-radius: 1px; height: 4px; }
+  .sig i:nth-child(2) { height: 6px; } .sig i:nth-child(3) { height: 8px; } .sig i:nth-child(4) { height: 10px; opacity: 0.35; }
+  .wifi { width: 14px; height: 10px; border-radius: 7px 7px 0 0 / 10px 10px 0 0; border: 2.2px solid #fff; border-bottom: 0; position: relative; }
+  .wifi::after { content: ""; position: absolute; left: 3px; bottom: -1px; width: 4px; height: 4px; border-radius: 50%; background: #fff; }
+  .bat { width: 25px; height: 12px; border-radius: 4px; background: #fff; color: #000; font-size: 9.5px; font-weight: 700; display: grid; place-items: center; position: relative; }
+  .bat::after { content: ""; position: absolute; right: -3px; top: 3.5px; width: 1.5px; height: 5px; background: #fff; border-radius: 1px; }
+  .mhead {
+    position: absolute; left: 0; right: 0; top: 48px; height: 56px; z-index: 4;
+    display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
-  .phone__bar b { font-family: var(--sc-font-display); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 13px; color: var(--sc-ink); }
+  .mhead__back { width: 10px; height: 10px; border-left: 2.5px solid #0a84ff; border-bottom: 2.5px solid #0a84ff; transform: rotate(45deg); margin-right: 4px; }
+  .mhead__ava { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #5b8def, #2e5cc8); display: grid; place-items: center; font-size: 13px; font-weight: 600; position: relative; }
+  .mhead__ava::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: #31a24c; box-shadow: 0 0 0 2px #000; }
+  .mhead__name { line-height: 1.15; }
+  .mhead__name b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .mhead__name span { font-size: 11.5px; color: #8e8e93; }
+  .mhead__acts { margin-left: auto; display: flex; gap: 14px; }
+  .mhead__acts i { width: 18px; height: 18px; border: 2px solid #0a84ff; border-radius: 5px; display: inline-block; }
+  .mhead__acts i:first-child { border-radius: 50%; }
   .thread {
-    position: absolute; left: 0; right: 0; top: 66px;
-    padding: 18px 14px 28px;
-    display: flex; flex-direction: column; gap: 8px;
+    position: absolute; left: 0; right: 0; top: 104px;
+    padding: 12px 12px 92px;
+    display: flex; flex-direction: column; gap: 3px;
     will-change: transform;
   }
-  .stamp { align-self: center; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); margin: 6px 0 2px; }
+  .stamp { align-self: center; font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; color: #8e8e93; margin: 10px 0 6px; opacity: 0; }
   .b {
-    max-width: 82%; padding: 9px 12px; border-radius: 16px;
-    font-size: 13.5px; line-height: 1.32; letter-spacing: -0.005em;
-    opacity: 0; transform: translateY(10px) scale(0.98);
+    max-width: 78%; padding: 8px 12px; border-radius: 18px;
+    font-size: 14px; line-height: 1.3; letter-spacing: -0.01em;
+    opacity: 0; transform: translateY(10px) scale(0.96);
     transform-origin: 0 100%;
   }
-  .b.is-in { opacity: 1; transform: none; }
-  .b--lead { align-self: flex-start; background: oklch(0.93 0.006 262); color: var(--sc-ink); border-bottom-left-radius: 5px; }
-  .b--agent { align-self: flex-end; background: var(--sc-accent); color: var(--sc-accent-ink); border-bottom-right-radius: 5px; transform-origin: 100% 100%; }
-  .stamp { opacity: 0; }
-  .stamp.is-in { opacity: 1; }
-  .b, .stamp { transition: opacity 260ms ease, transform 320ms cubic-bezier(0.2, 1, 0.3, 1); }
+  .b.is-in, .stamp.is-in { opacity: 1; transform: none; }
+  .b--lead { align-self: flex-start; background: #303030; color: #fff; }
+  .b--agent { align-self: flex-end; background: linear-gradient(160deg, #1f8fff, #0a5ff5); color: #fff; transform-origin: 100% 100%; }
+  .b--lead + .b--lead, .b--agent + .b--agent { margin-top: -1px; }
+  .b--lead:has(+ .b--lead) { border-bottom-left-radius: 5px; }
+  .b--lead + .b--lead { border-top-left-radius: 5px; }
+  .b--agent:has(+ .b--agent) { border-bottom-right-radius: 5px; }
+  .b--agent + .b--agent { border-top-right-radius: 5px; }
+  .seen { align-self: flex-end; font-size: 10.5px; color: #8e8e93; margin-top: 2px; opacity: 0; }
+  .seen.is-in { opacity: 1; }
+  .b, .stamp, .seen { transition: opacity 240ms ease, transform 320ms cubic-bezier(0.2, 1, 0.3, 1); }
+  .typing { align-self: flex-start; background: #303030; border-radius: 18px; padding: 10px 12px; display: none; gap: 4px; }
+  .typing.is-on { display: flex; }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: #8e8e93; animation: tdot 1.1s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: 0.15s; } .typing i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes tdot { 0%, 100% { opacity: 0.35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+  .composer {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 84px; z-index: 4;
+    background: linear-gradient(to top, #000 60%, rgba(0, 0, 0, 0));
+    display: flex; align-items: center; gap: 10px; padding: 0 12px 18px;
+  }
+  .composer i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #0a84ff; display: inline-block; flex: none; }
+  .composer i.sq { border-radius: 5px; }
+  .composer__field { flex: 1; height: 36px; border-radius: 18px; background: #262628; color: #8e8e93; font-size: 14px; display: flex; align-items: center; padding: 0 14px; }
+  .composer__mic { width: 22px; height: 22px; border-radius: 50%; background: #0a84ff; flex: none; }
+  .homebar { position: absolute; left: 50%; bottom: 6px; width: 110px; height: 4px; margin-left: -55px; border-radius: 2px; background: #fff; opacity: 0.85; z-index: 6; }
 
   /* Consoles: real screenshots from the product. */
   .console {
@@ -189,26 +256,20 @@
     opacity: 0; transform: translateY(40px);
   }
   .console img { display: block; width: 100%; height: auto; }
-  .console--learned { left: 1420px; top: 930px; width: 420px; }
-  .console--handles { left: 560px; top: 1080px; width: 440px; }
-  .console--takeover { left: 1420px; top: 1420px; width: 420px; }
-  .console__cap {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    padding: 10px 14px;
-    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--overline);
-    background: linear-gradient(to top, var(--card) 70%, transparent);
-  }
+  .console--learned { left: 1470px; top: 1000px; width: 420px; }
+  .console--handles { left: 600px; top: 1210px; width: 440px; }
+  .console--takeover { left: 1470px; top: 1500px; width: 420px; }
 
   /* The provenance line. */
-  .line { position: absolute; left: 0; top: 0; width: 2400px; height: 1700px; overflow: visible; pointer-events: none; }
-  .line #lineRing { transition: opacity 400ms ease; }
+  .line { position: absolute; left: 0; top: 0; width: 2600px; height: 1700px; overflow: visible; pointer-events: none; }
   .line path { fill: none; stroke: var(--sc-accent); stroke-width: 4; stroke-linecap: round; }
   .line circle { fill: var(--sc-accent); }
   .line .line__glow { stroke-width: 14; opacity: 0.18; }
+  .line #lineRing { transition: opacity 400ms ease; stroke: #a8c7fa; }
 
   /* The reply bubble: the CTA lives in the world, where the header put it. */
   .cta {
-    left: 1980px; top: 790px;
+    left: 2130px; top: 905px;
     display: inline-flex; align-items: center; gap: 14px;
     padding: 18px 26px 18px 22px;
     background: var(--sc-accent); color: var(--sc-accent-ink);
@@ -228,7 +289,7 @@
   /* ----------------------------------------------------------- copy -- */
   .sc-world__scrim.scrim-top, .sc-world__scrim.scrim-bottom { inset: 0; }
   .scrim-top { background: linear-gradient(to bottom, var(--ground) 0%, color-mix(in oklab, var(--ground) 70%, transparent) 18%, transparent 38%); }
-  .scrim-bottom { background: linear-gradient(to top, var(--ground) 0%, color-mix(in oklab, var(--ground) 60%, transparent) 14%, transparent 30%); }
+  .scrim-bottom { background: linear-gradient(to top, var(--ground) 0%, color-mix(in oklab, var(--ground) 55%, transparent) 9%, transparent 18%); }
 
   .copy { position: absolute; max-width: 44rem; color: var(--ink-now); }
   .copy--hero { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(4.5rem, 9vh, 6rem); }
@@ -237,7 +298,9 @@
   .copy--answers { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(4.5rem, 9vh, 6rem); max-width: 30rem; }
   .copy--answers h2 { font-size: clamp(2.2rem, 4.3vw, 4rem); }
   .copy--answers p { max-width: 30ch; font-size: clamp(1rem, 1.2vw, 1.15rem); }
-  .copy--peak { right: clamp(1.25rem, 5vw, 4.5rem); bottom: clamp(2.5rem, 9vh, 6rem); text-align: right; max-width: 34rem; }
+  .copy--peak { right: clamp(1.25rem, 5vw, 4.5rem); bottom: clamp(2.5rem, 9vh, 6rem); text-align: right; max-width: 22rem; }
+  .copy--peak h2 { font-size: clamp(2.2rem, 4.2vw, 4rem); }
+  .copy--peak p { font-size: clamp(1rem, 1.2vw, 1.15rem); }
   .copy--finale { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(4.5rem, 9vh, 6rem); max-width: 40rem; }
 
   .copy .over { color: var(--over-now); margin-bottom: 14px; }
@@ -245,13 +308,14 @@
     margin: 0; font-family: var(--sc-font-display); font-weight: 700;
     line-height: 0.98; letter-spacing: -0.035em; text-wrap: balance;
   }
-  .copy h1 { font-size: clamp(2.5rem, 5.4vw, 4.8rem); max-width: 22ch; }
+  .copy h1 { font-size: clamp(2.4rem, 4.9vw, 4.4rem); max-width: 30ch; }
+  .copy--hero p { font-size: clamp(1rem, 1.2vw, 1.1rem); }
   .copy h2 { font-size: clamp(2.4rem, 5.6vw, 5.4rem); }
+  .copy--finale h2 { font-size: clamp(2.5rem, 5.4vw, 4.8rem); }
   .copy .named { color: var(--sc-accent); }
   html[data-phase="night"] .copy .named { color: oklch(0.78 0.12 264); }
   .copy p { margin: 18px 0 0; font-size: clamp(1.05rem, 1.35vw, 1.3rem); line-height: 1.4; color: var(--soft-now); max-width: 34ch; text-wrap: pretty; }
   .copy--peak p { margin-left: auto; }
-  .copy--finale h2 { font-size: clamp(2.5rem, 5.4vw, 4.8rem); }
   .copy--note p { margin: 0; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; line-height: 1.5; color: var(--soft-now); max-width: none; }
 
   .foot { margin-top: clamp(1.25rem, 3vh, 2rem); display: flex; gap: 22px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; color: var(--over-now); }
@@ -278,17 +342,16 @@
   }
   .map button:hover { color: var(--ink-now); }
   .map button[aria-current="true"] { color: var(--sc-accent-ink); background: var(--sc-accent); }
-  .map button[aria-current="true"] .map__t { color: inherit; }
 
   /* --------------------------------------------------------- mobile -- */
   @media (max-width: 860px) {
     .map { display: none; }
-    .console--learned { left: 1050px; top: 1560px; width: 300px; }
-    .console--handles { left: 1050px; top: 1900px; width: 300px; }
-    .console--takeover { left: 1050px; top: 2190px; width: 300px; }
-    .cam { height: 2300px; }
-    .line { height: 2300px; }
-    .cta { left: 1720px; top: 840px; font-size: 22px; padding: 14px 20px 14px 18px; }
+    .console--learned { left: 1100px; top: 1660px; width: 300px; }
+    .console--handles { left: 1100px; top: 2000px; width: 300px; }
+    .console--takeover { left: 1100px; top: 2290px; width: 300px; }
+    .cam { height: 2400px; }
+    .line { height: 2400px; }
+    .cta { left: 1900px; top: 985px; font-size: 22px; padding: 14px 20px 14px 18px; }
     .copy--peak { text-align: left; right: auto; left: clamp(1.25rem, 5vw, 4.5rem); bottom: clamp(2rem, 6vh, 4rem); }
     .copy h1 { font-size: clamp(2.3rem, 11vw, 3.4rem); }
     .copy h2 { font-size: clamp(2.1rem, 10vw, 3.2rem); }
@@ -296,8 +359,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .b, .stamp, .console, .booked, .booked--friday { transition: none !important; animation: none !important; }
-    .cta .dots i { animation: none; opacity: 0.8; }
+    .b, .stamp, .seen, .console, .ev, .win { transition: none !important; animation: none !important; }
+    .cta .dots i, .typing i { animation: none; opacity: 0.8; }
   }
 </style>
 </head>
@@ -323,37 +386,58 @@
 
       <div class="cam" id="cam">
 
-        <section class="obj week week--quiet" aria-label="Your week without SetterFi">
-          <div class="week__head"><p class="over">Without</p><span class="tag">2 booked</span></div>
-          <div class="grid">
-            <span class="day">Mon</span><span class="day">Tue</span><span class="day">Wed</span><span class="day">Thu</span><span class="day">Fri</span>
-            <span class="slot"></span><span class="booked">10:00</span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
-            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="booked">14:00</span><span class="slot"></span>
-            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
-            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
-            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
-            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+        <!-- WEEK WITHOUT -->
+        <section class="obj win win--quiet" aria-label="Your week without SetterFi, in Google Calendar">
+          <p class="over win__label">Without</p>
+          <div class="chrome"><span class="chrome__lights"><i></i><i></i><i></i></span><span class="chrome__tab"><i></i>Google Calendar · Week of 6 September 2026</span><span class="chrome__url"><i></i><b>calendar.google.com</b>/calendar/u/0/r/week/2026/9/6</span></div>
+          <div class="gcal">
+            <div class="gcal__top"><span class="gcal__menu"></span><span class="gcal__logo"><i>6</i>Calendar</span><span class="gcal__btn">Today</span><span class="gcal__arrows">‹ ›</span><span class="gcal__title">September 2026</span><span class="gcal__right"><span class="gcal__icons"><i></i><i></i><i></i></span><span class="gcal__btn">Week ▾</span><span class="gcal__ava">A</span></span></div>
+            <div class="gcal__days"><span class="gcal__gmt">GMT-04</span>
+              <span class="gcal__day is-today"><span>SUN</span><b>6</b></span><span class="gcal__day"><span>MON</span><b>7</b></span><span class="gcal__day"><span>TUE</span><b>8</b></span><span class="gcal__day"><span>WED</span><b>9</b></span><span class="gcal__day"><span>THU</span><b>10</b></span><span class="gcal__day"><span>FRI</span><b>11</b></span><span class="gcal__day"><span>SAT</span><b>12</b></span>
+            </div>
+            <div class="gcal__body">
+              <div class="gcal__hours"><span style="top:68px">9 AM</span><span style="top:136px">10 AM</span><span style="top:204px">11 AM</span><span style="top:272px">12 PM</span><span style="top:340px">1 PM</span><span style="top:408px">2 PM</span><span style="top:476px">3 PM</span></div>
+              <div class="gcal__col is-today"></div>
+              <div class="gcal__col"><div class="ev ev--grey" style="--h:12;--d:1"><b>Lunch</b><span>12 – 1pm</span></div></div>
+              <div class="gcal__col"><div class="ev" style="--h:10;--d:0.5"><b>Discovery call · Dana W.</b><span>10 – 10:30am</span></div></div>
+              <div class="gcal__col"><div class="ev ev--grey" style="--h:8;--d:1"><b>Gym</b><span>8 – 9am</span></div></div>
+              <div class="gcal__col"><div class="ev" style="--h:14;--d:0.5"><b>Discovery call · Sofia M.</b><span>2 – 2:30pm</span></div></div>
+              <div class="gcal__col"><div class="ev ev--green" style="--h:15;--d:1"><b>Content block</b><span>3 – 4pm</span></div></div>
+              <div class="gcal__col"></div>
+            </div>
           </div>
         </section>
 
-        <section class="obj week week--full" id="weekFull" aria-label="Your week with SetterFi">
-          <div class="week__head"><p class="over">With SetterFi</p><span class="tag" id="fullTag">8 booked</span></div>
-          <div class="grid">
-            <span class="day">Mon</span><span class="day">Tue</span><span class="day">Wed</span><span class="day">Thu</span><span class="day">Fri</span>
-            <span class="booked">09:30</span><span class="slot"></span><span class="booked">09:30</span><span class="slot"></span><span class="booked">09:00</span>
-            <span class="slot"></span><span class="booked">10:00</span><span class="slot"></span><span class="booked">11:00</span><span class="slot"></span>
-            <span class="booked">11:30</span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="booked booked--friday" id="friday">11:00</span>
-            <span class="slot"></span><span class="slot"></span><span class="booked">13:30</span><span class="booked">14:00</span><span class="slot"></span>
-            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
-            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+        <!-- WEEK WITH -->
+        <section class="obj win win--full" id="weekFull" aria-label="Your week with SetterFi, in Google Calendar">
+          <p class="over win__label">With SetterFi</p>
+          <div class="chrome"><span class="chrome__lights"><i></i><i></i><i></i></span><span class="chrome__tab"><i></i>Google Calendar · Week of 6 September 2026</span><span class="chrome__url"><i></i><b>calendar.google.com</b>/calendar/u/0/r/week/2026/9/6</span></div>
+          <div class="gcal">
+            <div class="gcal__top"><span class="gcal__menu"></span><span class="gcal__logo"><i>6</i>Calendar</span><span class="gcal__btn">Today</span><span class="gcal__arrows">‹ ›</span><span class="gcal__title">September 2026</span><span class="gcal__right"><span class="gcal__icons"><i></i><i></i><i></i></span><span class="gcal__btn">Week ▾</span><span class="gcal__ava">A</span></span></div>
+            <div class="gcal__days"><span class="gcal__gmt">GMT-04</span>
+              <span class="gcal__day is-today"><span>SUN</span><b>6</b></span><span class="gcal__day"><span>MON</span><b>7</b></span><span class="gcal__day"><span>TUE</span><b>8</b></span><span class="gcal__day"><span>WED</span><b>9</b></span><span class="gcal__day"><span>THU</span><b>10</b></span><span class="gcal__day"><span>FRI</span><b>11</b></span><span class="gcal__day"><span>SAT</span><b>12</b></span>
+            </div>
+            <div class="gcal__body">
+              <div class="gcal__hours"><span style="top:68px">9 AM</span><span style="top:136px">10 AM</span><span style="top:204px">11 AM</span><span style="top:272px">12 PM</span><span style="top:340px">1 PM</span><span style="top:408px">2 PM</span><span style="top:476px">3 PM</span></div>
+              <div class="gcal__col is-today"></div>
+              <div class="gcal__col"><div class="ev" style="--h:9.5;--d:0.5"><b>Discovery call · Priya S.</b><span>9:30 – 10am</span></div><div class="ev" style="--h:11.5;--d:0.5"><b>Discovery call · Marcus T.</b><span>11:30am – 12pm</span></div><div class="ev ev--grey" style="--h:12;--d:1"><b>Lunch</b><span>12 – 1pm</span></div></div>
+              <div class="gcal__col"><div class="ev" style="--h:10;--d:0.5"><b>Discovery call · Dana W.</b><span>10 – 10:30am</span></div><div class="ev" style="--h:13;--d:0.5"><b>Discovery call · Omar A.</b><span>1 – 1:30pm</span></div></div>
+              <div class="gcal__col"><div class="ev ev--grey" style="--h:8;--d:1"><b>Gym</b><span>8 – 9am</span></div><div class="ev" style="--h:9.5;--d:0.5"><b>Discovery call · Luis R.</b><span>9:30 – 10am</span></div><div class="ev" style="--h:13.5;--d:0.5"><b>Discovery call · Amara O.</b><span>1:30 – 2pm</span></div></div>
+              <div class="gcal__col"><div class="ev" style="--h:11;--d:0.5"><b>Discovery call · Ben K.</b><span>11 – 11:30am</span></div><div class="ev" style="--h:14;--d:0.5"><b>Discovery call · Sofia M.</b><span>2 – 2:30pm</span></div></div>
+              <div class="gcal__col"><div class="ev" style="--h:9;--d:0.5"><b>Discovery call · Jordan P.</b><span>9 – 9:30am</span></div><div class="ev ev--friday" id="friday" style="--h:11;--d:0.5"><b>Discovery call · Nathaniel H.</b><span>11 – 11:30am</span></div><div class="ev ev--green" style="--h:15;--d:1"><b>Content block</b><span>3 – 4pm</span></div></div>
+              <div class="gcal__col"></div>
+            </div>
           </div>
         </section>
 
+        <!-- PHONE -->
         <div class="obj phone" id="phone" aria-label="A Messenger conversation at 02:14, sample data">
           <div class="phone__screen" id="screen">
-            <div class="phone__bar"><b>Messenger</b><span>02:14</span></div>
+            <div class="island"></div>
+            <div class="status"><span>2:14</span><span class="status__right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="bat">81</span></span></div>
+            <div class="mhead"><span class="mhead__back"></span><span class="mhead__ava">NH</span><span class="mhead__name"><b>Nathaniel Holloway</b><span>Active now</span></span><span class="mhead__acts"><i></i><i></i></span></div>
             <div class="thread" id="thread">
-              <span class="stamp">Sun 02:14</span>
+              <span class="stamp">SUN 2:14 AM</span>
               <p class="b b--lead">Hi, a friend said you help people get funded. Is that right?</p>
               <p class="b b--agent">It is. So I point you the right way: roughly where is your personal credit sitting right now?</p>
               <p class="b b--lead">Mid 600s I think. Haven't pulled it in a couple of months.</p>
@@ -365,11 +449,14 @@
               <p class="b b--lead">Ad spend mostly. Scaling the coaching program.</p>
               <p class="b b--agent">That works. One more: is the business bringing in revenue today?</p>
               <p class="b b--lead">About 8k a month</p>
-              <p class="b b--agent">Good. You qualify for a call. Friday 11:00 or Monday 09:30?</p>
+              <p class="b b--agent">Good. You qualify for a call. Friday 11:00 or Monday 9:30?</p>
               <p class="b b--lead">friday 11</p>
               <p class="b b--agent">Booked. Confirmation is on its way, and a reminder an hour before. Sleep well.</p>
-              <span class="stamp">Sun 02:21</span>
+              <span class="seen">Seen 2:21 AM</span>
+              <span class="typing" id="typing"><i></i><i></i><i></i></span>
             </div>
+            <div class="composer"><i></i><i class="sq"></i><i class="sq"></i><span class="composer__field">Aa</span><span class="composer__mic"></span></div>
+            <div class="homebar"></div>
           </div>
         </div>
 
@@ -383,7 +470,7 @@
           <img src="assets/takeover.webp" width="2100" height="264" alt="The take-over composer: one button hands any thread back to you" decoding="async">
         </figure>
 
-        <svg class="line" viewBox="0 0 2400 1700" aria-hidden="true">
+        <svg class="line" viewBox="0 0 2600 1700" aria-hidden="true">
           <path id="lineGlow" class="line__glow" d=""></path>
           <path id="linePath" d=""></path>
           <path id="lineRing" d=""></path>
@@ -448,7 +535,7 @@
   var screen = document.getElementById('screen');
   var phone = document.getElementById('phone');
   var thread = document.getElementById('thread');
-  var items = Array.prototype.slice.call(thread.children);
+  var items = Array.prototype.slice.call(thread.children).filter(function (el) { return el.id !== 'typing'; });
   var consoles = Array.prototype.slice.call(document.querySelectorAll('[data-reveal]'));
   var linePath = document.getElementById('linePath');
   var lineGlow = document.getElementById('lineGlow');
@@ -457,7 +544,7 @@
   var lineDot = document.getElementById('lineDot');
   var friday = document.getElementById('friday');
   var weekFull = document.getElementById('weekFull');
-  var fullTag = document.getElementById('fullTag');
+  var typing = document.getElementById('typing');
   var lineSvg = document.querySelector('.line');
   var cta = document.getElementById('cta');
   var mapBtns = Array.prototype.slice.call(document.querySelectorAll('[data-t]'));
@@ -474,29 +561,29 @@
   // frames correctly at every viewport size; phones get their own list because
   // the world is restacked for them in CSS.
   var KD = [
-    [0.0, 1200, 370, 2300, 1000],
-    [1.0, 1200, 500, 2150, 950],
-    [2.6, 1200, 1200, 700, 800],
-    [4.7, 1200, 1215, 690, 790],
-    [5.7, 1170, 1090, 1500, 940],
-    [6.5, 1170, 1090, 1500, 940],
-    [7.3, 1750, 700, 1500, 1000],
-    [8.9, 1750, 700, 1500, 1000],
-    [9.7, 1200, 370, 2200, 960],
-    [11.0, 1200, 370, 2300, 1000]
+    [0.0, 1250, 240, 2500, 1040],
+    [1.3, 1250, 280, 2400, 1000],
+    [2.6, 1250, 1310, 700, 800],
+    [4.7, 1250, 1325, 690, 790],
+    [5.7, 1220, 1190, 1500, 940],
+    [6.5, 1220, 1190, 1500, 940],
+    [7.3, 2100, 640, 1300, 1000],
+    [8.9, 2100, 640, 1300, 1000],
+    [9.7, 1250, 240, 2400, 1000],
+    [11.0, 1250, 240, 2500, 1040]
   ];
   var KM = [
-    [0.0, 1770, 380, 1000, 1300],
-    [1.0, 1650, 560, 1000, 1300],
-    [2.6, 1200, 1200, 420, 760],
-    [4.7, 1200, 1215, 420, 760],
-    [5.7, 1200, 880, 380, 1800],
-    [6.2, 1200, 880, 380, 1800],
-    [6.9, 1200, 1800, 380, 1800],
-    [7.5, 1850, 620, 1000, 1200],
-    [8.9, 1850, 620, 1000, 1200],
-    [9.7, 1770, 380, 960, 1250],
-    [11.0, 1770, 380, 1000, 1300]
+    [0.0, 1850, 450, 1140, 1400],
+    [1.0, 1750, 640, 1140, 1400],
+    [2.6, 1250, 1310, 420, 780],
+    [4.7, 1250, 1325, 420, 780],
+    [5.7, 1250, 980, 380, 1800],
+    [6.2, 1250, 980, 380, 1800],
+    [6.9, 1250, 1900, 380, 1800],
+    [7.5, 1970, 640, 1140, 1300],
+    [8.9, 1970, 640, 1140, 1300],
+    [9.7, 1850, 450, 1100, 1350],
+    [11.0, 1850, 450, 1140, 1400]
   ];
   // Ground: t -> [L, C] in oklch, hue fixed at 262.
   var G = [
@@ -541,7 +628,7 @@
   // T0 + i * STEP, and the thread scrolls so the newest bubble sits at the
   // bottom of the screen.
   var T0 = 2.75, STEP = 0.115;
-  var screenH = 0, threadTop = 66, bottoms = [];
+  var screenH = 0, threadTop = 104, bottoms = [];
   function measureThread() {
     screenH = screen.clientHeight;
     bottoms = items.map(function (el) { return el.offsetTop + el.offsetHeight; });
@@ -553,10 +640,10 @@
     // centre of the Friday 11:00 slot. Both are read from the DOM so the line
     // still lands after the mobile restack.
     var camRect = cam.getBoundingClientRect();
-    var z = camRect.width / 2400;
+    var z = camRect.width / 2600;
     var p = phone.getBoundingClientRect();
     var f = friday.getBoundingClientRect();
-    var x0 = (p.right - camRect.left) / z, y0 = (p.top - camRect.top) / z + 250;
+    var x0 = (p.right - camRect.left) / z + 6, y0 = (p.top - camRect.top) / z + 300;
     // Land just short of the slot's left edge, not inside it.
     var x1 = (f.left - camRect.left) / z - 7, y1 = (f.top + f.height / 2 - camRect.top) / z;
     var d = 'M' + x0 + ' ' + y0 + ' C ' + (x0 + (x1 - x0) * 0.45) + ' ' + y0 + ', ' + (x0 + (x1 - x0) * 0.6) + ' ' + y1 + ', ' + x1 + ' ' + y1;
@@ -569,7 +656,7 @@
 
     // The ring: from the contact point on the slot's left edge, up and around
     // the slot's rounded outline, back to where it started.
-    var rx = (f.left - camRect.left) / z, ry = (f.top - camRect.top) / z, rw = f.width / z, rh = f.height / z, r = 10;
+    var rx = (f.left - camRect.left) / z - 1, ry = (f.top - camRect.top) / z - 1, rw = f.width / z + 2, rh = f.height / z + 2, r = 5;
     var ring = 'M' + rx + ' ' + y1 +
       ' L' + rx + ' ' + (ry + r) + ' Q' + rx + ' ' + ry + ' ' + (rx + r) + ' ' + ry +
       ' L' + (rx + rw - r) + ' ' + ry + ' Q' + (rx + rw) + ' ' + ry + ' ' + (rx + rw) + ' ' + (ry + r) +
@@ -624,8 +711,18 @@
       if (on !== items[i].classList.contains('is-in')) items[i].classList.toggle('is-in', on);
     }
     if (reduce && t >= 2.6) shown = items.length - 1;
+    // The lead is typing in the gap before each of their messages.
+    var typingOn = false;
+    for (var q = 0; q < items.length; q++) {
+      if (!items[q].classList.contains('b--lead')) continue;
+      var at = T0 + q * STEP;
+      if (t >= at - 0.07 && t < at) { typingOn = true; break; }
+    }
+    if (reduce) typingOn = false;
+    if (typingOn !== typing.classList.contains('is-on')) typing.classList.toggle('is-on', typingOn);
+    if (typingOn && shown >= 0 && items[shown].nextSibling !== typing) items[shown].after(typing);
     var shift = 0;
-    if (shown >= 0 && bottoms.length) shift = Math.max(0, bottoms[shown] + 18 - (screenH - threadTop));
+    if (shown >= 0 && bottoms.length) shift = Math.max(0, bottoms[shown] + 96 + (typingOn ? 40 : 0) - (screenH - threadTop));
     thread.style.transform = 'translate3d(0,' + (-shift).toFixed(1) + 'px,0)';
 
     // Consoles surface as the camera pulls back.
@@ -654,7 +751,6 @@
     var arrived = rp >= 0.97;
     if (arrived !== friday.classList.contains('is-lit')) {
       friday.classList.toggle('is-lit', arrived);
-      fullTag.textContent = arrived ? '9 booked' : '8 booked';
     }
     // The ring has done its job once the slot is lit; the whole line leaves
     // as the camera pulls back to the wide shot.
