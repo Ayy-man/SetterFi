@@ -33,6 +33,7 @@
 import { handoffFor, type EscalationHandoff } from "@/components/workspace/live/escalation-queue";
 import type { PlatformHumanConversation } from "@/lib/platform/conversation-projection";
 import type { AttentionItem } from "@/lib/operations/attention-queue";
+import type { PlatformSupportThreadRead } from "@/lib/repositories/support";
 
 const CHANNEL_LABELS: Record<PlatformHumanConversation["channel"], string> = {
   instagram: "Instagram",
@@ -69,8 +70,10 @@ export type InboxHandoffLane =
 export type InboxLanes = {
   system: readonly AttentionItem[];
   handoff: InboxHandoffLane;
+  /** Present only when the nav fold has loaded the client-request queue. */
+  clientRequests?: readonly PlatformSupportThreadRead[];
   /** Rows waiting across both lanes, or null for the part that could not be counted. */
-  waiting: { system: number; handoff: number | null };
+  waiting: { system: number; handoff: number | null; clientRequests?: number };
   /** The longest wait anywhere in the Inbox, in minutes, with the lane it came from. */
   longestWait: { minutes: number; lane: "system" | "handoff" } | null;
   rankedBy: string;
@@ -136,6 +139,7 @@ export function inboxLanes(input: {
   queue: { items: readonly AttentionItem[] };
   conversations: readonly PlatformHumanConversation[] | null;
   unavailableReason?: string;
+  clientRequests?: readonly PlatformSupportThreadRead[];
 }): InboxLanes {
   const system = byWaitDescending(
     input.queue.items,
@@ -176,9 +180,13 @@ export function inboxLanes(input: {
   return {
     system,
     handoff,
+    clientRequests: input.clientRequests,
     waiting: {
       system: system.filter((item) => item.readAt === null).length,
       handoff: handoff.state === "available" ? handoff.rows.length : null,
+      ...(input.clientRequests === undefined
+        ? {}
+        : { clientRequests: input.clientRequests.filter((thread) => thread.status !== "resolved").length }),
     },
     longestWait,
     rankedBy: INBOX_RANKED_BY,

@@ -1,10 +1,32 @@
 // @vitest-environment node
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const navigation = vi.hoisted(() => ({
+  navFoldLive: vi.fn(() => false),
+  phase8SupportLive: vi.fn(() => false),
+  redirect: vi.fn((location: string) => { throw new Error(`REDIRECT:${location}`); }),
+}));
+
+vi.mock("next/navigation", () => ({
+  forbidden: vi.fn(),
+  redirect: navigation.redirect,
+}));
+
+vi.mock("@/lib/env-contract", () => ({
+  navFoldLive: navigation.navFoldLive,
+  phase8SupportLive: navigation.phase8SupportLive,
+  phase5Live: () => false,
+  phase6Live: () => false,
+}));
+
+vi.mock("@/lib/support/service", () => ({
+  loadSupportSession: vi.fn(),
+}));
 
 import { workspaceNavigation } from "@/lib/workspace-navigation";
 
-import { metadata } from "./page";
+import AdminSupportPage, { metadata } from "./page";
 
 /**
  * One destination, one name.
@@ -28,5 +50,30 @@ describe("the document title on /admin/support", () => {
     expect(item, "/admin/support is not in the admin navigation any more").toBeDefined();
     expect(item!.label.length).toBeGreaterThan(0);
     expect(metadata.title).toBe(item!.label);
+  });
+});
+
+describe("the folded /admin/support route", () => {
+  beforeEach(() => {
+    navigation.redirect.mockClear();
+    navigation.navFoldLive.mockReturnValue(false);
+    navigation.phase8SupportLive.mockReturnValue(false);
+  });
+
+  it("redirects server-side to Inbox when the nav fold is live", async () => {
+    navigation.navFoldLive.mockReturnValue(true);
+
+    await expect(AdminSupportPage()).rejects.toThrow("REDIRECT:/admin/alerts");
+    expect(navigation.redirect).toHaveBeenCalledWith("/admin/alerts");
+  });
+
+  it("keeps the support page's existing disabled path when the nav fold is off", async () => {
+    navigation.navFoldLive.mockReturnValue(false);
+    navigation.phase8SupportLive.mockReturnValue(false);
+
+    const page = await AdminSupportPage();
+
+    expect(navigation.redirect).not.toHaveBeenCalled();
+    expect(page.props).toMatchObject({ actorId: "", actorRole: "admin", enabled: false });
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 // The empty state renders a router-aware action, so the surface needs an app router mounted.
@@ -12,6 +12,7 @@ import { AdminInboxSurface } from "@/components/workspace/live/admin-inbox";
 import { inboxLanes } from "@/components/workspace/live/inbox-lanes";
 import type { AttentionItem, AttentionQueue } from "@/lib/operations/attention-queue";
 import type { PlatformHumanConversation } from "@/lib/platform/conversation-projection";
+import type { PlatformSupportThreadRead } from "@/lib/repositories/support";
 
 function notice(overrides: Partial<AttentionItem> & { id: string }): AttentionItem {
   return {
@@ -55,6 +56,27 @@ function handoff(overrides: Partial<PlatformHumanConversation> & { conversationI
   };
 }
 
+function clientRequest(
+  overrides: Partial<PlatformSupportThreadRead> & { id: string },
+): PlatformSupportThreadRead {
+  const { id, ...rest } = overrides;
+  return {
+    id,
+    tenantId: `tenant-${id}`,
+    tenantName: "Elevate Funding Co.",
+    tenantIsDemo: false,
+    subject: "Update the booking message",
+    status: "open",
+    assignedTo: { id: "owner-1", name: "Dana Whitfield" },
+    successOwner: null,
+    isTest: false,
+    createdAt: "2026-08-31T09:00:00.000Z",
+    updatedAt: "2026-08-31T09:30:00.000Z",
+    messages: [],
+    ...rest,
+  };
+}
+
 function queue(items: readonly AttentionItem[], overrides: Partial<AttentionQueue> = {}): AttentionQueue {
   return {
     asOf: "2026-08-31T10:00:00.000Z",
@@ -78,18 +100,67 @@ function renderInbox(
   items: readonly AttentionItem[],
   conversations: readonly PlatformHumanConversation[] | null,
   unavailableReason?: string,
+  clientRequests?: readonly PlatformSupportThreadRead[],
 ) {
   const value = queue(items);
   return render(
     <AdminInboxSurface
       actorId="owner-1"
-      lanes={inboxLanes({ queue: value, conversations, unavailableReason })}
+      lanes={inboxLanes({ queue: value, conversations, unavailableReason, clientRequests })}
       queue={value}
     />,
   );
 }
 
 describe("AdminInboxSurface lanes", () => {
+  it("keeps the flag-off inbox output stable", () => {
+    const { asFragment } = renderInbox(
+      [notice({ id: "a" }), notice({ id: "b", openForMinutes: 12 })],
+      [handoff({ conversationId: "x" }), handoff({ conversationId: "y", waitingSeconds: 11 * 60 })],
+    );
+
+    expect(asFragment()).toMatchSnapshot();
+  });
+
+  it("keeps Client requests absent and Everything selected before the nav fold is live", () => {
+    renderInbox([notice({ id: "a" })], []);
+
+    expect(screen.queryByText("Client requests")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Everything" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Assigned to me" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("puts the folded client-request lane first, defaults to the assignee's book, and counts every open request", () => {
+    renderInbox(
+      [notice({ id: "a" })],
+      [handoff({ conversationId: "x" })],
+      undefined,
+      [
+        clientRequest({ id: "mine" }),
+        clientRequest({ id: "other", subject: "Review the onboarding copy", assignedTo: { id: "owner-2", name: "Morgan Lee" } }),
+      ],
+    );
+
+    const clientHeading = screen.getByText("Client requests");
+    const systemHeading = screen.getByText("System problems");
+    expect(clientHeading.compareDocumentPosition(systemHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Assigned to me" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Update the booking message")).toBeVisible();
+    expect(screen.getByText("Elevate Funding Co. · Dana Whitfield")).toBeVisible();
+    expect(screen.queryByText("Review the onboarding copy")).not.toBeInTheDocument();
+
+    const tile = screen.getByText("Waiting on a person").closest('[data-slot="metric-card"]') as HTMLElement;
+    expect(within(tile).getByText("4")).toBeVisible();
+    expect(within(tile).getByText("1 problems · 2 client requests · 1 lead handoffs")).toBeVisible();
+
+    fireEvent.click(screen.getByText("Update the booking message"));
+    expect(document.querySelector('[data-slot="record-sheet"]')).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Everything" }));
+    expect(screen.getByText("Review the onboarding copy")).toBeVisible();
+  });
+
   // The merge is the point of 5a: one destination, two lanes, and each lane says what its rows are.
   it("bands the two lanes and counts each from its own list", () => {
     renderInbox(

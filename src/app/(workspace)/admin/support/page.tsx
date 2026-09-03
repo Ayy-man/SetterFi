@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { forbidden, redirect } from "next/navigation";
 
 import { AdminSupport } from "@/components/workspace/live/admin-support";
-import { phase8SupportLive } from "@/lib/env-contract";
+import { navFoldLive, phase8SupportLive } from "@/lib/env-contract";
 import { loadSupportSession } from "@/lib/support/service";
 
 /*
@@ -15,6 +15,7 @@ export const metadata: Metadata = { title: "Client requests" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminSupportPage() {
+  if (navFoldLive()) redirect("/admin/alerts");
   if (!phase8SupportLive()) return <AdminSupport actorId="" actorRole="admin" enabled={false} />;
 
   const session = await loadSupportSession();

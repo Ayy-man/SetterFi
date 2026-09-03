@@ -1,0 +1,727 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AdminInboxSurface lanes > keeps the flag-off inbox output stable 1`] = `
+<DocumentFragment>
+  <div
+    class="@container/attention flex flex-col gap-[var(--s-4)]"
+  >
+    <header
+      class="mb-[var(--s-5)] flex items-start justify-between gap-[var(--s-6)] max-sm:flex-col"
+      data-crumb-count="2"
+      data-page-header=""
+    >
+      <div
+        class="flex min-w-0 flex-col gap-[var(--s-1)]"
+      >
+        <h1
+          class="t-page-title m-0"
+          data-slot="page-header-title"
+        >
+          Inbox
+        </h1>
+        <p
+          class="m-0 max-w-[var(--measure-prose)] text-[length:var(--t-body)] leading-[var(--t-body-lh)] font-[var(--t-body-w)] tracking-[var(--t-body-tr)] text-[color:var(--muted)]"
+          data-slot="page-header-description"
+        >
+          System problems and lead handoffs in one queue. Everything here is waiting on a person, not a job.
+        </p>
+      </div>
+      <div
+        class="flex shrink-0 items-center gap-[var(--s-2)] max-sm:w-full max-sm:flex-wrap"
+        data-slot="page-header-actions"
+      >
+        <div
+          aria-label="Which accounts this queue covers"
+          class="inline-flex max-w-full overflow-x-auto border border-[var(--line)] bg-[var(--control-fill)] gap-[2px] rounded-[9px] p-[3px]"
+          data-slot="segmented"
+          role="group"
+        >
+          <button
+            aria-pressed="true"
+            class="inline-flex shrink-0 items-center justify-center gap-[6px] whitespace-nowrap transition-colors duration-[var(--duration-quick)] motion-reduce:transition-none rounded-[7px] px-[11px] py-[5px] text-[12.5px] bg-[var(--band)] text-[color:var(--ink)] font-[500]"
+            data-active="true"
+            data-segment="all"
+            data-slot="segmented-option"
+            data-tone="neutral"
+            type="button"
+          >
+            <span>
+              Everything
+            </span>
+          </button>
+          <button
+            aria-pressed="false"
+            class="inline-flex shrink-0 items-center justify-center gap-[6px] whitespace-nowrap transition-colors duration-[var(--duration-quick)] motion-reduce:transition-none rounded-[7px] px-[11px] py-[5px] text-[12.5px] text-[color:var(--muted)] hover:text-[color:var(--ink)]"
+            data-segment="mine"
+            data-slot="segmented-option"
+            data-tone="neutral"
+            type="button"
+          >
+            <span>
+              Assigned to me
+            </span>
+          </button>
+        </div>
+        <button
+          aria-expanded="false"
+          aria-haspopup="menu"
+          aria-label="Export table"
+          class="group/button inline-flex shrink-0 items-center justify-center rounded-lg border bg-clip-padding text-sm font-medium whitespace-nowrap [transition:color_var(--duration-quick)_var(--ease-out),background-color_var(--duration-quick)_var(--ease-out),border-color_var(--duration-quick)_var(--ease-out),box-shadow_var(--duration-quick)_var(--ease-out),opacity_var(--duration-quick)_var(--ease-out),transform_var(--press-dur)_var(--ease-out)] motion-reduce:transition-none outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px active:not-aria-[haspopup]:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 h-8 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 gap-[var(--s-2)]"
+          data-slot="dropdown-menu-trigger"
+          id="base-ui-_r_3_"
+          tabindex="0"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="shrink-0 size-[var(--s-4)]"
+            fill="currentColor"
+            height="16"
+            viewBox="0 0 256 256"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"
+            />
+          </svg>
+          Export
+          <svg
+            aria-hidden="true"
+            class="shrink-0 size-[var(--s-4)]"
+            fill="currentColor"
+            height="16"
+            viewBox="0 0 256 256"
+            width="16"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"
+            />
+          </svg>
+        </button>
+      </div>
+    </header>
+    <div
+      class="@container flex flex-col gap-[var(--s-2)] rounded-[11px] border px-[15px] py-[11px] @min-[420px]:flex-row @min-[420px]:items-center @min-[420px]:gap-[12px]"
+      data-slot="note-strip"
+      data-tone="waiting"
+      style="background: color-mix(in oklab, var(--waiting-text) 6%, transparent); border-color: var(--waiting-line);"
+    >
+      <p
+        class="m-0 min-w-0 text-[12.5px] leading-[1.5] text-[color:var(--body)] text-pretty"
+      >
+        Longest wait first, in both lanes. Nothing here stores a reply promise or a response target, so the order is how long each row has waited and nothing else.
+      </p>
+    </div>
+    <div
+      class="grid grid-cols-1 gap-[12px] @min-[620px]/attention:grid-cols-3"
+    >
+      <div
+        class="@container surface-card relative overflow-hidden p-[15px_16px]"
+        data-slot="metric-card"
+        data-tone="warning"
+        data-variant="card"
+        style="background-image: radial-gradient(120% 140% at 12% 0%, var(--warning-wash), transparent 62%); border-color: var(--warning-line);"
+      >
+        <div
+          class="relative flex flex-col gap-[12px]"
+        >
+          <div
+            class="flex items-center gap-[10px]"
+          >
+            <span
+              class="font-mono text-[9.5px] leading-[1.2] font-[500] tracking-[0.09em] uppercase text-[color:var(--overline)]"
+              data-slot="overline"
+              style="color: var(--warning-text); opacity: 0.85;"
+            >
+              Waiting on a person
+            </span>
+          </div>
+          <div
+            class="flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[var(--s-1)]"
+          >
+            <span
+              class="mono inline-block whitespace-nowrap tabular-nums text-[27px] leading-[1.05] font-[500] tracking-[-0.033em]"
+              data-figure-size="lg"
+              data-slot="figure"
+              data-tone="warning"
+              style="color: var(--warning-text);"
+            >
+              4
+            </span>
+            <span
+              class="text-[11.5px] leading-[1.4]"
+              data-slot="metric-card-note"
+              style="color: var(--warning-text);"
+            >
+              2 problems · 2 lead handoffs
+            </span>
+          </div>
+        </div>
+      </div>
+      <div
+        class="@container surface-card relative overflow-hidden p-[15px_16px]"
+        data-slot="metric-card"
+        data-tone="warning"
+        data-variant="card"
+        style="background-image: radial-gradient(120% 140% at 12% 0%, var(--warning-wash), transparent 62%); border-color: var(--warning-line);"
+      >
+        <div
+          class="relative flex flex-col gap-[12px]"
+        >
+          <div
+            class="flex items-center gap-[10px]"
+          >
+            <span
+              class="font-mono text-[9.5px] leading-[1.2] font-[500] tracking-[0.09em] uppercase text-[color:var(--overline)]"
+              data-slot="overline"
+              style="color: var(--warning-text); opacity: 0.85;"
+            >
+              Longest wait
+            </span>
+          </div>
+          <div
+            class="flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[var(--s-1)]"
+          >
+            <span
+              class="mono inline-block whitespace-nowrap tabular-nums text-[27px] leading-[1.05] font-[500] tracking-[-0.033em]"
+              data-figure-size="lg"
+              data-slot="figure"
+              data-tone="warning"
+              style="color: var(--warning-text);"
+            >
+              41m
+            </span>
+            <span
+              class="text-[11.5px] leading-[1.4]"
+              data-slot="metric-card-note"
+              style="color: var(--warning-text);"
+            >
+              a lead handoff
+            </span>
+          </div>
+        </div>
+      </div>
+      <div
+        class="@container surface-card relative overflow-hidden p-[15px_16px]"
+        data-slot="metric-card"
+        data-tone="neutral"
+        data-variant="card"
+      >
+        <div
+          class="relative flex flex-col gap-[12px]"
+        >
+          <div
+            class="flex items-center gap-[10px]"
+          >
+            <span
+              class="font-mono text-[9.5px] leading-[1.2] font-[500] tracking-[0.09em] uppercase text-[color:var(--overline)]"
+              data-slot="overline"
+            >
+              Opened in the last 7 days
+            </span>
+          </div>
+          <div
+            class="flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[var(--s-1)]"
+          >
+            <span
+              class="mono inline-block whitespace-nowrap tabular-nums text-[27px] leading-[1.05] font-[500] tracking-[-0.033em]"
+              data-figure-size="lg"
+              data-slot="figure"
+              data-tone="neutral"
+              style="color: var(--ink);"
+            >
+              11
+            </span>
+            <span
+              class="text-[11.5px] leading-[1.4]"
+              data-slot="metric-card-note"
+              style="color: var(--muted);"
+            >
+              median 6m to open
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="grid grid-cols-1 gap-[13px] @min-[900px]/attention:grid-cols-[1.25fr_1fr]"
+    >
+      <div
+        class="@container surface-card is-flush overflow-hidden"
+        data-slot="surface"
+        data-tone="neutral"
+        data-variant="panel"
+      >
+        <div
+          class="flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[2px] border-b border-[var(--line)] px-[14px] py-[10px]"
+        >
+          <span
+            class="font-mono text-[9.5px] leading-[1.2] font-[500] tracking-[0.09em] uppercase text-[color:var(--overline)]"
+            data-slot="overline"
+          >
+            System problems
+          </span>
+          <span
+            class="mono text-[12px] leading-[1.4] font-[400] tabular-nums"
+            data-slot="mono-meta"
+            data-tone="neutral"
+            style="color: var(--muted);"
+          >
+            2
+          </span>
+          <span
+            class="text-[11.5px] leading-[1.45] text-[color:var(--faint)]"
+          >
+            need a fix, not a reply
+          </span>
+        </div>
+        <ul
+          class="m-0 list-none p-0"
+        >
+          <li>
+            <button
+              aria-current="true"
+              class="block w-full cursor-pointer text-left"
+              type="button"
+            >
+              <div
+                class="@container flex gap-[12px] border-b border-[var(--line-soft)] px-[14px] py-[12px] last:border-b-0 bg-[var(--row-hover)]"
+                data-slot="queue-item"
+                data-tone="failure"
+                style="background: color-mix(in oklab, var(--failure) 5%, transparent);"
+              >
+                <span
+                  aria-hidden="true"
+                  class="inline-flex shrink-0 items-center justify-center border mt-[2px]"
+                  data-size="xs"
+                  data-slot="icon-tile"
+                  data-tone="failure"
+                  style="background: var(--failure-wash); border-color: var(--failure-line); border-radius: 7px; color: var(--failure); height: 22px; width: 22px;"
+                >
+                  <span
+                    class="inline-flex items-center justify-center [&>svg]:size-full"
+                    style="height: 10px; width: 10px;"
+                  >
+                    <span
+                      aria-hidden="true"
+                      class="inline-block shrink-0 rounded-[var(--r-full)]"
+                      data-slot="status-dot"
+                      data-tone="failure"
+                      style="background: var(--failure); height: 6px; width: 6px;"
+                    />
+                  </span>
+                </span>
+                <div
+                  class="min-w-0 flex-1"
+                >
+                  <div
+                    class="mb-[4px] flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[2px]"
+                  >
+                    <span
+                      class="min-w-0 text-[13.5px] leading-[1.3] font-[600] text-[color:var(--ink)]"
+                      data-slot="queue-item-title"
+                    >
+                      Agent stopped replying
+                    </span>
+                    <span
+                      class="mono ml-auto shrink-0 text-[11.5px] font-[500] tabular-nums"
+                      data-slot="queue-item-clock"
+                      style="color: var(--failure-text);"
+                    >
+                      open 34m
+                    </span>
+                  </div>
+                  <div
+                    class="text-[12px] leading-[1.45] text-[color:var(--muted)]"
+                    data-slot="queue-item-context"
+                  >
+                    Elevate Funding Co. · Instagram sign-in expired
+                  </div>
+                </div>
+              </div>
+            </button>
+          </li>
+          <li>
+            <button
+              class="block w-full cursor-pointer text-left"
+              type="button"
+            >
+              <div
+                class="@container flex gap-[12px] border-b border-[var(--line-soft)] px-[14px] py-[12px] last:border-b-0"
+                data-slot="queue-item"
+                data-tone="failure"
+                style="background: color-mix(in oklab, var(--failure) 5%, transparent);"
+              >
+                <span
+                  aria-hidden="true"
+                  class="inline-flex shrink-0 items-center justify-center border mt-[2px]"
+                  data-size="xs"
+                  data-slot="icon-tile"
+                  data-tone="failure"
+                  style="background: var(--failure-wash); border-color: var(--failure-line); border-radius: 7px; color: var(--failure); height: 22px; width: 22px;"
+                >
+                  <span
+                    class="inline-flex items-center justify-center [&>svg]:size-full"
+                    style="height: 10px; width: 10px;"
+                  >
+                    <span
+                      aria-hidden="true"
+                      class="inline-block shrink-0 rounded-[var(--r-full)]"
+                      data-slot="status-dot"
+                      data-tone="failure"
+                      style="background: var(--failure); height: 6px; width: 6px;"
+                    />
+                  </span>
+                </span>
+                <div
+                  class="min-w-0 flex-1"
+                >
+                  <div
+                    class="mb-[4px] flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[2px]"
+                  >
+                    <span
+                      class="min-w-0 text-[13.5px] leading-[1.3] font-[600] text-[color:var(--ink)]"
+                      data-slot="queue-item-title"
+                    >
+                      Agent stopped replying
+                    </span>
+                    <span
+                      class="mono ml-auto shrink-0 text-[11.5px] font-[500] tabular-nums"
+                      data-slot="queue-item-clock"
+                      style="color: var(--failure-text);"
+                    >
+                      open 12m
+                    </span>
+                  </div>
+                  <div
+                    class="text-[12px] leading-[1.45] text-[color:var(--muted)]"
+                    data-slot="queue-item-context"
+                  >
+                    Elevate Funding Co. · Instagram sign-in expired
+                  </div>
+                </div>
+              </div>
+            </button>
+          </li>
+        </ul>
+      </div>
+      <div
+        class="flex flex-col gap-[13px]"
+      >
+        <div
+          class="@container surface-card is-flush overflow-hidden flex flex-col"
+          data-slot="surface"
+          data-tone="neutral"
+          data-variant="panel"
+        >
+          <div
+            class="flex flex-col gap-[var(--s-2)] border-b border-[var(--line)] px-[var(--s-4)] py-[var(--s-3)] @min-[380px]:flex-row @min-[380px]:items-baseline @min-[380px]:gap-[var(--s-3)]"
+            data-slot="surface-header"
+          >
+            <div
+              class="min-w-0"
+            >
+              <span
+                class="font-mono text-[9.5px] leading-[1.2] font-[500] tracking-[0.09em] uppercase text-[color:var(--overline)] mb-[var(--s-1)] block"
+                data-slot="overline"
+              >
+                Selected · Elevate Funding Co.
+              </span>
+            </div>
+          </div>
+          <div
+            class="flex flex-col gap-[13px] p-[15px]"
+          >
+            <div
+              class="flex items-center gap-[11px]"
+            >
+              <span
+                aria-label="Elevate Funding Co."
+                class="mono inline-flex shrink-0 items-center justify-center border border-[var(--line)] font-[500] text-[color:var(--accent-text)]"
+                data-kind="account"
+                data-slot="monogram"
+                role="img"
+                style="background: linear-gradient(150deg, var(--accent), var(--accent-active)); border-radius: 8px; font-size: 10.9px; height: 28px; width: 28px;"
+              >
+                EC
+              </span>
+              <div
+                class="min-w-0"
+              >
+                <div
+                  class="text-[14px] leading-[1.3] font-[600] text-[color:var(--ink)]"
+                >
+                  Agent stopped replying
+                </div>
+                <div
+                  class="mt-[2px] flex flex-wrap items-center gap-x-[var(--s-2)] gap-y-[2px]"
+                >
+                  <span
+                    class="inline-flex max-w-full items-center whitespace-nowrap gap-[6px] rounded-[var(--r-full)] border py-[3px] pr-[9px] pl-[7px] text-[11.5px] leading-[1.35] font-[500]"
+                    data-slot="status"
+                    data-tone="failure"
+                    data-treatment="pill"
+                    style="color: var(--failure-text); background: var(--failure-wash); border-color: var(--failure-line);"
+                  >
+                    <span
+                      aria-hidden="true"
+                      class="inline-block shrink-0 rounded-[var(--r-full)]"
+                      data-slot="status-dot"
+                      data-tone="failure"
+                      style="background: var(--failure); height: 5px; width: 5px;"
+                    />
+                    <span
+                      class="min-w-0 truncate"
+                      data-slot="status-label"
+                    >
+                      Critical
+                    </span>
+                  </span>
+                  <span
+                    class="mono text-[12px] leading-[1.4] font-[400] tabular-nums"
+                    data-slot="mono-meta"
+                    data-tone="neutral"
+                    style="color: var(--muted);"
+                  >
+                    Recorded Aug 31, 2026, 5:00 AM
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div
+              class="@container surface-well"
+              data-slot="surface"
+              data-tone="neutral"
+              data-variant="well"
+            >
+              <span
+                class="font-mono text-[9.5px] leading-[1.2] font-[500] tracking-[0.09em] uppercase text-[color:var(--overline)] mb-[9px] block"
+                data-slot="overline"
+              >
+                Blast radius
+              </span>
+              <p
+                class="m-0 text-[12px] leading-[1.5] text-[color:var(--muted)]"
+              >
+                This notice is not about one account, so there is nothing to count.
+              </p>
+            </div>
+            <div
+              class="@container surface-well"
+              data-slot="surface"
+              data-tone="neutral"
+              data-variant="well"
+            >
+              <span
+                class="font-mono text-[9.5px] leading-[1.2] font-[500] tracking-[0.09em] uppercase text-[color:var(--overline)] mb-[10px] block"
+                data-slot="overline"
+              >
+                Last 24h agent replies
+              </span>
+              <p
+                class="m-0 text-[12px] leading-[1.5] text-[color:var(--muted)]"
+              >
+                No account is attached to this notice, so there is no reply series to draw.
+              </p>
+            </div>
+            <div
+              class="flex flex-col gap-[8px]"
+            >
+              <p
+                class="m-0 text-[12px] leading-[1.5] text-[color:var(--muted)]"
+                data-slot="no-action-reason"
+              >
+                No implemented command restarts an agent.
+              </p>
+              <div
+                class="flex flex-wrap gap-[8px]"
+              >
+                <button
+                  class="inline-flex items-center justify-center gap-[var(--s-2)] whitespace-nowrap transition-[filter,color,border-color,background-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 h-[30px] px-[11px] text-[12.5px] rounded-[var(--r-chip)] border border-[var(--line)] bg-[var(--control-fill)] font-[400] text-[color:var(--body)] [box-shadow:0_1px_0_rgba(255,255,255,.05)_inset] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] flex-1"
+                  data-size="md"
+                  data-slot="kit-button"
+                  data-variant="secondary"
+                  type="button"
+                >
+                  Open channel health
+                </button>
+                <button
+                  class="inline-flex items-center justify-center gap-[var(--s-2)] whitespace-nowrap transition-[filter,color,border-color,background-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 h-[30px] px-[11px] text-[12.5px] rounded-[var(--r-chip)] border border-[var(--line)] bg-[var(--control-fill)] font-[400] text-[color:var(--body)] [box-shadow:0_1px_0_rgba(255,255,255,.05)_inset] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] flex-1"
+                  data-size="md"
+                  data-slot="kit-button"
+                  data-variant="secondary"
+                  type="button"
+                >
+                  Mark read
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="@container surface-card is-flush overflow-hidden"
+          data-slot="surface"
+          data-tone="neutral"
+          data-variant="panel"
+        >
+          <div
+            class="flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[2px] border-b border-[var(--line)] px-[14px] py-[10px]"
+          >
+            <span
+              class="font-mono text-[9.5px] leading-[1.2] font-[500] tracking-[0.09em] uppercase text-[color:var(--overline)]"
+              data-slot="overline"
+            >
+              Lead handoffs
+            </span>
+            <span
+              class="mono text-[12px] leading-[1.4] font-[400] tabular-nums"
+              data-slot="mono-meta"
+              data-tone="neutral"
+              style="color: var(--muted);"
+            >
+              2
+            </span>
+            <span
+              class="text-[11.5px] leading-[1.45] text-[color:var(--faint)]"
+            >
+              the agent stopped; nobody has taken these over
+            </span>
+          </div>
+          <ul
+            class="m-0 list-none p-0"
+          >
+            <li>
+              <div
+                class="@container flex gap-[12px] border-b border-[var(--line-soft)] px-[14px] py-[12px] last:border-b-0"
+                data-slot="queue-item"
+                data-tone="warning"
+                style="background: color-mix(in oklab, var(--warning) 5%, transparent);"
+              >
+                <span
+                  aria-hidden="true"
+                  class="inline-flex shrink-0 items-center justify-center border mt-[2px]"
+                  data-size="xs"
+                  data-slot="icon-tile"
+                  data-tone="warning"
+                  style="background: var(--warning-wash); border-color: var(--warning-line); border-radius: 7px; color: var(--warning); height: 22px; width: 22px;"
+                >
+                  <span
+                    class="inline-flex items-center justify-center [&>svg]:size-full"
+                    style="height: 10px; width: 10px;"
+                  >
+                    <span
+                      aria-hidden="true"
+                      class="inline-block shrink-0 rounded-[var(--r-full)]"
+                      data-slot="status-dot"
+                      data-tone="warning"
+                      style="background: var(--warning); height: 6px; width: 6px;"
+                    />
+                  </span>
+                </span>
+                <div
+                  class="min-w-0 flex-1"
+                >
+                  <div
+                    class="mb-[4px] flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[2px]"
+                  >
+                    <span
+                      class="min-w-0 text-[13.5px] leading-[1.3] font-[600] text-[color:var(--ink)]"
+                      data-slot="queue-item-title"
+                    >
+                      Reid Funding Group
+                    </span>
+                    <span
+                      class="mono ml-auto shrink-0 text-[11.5px] font-[500] tabular-nums"
+                      data-slot="queue-item-clock"
+                      style="color: var(--warning-text);"
+                    >
+                      41m
+                    </span>
+                  </div>
+                  <div
+                    class="text-[12px] leading-[1.45] text-[color:var(--muted)]"
+                    data-slot="queue-item-context"
+                  >
+                    Instagram · The lead asked for a person
+                  </div>
+                </div>
+              </div>
+            </li>
+            <li>
+              <div
+                class="@container flex gap-[12px] border-b border-[var(--line-soft)] px-[14px] py-[12px] last:border-b-0"
+                data-slot="queue-item"
+                data-tone="warning"
+                style="background: color-mix(in oklab, var(--warning) 5%, transparent);"
+              >
+                <span
+                  aria-hidden="true"
+                  class="inline-flex shrink-0 items-center justify-center border mt-[2px]"
+                  data-size="xs"
+                  data-slot="icon-tile"
+                  data-tone="warning"
+                  style="background: var(--warning-wash); border-color: var(--warning-line); border-radius: 7px; color: var(--warning); height: 22px; width: 22px;"
+                >
+                  <span
+                    class="inline-flex items-center justify-center [&>svg]:size-full"
+                    style="height: 10px; width: 10px;"
+                  >
+                    <span
+                      aria-hidden="true"
+                      class="inline-block shrink-0 rounded-[var(--r-full)]"
+                      data-slot="status-dot"
+                      data-tone="warning"
+                      style="background: var(--warning); height: 6px; width: 6px;"
+                    />
+                  </span>
+                </span>
+                <div
+                  class="min-w-0 flex-1"
+                >
+                  <div
+                    class="mb-[4px] flex flex-wrap items-baseline gap-x-[var(--s-2)] gap-y-[2px]"
+                  >
+                    <span
+                      class="min-w-0 text-[13.5px] leading-[1.3] font-[600] text-[color:var(--ink)]"
+                      data-slot="queue-item-title"
+                    >
+                      Reid Funding Group
+                    </span>
+                    <span
+                      class="mono ml-auto shrink-0 text-[11.5px] font-[500] tabular-nums"
+                      data-slot="queue-item-clock"
+                      style="color: var(--warning-text);"
+                    >
+                      11m
+                    </span>
+                  </div>
+                  <div
+                    class="text-[12px] leading-[1.45] text-[color:var(--muted)]"
+                    data-slot="queue-item-context"
+                  >
+                    Instagram · The lead asked for a person
+                  </div>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div
+          class="@container flex flex-col gap-[var(--s-2)] rounded-[11px] border px-[15px] py-[11px] @min-[420px]:flex-row @min-[420px]:items-center @min-[420px]:gap-[12px]"
+          data-slot="note-strip"
+          data-tone="neutral"
+          style="background: color-mix(in oklab, var(--body) 6%, transparent); border-color: var(--line);"
+        >
+          <p
+            class="m-0 min-w-0 text-[12.5px] leading-[1.5] text-[color:var(--body)] text-pretty"
+          >
+            Nothing records who is working a system problem, so opened means somebody has read it, not that it is fixed or that anybody owns it. A lead handoff leaves this lane the moment the coach takes it over, so the lane counts threads nobody has picked up.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</DocumentFragment>
+`;

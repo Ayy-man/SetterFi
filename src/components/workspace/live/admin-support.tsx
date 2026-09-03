@@ -389,6 +389,183 @@ function OwnerPanel({
   );
 }
 
+/** The support queue and folded Inbox open the same request sheet. */
+export function SupportRequestSheet({
+  actorId,
+  actorRole,
+  onOpenChange,
+  onReload,
+  onThreadChange,
+  selected,
+  threads,
+}: {
+  actorId: string;
+  actorRole: Extract<UserRole, "owner" | "admin" | "success">;
+  onOpenChange: (open: boolean) => void;
+  onReload?: () => Promise<void>;
+  onThreadChange: (thread: PlatformSupportThreadRead) => void;
+  selected: PlatformSupportThreadRead | null;
+  threads: readonly PlatformSupportThreadRead[];
+}) {
+  const [messageKind, setMessageKind] = useState<"reply" | "internal_note">("reply");
+  const [assigneeChoice, setAssigneeChoice] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<ReassignmentReceipt | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const selectedView = selected ? platformSupportThreadView(selected) : null;
+  const assigneeOptions = useMemo<AssigneeOption[]>(() => {
+    if (actorRole === "success") return [{ value: actorId, label: "You" }];
+    const named = new Map<string, string>();
+    for (const thread of threads) {
+      if (thread.successOwner?.name?.trim()) named.set(thread.successOwner.id, thread.successOwner.name.trim());
+    }
+    return [...named].map(([value, label]) => ({ value, label }));
+  }, [actorId, actorRole, threads]);
+  const assigneeId = assigneeChoice
+    ?? (actorRole === "success" ? actorId : selected?.successOwner?.name ? selected.successOwner.id : "");
+  const assignmentTruth = selectedView ? reassignmentControlState({
+    expectedTenant: selectedView.tenantId,
+    expectedAssignee: assigneeId,
+    receipt,
+  }) : null;
+
+  async function appendMessage(body: string): Promise<AppendResult> {
+    if (!selected) return { ok: false, message: APPEND_FAILED_MESSAGE };
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/platform/support/threads/${selected.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: messageKind, body }),
+      });
+      const value = await payload(response);
+      if (!response.ok || !value.thread) throw new Error("SUPPORT_WRITE_FAILED");
+      onThreadChange(value.thread as PlatformSupportThreadRead);
+      return { ok: true };
+    } catch {
+      return { ok: false, message: APPEND_FAILED_MESSAGE };
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmAssignment(input: { reason?: string }): Promise<Result> {
+    const selectedThread = selected;
+    if (!selectedThread || !selectedView || !assigneeId || !input.reason) {
+      return { ok: false, message: "Choose a named owner and add a reason." };
+    }
+    try {
+      const response = await fetch(`/api/platform/clients/${selectedView.tenantId}/success-owner`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeId, reason: input.reason }),
+      });
+      const value = await payload(response) as ReassignmentReceipt;
+      const truth = reassignmentControlState({
+        expectedTenant: selectedView.tenantId,
+        expectedAssignee: assigneeId,
+        receipt: value,
+      });
+      if (!response.ok || truth.kind !== "reassigned") {
+        return { ok: false, message: "The owner change was not confirmed by the client and audit read-back." };
+      }
+      setReceipt(value);
+      if (onReload) {
+        await onReload();
+      } else {
+        onThreadChange({
+          ...selectedThread,
+          successOwner: { id: assigneeId, name: assigneeOptions.find((option) => option.value === assigneeId)?.label ?? null },
+        });
+      }
+      return { ok: true, receipt: { auditId: truth.auditId, actionKey: "tenant.success_owner.reassigned" } };
+    } catch {
+      return { ok: false, message: "The owner change could not be confirmed." };
+    }
+  }
+
+  return (
+    <>
+      <RecordSheet
+        created={selectedView ? { when: timestamp(selectedView.createdAt), who: firstAuthor(selected) } : undefined}
+        lastChange={selectedView ? { when: timestamp(selectedView.updatedAt), who: lastAuthor(selected) } : undefined}
+        logged={AUDIT_ACTIONS["tenant.success_owner.reassigned"].microcopy}
+        onOpenChange={onOpenChange}
+        open={selectedView !== null}
+        state={selected ? { kind: "lifecycle", ...statusPresentation(selected.status) } : undefined}
+        states={selected ? [
+          { kind: "tag", label: platformSupportThreadView(selected).tenantName, tone: "neutral" },
+          ...(threadIsTest(selected) ? [{ kind: "tag" as const, label: "Demo data", tone: "neutral" as const }] : []),
+        ] : undefined}
+        subtitle={selectedView ? `${selectedView.tenantName}, success owner ${selected ? successOwnerLabel(selected) : "Unassigned"}` : undefined}
+        tabs={selected && selectedView ? [
+          {
+            id: "request",
+            label: "Request",
+            sections: [{
+              title: "Messages",
+              body: (
+                <div className="flex min-w-0 flex-col gap-[var(--s-3)]">
+                  <div className="flex justify-end">
+                    <ExportMenu filename="setterfi-support-messages" mode="server" query={{ reason: "", threadId: selectedView.id }} resource="support-messages" />
+                  </div>
+                  <ThreadConversation
+                    actorId={actorId}
+                    busy={busy}
+                    key={selected.id}
+                    messageKind={messageKind}
+                    onAppendMessage={appendMessage}
+                    onMessageKindChange={setMessageKind}
+                    selected={selected}
+                  />
+                </div>
+              ),
+            }],
+          },
+          {
+            id: "owner",
+            label: "Success owner",
+            sections: [{
+              title: "Success owner",
+              body: (
+                <OwnerPanel
+                  assigneeId={assigneeId}
+                  assigneeOptions={assigneeOptions}
+                  busy={busy}
+                  onAssigneeChange={(value) => { setAssigneeChoice(value); setReceipt(null); }}
+                  onOpenAssignment={() => setConfirmOpen(true)}
+                  ownerChanged={assignmentTruth?.kind === "reassigned"}
+                  selected={selected}
+                />
+              ),
+            }],
+          },
+        ] : undefined}
+        technical={selectedView ? [
+          { label: "Thread ID", value: selectedView.id, mono: true },
+          { label: "Client ID", value: selectedView.tenantId, mono: true },
+        ] : undefined}
+        title={selectedView?.subject ?? ""}
+      />
+
+      <ConfirmFlow
+        action="tenant.success_owner.reassigned"
+        confirmLabel={actorRole === "success" ? "Take ownership" : "Change owner"}
+        impact={selectedView ? [
+          { label: "Client", value: selectedView.tenantName },
+          { label: "Current owner", value: selected ? successOwnerLabel(selected) : "Unassigned" },
+          { label: "New owner", value: assigneeOptions.find((option) => option.value === assigneeId)?.label ?? "No named owner selected" },
+        ] : []}
+        onConfirm={confirmAssignment}
+        onOpenChange={setConfirmOpen}
+        open={confirmOpen}
+        reason={{ required: true, label: "Reason", hint: "Explain why this client needs a different success owner." }}
+        title="Review success owner change"
+      />
+    </>
+  );
+}
+
 export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps) {
   const query = useQueryState();
   const requestedView = query.get("view");
@@ -401,18 +578,12 @@ export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps)
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [messageKind, setMessageKind] = useState<"reply" | "internal_note">("reply");
-  const [assigneeChoice, setAssigneeChoice] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<ReassignmentReceipt | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   // Age is measured from the read that produced the rows, so a row never ages while nothing moves.
   const [now, setNow] = useState<number | null>(null);
 
   const loadThreads = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setLoadError(null);
-    setAssigneeChoice(null);
     try {
       const searchParams = new URLSearchParams({ book });
       if (status !== "all") searchParams.set("status", status);
@@ -445,23 +616,6 @@ export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps)
     () => threads.find((thread) => thread.id === selectedId) ?? null,
     [selectedId, threads],
   );
-  const selectedView = selected ? platformSupportThreadView(selected) : null;
-  const assigneeOptions = useMemo<AssigneeOption[]>(() => {
-    if (actorRole === "success") return [{ value: actorId, label: "You" }];
-    const named = new Map<string, string>();
-    for (const thread of threads) {
-      if (thread.successOwner?.name?.trim()) named.set(thread.successOwner.id, thread.successOwner.name.trim());
-    }
-    return [...named].map(([value, label]) => ({ value, label }));
-  }, [actorId, actorRole, threads]);
-  const assigneeId = assigneeChoice
-    ?? (actorRole === "success" ? actorId : selected?.successOwner?.name ? selected.successOwner.id : "");
-
-  const assignmentTruth = selectedView ? reassignmentControlState({
-    expectedTenant: selectedView.tenantId,
-    expectedAssignee: assigneeId,
-    receipt,
-  }) : null;
 
   const columns = useMemo<ColumnDef<PlatformSupportThreadRead>[]>(() => [
     // The client is what a success owner scans for and the request is why the row is here, so the
@@ -541,62 +695,8 @@ export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps)
     },
   ], [now]);
 
-  async function appendMessage(body: string): Promise<AppendResult> {
-    if (!selected) return { ok: false, message: APPEND_FAILED_MESSAGE };
-    setBusy(true);
-    try {
-      const response = await fetch(`/api/platform/support/threads/${selected.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: messageKind, body }),
-      });
-      const value = await payload(response);
-      if (!response.ok || !value.thread) throw new Error("SUPPORT_WRITE_FAILED");
-      const thread = value.thread as PlatformSupportThreadRead;
-      setThreads((current) => current.map((row) => row.id === thread.id ? thread : row));
-      return { ok: true };
-    } catch {
-      // Reported back to the composer rather than rethrown into an uncaught promise.
-      return { ok: false, message: APPEND_FAILED_MESSAGE };
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function confirmAssignment(input: { reason?: string }): Promise<Result> {
-    if (!selectedView || !assigneeId || !input.reason) {
-      return { ok: false, message: "Choose a named owner and add a reason." };
-    }
-    try {
-      const response = await fetch(`/api/platform/clients/${selectedView.tenantId}/success-owner`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigneeId, reason: input.reason }),
-      });
-      const value = await payload(response) as ReassignmentReceipt;
-      const truth = reassignmentControlState({
-        expectedTenant: selectedView.tenantId,
-        expectedAssignee: assigneeId,
-        receipt: value,
-      });
-      if (!response.ok || truth.kind !== "reassigned") {
-        return { ok: false, message: "The owner change was not confirmed by the client and audit read-back." };
-      }
-      setReceipt(value);
-      await loadThreads();
-      return {
-        ok: true,
-        receipt: { auditId: truth.auditId, actionKey: "tenant.success_owner.reassigned" },
-      };
-    } catch {
-      return { ok: false, message: "The owner change could not be confirmed." };
-    }
-  }
-
   function openThread(thread: PlatformSupportThreadRead) {
     setSelectedId(thread.id);
-    setAssigneeChoice(null);
-    setReceipt(null);
   }
 
   // A success owner opens on their own book, so their own view leads the switch.
@@ -777,105 +877,14 @@ export function AdminSupport({ actorId, actorRole, enabled }: AdminSupportProps)
         )}
       </ListPage>
 
-      <RecordSheet
-        created={selectedView
-          ? { when: timestamp(selectedView.createdAt), who: firstAuthor(selected) }
-          : undefined}
-        lastChange={selectedView
-          ? { when: timestamp(selectedView.updatedAt), who: lastAuthor(selected) }
-          : undefined}
-        logged={AUDIT_ACTIONS["tenant.success_owner.reassigned"].microcopy}
+      <SupportRequestSheet
+        actorId={actorId}
+        actorRole={actorRole}
         onOpenChange={(open) => { if (!open) setSelectedId(null); }}
-        open={selectedView !== null}
-        state={selected ? {
-          kind: "lifecycle",
-          ...statusPresentation(selected.status),
-        } : undefined}
-        states={selected ? [
-          { kind: "tag", label: platformSupportThreadView(selected).tenantName, tone: "neutral" },
-          ...(threadIsTest(selected)
-            ? [{ kind: "tag" as const, label: "Demo data", tone: "neutral" as const }]
-            : []),
-        ] : undefined}
-        subtitle={selectedView
-          ? `${selectedView.tenantName}, success owner ${selected ? successOwnerLabel(selected) : "Unassigned"}`
-          : undefined}
-        tabs={selected && selectedView ? [
-          {
-            id: "request",
-            label: "Request",
-            sections: [
-              {
-                title: "Messages",
-                body: (
-                  <div className="flex min-w-0 flex-col gap-[var(--s-3)]">
-                    <div className="flex justify-end">
-                        <ExportMenu
-                        filename="setterfi-support-messages"
-                        mode="server"
-                        query={{ reason: "", threadId: selectedView.id }}
-                        resource="support-messages"
-                      />
-                    </div>
-                    <ThreadConversation
-                      actorId={actorId}
-                      busy={busy}
-                      key={selected.id}
-                      messageKind={messageKind}
-                      onAppendMessage={appendMessage}
-                      onMessageKindChange={setMessageKind}
-                      selected={selected}
-                    />
-                  </div>
-                ),
-              },
-            ],
-          },
-          {
-            id: "owner",
-            label: "Success owner",
-            sections: [
-              {
-                title: "Success owner",
-                body: (
-                  <OwnerPanel
-                    assigneeId={assigneeId}
-                    assigneeOptions={assigneeOptions}
-                    busy={busy}
-                    onAssigneeChange={(value) => { setAssigneeChoice(value); setReceipt(null); }}
-                    onOpenAssignment={() => setConfirmOpen(true)}
-                    ownerChanged={assignmentTruth?.kind === "reassigned"}
-                    selected={selected}
-                  />
-                ),
-              },
-            ],
-          },
-        ] : undefined}
-        technical={selectedView ? [
-          { label: "Thread ID", value: selectedView.id, mono: true },
-          { label: "Client ID", value: selectedView.tenantId, mono: true },
-        ] : undefined}
-        title={selectedView?.subject ?? ""}
-      />
-
-      <ConfirmFlow
-        action="tenant.success_owner.reassigned"
-        confirmLabel={actorRole === "success" ? "Take ownership" : "Change owner"}
-        impact={selectedView ? [
-          { label: "Client", value: selectedView.tenantName },
-          { label: "Current owner", value: selected ? successOwnerLabel(selected) : "Unassigned" },
-          { label: "New owner", value: assigneeOptions.find((option) => option.value === assigneeId)?.label ?? "No named owner selected" },
-        ] : []}
-        onConfirm={confirmAssignment}
-        onOpenChange={setConfirmOpen}
-        open={confirmOpen}
-        reason={{
-          required: true,
-          label: "Reason",
-          hint: "Explain why this client needs a different success owner.",
-        }}
-        title="Review success owner change"
+        onReload={loadThreads}
+        onThreadChange={(thread) => setThreads((current) => current.map((row) => row.id === thread.id ? thread : row))}
+        selected={selected}
+        threads={threads}
       />
     </AppShell>
   );

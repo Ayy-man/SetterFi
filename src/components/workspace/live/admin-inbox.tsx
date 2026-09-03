@@ -34,6 +34,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { DataState } from "@/components/kit/data-state";
 import { ExportMenu } from "@/components/kit/export-menu";
@@ -58,6 +59,7 @@ import {
 } from "@/components/kit/atomics";
 import { PageHeader } from "@/components/kit/page-header";
 import { wholePageProvenanceKind } from "@/components/kit/provenance-chip";
+import { SupportRequestSheet } from "@/components/workspace/live/admin-support";
 import { workspaceCountFormat, workspaceTimestampFormat } from "@/lib/format/datetime";
 import type {
   AttentionItem,
@@ -65,6 +67,7 @@ import type {
   AttentionSeverity,
 } from "@/lib/operations/attention-queue";
 import { formatElapsed, formatQueueClock } from "@/lib/operations/attention-queue-format";
+import type { PlatformSupportThreadRead } from "@/lib/repositories/support";
 import {
   INBOX_NO_CLAIM_REASON,
   type InboxHandoffLane,
@@ -142,9 +145,14 @@ export type AdminInboxProps = {
   actorId: string;
 };
 
-export function AdminInboxSurface({ lanes, queue }: AdminInboxProps) {
-  const [scope, setScope] = useState<Scope>("all");
+export function AdminInboxSurface({ actorId, lanes, queue }: AdminInboxProps) {
+  const clientRequestsLive = lanes.clientRequests !== undefined;
+  const [scope, setScope] = useState<Scope>(clientRequestsLive ? "mine" : "all");
   const [selectedId, setSelectedId] = useState<string | null>(queue.items[0]?.id ?? null);
+  const [clientRequests, setClientRequests] = useState<readonly PlatformSupportThreadRead[]>(
+    lanes.clientRequests ?? [],
+  );
+  const [selectedClientRequestId, setSelectedClientRequestId] = useState<string | null>(null);
 
   /*
    * Scope narrows the system lane by the account's success owner, which is the only ownership this
@@ -169,6 +177,14 @@ export function AdminInboxSurface({ lanes, queue }: AdminInboxProps) {
   );
 
   const selected = items.find((item) => item.id === selectedId) ?? items[0] ?? null;
+  const visibleClientRequests = useMemo(
+    () => clientRequests
+      .filter((thread) => thread.status !== "resolved")
+      .filter((thread) => scope !== "mine" || thread.assignedTo?.id === actorId)
+      .sort((first, second) => first.updatedAt.localeCompare(second.updatedAt)),
+    [actorId, clientRequests, scope],
+  );
+  const selectedClientRequest = clientRequests.find((thread) => thread.id === selectedClientRequestId) ?? null;
   /* An unreadable lane is not an empty one, so it never lets the page call itself clear. */
   const handoffEmpty = lanes.handoff.state === "available" && lanes.handoff.rows.length === 0;
 
@@ -214,7 +230,7 @@ export function AdminInboxSurface({ lanes, queue }: AdminInboxProps) {
 
       {/* The page is only clear when both lanes are. An empty system lane over four waiting leads
           would have read as "nothing to do", which is the completion theatre the rules ban. */}
-      {items.length === 0 && handoffEmpty ? (
+      {items.length === 0 && handoffEmpty && (!clientRequestsLive || visibleClientRequests.length === 0) ? (
         <DataState
           body={
             scope === "mine"
@@ -225,58 +241,77 @@ export function AdminInboxSurface({ lanes, queue }: AdminInboxProps) {
           title="The Inbox is clear"
         />
       ) : (
-        <div className="grid grid-cols-1 gap-[13px] @min-[900px]/attention:grid-cols-[1.25fr_1fr]">
-          <Surface variant="panel">
-            <LaneHeader
-              count={workspaceCountFormat.format(items.length)}
-              meaning="need a fix, not a reply"
-              title="System problems"
+        <>
+          {clientRequestsLive ? (
+            <ClientRequestLane
+              nowIso={queue.asOf}
+              onOpen={(thread) => setSelectedClientRequestId(thread.id)}
+              rows={visibleClientRequests}
             />
-            <ul className="m-0 list-none p-0">
-              {items.map((item) => (
-                <li key={item.id}>
-                  <button
-                    aria-current={selected?.id === item.id ? "true" : undefined}
-                    className="block w-full cursor-pointer text-left"
-                    onClick={() => setSelectedId(item.id)}
-                    type="button"
-                  >
-                    <QueueItem
-                      cleared={item.readAt !== null}
-                      className={selected?.id === item.id ? "bg-[var(--row-hover)]" : undefined}
-                      clock={formatQueueClock(item)}
-                      context={
-                        <>
-                          {contextFor(item)}
-                          {item.isTest ? (
-                            <>
-                              {" · "}
-                              <span data-slot="test-data-label">Test data, excluded from real analytics</span>
-                            </>
-                          ) : null}
-                        </>
-                      }
-                      title={item.title}
-                      tone={SEVERITY_TONE[item.severity]}
-                    />
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {queue.truncated ? (
-              <div className="border-t border-[var(--line)] px-[14px] py-[10px]">
-                <MonoMeta>Showing the newest {workspaceCountFormat.format(items.length)}. Older notices are not read.</MonoMeta>
-              </div>
-            ) : null}
-          </Surface>
+          ) : null}
+          <div className="grid grid-cols-1 gap-[13px] @min-[900px]/attention:grid-cols-[1.25fr_1fr]">
+            <Surface variant="panel">
+              <LaneHeader
+                count={workspaceCountFormat.format(items.length)}
+                meaning="need a fix, not a reply"
+                title="System problems"
+              />
+              <ul className="m-0 list-none p-0">
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      aria-current={selected?.id === item.id ? "true" : undefined}
+                      className="block w-full cursor-pointer text-left"
+                      onClick={() => setSelectedId(item.id)}
+                      type="button"
+                    >
+                      <QueueItem
+                        cleared={item.readAt !== null}
+                        className={selected?.id === item.id ? "bg-[var(--row-hover)]" : undefined}
+                        clock={formatQueueClock(item)}
+                        context={
+                          <>
+                            {contextFor(item)}
+                            {item.isTest ? (
+                              <>
+                                {" · "}
+                                <span data-slot="test-data-label">Test data, excluded from real analytics</span>
+                              </>
+                            ) : null}
+                          </>
+                        }
+                        title={item.title}
+                        tone={SEVERITY_TONE[item.severity]}
+                      />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {queue.truncated ? (
+                <div className="border-t border-[var(--line)] px-[14px] py-[10px]">
+                  <MonoMeta>Showing the newest {workspaceCountFormat.format(items.length)}. Older notices are not read.</MonoMeta>
+                </div>
+              ) : null}
+            </Surface>
 
-          <div className="flex flex-col gap-[13px]">
-            {selected ? <DetailPanel item={selected} queue={queue} /> : null}
-            <HandoffLane lane={lanes.handoff} />
-            {/* Said once, at the foot of the page: what "opened" means and what nothing records. */}
-            <NoteStrip tone="neutral">{INBOX_NO_CLAIM_REASON}</NoteStrip>
+            <div className="flex flex-col gap-[13px]">
+              {selected ? <DetailPanel item={selected} queue={queue} /> : null}
+              <HandoffLane lane={lanes.handoff} />
+              {/* Said once, at the foot of the page: what "opened" means and what nothing records. */}
+              <NoteStrip tone="neutral">{INBOX_NO_CLAIM_REASON}</NoteStrip>
+            </div>
           </div>
-        </div>
+          {clientRequestsLive ? (
+            <SupportRequestSheet
+              actorId={actorId}
+              actorRole="admin"
+              onOpenChange={(open) => { if (!open) setSelectedClientRequestId(null); }}
+              onThreadChange={(thread) => setClientRequests((current) => current.map((row) => row.id === thread.id ? thread : row))}
+              selected={selectedClientRequest}
+              threads={clientRequests}
+            />
+          ) : null}
+        </>
       )}
     </div>
   );
@@ -309,22 +344,24 @@ function SummaryStrip({ lanes, queue }: { lanes: InboxLanes; queue: AttentionQue
   const median = summary.medianMinutesToClear;
   const longest = lanes.longestWait;
   const handoffWaiting = lanes.waiting.handoff;
+  const clientRequestsWaiting = lanes.waiting.clientRequests;
+  const waitingTotal = lanes.waiting.system + (clientRequestsWaiting ?? 0) + (handoffWaiting ?? 0);
 
   return (
     <div className="grid grid-cols-1 gap-[12px] @min-[620px]/attention:grid-cols-3">
       <MetricCard
         note={
-          handoffWaiting === null
-            ? `${workspaceCountFormat.format(lanes.waiting.system)} problems · lead handoffs not counted`
-            : `${workspaceCountFormat.format(lanes.waiting.system)} problems · ${workspaceCountFormat.format(handoffWaiting)} lead handoffs`
+          clientRequestsWaiting === undefined
+            ? handoffWaiting === null
+              ? `${workspaceCountFormat.format(lanes.waiting.system)} problems · lead handoffs not counted`
+              : `${workspaceCountFormat.format(lanes.waiting.system)} problems · ${workspaceCountFormat.format(handoffWaiting)} lead handoffs`
+            : handoffWaiting === null
+              ? `${workspaceCountFormat.format(lanes.waiting.system)} problems · ${workspaceCountFormat.format(clientRequestsWaiting)} client requests · lead handoffs not counted`
+              : `${workspaceCountFormat.format(lanes.waiting.system)} problems · ${workspaceCountFormat.format(clientRequestsWaiting)} client requests · ${workspaceCountFormat.format(handoffWaiting)} lead handoffs`
         }
         overline="Waiting on a person"
-        tone={lanes.waiting.system + (handoffWaiting ?? 0) > 0 ? "warning" : "neutral"}
-        value={
-          handoffWaiting === null
-            ? workspaceCountFormat.format(lanes.waiting.system)
-            : workspaceCountFormat.format(lanes.waiting.system + handoffWaiting)
-        }
+        tone={waitingTotal > 0 ? "warning" : "neutral"}
+        value={workspaceCountFormat.format(waitingTotal)}
       />
       <MetricCard
         note={
@@ -348,6 +385,48 @@ function SummaryStrip({ lanes, queue }: { lanes: InboxLanes; queue: AttentionQue
         value={workspaceCountFormat.format(summary.clearedInWindow)}
       />
     </div>
+  );
+}
+
+function clientRequestAssignee(thread: PlatformSupportThreadRead) {
+  return thread.assignedTo?.name?.trim() || (thread.assignedTo ? "Assigned team member" : "Unassigned");
+}
+
+function clientRequestWait(updatedAt: string, nowIso: string) {
+  const updated = new Date(updatedAt).getTime();
+  const now = new Date(nowIso).getTime();
+  return Number.isFinite(updated) && Number.isFinite(now)
+    ? formatElapsed(Math.max(0, Math.floor((now - updated) / 60_000)))
+    : "wait not recorded";
+}
+
+function ClientRequestLane({
+  nowIso,
+  onOpen,
+  rows,
+}: {
+  nowIso: string;
+  onOpen: (thread: PlatformSupportThreadRead) => void;
+  rows: readonly PlatformSupportThreadRead[];
+}) {
+  return (
+    <Surface variant="panel">
+      <LaneHeader count={workspaceCountFormat.format(rows.length)} meaning="" title="Client requests" />
+      <ul className="m-0 list-none p-0">
+        {rows.map((thread) => (
+          <li key={thread.id}>
+            <button className="block w-full cursor-pointer text-left" onClick={() => onOpen(thread)} type="button">
+              <QueueItem
+                clock={clientRequestWait(thread.updatedAt, nowIso)}
+                context={`${thread.tenantName} · ${clientRequestAssignee(thread)}`}
+                title={thread.subject}
+                tone="warning"
+              />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Surface>
   );
 }
 
@@ -530,6 +609,7 @@ function DetailPanel({ item, queue }: { item: AttentionItem; queue: AttentionQue
  * sentence rather than rendering a disabled button that looks like a capability.
  */
 function ItemActions({ item }: { item: AttentionItem }) {
+  const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "done" | "failed">("idle");
@@ -618,7 +698,7 @@ function ItemActions({ item }: { item: AttentionItem }) {
           <KitButton
             className="flex-1"
             onClick={() => {
-              window.location.href = `/admin/channel-health?client=${encodeURIComponent(item.tenantId as string)}`;
+              router.push(`/admin/channel-health?client=${encodeURIComponent(item.tenantId as string)}`);
             }}
             size="md"
             variant="secondary"

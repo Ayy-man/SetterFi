@@ -8,13 +8,14 @@ import {
   AdminInboxUnavailable,
 } from "@/components/workspace/live/admin-inbox";
 import { inboxLanes } from "@/components/workspace/live/inbox-lanes";
-import { phase8AlertsLive } from "@/lib/env-contract";
+import { navFoldLive, phase8AlertsLive } from "@/lib/env-contract";
 import { loadAttentionQueue, type AttentionQueue } from "@/lib/operations/attention-queue";
 import {
   platformConversationQueueLive,
   readPlatformHumanConversationQueue,
   type PlatformHumanConversation,
 } from "@/lib/platform/conversation-projection";
+import { listPlatformSupportThreads } from "@/lib/repositories/support";
 
 export const metadata: Metadata = { title: "Inbox" };
 export const dynamic = "force-dynamic";
@@ -61,10 +62,16 @@ export default async function AdminAlertsPage() {
    * array: an unreadable lane must never render as nothing waiting.
    */
   const handoffs = await readHandoffLane(actor.userId);
+  // The folded Inbox owns the same platform support projection as Client requests. The repository
+  // remains its single query implementation; this route only decides whether the folded lane needs it.
+  const clientRequests = navFoldLive()
+    ? await listPlatformSupportThreads({ actorId: actor.userId, book: "all" })
+    : undefined;
   const lanes = inboxLanes({
     queue: result.value,
     conversations: handoffs.ok ? handoffs.value : null,
     unavailableReason: handoffs.ok ? undefined : handoffs.reason,
+    clientRequests,
   });
 
   return (
