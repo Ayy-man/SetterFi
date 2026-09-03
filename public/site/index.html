@@ -57,7 +57,7 @@
   .ground { position: absolute; inset: 0; background: var(--ground); }
   .cam {
     position: absolute; left: 0; top: 0;
-    width: 2600px; height: 1700px;
+    width: 2600px; height: 2300px;
     transform-origin: 0 0;
     will-change: transform;
   }
@@ -263,27 +263,93 @@
   .console--handles { left: 600px; top: 1210px; width: 440px; }
   .console--takeover { left: 1470px; top: 1500px; width: 420px; }
 
-  /* Meta Events Manager, as the coach's dataset sees the night. */
+  /* Meta Events Manager, the dataset overview. */
   .meta {
-    left: 1950px; top: 1090px; width: 600px;
+    left: 1950px; top: 1060px; width: 720px; height: 470px;
     box-sizing: border-box; border-radius: 12px; overflow: hidden;
-    background: #fff; color: #1c2b33;
-    font-family: var(--ui); font-size: 13px;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 30px 70px -30px rgba(20, 40, 90, 0.35);
+    background: #f0f2f5; color: #1c2b33;
+    font-family: var(--ui); font-size: 12px;
+    display: flex;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 30px 70px -30px rgba(20, 40, 90, 0.4);
     opacity: 0; transform: translateY(30px);
   }
-  .meta__bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e4e6eb; color: #65676b; }
-  .meta__logo { font-weight: 700; color: #0866ff; font-size: 15px; letter-spacing: -0.02em; }
-  .meta__ds { margin-left: auto; font-size: 12px; }
-  .meta__head, .meta__row { display: grid; grid-template-columns: 1.3fr 0.8fr 1.3fr 0.8fr; gap: 10px; padding: 10px 16px; align-items: center; }
-  .meta__head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #65676b; background: #f0f2f5; }
+  .meta__rail { width: 48px; flex: none; background: #fff; border-right: 1px solid #dddfe2; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 10px; }
+  .meta__logo { width: 28px; height: 28px; border-radius: 50%; background: #0866ff; color: #fff; display: grid; place-items: center; font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .meta__rail i { width: 22px; height: 22px; border-radius: 6px; background: #e4e6eb; }
+  .meta__rail i.is-on { background: #e7f0ff; box-shadow: 0 0 0 1.5px #0866ff inset; }
+  .meta__main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .meta__top { height: 40px; flex: none; background: #fff; border-bottom: 1px solid #dddfe2; display: flex; align-items: center; gap: 14px; padding: 0 16px; }
+  .meta__title { font-weight: 700; font-size: 14px; }
+  .meta__biz { color: #606770; }
+  .meta__search { margin-left: auto; width: 160px; height: 26px; border-radius: 13px; background: #f0f2f5; color: #8a8d91; display: flex; align-items: center; padding: 0 12px; }
+  .meta__ds { display: flex; align-items: center; gap: 12px; padding: 12px 16px 0; }
+  .meta__dsicon { width: 34px; height: 34px; border-radius: 8px; background: #e7f0ff; position: relative; }
+  .meta__dsicon::after { content: ""; position: absolute; inset: 9px; border: 2.5px solid #0866ff; border-radius: 3px; }
+  .meta__dsname { display: flex; flex-direction: column; line-height: 1.25; }
+  .meta__dsname b { font-size: 15px; font-weight: 700; }
+  .meta__dsname span { color: #606770; font-size: 11px; }
+  .meta__pill { margin-left: auto; padding: 3px 10px; border-radius: 12px; background: #e3f5e8; color: #1f7a3a; font-weight: 600; font-size: 11px; }
+  .meta__tabs { display: flex; gap: 22px; padding: 10px 16px 0; border-bottom: 1px solid #dddfe2; color: #606770; font-weight: 600; }
+  .meta__tabs span { padding-bottom: 8px; border-bottom: 2.5px solid transparent; }
+  .meta__tabs span.is-on { color: #0866ff; border-bottom-color: #0866ff; }
+  .meta__filters { display: flex; gap: 8px; padding: 10px 16px; align-items: center; }
+  .meta__sel { padding: 5px 10px; border-radius: 6px; background: #fff; box-shadow: 0 0 0 1px #ced0d4; color: #1c2b33; }
+  .meta__btn { margin-left: auto; padding: 6px 12px; border-radius: 6px; background: #0866ff; color: #fff; font-weight: 600; }
+  .meta__chart { position: relative; margin: 0 16px; height: 86px; background: #fff; border-radius: 8px; box-shadow: 0 0 0 1px #dddfe2; padding: 10px 12px 18px 26px; box-sizing: border-box; }
+  .meta__axis { position: absolute; left: 10px; top: 8px; font-size: 9px; color: #8a8d91; }
+  .meta__axis--b { top: auto; bottom: 16px; }
+  .meta__bars { display: flex; align-items: flex-end; gap: 3px; height: 100%; border-bottom: 1px solid #e4e6eb; }
+  .meta__bars i { flex: 1; height: 2px; background: #e4e6eb; border-radius: 1px 1px 0 0; transition: height 420ms cubic-bezier(0.2, 1, 0.3, 1), background 300ms ease; }
+  .meta__bars i.is-in { height: 100%; background: #0866ff; }
+  .meta__ticks { position: absolute; left: 26px; right: 12px; bottom: 4px; display: flex; justify-content: space-between; font-size: 9px; color: #8a8d91; }
+  .meta__table { margin: 10px 16px 0; background: #fff; border-radius: 8px; box-shadow: 0 0 0 1px #dddfe2; overflow: hidden; }
+  .meta__head, .meta__row { display: grid; grid-template-columns: 1.5fr 0.9fr 1.4fr 1fr 0.8fr; gap: 10px; padding: 9px 12px; align-items: center; }
+  .meta__head { font-size: 11px; color: #606770; font-weight: 600; border-bottom: 1px solid #e4e6eb; }
   .meta__row { border-bottom: 1px solid #e4e6eb; opacity: 0; transform: translateY(8px); transition: opacity 320ms ease, transform 420ms cubic-bezier(0.2, 1, 0.3, 1); }
+  .meta__row:last-child { border-bottom: 0; }
   .meta__row.is-in { opacity: 1; transform: none; }
-  .meta__row b { font-weight: 600; }
-  .meta__row em { font-style: normal; color: #31a24c; font-weight: 600; }
+  .meta__row b { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .meta__ev { width: 16px; height: 16px; border-radius: 4px; background: #e7f0ff; box-shadow: 0 0 0 1.5px #0866ff inset; display: inline-block; }
+  .meta__srv { width: 12px; height: 12px; border-radius: 2px; border: 1.5px solid #606770; display: inline-block; margin-right: 6px; vertical-align: -2px; }
+  .meta__row em { font-style: normal; color: #1f7a3a; font-weight: 600; }
   .meta__row em::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #31a24c; margin-right: 6px; vertical-align: 1px; }
-  .meta__foot { display: flex; justify-content: space-between; padding: 10px 16px; color: #65676b; font-size: 11.5px; }
   .console--numbers { left: 100px; top: 1030px; width: 420px; }
+
+  /* The two late cards: refusals, and the follow-up ladder. Product-console styling. */
+  .card {
+    box-sizing: border-box; border-radius: 16px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--line); color: #181e28;
+    box-shadow: 0 30px 70px -30px rgba(20, 40, 90, 0.35);
+    font-family: var(--ui); font-size: 13px;
+    opacity: 0; transform: translateY(40px);
+  }
+  .stops { left: 300px; top: 1850px; width: 540px; }
+  .quiet { left: 1020px; top: 1850px; width: 540px; }
+  .card__head { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 18px 10px; border-bottom: 1px solid var(--line); }
+  .card__head b { font-size: 15px; font-weight: 600; }
+  .card__head span { color: #5e6b83; font-size: 12px; }
+  .card__row { display: grid; grid-template-columns: 32px 1fr auto auto; gap: 12px; align-items: center; padding: 10px 18px; border-bottom: 1px solid var(--line); opacity: 0; transform: translateY(8px); transition: opacity 320ms ease, transform 420ms cubic-bezier(0.2, 1, 0.3, 1); }
+  .card__row.is-in { opacity: 1; transform: none; }
+  .card__av { width: 32px; height: 32px; border-radius: 50%; background: #e3e8f2; color: #333d50; font-style: normal; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
+  .card__who { display: flex; flex-direction: column; line-height: 1.2; }
+  .card__who b { font-weight: 600; }
+  .card__who small { color: #5e6b83; font-size: 11px; }
+  .card__tag { font-style: normal; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 10px; background: #f2e9d8; color: #6b4a08; white-space: nowrap; }
+  .card__tag--hard { background: #f7dfe0; color: #8a1c24; }
+  .card__row time { font-size: 11px; color: #5e6b83; font-variant-numeric: tabular-nums; }
+  .card__foot { padding: 10px 18px 14px; color: #5e6b83; font-size: 12px; }
+  .tl { list-style: none; margin: 0; padding: 12px 18px 16px 22px; position: relative; }
+  .tl::before { content: ""; position: absolute; left: 27px; top: 22px; bottom: 26px; width: 2px; background: #e3e8f2; }
+  .tl li { position: relative; display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: baseline; padding: 7px 0 7px 22px; opacity: 0; transform: translateX(-6px); transition: opacity 320ms ease, transform 420ms cubic-bezier(0.2, 1, 0.3, 1); }
+  .tl li.is-in { opacity: 1; transform: none; }
+  .tl li i { position: absolute; left: 0; top: 11px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #2b4bd8 inset; }
+  .tl li b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tl li span { color: #333d50; }
+  .tl li time { font-size: 11px; color: #5e6b83; white-space: nowrap; }
+  .tl__reply { background: #eef3ff; border-radius: 8px; margin: 4px 0 4px -22px; padding-left: 44px !important; }
+  .tl__reply i { left: 22px !important; background: #2b4bd8 !important; box-shadow: 0 0 0 4px #d5e0ff !important; }
+  .tl__off span, .tl__off b { color: #9aa5b8; text-decoration: line-through; }
+  .tl__off i { box-shadow: 0 0 0 2px #c9d0dd inset !important; }
 
   /* The provenance line. */
   .line { position: absolute; left: 0; top: 0; width: 2600px; height: 1700px; overflow: visible; pointer-events: none; }
@@ -332,6 +398,10 @@
   .copy--pixel h2, .copy--numbers h2 { font-size: clamp(2.2rem, 4.2vw, 4rem); }
   .copy--pixel p, .copy--numbers p { font-size: clamp(1rem, 1.2vw, 1.15rem); }
   .copy--numbers p { margin-left: auto; }
+  .copy--stops { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(5.5rem, 12vh, 8rem); max-width: 26rem; }
+  .copy--quiet { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(5.5rem, 12vh, 8rem); max-width: 26rem; }
+  .copy--stops h2, .copy--quiet h2 { font-size: clamp(2.2rem, 4.2vw, 4rem); }
+  .copy--stops p, .copy--quiet p { font-size: clamp(1rem, 1.2vw, 1.15rem); }
 
   .copy .over { color: var(--over-now); margin-bottom: 14px; }
   .copy h1, .copy h2 {
@@ -371,11 +441,13 @@
 
   /* --------------------------------------------------------- mobile -- */
   @media (max-width: 860px) {
+    .stops { left: 100px; top: 2500px; width: 520px; }
+    .quiet { left: 100px; top: 3000px; width: 520px; }
     .auth__in { display: none; }
     .console--learned { left: 1100px; top: 1660px; width: 300px; }
     .console--handles { left: 1100px; top: 2000px; width: 300px; }
     .console--takeover { left: 1100px; top: 2290px; width: 300px; }
-    .cam { height: 2400px; }
+    .cam { height: 3500px; }
     .line { height: 2400px; }
     .cta { left: 1900px; top: 985px; font-size: 22px; padding: 14px 20px 14px 18px; }
     .copy--peak { text-align: left; right: auto; left: clamp(1.25rem, 5vw, 4.5rem); bottom: clamp(2rem, 6vh, 4rem); }
@@ -403,7 +475,7 @@
 <main id="top" data-sc-mode="worldflight" data-sc-seam="0.12">
 
   <div data-sc-world class="sc-world" data-sc-verify-state="">
-    <div data-sc-segment data-sc-w="13" data-sc-waypoint="The week" class="sc-world__seg leg">
+    <div data-sc-segment data-sc-w="16" data-sc-waypoint="The week" class="sc-world__seg leg">
       <div data-sc-poster hidden></div>
       <div class="ground"></div>
 
@@ -443,10 +515,10 @@
             <div class="gcal__body">
               <div class="gcal__hours"><span style="top:68px">9 AM</span><span style="top:136px">10 AM</span><span style="top:204px">11 AM</span><span style="top:272px">12 PM</span><span style="top:340px">1 PM</span><span style="top:408px">2 PM</span><span style="top:476px">3 PM</span></div>
               <div class="gcal__col is-today"></div>
-              <div class="gcal__col"><div class="ev" style="--h:9.5;--d:0.5"><b>Discovery call · Priya S.</b><span>9:30 – 10am</span></div><div class="ev" style="--h:11.5;--d:0.5"><b>Discovery call · Marcus T.</b><span>11:30am – 12pm</span></div><div class="ev ev--grey" style="--h:12;--d:1"><b>Lunch</b><span>12 – 1pm</span></div></div>
-              <div class="gcal__col"><div class="ev" style="--h:10;--d:0.5"><b>Discovery call · Dana W.</b><span>10 – 10:30am</span></div><div class="ev" style="--h:13;--d:0.5"><b>Discovery call · Omar A.</b><span>1 – 1:30pm</span></div></div>
-              <div class="gcal__col"><div class="ev ev--grey" style="--h:8;--d:1"><b>Gym</b><span>8 – 9am</span></div><div class="ev" style="--h:9.5;--d:0.5"><b>Discovery call · Luis R.</b><span>9:30 – 10am</span></div><div class="ev" style="--h:13.5;--d:0.5"><b>Discovery call · Amara O.</b><span>1:30 – 2pm</span></div></div>
-              <div class="gcal__col"><div class="ev" style="--h:11;--d:0.5"><b>Discovery call · Ben K.</b><span>11 – 11:30am</span></div><div class="ev" style="--h:14;--d:0.5"><b>Discovery call · Sofia M.</b><span>2 – 2:30pm</span></div></div>
+              <div class="gcal__col"><div class="ev" style="--h:9.5;--d:0.5"><b>Discovery call · Priya S.</b><span>9:30 – 10am</span></div><div class="ev" style="--h:10.5;--d:0.5"><b>Discovery call · Elena V.</b><span>10:30 – 11am</span></div><div class="ev" style="--h:11.5;--d:0.5"><b>Discovery call · Marcus T.</b><span>11:30am – 12pm</span></div><div class="ev ev--grey" style="--h:12;--d:1"><b>Lunch</b><span>12 – 1pm</span></div><div class="ev" style="--h:14;--d:0.5"><b>Discovery call · Noah F.</b><span>2 – 2:30pm</span></div></div>
+              <div class="gcal__col"><div class="ev" style="--h:9;--d:0.5"><b>Discovery call · Chris D.</b><span>9 – 9:30am</span></div><div class="ev" style="--h:10;--d:0.5"><b>Discovery call · Dana W.</b><span>10 – 10:30am</span></div><div class="ev" style="--h:13;--d:0.5"><b>Discovery call · Omar A.</b><span>1 – 1:30pm</span></div><div class="ev" style="--h:11.5;--d:0.5"><b>Discovery call · Hana K.</b><span>11:30am – 12pm</span></div><div class="ev" style="--h:14.5;--d:0.5"><b>Discovery call · Tom B.</b><span>2:30 – 3pm</span></div></div>
+              <div class="gcal__col"><div class="ev ev--grey" style="--h:8;--d:1"><b>Gym</b><span>8 – 9am</span></div><div class="ev" style="--h:9.5;--d:0.5"><b>Discovery call · Luis R.</b><span>9:30 – 10am</span></div><div class="ev" style="--h:13.5;--d:0.5"><b>Discovery call · Amara O.</b><span>1:30 – 2pm</span></div><div class="ev" style="--h:11;--d:0.5"><b>Discovery call · Grace L.</b><span>11 – 11:30am</span></div><div class="ev" style="--h:15;--d:0.5"><b>Discovery call · Ravi P.</b><span>3 – 3:30pm</span></div></div>
+              <div class="gcal__col"><div class="ev" style="--h:11;--d:0.5"><b>Discovery call · Ben K.</b><span>11 – 11:30am</span></div><div class="ev" style="--h:14;--d:0.5"><b>Discovery call · Sofia M.</b><span>2 – 2:30pm</span></div><div class="ev" style="--h:9.5;--d:0.5"><b>Discovery call · Mia C.</b><span>9:30 – 10am</span></div><div class="ev" style="--h:12.5;--d:0.5"><b>Discovery call · Leo G.</b><span>12:30 – 1pm</span></div><div class="ev" style="--h:15;--d:0.5"><b>Discovery call · Zoe A.</b><span>3 – 3:30pm</span></div></div>
               <div class="gcal__col"><div class="ev" style="--h:9;--d:0.5"><b>Discovery call · Jordan P.</b><span>9 – 9:30am</span></div><div class="ev ev--friday" id="friday" style="--h:11;--d:0.5"><b>Discovery call · Nathaniel H.</b><span>11 – 11:30am</span></div><div class="ev ev--green" style="--h:15;--d:1"><b>Content block</b><span>3 – 4pm</span></div></div>
               <div class="gcal__col"></div>
             </div>
@@ -493,18 +565,61 @@
           <img src="/site/assets/takeover.webp" width="2100" height="264" alt="The take-over composer: one button hands any thread back to you" decoding="async">
         </figure>
 
-        <!-- META EVENTS -->
-        <section class="obj meta" id="meta" aria-label="Meta Events Manager receiving the QualifiedLead and Purchase events, sample data">
-          <div class="meta__bar"><span class="meta__logo">Meta</span><span>Events Manager</span><span class="meta__ds">Dataset · Reid Coaching · Messenger</span></div>
-          <div class="meta__head"><span>Event</span><span>Time</span><span>Source</span><span>Status</span></div>
-          <div class="meta__row" data-at="9.7"><b>QualifiedLead</b><span>2:19 AM</span><span>Business messaging</span><em>Received</em></div>
-          <div class="meta__row" data-at="10.1"><b>Purchase</b><span>2:21 AM</span><span>Business messaging</span><em>Received</em></div>
-          <div class="meta__foot"><span>Conversions API</span><span>1 event per conversation</span></div>
+        <!-- META EVENTS MANAGER -->
+        <section class="obj meta" id="meta" aria-label="Meta Events Manager, the coach's dataset receiving QualifiedLead and Purchase over the Conversions API, sample data">
+          <div class="meta__rail"><span class="meta__logo">∞</span><i class="is-on"></i><i></i><i></i><i></i></div>
+          <div class="meta__main">
+            <div class="meta__top">
+              <span class="meta__title">Events Manager</span>
+              <span class="meta__biz">Reid Coaching ▾</span>
+              <span class="meta__search">Search</span>
+            </div>
+            <div class="meta__ds">
+              <span class="meta__dsicon"></span>
+              <span class="meta__dsname"><b>Reid Coaching · Messenger</b><span>Dataset ID: 1042 6633 8905 214</span></span>
+              <span class="meta__pill">Active</span>
+            </div>
+            <div class="meta__tabs"><span class="is-on">Overview</span><span>Test events</span><span>History</span><span>Settings</span></div>
+            <div class="meta__filters"><span class="meta__sel">Last 24 hours ▾</span><span class="meta__sel">All events ▾</span><span class="meta__btn">Add events</span></div>
+            <div class="meta__chart" aria-hidden="true">
+              <span class="meta__axis">2</span><span class="meta__axis meta__axis--b">0</span>
+              <div class="meta__bars"><i></i><i></i><i></i><i class="meta__bar--q" data-at="9.7"></i><i class="meta__bar--p" data-at="10.1"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="meta__ticks"><span>Sep 6</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>Sep 7</span></div>
+            </div>
+            <div class="meta__table">
+              <div class="meta__head"><span>Event</span><span>Total events</span><span>Connection method</span><span>Last received</span><span>Status</span></div>
+              <div class="meta__row" data-at="10.1"><b><i class="meta__ev"></i>Purchase</b><span>1</span><span><i class="meta__srv"></i>Conversions API</span><span>2:21 AM</span><em>Active</em></div>
+              <div class="meta__row" data-at="9.7"><b><i class="meta__ev"></i>QualifiedLead</b><span>1</span><span><i class="meta__srv"></i>Conversions API</span><span>2:19 AM</span><em>Active</em></div>
+            </div>
+          </div>
         </section>
 
-        <figure class="obj console console--numbers" data-reveal="10.9 11.4">
+        <figure class="obj console console--numbers" data-reveal="10.9 11.4" data-leave="12.6 13.1">
           <img src="/site/assets/numbers.webp" width="1262" height="1982" alt="Your numbers this month: leads, booked calls, and time to book" decoding="async">
         </figure>
+
+        <!-- REFUSALS -->
+        <section class="obj card stops" id="stops" data-reveal="12.7 13.2" data-leave="14.1 14.6" aria-label="Declined leads and the reason each was declined, sample data">
+          <header class="card__head"><b>Declined</b><span>Tonight · 4</span></header>
+          <div class="card__row" data-at="13.05"><i class="card__av">MT</i><span class="card__who"><b>Marcus T.</b><small>@marcus.builds</small></span><em class="card__tag">Goal under $50k</em><time>1:03 AM</time></div>
+          <div class="card__row" data-at="13.15"><i class="card__av">DO</i><span class="card__who"><b>D. Okafor</b><small>@dokafor</small></span><em class="card__tag">Credit under 600, no business</em><time>11:48 PM</time></div>
+          <div class="card__row" data-at="13.25"><i class="card__av">KF</i><span class="card__who"><b>kingfund_99</b><small>Instagram</small></span><em class="card__tag card__tag--hard">Asked about CPNs</em><time>9:12 PM</time></div>
+          <div class="card__row" data-at="13.35"><i class="card__av">PS</i><span class="card__who"><b>Priya S.</b><small>@priya.s</small></span><em class="card__tag">Not the buyer</em><time>8:40 PM</time></div>
+          <footer class="card__foot">Each one declined politely, thread kept for you.</footer>
+        </section>
+
+        <!-- FOLLOW-UPS -->
+        <section class="obj card quiet" id="quiet" data-reveal="14.2 14.7" data-leave="15.5 16.0" aria-label="Follow-up schedule for a lead who went quiet, cancelled when they replied, sample data">
+          <header class="card__head"><b>Jordan B.</b><span>Went quiet · Sun 2:16 AM</span></header>
+          <ol class="tl">
+            <li data-at="14.55"><i></i><b>+3 h</b><span>"Still there, Jordan?"</span><time>Sent 5:16 AM</time></li>
+            <li data-at="14.65"><i></i><b>+1 d</b><span>"Worth 20 minutes this week?"</span><time>Sent Mon 5:16 AM</time></li>
+            <li data-at="14.75"><i></i><b>+1 d</b><span>"Two slots left Friday."</span><time>Sent Tue 5:16 AM</time></li>
+            <li class="tl__reply" data-at="14.95"><i></i><b>Replied</b><span>"yeah friday works"</span><time>Tue 9:41 AM</time></li>
+            <li class="tl__off" data-at="15.05"><i></i><b>+2 d</b><span>Cancelled</span><time></time></li>
+            <li class="tl__off" data-at="15.05"><i></i><b>+2 d</b><span>Cancelled</span><time></time></li>
+          </ol>
+        </section>
 
         <svg class="line" viewBox="0 0 2600 1700" aria-hidden="true">
           <path id="lineGlow" class="line__glow" d=""></path>
@@ -521,38 +636,48 @@
   <div data-sc-world-copy>
     <div class="sc-world__scrim scrim-top"></div>
 
-    <div class="copy copy--hero" data-sc-copy data-sc-window="0 0.085 0 0.45">
+    <div class="copy copy--hero" data-sc-copy data-sc-window="0.0 0.0691 0 0.45">
       <p class="over">Same week. Same leads.</p>
       <h1>One of these is your calendar <span class="named">with SetterFi.</span></h1>
       <p>It answers your DMs at night. You take the calls in the morning.</p>
     </div>
 
-    <div class="copy copy--night" data-sc-copy data-sc-window="0.13 0.24 0.2 0.3">
+    <div class="copy copy--night" data-sc-copy data-sc-window="0.1056 0.195 0.2 0.3">
       <h2>02:14. A lead is typing.</h2>
     </div>
 
-    <div class="copy copy--note" data-sc-copy data-sc-window="0.23 0.36 0.25 0.25">
+    <div class="copy copy--note" data-sc-copy data-sc-window="0.1869 0.2925 0.25 0.25">
       <p>Sample conversation. Names, numbers and times are sample data.</p>
     </div>
 
-    <div class="copy copy--answers" data-sc-copy data-sc-window="0.42 0.52 0.3 0.3">
+    <div class="copy copy--answers" data-sc-copy data-sc-window="0.3412 0.4225 0.3 0.3">
       <h2>Five answers, in the fields.</h2>
       <p>The setter is built on thousands of funding leads closed in this industry. It asks what closers ask, in the order they ask it, and hands you the thread the moment it goes off script.</p>
     </div>
 
-    <div class="copy copy--peak" data-sc-copy data-sc-window="0.55 0.69 0.2 0.3">
+    <div class="copy copy--peak" data-sc-copy data-sc-window="0.4469 0.5606 0.2 0.3">
       <h2>Friday, 11:00.</h2>
       <p>Every booking carries the message it came from.</p>
     </div>
 
-    <div class="copy copy--pixel" data-sc-copy data-sc-window="0.72 0.82 0.3 0.3">
+    <div class="copy copy--pixel" data-sc-copy data-sc-window="0.585 0.6663 0.3 0.3">
       <h2>Meta hears about it.</h2>
       <p>The qualified lead and the booking go to your ad account as they happen, so your ads learn who books.</p>
     </div>
 
-    <div class="copy copy--numbers" data-sc-copy data-sc-window="0.845 0.935 0.3 0.3">
+    <div class="copy copy--numbers" data-sc-copy data-sc-window="0.6866 0.7597 0.3 0.3">
       <h2>Then the numbers.</h2>
       <p>Leads, booked calls and time to book, on your home screen every morning. Sample workspace shown.</p>
+    </div>
+
+    <div class="copy copy--stops" data-sc-copy data-sc-window="0.809 0.866 0.3 0.3">
+      <h2>It says no, too.</h2>
+      <p>Seven hard stops. Under 18, under $50k, CPNs, not the buyer. Declined politely, logged for you.</p>
+    </div>
+
+    <div class="copy copy--quiet" data-sc-copy data-sc-window="0.903 0.959 0.3 0.3">
+      <h2>If they go quiet, it doesn't.</h2>
+      <p>Five touches over a week. All cancelled the moment they reply.</p>
     </div>
 
     <div class="copy copy--finale" data-sc-copy data-sc-window="0.99 1 0.6 0">
@@ -591,7 +716,7 @@
   var weekFull = document.getElementById('weekFull');
   var typing = document.getElementById('typing');
   var meta = document.getElementById('meta');
-  var metaRows = Array.prototype.slice.call(meta.querySelectorAll('.meta__row'));
+  var metaRows = Array.prototype.slice.call(document.querySelectorAll('.meta__row, .meta__bars i[data-at], .card [data-at]'));
   var lineSvg = document.querySelector('.line');
   var cta = document.getElementById('cta');
   var mapBtns = Array.prototype.slice.call(document.querySelectorAll('[data-t]'));
@@ -600,7 +725,7 @@
   });
   var docEl = document.documentElement;
 
-  var TOTAL = 14; // the leg (13vh) plus the engine's landing viewport
+  var TOTAL = 17; // the leg (16vh) plus the engine's landing viewport
   var vw = innerWidth, vh = innerHeight, mobile = vw <= 860;
 
   // Camera keyframes: t in vh, world centre (x, y), and the world box (w, h)
@@ -616,12 +741,16 @@
     [6.5, 1220, 1190, 1500, 940],
     [7.3, 2100, 640, 1300, 1000],
     [8.9, 2100, 640, 1300, 1000],
-    [9.8, 2030, 1270, 1000, 700],
-    [10.6, 2030, 1270, 1000, 700],
+    [9.8, 2110, 1300, 1100, 760],
+    [10.6, 2110, 1300, 1100, 760],
     [11.5, 400, 1360, 700, 800],
     [12.3, 400, 1360, 700, 800],
-    [12.9, 1250, 240, 2400, 1000],
-    [14.0, 1250, 240, 2500, 1040]
+    [13.0, 370, 2040, 1000, 700],
+    [13.8, 370, 2040, 1000, 700],
+    [14.5, 1090, 2050, 1000, 700],
+    [15.3, 1090, 2050, 1000, 700],
+    [15.9, 1250, 240, 2400, 1000],
+    [17.0, 1250, 240, 2500, 1040]
   ];
   var KM = [
     [0.0, 1850, 450, 1140, 1400],
@@ -633,12 +762,16 @@
     [6.9, 1250, 1900, 380, 1800],
     [7.5, 1970, 640, 1140, 1300],
     [8.9, 1970, 640, 1140, 1300],
-    [9.8, 2250, 1300, 640, 900],
-    [10.6, 2250, 1300, 640, 900],
+    [9.8, 2310, 1300, 760, 900],
+    [10.6, 2310, 1300, 760, 900],
     [11.5, 310, 1420, 480, 900],
     [12.3, 310, 1420, 480, 900],
-    [12.9, 1850, 450, 1100, 1350],
-    [14.0, 1850, 450, 1140, 1400]
+    [13.0, 360, 2760, 700, 900],
+    [13.8, 360, 2760, 700, 900],
+    [14.5, 360, 3260, 700, 900],
+    [15.3, 360, 3260, 700, 900],
+    [15.9, 1850, 450, 1100, 1350],
+    [17.0, 1850, 450, 1140, 1400]
   ];
   // Ground: t -> [L, C] in oklch, hue fixed at 262.
   var G = [
@@ -651,7 +784,7 @@
     [7.4, 0.985, 0.003],
     [8.9, 0.985, 0.003],
     [9.8, 0.9612, 0.0042],
-    [14.0, 0.9612, 0.0042]
+    [17.0, 0.9612, 0.0042]
   ];
 
   function smooth(x) { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }
@@ -785,9 +918,9 @@
     // Consoles surface as the camera pulls back.
     for (var c = 0; c < consoles.length; c++) {
       var r = consoles[c].getAttribute('data-reveal').split(' ');
-      var late = consoles[c].classList.contains('console--numbers');
-      var lv = late ? 1 - ramp(t, 12.6, 13.1) : leave;
-      var p = reduce ? (t >= +r[0] && t < (late ? 12.9 : 9.2) ? 1 : 0) : Math.min(ramp(t, +r[0], +r[1]), lv);
+      var lvA = consoles[c].getAttribute('data-leave');
+      var lv = lvA ? 1 - ramp(t, +lvA.split(' ')[0], +lvA.split(' ')[1]) : leave;
+      var p = reduce ? (t >= +r[0] && t < (lvA ? +lvA.split(' ')[1] - 0.2 : 9.2) ? 1 : 0) : Math.min(ramp(t, +r[0], +r[1]), lv);
       consoles[c].style.opacity = p.toFixed(3);
       consoles[c].style.transform = 'translate3d(0,' + ((1 - p) * 40).toFixed(1) + 'px,0)';
     }
@@ -827,7 +960,7 @@
     if (peak !== weekFull.classList.contains('is-peak')) weekFull.classList.toggle('is-peak', peak);
 
     // The reply bubble is present at the wide shot, and only there.
-    var ctaOn = Math.max(1 - ramp(t, 0.6, 1.3), ramp(t, 12.9, 13.3));
+    var ctaOn = Math.max(1 - ramp(t, 0.6, 1.3), ramp(t, 15.9, 16.3));
     cta.style.opacity = ctaOn.toFixed(3);
     cta.style.transform = 'scale(' + (0.9 + 0.1 * ctaOn).toFixed(3) + ')';
     cta.style.pointerEvents = ctaOn > 0.5 ? 'auto' : 'none';

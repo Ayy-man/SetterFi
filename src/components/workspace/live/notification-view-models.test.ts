@@ -36,10 +36,10 @@ const preference: Preference = {
 };
 
 function preferences(locked = true): Preference[] {
-  return (["bell", "email", "slack"] as const).map((destination) => ({
+  return (["bell", "email"] as const).map((destination) => ({
     ...preference,
     destination,
-    enabled: destination !== "slack",
+    enabled: true,
     locked,
   }));
 }
@@ -66,7 +66,6 @@ describe("notification preference projections", () => {
       enabled: true,
       bell: expect.objectContaining({ enabled: true, locked: true }),
       email: expect.objectContaining({ enabled: true, locked: true }),
-      slack: expect.objectContaining({ enabled: false, locked: true }),
     })]);
   });
 

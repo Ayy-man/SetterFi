@@ -68,7 +68,6 @@ describe("first-customer environment gate", () => {
     expect(result.requiredNames).toContain("SETTERFI_OPENROUTER_DRIVER");
     expect(result.requiredNames).not.toContain("SETTERFI_META_DRIVER");
     expect(result.requiredNames).not.toContain("SETTERFI_EMAIL_DRIVER");
-    expect(result.requiredNames).not.toContain("SETTERFI_SLACK_DRIVER");
     expect(result.requiredNames).not.toContain("SETTERFI_NOTION_DRIVER");
   });
 
@@ -172,11 +171,6 @@ describe("first-customer environment gate", () => {
     expect(email.missingNames).toEqual(expect.arrayContaining([
       "RESEND_API_KEY", "RESEND_WEBHOOK_SIGNING_SECRET", "SETTERFI_EMAIL_FROM",
     ]));
-    expect(email.missingNames).not.toContain("SLACK_WEBHOOK_URL");
-
-    const slack = validateFirstCustomerEnvironment({ ...baseline, SETTERFI_SLACK_DRIVER: "real" });
-    expect(slack.missingNames).toContain("SLACK_WEBHOOK_URL");
-    expect(slack.missingNames).not.toContain("RESEND_API_KEY");
 
     const offlineNotion = validateFirstCustomerEnvironment({ ...baseline, SETTERFI_NOTION_DRIVER: "offline" });
     expect(offlineNotion.missingNames).toContain("NOTION_EXPORT_PATH");

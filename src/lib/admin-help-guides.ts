@@ -379,7 +379,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
     title: "Review alert preferences",
     detail: "Change optional destinations while leaving required notices locked and visible.",
     category: "Diagnostics",
-    outcome: "The account's bell, email, and Slack choices match the persisted registry read-back.",
+    outcome: "The account's bell and email choices match the persisted registry read-back.",
     steps: [
       {
         heading: "Open Notifications and read the rule before changing it",
@@ -451,7 +451,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Read the destination-specific state",
         caption:
-          "Email acceptance reads Sent until a signed receipt arrives; Slack requires its documented success response; a bell is delivered by the database commit.",
+          "Email acceptance reads Sent until a signed receipt arrives; a bell is delivered by the database commit.",
       },
       {
         heading: "Let the bounded retry policy own retries",

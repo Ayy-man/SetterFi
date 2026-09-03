@@ -23,7 +23,7 @@ import { notificationDestination } from "@/lib/notifications/destinations";
 
 export { ALERT_EVENT_KEYS, BOOKING_EVENT_KEYS } from "@/lib/booking/types";
 
-export type NotificationDestination = "bell" | "email" | "slack";
+export type NotificationDestination = "bell" | "email";
 
 export type NotificationRule = {
   id: string;

@@ -115,10 +115,6 @@ export const EMAIL_CONFIGURATION_NAMES = [
   "SETTERFI_EMAIL_FROM",
 ] as const;
 
-export const SLACK_CONFIGURATION_NAMES = [
-  "SLACK_WEBHOOK_URL",
-] as const;
-
 export function selectGhlProvisioningDriver({
   factories,
   environment = process.env,

@@ -39,7 +39,7 @@ function preference(overrides: Partial<Preference> & { ruleId: string; destinati
 }
 
 function ruleFixture(ruleId: string, name: string, locked = false): Preference[] {
-  return (["bell", "email", "slack"] as const).map((destination) =>
+  return (["bell", "email"] as const).map((destination) =>
     preference({ ruleId, destination, name, locked: locked && destination === "bell" }));
 }
 
@@ -171,7 +171,6 @@ describe("the owner's account sheet", () => {
       expect(within(panel).getAllByLabelText("Bell for Appointment booked").length).toBeGreaterThan(0);
     });
     expect(within(panel).getAllByLabelText("Email for Appointment booked").length).toBeGreaterThan(0);
-    expect(within(panel).getAllByLabelText("Slack for Appointment booked").length).toBeGreaterThan(0);
     expect(within(panel).getByText("Required")).toBeTruthy();
   });
 });
@@ -243,10 +242,11 @@ describe("the coach's account sheet", () => {
   });
 
   /*
-   * Slack is a platform destination pointed at SetterFi's own channel. The console offers all
-   * three; a coach must never be handed a control over it.
+   * The coach surface offers the two destinations the store holds. The `not.toContain` guard is
+   * kept as a regression check: Slack was removed in
+   * `20261012000001_remove_slack_alert_destination.sql` and must not come back through the UI.
    */
-  it("offers a coach the app and email, never Slack", async () => {
+  it("offers a coach the app and email", async () => {
     mountSheet("coach");
     const panel = await sheetPanel();
 

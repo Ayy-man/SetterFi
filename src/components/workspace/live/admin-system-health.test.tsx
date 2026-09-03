@@ -111,7 +111,7 @@ const health: SystemHealth = {
       {
         id: "delivery-1",
         event: "BOOKING_CREATED",
-        destination: "slack",
+        destination: "email",
         state: "retryable",
         attempts: 2,
         lastAttemptAt: "2026-08-24T05:42:00.000Z",

@@ -300,7 +300,7 @@ type ExportFilter = {
   to?: string;
   scope?: "all" | "tenant" | "platform";
   category?: string;
-  destination?: "all" | "bell" | "email" | "slack";
+  destination?: "all" | "bell" | "email";
   book?: "mine" | "all";
   action?: string;
   assignee?: string;
@@ -542,7 +542,7 @@ export const RESOURCE_COLUMNS = {
   "notification-deliveries": [
     "event", "destination", "state", "attempts", "lastAttemptAt", "deliveredAt", "testData",
   ],
-  "notification-rules": ["event", "scope", "bell", "email", "slack", "required"],
+  "notification-rules": ["event", "scope", "bell", "email", "required"],
   "support-messages": ["thread", "author", "internal", "createdAt", "testData"],
   "support-threads": ["subject", "client", "status", "assignee", "updatedAt", "testData"],
   "success-client-book": ["client", "status", "successOwner", "supportStatus", "updatedAt"],
@@ -847,7 +847,7 @@ function parseRequest(request: Request, resource: ExportResource) {
     const assignee = url.searchParams.get("assignee")?.trim() ?? "";
     const threadId = url.searchParams.get("threadId")?.trim() ?? "";
     if (!["all", "tenant", "platform"].includes(scope)) throw new Error("EXPORT_SCOPE_INVALID");
-    if (!["all", "bell", "email", "slack"].includes(destination)) {
+    if (!["all", "bell", "email"].includes(destination)) {
       throw new Error("EXPORT_DESTINATION_INVALID");
     }
     if (!["mine", "all"].includes(book)) throw new Error("EXPORT_BOOK_INVALID");
@@ -2137,7 +2137,6 @@ const PHASE8_EXPORT_SPECS: Record<(typeof PHASE8_EXPORT_RESOURCES)[number], Phas
         scope: scalar(value.scope),
         bell: enabled.includes("bell"),
         email: enabled.includes("email"),
-        slack: enabled.includes("slack"),
         required: !truth(value.suppressible),
       };
     },

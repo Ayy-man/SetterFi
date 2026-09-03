@@ -67,7 +67,6 @@ function displayDestination(value: string) {
   const destinationLabels: Record<string, string> = {
     bell: "In-app notification",
     email: "Email",
-    slack: "Alerts",
   };
   return destinationLabels[value] ?? (/^[a-z0-9_-]+$/i.test(value)
     ? humanizeMachineValue(value)

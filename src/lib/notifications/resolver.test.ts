@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createMockEmailDriver } from "@/lib/integrations/email/mock";
 import { createRealEmailDriver } from "@/lib/integrations/email/real";
-import { createMockSlackDriver } from "@/lib/integrations/slack/mock";
-import { createRealSlackDriver } from "@/lib/integrations/slack/real";
 import {
   EMITTED_ALERT_RULE_BINDING_COUNT,
   EMITTED_ALERT_RULE_BINDINGS,
@@ -44,7 +42,7 @@ function rule(overrides: Partial<AlertDestinationRule> = {}): AlertDestinationRu
     audienceRoles: ["coach"],
     includeSuccessOwner: false,
     includeBillingContact: false,
-    defaultDestinations: ["bell", "email", "slack"],
+    defaultDestinations: ["bell", "email"],
     suppressible: true,
     ...overrides,
   };
@@ -63,7 +61,7 @@ describe("resolveAlertDestinations", () => {
     expect(resolved).toHaveLength(EMITTED_ALERT_RULE_BINDING_COUNT);
     expect(resolved.every(({ recipients }) =>
       recipients.length === 1
-      && recipients[0].destinations.join(",") === "bell,email,slack")).toBe(true);
+      && recipients[0].destinations.join(",") === "bell,email")).toBe(true);
   });
 
   it("keeps platform and tenant rows distinct for dual-scope compliance events", async () => {
@@ -88,7 +86,6 @@ describe("resolveAlertDestinations", () => {
       preferences: [
         { userId: tenantUser.id, destination: "bell", enabled: false },
         { userId: tenantUser.id, destination: "email", enabled: false },
-        { userId: tenantUser.id, destination: "slack", enabled: false },
       ],
     }));
 
@@ -96,7 +93,7 @@ describe("resolveAlertDestinations", () => {
       {
         userId: tenantUser.id,
         recipientEmail: tenantUser.email,
-        destinations: ["bell", "email", "slack"],
+        destinations: ["bell", "email"],
       },
       {
         userId: null,
@@ -114,7 +111,7 @@ describe("resolveAlertDestinations", () => {
       preferences: [{ userId: tenantUser.id, destination: "email", enabled: false }],
     }));
 
-    expect(recipients[0].destinations).toEqual(["bell", "slack"]);
+    expect(recipients[0].destinations).toEqual(["bell"]);
   });
 
   it("turns a tenant test fact into a labelled-bell destination with zero outbound intent", async () => {
@@ -129,7 +126,7 @@ describe("resolveAlertDestinations", () => {
       destinations: ["bell"],
     }]);
     expect(recipients.flatMap((recipient) => recipient.destinations))
-      .not.toEqual(expect.arrayContaining(["email", "slack"]));
+      .not.toEqual(expect.arrayContaining(["email"]));
   });
 
   it("suppresses a test fact at platform scope instead of paging platform staff", async () => {
@@ -149,29 +146,14 @@ describe("resolveAlertDestinations", () => {
       subject: "SETTERFI_DEMO_PLACEHOLDER_EMAIL_SUBJECT_APPOINTMENT_BOOKED",
       text: "SETTERFI_DEMO_PLACEHOLDER_EMAIL_BODY_APPOINTMENT_BOOKED",
     };
-    const slackInput = {
-      deliveryId: "delivery-2",
-      attemptNumber: 1,
-      text: "SETTERFI_DEMO_PLACEHOLDER_SLACK_TEXT_APPOINTMENT_BOOKED",
-      destinationUrl: "https://hooks.slack.test/services/synthetic",
-    };
     const mockEmail = createMockEmailDriver();
-    const mockSlack = createMockSlackDriver();
 
     await mockEmail.deliverEmail(emailInput);
-    await mockSlack.postSlack(slackInput);
     expect(mockEmail.records[0].placeholderCopy).toBe(true);
-    expect(mockSlack.records[0].placeholderCopy).toBe(true);
     await expect(createRealEmailDriver({
       apiKey: "synthetic-key",
       from: emailInput.from,
     }, { fetch: fetcher }).deliverEmail(emailInput)).resolves.toMatchObject({
-      kind: "terminal",
-      errorCode: "ALERT_COPY_UNAPPROVED",
-    });
-    await expect(createRealSlackDriver({
-      platformFallbackUrl: slackInput.destinationUrl,
-    }, { fetch: fetcher }).postSlack(slackInput)).resolves.toMatchObject({
       kind: "terminal",
       errorCode: "ALERT_COPY_UNAPPROVED",
     });

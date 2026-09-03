@@ -245,7 +245,7 @@ describe("environment contract", () => {
   it("keeps the Phase 8 names-only block ordered and contiguous after Phase 7", () => {
     const start = ENV_CONTRACT_NAMES.indexOf("SETTERFI_PHASE8_LIVE");
     expect(start).toBeGreaterThan(-1);
-    expect(ENV_CONTRACT_NAMES.slice(start, start + 12)).toEqual([
+    expect(ENV_CONTRACT_NAMES.slice(start, start + 10)).toEqual([
       "SETTERFI_PHASE8_LIVE",
       "SETTERFI_PHASE8_ALERTS_LIVE",
       "SETTERFI_PHASE8_ALERT_RULE_EVENTS_LIVE",
@@ -256,8 +256,6 @@ describe("environment contract", () => {
       "RESEND_API_KEY",
       "RESEND_WEBHOOK_SIGNING_SECRET",
       "SETTERFI_EMAIL_FROM",
-      "SETTERFI_SLACK_DRIVER",
-      "SLACK_WEBHOOK_URL",
     ]);
   });
 
@@ -297,8 +295,6 @@ describe("environment contract", () => {
   it("requires explicit Phase 8 driver arms and reports named missing real configuration", () => {
     expect(() => driverSelection("email", "SETTERFI_EMAIL_DRIVER", {}))
       .toThrowError(DriverConfigurationError);
-    expect(() => driverSelection("slack", "SETTERFI_SLACK_DRIVER", {}))
-      .toThrowError(DriverConfigurationError);
     expect(realArmSkipReason(
       "email",
       "SETTERFI_EMAIL_DRIVER",
@@ -319,14 +315,12 @@ describe("environment contract", () => {
         env: {
           NODE_ENV: "test",
           SETTERFI_EMAIL_DRIVER: "real",
-          SETTERFI_SLACK_DRIVER: "real",
         },
       },
     );
     expect(report).toContain(
       "SETTERFI_EMAIL_DRIVER: SKIPPED (RESEND_API_KEY, SETTERFI_EMAIL_FROM missing)",
     );
-    expect(report).toContain("SETTERFI_SLACK_DRIVER: SKIPPED (SLACK_WEBHOOK_URL missing)");
   });
 
   it("leaves Phase 1 off unless the gate is exactly true", () => {

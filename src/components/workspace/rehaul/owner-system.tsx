@@ -149,7 +149,6 @@ const JOB_PROVIDERS: Record<string, string> = {
 
 /** The integration slot, without a deployment configuration name anywhere in it. */
 const PROVIDER_LABELS: Record<string, string> = {
-  alerts: "Slack",
   calendar: "calendar sync",
   "credential-storage": "encryption",
   email: "email",

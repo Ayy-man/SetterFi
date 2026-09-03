@@ -4,7 +4,6 @@ import type { EnvironmentName, EnvironmentSource } from "@/lib/env-contract";
 import {
   EMAIL_CONFIGURATION_NAMES,
   META_CONFIGURATION_NAMES,
-  SLACK_CONFIGURATION_NAMES,
 } from "@/lib/integrations/selector";
 import { STRIPE_CONFIGURATION_NAMES } from "@/lib/integrations/stripe/selector";
 import {
@@ -171,11 +170,6 @@ const PROVIDERS: readonly ProviderDescriptor[] = [
     id: "email",
     label: "Email",
     checks: [{ selectorName: "SETTERFI_EMAIL_DRIVER", requiredNames: EMAIL_CONFIGURATION_NAMES }],
-  },
-  {
-    id: "alerts",
-    label: "Alerts",
-    checks: [{ selectorName: "SETTERFI_SLACK_DRIVER", requiredNames: SLACK_CONFIGURATION_NAMES }],
   },
 ] as const;
 

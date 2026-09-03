@@ -6,14 +6,9 @@ import { createMockEmailDriver } from "@/lib/integrations/email/mock";
 import { createRealEmailDriver } from "@/lib/integrations/email/real";
 import { resolveEmailDriver } from "@/lib/integrations/email/selector";
 import type { EmailDriver } from "@/lib/integrations/email/types";
-import { createMockSlackDriver } from "@/lib/integrations/slack/mock";
-import { createRealSlackDriver } from "@/lib/integrations/slack/real";
-import { resolveSlackDriver } from "@/lib/integrations/slack/selector";
-import type { SlackDriver } from "@/lib/integrations/slack/types";
 import { runJobWithReceipt, type JobReceiptExecution } from "@/lib/jobs/job-receipts";
 import {
   createLiveNotificationDeliveryRepository,
-  createSlackWebhookPacer,
   deliverClaimedNotification,
   type ClaimedNotificationDelivery,
 } from "@/lib/notifications/delivery";
@@ -74,16 +69,8 @@ export function createNotificationDeliveryJobHandler(dependencies: Dependencies)
   };
 }
 
-const unusedEmailDriver: EmailDriver = {
-  deliverEmail: async () => { throw new Error("EMAIL_DRIVER_NOT_SELECTED_FOR_SLACK_DELIVERY"); },
-};
-const unusedSlackDriver: SlackDriver = {
-  postSlack: async () => { throw new Error("SLACK_DRIVER_NOT_SELECTED_FOR_EMAIL_DELIVERY"); },
-};
-
 type DeliveryDriverResolvers = {
   email(isDemo: boolean): EmailDriver;
-  slack(isDemo: boolean): SlackDriver;
 };
 
 export function notificationDriversForClaim(
@@ -93,15 +80,9 @@ export function notificationDriversForClaim(
       isDemo,
       factories: { mock: createMockEmailDriver, real: createRealEmailDriver },
     }),
-    slack: (isDemo) => resolveSlackDriver({
-      isDemo,
-      factories: { mock: createMockSlackDriver, real: createRealSlackDriver },
-    }),
   },
 ) {
-  return claim.destination === "email"
-    ? { email: resolvers.email(claim.isTest), slack: unusedSlackDriver }
-    : { email: unusedEmailDriver, slack: resolvers.slack(claim.isTest) };
+  return { email: resolvers.email(claim.isTest) };
 }
 
 export async function runLiveNotificationDeliveryJob(): Promise<NotificationDeliveryJobReceipt> {
@@ -117,12 +98,10 @@ export async function runLiveNotificationDeliveryJob(): Promise<NotificationDeli
     scheduled: scheduled.selected, recovered, expired, claimed: claims.length,
     accepted: 0, delivered: 0, retryable: 0, unavailable: 0,
   };
-  const paceSlack = createSlackWebhookPacer();
   for (const claim of claims) {
-    if (claim.destination === "slack") await paceSlack(claim.destinationUrl);
-    const { email, slack } = notificationDriversForClaim(claim);
+    const { email } = notificationDriversForClaim(claim);
     const result = await deliverClaimedNotification({
-      claim, workerId, repository, email, slack,
+      claim, workerId, repository, email,
       emailFrom: process.env.SETTERFI_EMAIL_FROM?.trim() || "mock@setterfi.invalid",
       now,
     });

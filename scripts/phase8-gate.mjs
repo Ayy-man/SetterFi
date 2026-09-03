@@ -90,10 +90,9 @@ async function handoverBlockers() {
   try {
     unapprovedAlertCopy = Number((await database.query(
       `select count(*)::int count from public.alert_rules where
-        email_subject is null or email_body is null or slack_text is null
+        email_subject is null or email_body is null
         or email_subject like 'SETTERFI_DEMO_PLACEHOLDER_%'
-        or email_body like 'SETTERFI_DEMO_PLACEHOLDER_%'
-        or slack_text like 'SETTERFI_DEMO_PLACEHOLDER_%'`,
+        or email_body like 'SETTERFI_DEMO_PLACEHOLDER_%'`,
     )).rows[0].count);
   } finally {
     await database.end();

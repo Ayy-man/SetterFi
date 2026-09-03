@@ -443,7 +443,6 @@ export type AdminAlertRule = {
   category: AdminAlertCategory;
   bell: boolean;
   email: boolean;
-  slack: boolean;
 };
 
 export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
@@ -454,7 +453,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "bookings",
     bell: true,
     email: true,
-    slack: true,
   },
   {
     id: "payment-failed",
@@ -463,7 +461,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "billing",
     bell: true,
     email: true,
-    slack: true,
   },
   {
     id: "channel-disconnected",
@@ -472,7 +469,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "channels",
     bell: true,
     email: true,
-    slack: false,
   },
   {
     id: "a2p-cleared",
@@ -481,7 +477,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "channels",
     bell: true,
     email: false,
-    slack: false,
   },
   {
     id: "whatsapp-verified",
@@ -490,7 +485,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "channels",
     bell: true,
     email: false,
-    slack: false,
   },
   {
     id: "onboarding-stalled",
@@ -499,7 +493,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "onboarding",
     bell: true,
     email: true,
-    slack: true,
   },
   {
     id: "agent-inactive",
@@ -508,7 +501,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "agent",
     bell: true,
     email: true,
-    slack: true,
   },
   {
     id: "completed-payment",
@@ -517,7 +509,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "billing",
     bell: true,
     email: false,
-    slack: false,
   },
   {
     id: "tier-upgrade",
@@ -526,7 +517,6 @@ export const initialAdminFeedbackAlertRules: AdminAlertRule[] = [
     category: "billing",
     bell: true,
     email: true,
-    slack: true,
   },
 ];
 

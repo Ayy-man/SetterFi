@@ -1586,7 +1586,7 @@ describe("Phase 8 export route", () => {
     "audit-log": ["action", "actor", "target", "reason", "at", "testData"],
     "coach-support-messages": ["thread", "author", "createdAt", "testData"],
     "notification-deliveries": ["event", "destination", "state", "attempts", "lastAttemptAt", "deliveredAt", "testData"],
-    "notification-rules": ["event", "scope", "bell", "email", "slack", "required"],
+    "notification-rules": ["event", "scope", "bell", "email", "required"],
     "support-messages": ["thread", "author", "internal", "createdAt", "testData"],
     "support-threads": ["subject", "client", "status", "assignee", "updatedAt", "testData"],
     "success-client-book": ["client", "status", "successOwner", "supportStatus", "updatedAt"],

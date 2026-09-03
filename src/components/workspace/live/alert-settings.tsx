@@ -50,7 +50,7 @@ type AlertSettingsProps = {
   surface: "admin-alerts" | "coach-settings";
 };
 
-type Destination = "bell" | "email" | "slack";
+type Destination = "bell" | "email";
 
 /**
  * What the last write actually did. A write that came back from the server and a write we could
@@ -94,7 +94,6 @@ const COACH_CRUMBS = [
 const DESTINATION_LABELS: Record<Destination, string> = {
   bell: "Bell",
   email: "Email",
-  slack: "Slack",
 };
 
 /*
@@ -158,13 +157,8 @@ const COACH_CHECKBOX_CLASS =
  * `notification_preferences` it writes. The admin branch keeps `DESTINATION_LABELS` untouched, so
  * its column headers and its "Email for Appointment booked" accessible names do not move.
  *
- * Slack is deliberately absent. The API can store it, and the admin matrix offers it, but it is a
- * platform destination pointed at the client's own channel -- and the one time a Slack-destined
- * rule reached coaches it was the hand-inserted `phase8.demo.slack:tenant` row, which is why the
- * route now filters `demo` for coaches at all.
- *
- * There is deliberately no "Text message" here either. `notification_preferences.destination` is
- * `bell | email | slack`; there is no column an SMS preference could be written to, so the
+ * There is deliberately no "Text message" here. `notification_preferences.destination` is
+ * `bell | email`; there is no column an SMS preference could be written to, so the
  * artboard's third card would have been a control over nothing. Nor is there a carrier-review day
  * counter: this page loads notification rules and nothing else, so it holds no provisioning date
  * to count elapsed days from, and a counter invented here would be exactly the predicted number
@@ -191,7 +185,6 @@ const NOTIFICATION_EXPORT_COLUMNS = [
   "scope",
   "bell",
   "email",
-  "slack",
   "required",
 ] as const;
 
@@ -235,7 +228,7 @@ const CATEGORY_BLURBS: Record<string, string> = {
 };
 
 /**
- * The category the hand-inserted `phase8.demo.slack:tenant` rule sits in.
+ * The category seeded demo rules sit in.
  *
  * The route hides `demo` rules from coaches and deliberately leaves admins unfiltered, because
  * hiding the row from the only people who can delete it is how it survives. That leaves the admin
@@ -276,8 +269,7 @@ function categoryLabel(category: string) {
  *
  * `alert_rules.description` is `not null`, so this should not fire in practice, but a row with a
  * blank description would otherwise draw an empty line exactly where the reader looks for the
- * consequence. Each phrasing names both destinations rather than saying "nothing is sent", because
- * a Slack preference the coach surface never shows could still be on.
+ * consequence. Each phrasing names both destinations rather than saying "nothing is sent".
  */
 function deliveryConsequence(rule: AlertRuleView) {
   const bell = rule.bell.enabled;
@@ -415,7 +407,7 @@ function SeededMark() {
 function RuleSummary({ rule }: { rule: AlertRuleView }) {
   return (
     <KeyValueList
-      rows={(["bell", "email", "slack"] as const).map((destination) => ({
+      rows={(["bell", "email"] as const).map((destination) => ({
         label: DESTINATION_LABELS[destination],
         value: destinationState(rule[destination]),
       }))}
@@ -709,7 +701,7 @@ export function AlertSettings({
       header: "Scope",
       meta: { cellKind: "secondary", defaultHidden: true, label: "Scope" },
     },
-    ...(["bell", "email", "slack"] as const).map((destination): ColumnDef<AlertRuleView> => ({
+    ...(["bell", "email"] as const).map((destination): ColumnDef<AlertRuleView> => ({
       id: destination,
       enableSorting: false,
       header: DESTINATION_LABELS[destination],
@@ -841,7 +833,7 @@ export function AlertSettings({
                 * The canvas's first panel, with the destinations the store can actually hold. The
                 * artboard offers three -- email, text message, both -- and two of those would be
                 * controls over nothing: `notification_preferences.destination` is
-                * `bell | email | slack`, so there is no column an SMS preference writes to, and
+                * `bell | email`, so there is no column an SMS preference writes to, and
                 * nothing on this page carries a carrier-review start date to count elapsed days
                 * from. See `COACH_DESTINATIONS` for the full argument.
                 */}

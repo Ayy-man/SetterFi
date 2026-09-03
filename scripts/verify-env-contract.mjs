@@ -187,10 +187,6 @@ export function firstCustomerRequirements(environment = process.env) {
     addRequirement(required, "RESEND_API_KEY", "RESEND_WEBHOOK_SIGNING_SECRET", "SETTERFI_EMAIL_FROM");
     realSelectors.add("SETTERFI_EMAIL_DRIVER");
   }
-  if (value(environment, "SETTERFI_SLACK_DRIVER") === "real") {
-    addRequirement(required, "SLACK_WEBHOOK_URL");
-    realSelectors.add("SETTERFI_SLACK_DRIVER");
-  }
   const notionMode = value(environment, "SETTERFI_NOTION_DRIVER");
   if (notionMode === "real") addRequirement(required, "NOTION_API_KEY", "NOTION_KB_ROOT_ID");
   if (notionMode === "offline") addRequirement(required, "NOTION_EXPORT_PATH");
@@ -223,7 +219,7 @@ export function validateFirstCustomerEnvironment(environment = process.env) {
     SETTERFI_GHL_DRIVER: ["real"], SETTERFI_OPENROUTER_DRIVER: ["real"],
     SETTERFI_META_DRIVER: ["real"], SETTERFI_EMBEDDINGS_DRIVER: ["real"],
     SETTERFI_GHL_PROVISIONING_DRIVER: ["real"], SETTERFI_STRIPE_DRIVER: ["real"],
-    SETTERFI_EMAIL_DRIVER: ["real"], SETTERFI_SLACK_DRIVER: ["real"],
+    SETTERFI_EMAIL_DRIVER: ["real"],
     SETTERFI_NOTION_DRIVER: ["real", "offline"],
   };
   for (const [selector, allowed] of Object.entries(selectorModes)) {
@@ -277,7 +273,6 @@ export async function verifyEnvContract(environment = process.env, argv = []) {
   const selectors = {
     ...SELECTORS,
     SETTERFI_EMAIL_DRIVER: sourceArrayNames(selectorSource, "EMAIL_CONFIGURATION_NAMES"),
-    SETTERFI_SLACK_DRIVER: sourceArrayNames(selectorSource, "SLACK_CONFIGURATION_NAMES"),
   };
   const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
   if (duplicates.length > 0) throw new Error(`ENV_CONTRACT_DUPLICATE_NAMES:${[...new Set(duplicates)].join(",")}`);
@@ -294,8 +289,8 @@ export async function verifyEnvContract(environment = process.env, argv = []) {
     ["GHL_AGENCY_OAUTH_CONFIGURATION_NAMES", GHL_AGENCY_OAUTH_REQUIREMENTS],
   ]) assertSameNames(sourceArrayNames(selectorSource, constantName), expected, constantName);
   assertSameNames(sourceArrayNames(stripeSelectorSource, "STRIPE_CONFIGURATION_NAMES"), SELECTORS.SETTERFI_STRIPE_DRIVER, "STRIPE_CONFIGURATION_NAMES");
-  for (const selector of ["SETTERFI_EMAIL_DRIVER", "SETTERFI_SLACK_DRIVER"]) {
-    const constantName = selector === "SETTERFI_EMAIL_DRIVER" ? "EMAIL_CONFIGURATION_NAMES" : "SLACK_CONFIGURATION_NAMES";
+  for (const selector of ["SETTERFI_EMAIL_DRIVER"]) {
+    const constantName = "EMAIL_CONFIGURATION_NAMES";
     assertSameNames(sourceArrayNames(selectorSource, constantName), selectors[selector], constantName);
     assertExampleOrder(names, selectors[selector], `${constantName}_EXAMPLE_ORDER`);
   }

@@ -21,24 +21,13 @@ describe("notification delivery job", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("constructs only the provider selected by the claimed destination", () => {
+  it("constructs the email provider for a claimed delivery", () => {
     const email = { deliverEmail: vi.fn() };
-    const slack = { postSlack: vi.fn() };
-    const resolvers = {
-      email: vi.fn(() => email),
-      slack: vi.fn(() => slack),
-    };
+    const resolvers = { email: vi.fn(() => email) };
 
     expect(notificationDriversForClaim({ destination: "email", isTest: false }, resolvers).email)
       .toBe(email);
     expect(resolvers.email).toHaveBeenCalledWith(false);
-    expect(resolvers.slack).not.toHaveBeenCalled();
-
-    resolvers.email.mockClear();
-    expect(notificationDriversForClaim({ destination: "slack", isTest: false }, resolvers).slack)
-      .toBe(slack);
-    expect(resolvers.slack).toHaveBeenCalledWith(false);
-    expect(resolvers.email).not.toHaveBeenCalled();
   });
 
   it("uses the CRON bearer guard and returns bounded job counts", async () => {

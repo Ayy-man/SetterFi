@@ -4,7 +4,6 @@ import { createMockEmailDriver } from "@/lib/integrations/email/mock";
 import { deliveryLabel } from "@/lib/notifications/bell";
 import {
   acceptedReceiptExpired,
-  createSlackWebhookPacer,
   deliverClaimedNotification,
   recoveryForExpiredLease,
   retryAtForAttempt,
@@ -15,7 +14,7 @@ const claim = {
   destination: "email" as const, tenantId: "tenant", userId: "user", recipientEmail: "user@example.test",
   destinationUrl: null, eventKey: "event", title: "title", body: "body", link: null, isTest: false,
 };
-const copy = { emailSubject: "subject", emailBody: "body", slackText: "slack" };
+const copy = { emailSubject: "subject", emailBody: "body" };
 
 describe("notification delivery", () => {
   it("uses the exact retry ladder and lets a later provider instant win", () => {
@@ -49,7 +48,6 @@ describe("notification delivery", () => {
       claim, workerId: "worker", now: new Date("2026-08-18T00:00:00.000Z"), emailFrom: "from@example.test",
       repository: { loadCopy: vi.fn(async () => copy), finish },
       email: { deliverEmail: vi.fn(async () => ({ kind: "accepted" as const, providerReference: "email-id" })) },
-      slack: { postSlack: vi.fn() },
     });
     expect(outcome).toEqual({ outcome: "accepted" });
     expect(finish).toHaveBeenCalledWith(expect.objectContaining({ outcome: "accepted", providerReference: "email-id" }));
@@ -61,7 +59,7 @@ describe("notification delivery", () => {
     const outcome = await deliverClaimedNotification({
       claim, workerId: "worker", now: new Date("2026-08-18T00:00:00.000Z"), emailFrom: "from@example.test",
       repository: { loadCopy: vi.fn(async () => copy), finish },
-      email, slack: { postSlack: vi.fn() },
+      email,
     });
     expect(email.records).toHaveLength(1);
     expect(outcome).toEqual({ outcome: "accepted" });
@@ -71,26 +69,14 @@ describe("notification delivery", () => {
 
   it("never invokes a provider for a test or demo claim", async () => {
     const email = vi.fn();
-    const slack = vi.fn();
     const finish = vi.fn(async () => undefined);
     await deliverClaimedNotification({
       claim: { ...claim, isTest: true }, workerId: "worker", emailFrom: "mock@example.test",
       repository: { loadCopy: vi.fn(), finish },
-      email: { deliverEmail: email }, slack: { postSlack: slack },
+      email: { deliverEmail: email },
     });
     expect(email).not.toHaveBeenCalled();
-    expect(slack).not.toHaveBeenCalled();
     expect(finish).toHaveBeenCalledWith(expect.objectContaining({ outcome: "unavailable", errorCode: "TEST_DELIVERY_BLOCKED" }));
   });
 
-  it("paces repeated Slack calls to one webhook at one request per second", async () => {
-    let clock = 1_000;
-    const sleep = vi.fn(async (milliseconds: number) => { clock += milliseconds; });
-    const pace = createSlackWebhookPacer({ now: () => clock, sleep });
-    await pace("https://hooks.slack.test/a");
-    clock += 250;
-    await pace("https://hooks.slack.test/a");
-    await pace("https://hooks.slack.test/b");
-    expect(sleep).toHaveBeenCalledWith(750);
-  });
 });

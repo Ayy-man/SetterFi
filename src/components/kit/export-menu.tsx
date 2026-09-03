@@ -195,7 +195,7 @@ export type ServerExportMenuProps = ServerExportBase & (
         reason: string;
         scope?: "all" | "tenant" | "platform";
         category?: string;
-        destination?: "all" | "bell" | "email" | "slack";
+        destination?: "all" | "bell" | "email";
         status?: string;
         book?: "mine" | "all";
         action?: string;
@@ -284,7 +284,7 @@ type ServerQuery = CommonServerQuery & {
   to?: string;
   scope?: "all" | "tenant" | "platform";
   category?: string;
-  destination?: "all" | "bell" | "email" | "slack";
+  destination?: "all" | "bell" | "email";
   book?: "mine" | "all";
   action?: string;
   assignee?: string;

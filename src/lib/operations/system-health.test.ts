@@ -59,7 +59,7 @@ describe("read-only system health", () => {
     });
     expect(result.providers.map((provider) => provider.label)).toEqual([
       "Text messages (SMS)", "Calendar", "Model routing", "Instagram and Messenger",
-      "Credential storage", "Payments", "Email", "Alerts",
+      "Credential storage", "Payments", "Email",
     ]);
   });
 
@@ -159,11 +159,15 @@ describe("read-only system health", () => {
   });
 
   it("reports real only when every requirement is present and never returns names or values", async () => {
-    const environment = { SETTERFI_SLACK_DRIVER: "real", SLACK_WEBHOOK_URL: "https://synthetic.invalid/secret-path" };
+    const environment = {
+      SETTERFI_EMAIL_DRIVER: "real",
+      RESEND_API_KEY: "synthetic-key-never-rendered",
+      SETTERFI_EMAIL_FROM: "https://synthetic.invalid/secret-path",
+    };
     const result = await loadSystemHealth({ source: source(), environment });
-    expect(result.providers.find((provider) => provider.id === "alerts")).toEqual({ id: "alerts", label: "Alerts", state: "real", reason: null });
-    expect(JSON.stringify(result.providers)).not.toContain("SLACK_WEBHOOK_URL");
-    expect(JSON.stringify(result)).not.toContain(environment.SLACK_WEBHOOK_URL);
+    expect(result.providers.find((provider) => provider.id === "email")).toEqual({ id: "email", label: "Email", state: "real", reason: null });
+    expect(JSON.stringify(result.providers)).not.toContain("RESEND_API_KEY");
+    expect(JSON.stringify(result)).not.toContain(environment.RESEND_API_KEY);
   });
 
   it("keeps a grouped integration in mock state until every underlying service is real", async () => {

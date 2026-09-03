@@ -22,18 +22,17 @@ export async function resetPhase8Demo({ argumentsList = process.argv.slice(2), q
     await database.query("set local session_replication_role=replica");
     await database.query(
       "delete from public.notification_delivery_attempts where id=any($1::uuid[])",
-      [[PHASE8_DEMO_IDS.emailAttempt, PHASE8_DEMO_IDS.slackAttemptOne, PHASE8_DEMO_IDS.slackAttemptTwo]],
+      [[PHASE8_DEMO_IDS.emailAttempt]],
     );
     await database.query(
       "delete from public.notification_deliveries where id=any($1::uuid[])",
-      [[PHASE8_DEMO_IDS.bellDelivery, PHASE8_DEMO_IDS.emailDelivery, PHASE8_DEMO_IDS.slackDelivery]],
+      [[PHASE8_DEMO_IDS.bellDelivery, PHASE8_DEMO_IDS.emailDelivery]],
     );
     await database.query(
       "delete from public.notifications where id=any($1::uuid[])",
-      [[PHASE8_DEMO_IDS.bellNotification, PHASE8_DEMO_IDS.emailNotification, PHASE8_DEMO_IDS.slackNotification]],
+      [[PHASE8_DEMO_IDS.bellNotification, PHASE8_DEMO_IDS.emailNotification]],
     );
     await database.query("delete from public.notification_preferences where id=$1", [PHASE8_DEMO_IDS.billingPreference]);
-    await database.query("delete from public.alert_rules where id=$1", [PHASE8_DEMO_IDS.slackRule]);
     await database.query("delete from public.support_messages where thread_id=$1", [PHASE8_DEMO_IDS.thread]);
     await database.query("delete from public.support_threads where id=$1", [PHASE8_DEMO_IDS.thread]);
     await database.query(
@@ -60,12 +59,12 @@ export async function resetPhase8Demo({ argumentsList = process.argv.slice(2), q
         (select count(*)::int from public.audit_log where reason=any($6::text[])) audits,
         (select count(*)::int from public.users where id=$7) users`,
       [PHASE8_DEMO_IDS.thread, PHASE8_DEMO_IDS.billingPreference,
-        [PHASE8_DEMO_IDS.bellNotification, PHASE8_DEMO_IDS.emailNotification, PHASE8_DEMO_IDS.slackNotification],
-        [PHASE8_DEMO_IDS.bellDelivery, PHASE8_DEMO_IDS.emailDelivery, PHASE8_DEMO_IDS.slackDelivery],
-        [PHASE8_DEMO_IDS.emailAttempt, PHASE8_DEMO_IDS.slackAttemptOne, PHASE8_DEMO_IDS.slackAttemptTwo],
+        [PHASE8_DEMO_IDS.bellNotification, PHASE8_DEMO_IDS.emailNotification],
+        [PHASE8_DEMO_IDS.bellDelivery, PHASE8_DEMO_IDS.emailDelivery],
+        [PHASE8_DEMO_IDS.emailAttempt],
         [PHASE8_DEMO_VALUES.successReason, PHASE8_DEMO_VALUES.namedExportReason,
           PHASE8_DEMO_VALUES.resourceExportReason, PHASE8_DEMO_VALUES.abortedExportReason],
-        PHASE8_DEMO_IDS.success, PHASE8_DEMO_IDS.slackRule],
+        PHASE8_DEMO_IDS.success],
     )).rows[0];
     if (!Object.values(remaining).every((count) => count === 0)) {
       throw new Error(`PHASE8_DEMO_RESET_INCOMPLETE:${JSON.stringify(remaining)}`);

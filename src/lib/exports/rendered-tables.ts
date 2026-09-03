@@ -76,7 +76,7 @@ export const LIVE_RENDERED_TABLE_EXPORTS = [
   renderedTable(`${live}/success-client-book.tsx#success-client-book`, "success-client-book", ["book"], "created_desc"),
   renderedTable(`${live}/coach-support.tsx#coach-support-messages`, "coach-support-messages", ["threadId"], "created_desc"),
   renderedTable(`${live}/alert-settings.tsx#notification-rules`, "notification-rules", [], "event_asc", [
-    "event", "scope", "bell", "email", "slack", "required",
+    "event", "scope", "bell", "email", "required",
   ]),
   renderedTable(`${live}/admin-system-health.tsx#notification-deliveries`, "notification-deliveries", [], "created_desc", [
     "event", "destination", "state", "attempts", "lastAttemptAt", "deliveredAt", "testData",

@@ -301,12 +301,10 @@ export const DEMO_ALERT_COPY = Object.freeze({
   ruleDescription: "Posts to the demo channel when the agent hands a conversation back. (demo)",
   emailSubject: "A demo lead needs a human",
   emailBody: "The agent handed a conversation back to you. Open the inbox to take it. (demo)",
-  slackText: "A demo lead needs a human. Open the inbox to take it.",
   testBell: "Demo alert: a payment failed",
   billingEmail: "Demo alert: a payment failed, emailed to the billing contact",
-  slackRetry: "Demo alert: Slack retried once before it delivered",
   retryErrorCode: "429",
-  retryErrorDetail: "Slack asked us to slow down, so the send retried. (demo)",
+  retryErrorDetail: "The provider asked us to slow down, so the send retried. (demo)",
 });
 
 export const DEMO_MEASUREMENT_COPY = Object.freeze({

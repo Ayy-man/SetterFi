@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 export type MatrixCheckboxProps = {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
-  /** The destination or capability this column is: "Bell", "Email", "Slack". */
+  /** The destination or capability this column is: "Bell", "Email". */
   columnLabel: string;
   /** The record this row is: the rule name, the client name. */
   rowLabel: string;

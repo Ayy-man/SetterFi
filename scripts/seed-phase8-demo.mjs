@@ -29,16 +29,10 @@ export const PHASE8_DEMO_IDS = Object.freeze({
   billingPreference: "88000000-0000-4000-8000-000000000006",
   bellNotification: "88000000-0000-4000-8000-000000000007",
   emailNotification: "88000000-0000-4000-8000-000000000008",
-  slackNotification: "88000000-0000-4000-8000-000000000009",
   bellDelivery: "88000000-0000-4000-8000-000000000010",
   emailDelivery: "88000000-0000-4000-8000-000000000011",
-  slackDelivery: "88000000-0000-4000-8000-000000000012",
   emailAttempt: "88000000-0000-4000-8000-000000000013",
-  slackAttemptOne: "88000000-0000-4000-8000-000000000014",
-  slackAttemptTwo: "88000000-0000-4000-8000-000000000015",
   emailWorker: "88000000-0000-4000-8000-000000000016",
-  slackWorker: "88000000-0000-4000-8000-000000000017",
-  slackRule: "88000000-0000-4000-8000-000000000018",
 });
 
 export const PHASE8_DEMO_VALUES = Object.freeze({
@@ -56,7 +50,6 @@ export const PHASE8_DEMO_VALUES = Object.freeze({
 
 export const PHASE8_MOCK_DRIVER_NAMES = Object.freeze([
   "SETTERFI_EMAIL_DRIVER",
-  "SETTERFI_SLACK_DRIVER",
   "SETTERFI_GHL_DRIVER",
   "SETTERFI_STRIPE_DRIVER",
   "SETTERFI_META_DRIVER",
@@ -187,19 +180,6 @@ async function ensureFixture(database) {
   )).rows[0];
   assert(billingRule, "PHASE6_BILLING_RULE_MISSING");
   await database.query(
-    `insert into public.alert_rules
-       (id,event_key,scope,name,description,category,audience_roles,include_success_owner,
-        include_billing_contact,default_destinations,suppressible,default_enabled,
-        email_subject,email_body,slack_text)
-     values ($1,'phase8.demo.slack','tenant',$2,$3,'demo','{success}',true,false,
-       '{slack}',true,true,$4,$5,$6)
-     on conflict (id) do update set default_destinations='{slack}',name=excluded.name,
-       description=excluded.description,email_subject=excluded.email_subject,
-       email_body=excluded.email_body,slack_text=excluded.slack_text`,
-    [PHASE8_DEMO_IDS.slackRule, DEMO_ALERT_COPY.ruleName, DEMO_ALERT_COPY.ruleDescription,
-      DEMO_ALERT_COPY.emailSubject, DEMO_ALERT_COPY.emailBody, DEMO_ALERT_COPY.slackText],
-  );
-  await database.query(
     `insert into public.notification_preferences (id,user_id,rule_id,destination,enabled)
      values ($1,$2,$3,'email',true)
      on conflict (id) do update set enabled=true,updated_at=now()`,
@@ -211,8 +191,6 @@ async function ensureFixture(database) {
       "phase8:test-bell", "billing.payment_failed", DEMO_ALERT_COPY.testBell, true],
     [PHASE8_DEMO_IDS.emailNotification, null, PHASE8_DEMO_VALUES.billingEmail, billingRule.id,
       "phase8:billing-email", "billing.payment_failed", DEMO_ALERT_COPY.billingEmail, false],
-    [PHASE8_DEMO_IDS.slackNotification, PHASE8_DEMO_IDS.success, null, PHASE8_DEMO_IDS.slackRule,
-      "phase8:slack-retry", "phase8.slack.retry", DEMO_ALERT_COPY.slackRetry, false],
   ];
   for (const row of notifications) await database.query(
     `insert into public.notifications
@@ -227,8 +205,6 @@ async function ensureFixture(database) {
       "mock-bell:phase8", "2026-08-18T08:10:00Z", "2026-08-18T08:10:00Z"],
     [PHASE8_DEMO_IDS.emailDelivery, PHASE8_DEMO_IDS.emailNotification, "email", "accepted", 1,
       "mock-email:phase8", "2026-08-18T08:11:00Z", null],
-    [PHASE8_DEMO_IDS.slackDelivery, PHASE8_DEMO_IDS.slackNotification, "slack", "delivered", 2,
-      "mock-slack:phase8:2", "2026-08-18T08:13:00Z", "2026-08-18T08:13:00Z"],
   ];
   for (const row of deliveries) await database.query(
     `insert into public.notification_deliveries
@@ -248,12 +224,6 @@ async function ensureFixture(database) {
     [PHASE8_DEMO_IDS.emailAttempt, PHASE8_DEMO_IDS.emailDelivery, 1, PHASE8_DEMO_IDS.emailWorker,
       "email", PHASE8_DEMO_VALUES.billingEmail, null, "2026-08-18T08:11:00Z", "accepted",
       "mock-email:phase8", null],
-    [PHASE8_DEMO_IDS.slackAttemptOne, PHASE8_DEMO_IDS.slackDelivery, 1, PHASE8_DEMO_IDS.slackWorker,
-      "slack", null, "mock://phase8-slack-sink", "2026-08-18T08:12:00Z", "retryable",
-      null, DEMO_ALERT_COPY.retryErrorCode],
-    [PHASE8_DEMO_IDS.slackAttemptTwo, PHASE8_DEMO_IDS.slackDelivery, 2, PHASE8_DEMO_IDS.slackWorker,
-      "slack", null, "mock://phase8-slack-sink", "2026-08-18T08:13:00Z", "delivered",
-      "mock-slack:phase8:2", null],
   ];
   for (const row of attempts) await database.query(
     `insert into public.notification_delivery_attempts
@@ -294,20 +264,19 @@ export async function readPhase8Demo(database) {
       (select count(*)::int from public.notification_deliveries where id=any($4::uuid[])) deliveries,
       (select count(*)::int from public.notification_delivery_attempts where id=any($5::uuid[])) attempts`,
     [PHASE8_DEMO_IDS.thread, PHASE8_DEMO_IDS.billingPreference,
-      [PHASE8_DEMO_IDS.bellNotification, PHASE8_DEMO_IDS.emailNotification, PHASE8_DEMO_IDS.slackNotification],
-      [PHASE8_DEMO_IDS.bellDelivery, PHASE8_DEMO_IDS.emailDelivery, PHASE8_DEMO_IDS.slackDelivery],
-      [PHASE8_DEMO_IDS.emailAttempt, PHASE8_DEMO_IDS.slackAttemptOne, PHASE8_DEMO_IDS.slackAttemptTwo],
-      PHASE8_DEMO_IDS.slackRule],
+      [PHASE8_DEMO_IDS.bellNotification, PHASE8_DEMO_IDS.emailNotification],
+      [PHASE8_DEMO_IDS.bellDelivery, PHASE8_DEMO_IDS.emailDelivery],
+      [PHASE8_DEMO_IDS.emailAttempt]],
   )).rows[0];
   const deliveries = (await database.query(
     `select id,status::text,attempts,provider_reference from public.notification_deliveries
      where id=any($1::uuid[]) order by id`,
-    [[PHASE8_DEMO_IDS.bellDelivery, PHASE8_DEMO_IDS.emailDelivery, PHASE8_DEMO_IDS.slackDelivery]],
+    [[PHASE8_DEMO_IDS.bellDelivery, PHASE8_DEMO_IDS.emailDelivery]],
   )).rows;
   const attempts = (await database.query(
     `select id,attempt_number,outcome,recipient_email,destination_url,provider_reference,error_code
      from public.notification_delivery_attempts where id=any($1::uuid[]) order by id`,
-    [[PHASE8_DEMO_IDS.emailAttempt, PHASE8_DEMO_IDS.slackAttemptOne, PHASE8_DEMO_IDS.slackAttemptTwo]],
+    [[PHASE8_DEMO_IDS.emailAttempt]],
   )).rows;
   const audit = (await database.query(
     `select action,reason,target_type,target_id,payload from public.audit_log
@@ -342,18 +311,9 @@ export function assertPhase8Demo(snapshot) {
   assert(snapshot.deliveries.some((row) => row.id === PHASE8_DEMO_IDS.emailDelivery
     && row.status === "accepted" && row.attempts === 1 && row.provider_reference === "mock-email:phase8"),
   "PHASE8_EMAIL_RECEIPT_MISSING");
-  assert(snapshot.deliveries.some((row) => row.id === PHASE8_DEMO_IDS.slackDelivery
-    && row.status === "delivered" && row.attempts === 2 && row.provider_reference === "mock-slack:phase8:2"),
-  "PHASE8_SLACK_RECEIPT_MISSING");
   assert(snapshot.attempts.some((row) => row.id === PHASE8_DEMO_IDS.emailAttempt
     && row.recipient_email === PHASE8_DEMO_VALUES.billingEmail && row.outcome === "accepted"),
   "PHASE8_BILLING_TARGET_MISSING");
-  assert(snapshot.attempts.some((row) => row.id === PHASE8_DEMO_IDS.slackAttemptOne
-    && row.outcome === "retryable" && row.error_code === DEMO_ALERT_COPY.retryErrorCode),
-  "PHASE8_RETRY_RECEIPT_MISSING");
-  assert(snapshot.attempts.some((row) => row.id === PHASE8_DEMO_IDS.slackAttemptTwo
-    && row.outcome === "delivered" && row.destination_url === "mock://phase8-slack-sink"),
-  "PHASE8_RETRY_SUCCESS_MISSING");
   const starts = snapshot.audit.filter((row) => row.action === "platform_export.started");
   const finishes = snapshot.audit.filter((row) => row.action === "platform_export.finished");
   assert(starts.length === 3 && finishes.length === 2, "PHASE8_EXPORT_AUDIT_SHAPE_INVALID", snapshot.audit);

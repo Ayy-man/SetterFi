@@ -6,7 +6,7 @@ export type DeliveryAggregateStatus = "pending" | "sending" | "accepted" | "deli
 export type DeliveryLabel = "Recorded" | "Queued" | "Sent" | "Delivered" | "Failed" | "Unavailable";
 
 export function deliveryLabel(deliveries: readonly {
-  destination: "bell" | "email" | "slack";
+  destination: "bell" | "email";
   status: DeliveryAggregateStatus;
 }[]): DeliveryLabel {
   const outbound = deliveries.filter((delivery) => delivery.destination !== "bell");
@@ -54,7 +54,7 @@ type BellRow = {
   id: string; kind: string; rule_id: string | null; source_event_id: string | null;
   title: string; body: string; link: string | null;
   is_test: boolean; read_at: string | null; created_at: string;
-  notification_deliveries: Array<{ destination: "bell" | "email" | "slack"; status: DeliveryAggregateStatus }>;
+  notification_deliveries: Array<{ destination: "bell" | "email"; status: DeliveryAggregateStatus }>;
 };
 
 function mapBell(row: BellRow): BellNotification {

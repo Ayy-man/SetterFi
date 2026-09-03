@@ -28,7 +28,6 @@ import {
   GHL_CONFIGURATION_NAMES,
   GHL_PROVISIONING_CONFIGURATION_NAMES,
   META_CONFIGURATION_NAMES,
-  SLACK_CONFIGURATION_NAMES,
 } from "@/lib/integrations/selector";
 import { STRIPE_CONFIGURATION_NAMES } from "@/lib/integrations/stripe/selector";
 import { readJobReceipts, type SystemJobReceipt } from "@/lib/repositories/job-receipts";
@@ -114,7 +113,6 @@ function requiredProviderConfiguration(environment: EnvironmentSource) {
   if (phase8AlertsLive(environment)) {
     requirements.push(
       { driver: "email", selector: "SETTERFI_EMAIL_DRIVER", names: EMAIL_CONFIGURATION_NAMES },
-      { driver: "slack", selector: "SETTERFI_SLACK_DRIVER", names: SLACK_CONFIGURATION_NAMES },
     );
   }
   return requirements;

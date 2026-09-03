@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createMockEmailDriver } from "@/lib/integrations/email/mock";
-import { createMockSlackDriver } from "@/lib/integrations/slack/mock";
 import { deliverClaimedNotification } from "@/lib/notifications/delivery";
 import { resolveAlertDestinations } from "@/lib/notifications/resolver";
 
@@ -46,9 +45,8 @@ describe("Phase 8 receipt-backed vertical slice", () => {
     }]);
   });
 
-  it("blocks a test claim before either provider driver can run", async () => {
+  it("blocks a test claim before the provider driver can run", async () => {
     const email = createMockEmailDriver();
-    const slack = createMockSlackDriver();
     const finish = vi.fn(async () => undefined);
     const result = await deliverClaimedNotification({
       claim: {
@@ -58,43 +56,43 @@ describe("Phase 8 receipt-backed vertical slice", () => {
         title: "SETTERFI_DEMO_PLACEHOLDER_TITLE", body: "SETTERFI_DEMO_PLACEHOLDER_BODY",
         link: null, isTest: true,
       },
-      workerId: "worker", repository: { loadCopy: vi.fn(), finish }, email, slack,
+      workerId: "worker", repository: { loadCopy: vi.fn(), finish }, email,
       emailFrom: "sender@example.invalid", now: new Date("2026-08-18T00:00:00Z"),
     });
     expect(result).toEqual({ outcome: "unavailable" });
     expect(email.records).toHaveLength(0);
-    expect(slack.records).toHaveLength(0);
     expect(finish).toHaveBeenCalledWith(expect.objectContaining({ errorCode: "TEST_DELIVERY_BLOCKED" }));
   });
 
-  it("persists retry then success as separate finish outcomes", async () => {
+  it("persists retry then acceptance as separate finish outcomes", async () => {
     const finish = vi.fn(async () => undefined);
     let calls = 0;
-    const slack = {
-      postSlack: vi.fn(async () => ++calls === 1
+    const email = {
+      deliverEmail: vi.fn(async () => ++calls === 1
         ? { kind: "retry" as const, errorCode: "SETTERFI_DEMO_PLACEHOLDER_RETRY", retryAfterSeconds: null }
-        : { kind: "delivered" as const, providerReference: "mock-slack:delivery:2" }),
+        : { kind: "accepted" as const, providerReference: "mock-email:delivery:2" }),
     };
     const base = {
       deliveryId: "delivery", notificationId: "notification", attemptId: "attempt",
-      destination: "slack" as const, tenantId: "tenant-demo", userId: "success",
-      recipientEmail: null, destinationUrl: "mock://slack-sink", eventKey: "demo.retry",
+      destination: "email" as const, tenantId: "tenant-demo", userId: "success",
+      recipientEmail: "success@example.invalid", destinationUrl: null, eventKey: "demo.retry",
       title: "SETTERFI_DEMO_PLACEHOLDER_TITLE", body: "SETTERFI_DEMO_PLACEHOLDER_BODY",
       link: null, isTest: false,
     };
     const repository = {
-      loadCopy: async () => ({ emailSubject: null, emailBody: null,
-        slackText: "SETTERFI_DEMO_PLACEHOLDER_SLACK" }),
+      loadCopy: async () => ({
+        emailSubject: "SETTERFI_DEMO_PLACEHOLDER_SUBJECT",
+        emailBody: "SETTERFI_DEMO_PLACEHOLDER_BODY",
+      }),
       finish,
     };
-    const email = createMockEmailDriver();
     expect(await deliverClaimedNotification({ claim: { ...base, attemptNumber: 1 }, workerId: "worker",
-      repository, email, slack, emailFrom: "sender@example.invalid", now: new Date("2026-08-18T00:00:00Z") }))
+      repository, email, emailFrom: "sender@example.invalid", now: new Date("2026-08-18T00:00:00Z") }))
       .toEqual({ outcome: "retryable" });
     expect(await deliverClaimedNotification({ claim: { ...base, attemptNumber: 2 }, workerId: "worker",
-      repository, email, slack, emailFrom: "sender@example.invalid", now: new Date("2026-08-18T00:01:00Z") }))
-      .toEqual({ outcome: "delivered" });
+      repository, email, emailFrom: "sender@example.invalid", now: new Date("2026-08-18T00:01:00Z") }))
+      .toEqual({ outcome: "accepted" });
     expect(finish).toHaveBeenNthCalledWith(1, expect.objectContaining({ outcome: "retryable" }));
-    expect(finish).toHaveBeenNthCalledWith(2, expect.objectContaining({ outcome: "delivered" }));
+    expect(finish).toHaveBeenNthCalledWith(2, expect.objectContaining({ outcome: "accepted" }));
   });
 });

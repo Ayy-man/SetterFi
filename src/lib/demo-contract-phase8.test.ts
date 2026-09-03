@@ -55,12 +55,9 @@ describe("Phase 8 demo contract", () => {
         notifications: 3, deliveries: 3, attempts: 3 },
       deliveries: [
         { id: PHASE8_DEMO_IDS.emailDelivery, status: "accepted", attempts: 1, provider_reference: "mock-email:phase8" },
-        { id: PHASE8_DEMO_IDS.slackDelivery, status: "delivered", attempts: 2, provider_reference: "mock-slack:phase8:2" },
       ],
       attempts: [
         { id: PHASE8_DEMO_IDS.emailAttempt, recipient_email: PHASE8_DEMO_VALUES.billingEmail, outcome: "accepted" },
-        { id: PHASE8_DEMO_IDS.slackAttemptOne, outcome: "retryable", error_code: DEMO_ALERT_COPY.retryErrorCode },
-        { id: PHASE8_DEMO_IDS.slackAttemptTwo, outcome: "delivered", destination_url: "mock://phase8-slack-sink" },
       ],
       audit: [
         { action: "platform_export.started", reason: PHASE8_DEMO_VALUES.namedExportReason,

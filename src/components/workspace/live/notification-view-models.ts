@@ -22,12 +22,11 @@ export type AlertRuleView = {
   description: string;
   category: string;
   audience: string;
-  destinations: readonly ("bell" | "email" | "slack")[];
+  destinations: readonly ("bell" | "email")[];
   required: boolean;
   enabled: boolean;
   bell: Preference;
   email: Preference;
-  slack: Preference;
 };
 
 export type NotificationListState = {
@@ -61,7 +60,7 @@ export const EMPTY_NOTIFICATION_STATE: NotificationListState = {
 
 function preferenceFor(
   preferences: readonly Preference[],
-  destination: "bell" | "email" | "slack",
+  destination: "bell" | "email",
 ) {
   return preferences.find((preference) => preference.destination === destination) ?? null;
 }
@@ -78,8 +77,7 @@ export function alertRuleViews(preferences: readonly Preference[]): AlertRuleVie
     const first = rulePreferences[0];
     const bell = preferenceFor(rulePreferences, "bell");
     const email = preferenceFor(rulePreferences, "email");
-    const slack = preferenceFor(rulePreferences, "slack");
-    if (!first || !bell || !email || !slack) return [];
+    if (!first || !bell || !email) return [];
     return [{
       ruleId: first.ruleId,
       event: first.event,
@@ -93,7 +91,6 @@ export function alertRuleViews(preferences: readonly Preference[]): AlertRuleVie
       enabled: first.defaultEnabled,
       bell,
       email,
-      slack,
     }];
   }).sort((left, right) => `${left.event}:${left.scope}`.localeCompare(`${right.event}:${right.scope}`));
 }

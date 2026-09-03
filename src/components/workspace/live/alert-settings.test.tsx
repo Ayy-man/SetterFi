@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
-const destinations = ["bell", "email", "slack"] as const;
+const destinations = ["bell", "email"] as const;
 
 const preferences: Preference[] = destinations.map((destination) => ({
   ruleId: "rule-booked",
@@ -27,7 +27,7 @@ const preferences: Preference[] = destinations.map((destination) => ({
   defaultDestinations: ["bell", "email"],
   defaultEnabled: true,
   destination,
-  enabled: destination !== "slack",
+  enabled: true,
   locked: false,
 }));
 
@@ -102,7 +102,7 @@ describe("AlertSettings", () => {
     renderSettings("admin-alerts");
 
     await expectEveryCheckboxIsNamed(3);
-    for (const destination of ["Bell", "Email", "Slack"]) {
+    for (const destination of ["Bell", "Email"]) {
       expect(
         screen.getByRole("checkbox", {
           name: `${destination} for Appointment booked`,
@@ -116,14 +116,14 @@ describe("AlertSettings", () => {
   });
 
   /**
-   * The coach's two destinations are named in the coach's own words, and Slack is not one of them.
+   * The coach's two destinations are named in the coach's own words.
    *
    * "Bell" is the console's column header for a cell in a permission matrix; a coach's question is
-   * where the notice turns up, so the same destination reads "In the app" here. Slack stays off
-   * this surface entirely -- the API can store it, but it points at the client's own channel, and
-   * the one Slack-destined rule that ever reached coaches was the hand-inserted demo row.
+   * where the notice turns up, so the same destination reads "In the app" here. The "Slack" absence
+   * below is a regression guard: the destination was removed in
+   * `20261012000001_remove_slack_alert_destination.sql` and must not return through this surface.
    */
-  it("names the coach destinations in the coach's words and does not offer Slack", async () => {
+  it("names the coach destinations in the coach's words", async () => {
     renderSettings("coach-settings");
 
     await expectEveryCheckboxIsNamed(2);
@@ -456,7 +456,7 @@ describe("AlertSettings coach surface, the ported canvas", () => {
 /**
  * The delivery panel, and the two rows of the artboard it deliberately does not draw.
  *
- * `notification_preferences.destination` is `bell | email | slack`. There is no column an SMS
+ * `notification_preferences.destination` is `bell | email`. There is no column an SMS
  * preference could be written to, and this page loads notification rules and nothing else, so it
  * holds no carrier-review start date to count elapsed days from. The artboard's "Text message" and
  * "Both" cards would therefore have been a control over nothing and a day counter over nothing,
@@ -541,8 +541,8 @@ function preferencesFor(
     ruleId: string;
     name: string;
     category: string;
-    defaultDestinations: readonly ("bell" | "email" | "slack")[];
-    enabledDestinations: readonly ("bell" | "email" | "slack")[];
+    defaultDestinations: readonly ("bell" | "email")[];
+    enabledDestinations: readonly ("bell" | "email")[];
     locked?: boolean;
   }[],
 ): Preference[] {
@@ -717,7 +717,7 @@ describe("AlertSettings admin surface, console density", () => {
 
     // Positive control first: the console really rendered, so the absences below mean something.
     expect(
-      await screen.findByRole("checkbox", { name: "Slack for Appointment booked" }),
+      await screen.findByRole("checkbox", { name: "Email for Appointment booked" }),
     ).toBeVisible();
     expect(screen.getByRole("table")).toBeVisible();
     expect(screen.getByRole("columnheader", { name: /Bell/u })).toBeVisible();
@@ -752,10 +752,10 @@ describe("AlertSettings admin surface, seeded rules", () => {
             },
             {
               ruleId: "rule-demo",
-              name: "Phase 8 demo Slack",
+              name: "Phase 8 demo rule",
               category: "demo",
-              defaultDestinations: ["slack"],
-              enabledDestinations: ["slack"],
+              defaultDestinations: ["email"],
+              enabledDestinations: ["email"],
             },
           ]),
         }),
@@ -766,7 +766,7 @@ describe("AlertSettings admin surface, seeded rules", () => {
     const marks = await screen.findAllByText("Test data");
     expect(marks).toHaveLength(1);
     const row = marks[0]!.closest("tr");
-    expect(row?.textContent).toContain("Phase 8 demo Slack");
+    expect(row?.textContent).toContain("Phase 8 demo rule");
     expect(screen.getByText("Appointment booked").closest("tr")?.textContent).not.toContain(
       "Test data",
     );

@@ -1,7 +1,6 @@
 /** Durable queue delivery: every call starts from a claimed attempt and ends through the finish RPC. */
 
 import type { EmailDriver } from "@/lib/integrations/email/types";
-import type { SlackDriver } from "@/lib/integrations/slack/types";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const NOTIFICATION_RETRY_DELAYS_MS = [
@@ -18,7 +17,7 @@ export type ClaimedNotificationDelivery = {
   notificationId: string;
   attemptId: string;
   attemptNumber: number;
-  destination: "email" | "slack";
+  destination: "email";
   tenantId: string | null;
   userId: string | null;
   recipientEmail: string | null;
@@ -33,7 +32,6 @@ export type ClaimedNotificationDelivery = {
 export type NotificationDeliveryCopy = {
   emailSubject: string | null;
   emailBody: string | null;
-  slackText: string | null;
 };
 
 export type FinishNotificationDelivery = {
@@ -81,7 +79,6 @@ export async function deliverClaimedNotification(input: {
   workerId: string;
   repository: NotificationDeliveryRepository;
   email: EmailDriver;
-  slack: SlackDriver;
   emailFrom: string;
   now?: Date;
 }) {
@@ -105,63 +102,27 @@ export async function deliverClaimedNotification(input: {
   }
 
   const copy = await input.repository.loadCopy(input.claim.notificationId);
-  if (input.claim.destination === "email") {
-    if (!input.claim.recipientEmail || !copy.emailSubject || !copy.emailBody) {
-      await finish({
-        outcome: "unavailable", providerReference: null, errorCode: "EMAIL_DELIVERY_TARGET_MISSING",
-        errorDetail: "Email target or copy is unavailable.", retryAt: null,
-      });
-      return { outcome: "unavailable" as const };
-    }
-    const outcome = await input.email.deliverEmail({
-      deliveryId: input.claim.deliveryId,
-      attemptNumber: input.claim.attemptNumber,
-      to: input.claim.recipientEmail,
-      from: input.emailFrom,
-      subject: copy.emailSubject,
-      text: copy.emailBody,
-    });
-    if (outcome.kind === "accepted") {
-      await finish({
-        outcome: "accepted", providerReference: outcome.providerReference,
-        errorCode: null, errorDetail: null, retryAt: null,
-      });
-      return { outcome: "accepted" as const };
-    }
-    if (outcome.kind === "retry") {
-      const retryAt = retryAtForAttempt(input.claim.attemptNumber, now, outcome.retryAfterSeconds);
-      await finish({
-        outcome: retryAt ? "retryable" : "unavailable", providerReference: null,
-        errorCode: outcome.errorCode, errorDetail: null, retryAt,
-      });
-      return { outcome: retryAt ? "retryable" as const : "unavailable" as const };
-    }
+  if (!input.claim.recipientEmail || !copy.emailSubject || !copy.emailBody) {
     await finish({
-      outcome: "unavailable", providerReference: null, errorCode: outcome.errorCode,
-      errorDetail: outcome.safeDetail, retryAt: null,
+      outcome: "unavailable", providerReference: null, errorCode: "EMAIL_DELIVERY_TARGET_MISSING",
+      errorDetail: "Email target or copy is unavailable.", retryAt: null,
     });
     return { outcome: "unavailable" as const };
   }
-
-  if (!copy.slackText) {
-    await finish({
-      outcome: "unavailable", providerReference: null, errorCode: "SLACK_COPY_MISSING",
-      errorDetail: "Slack copy is unavailable.", retryAt: null,
-    });
-    return { outcome: "unavailable" as const };
-  }
-  const outcome = await input.slack.postSlack({
+  const outcome = await input.email.deliverEmail({
     deliveryId: input.claim.deliveryId,
     attemptNumber: input.claim.attemptNumber,
-    text: copy.slackText,
-    destinationUrl: input.claim.destinationUrl,
+    to: input.claim.recipientEmail,
+    from: input.emailFrom,
+    subject: copy.emailSubject,
+    text: copy.emailBody,
   });
-  if (outcome.kind === "delivered") {
+  if (outcome.kind === "accepted") {
     await finish({
-      outcome: "delivered", providerReference: outcome.providerReference,
+      outcome: "accepted", providerReference: outcome.providerReference,
       errorCode: null, errorDetail: null, retryAt: null,
     });
-    return { outcome: "delivered" as const };
+    return { outcome: "accepted" as const };
   }
   if (outcome.kind === "retry") {
     const retryAt = retryAtForAttempt(input.claim.attemptNumber, now, outcome.retryAfterSeconds);
@@ -187,11 +148,11 @@ export function createLiveNotificationDeliveryRepository(): NotificationDelivery
   return {
     loadCopy: async (notificationId) => {
       const { data, error } = await client.from("notifications")
-        .select("rule:alert_rules!inner(email_subject,email_body,slack_text)")
+        .select("rule:alert_rules!inner(email_subject,email_body)")
         .eq("id", notificationId).single();
       if (error || !data) throw new Error("NOTIFICATION_COPY_READ_FAILED");
-      const rule = data.rule as unknown as { email_subject: string | null; email_body: string | null; slack_text: string | null };
-      return { emailSubject: rule.email_subject, emailBody: rule.email_body, slackText: rule.slack_text };
+      const rule = data.rule as unknown as { email_subject: string | null; email_body: string | null };
+      return { emailSubject: rule.email_subject, emailBody: rule.email_body };
     },
     finish: async (input) => {
       const { error } = await client.rpc("finish_notification_delivery_attempt", {
@@ -250,7 +211,7 @@ export function createLiveNotificationDeliveryRepository(): NotificationDelivery
       if (error) throw new Error("NOTIFICATION_DELIVERY_CLAIM_FAILED");
       return (data ?? []).map((row: Record<string, unknown>) => ({
         deliveryId: String(row.delivery_id), notificationId: String(row.notification_id), attemptId: String(row.attempt_id),
-        attemptNumber: Number(row.attempt_number), destination: row.destination as "email" | "slack",
+        attemptNumber: Number(row.attempt_number), destination: "email" as const,
         tenantId: row.tenant_id === null ? null : String(row.tenant_id),
         userId: row.user_id === null ? null : String(row.user_id),
         recipientEmail: row.recipient_email === null ? null : String(row.recipient_email),
@@ -259,20 +220,5 @@ export function createLiveNotificationDeliveryRepository(): NotificationDelivery
         link: row.link === null ? null : String(row.link), isTest: Boolean(row.is_test),
       }));
     },
-  };
-}
-
-export function createSlackWebhookPacer(input: {
-  now?: () => number;
-  sleep?: (milliseconds: number) => Promise<void>;
-} = {}) {
-  const now = input.now ?? Date.now;
-  const sleep = input.sleep ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
-  const lastByWebhook = new Map<string, number>();
-  return async (destinationUrl: string | null) => {
-    if (!destinationUrl) return;
-    const last = lastByWebhook.get(destinationUrl);
-    if (last !== undefined) await sleep(Math.max(0, 1_000 - (now() - last)));
-    lastByWebhook.set(destinationUrl, now());
   };
 }

@@ -47,13 +47,13 @@ describe("MatrixCheckbox", () => {
     render(
       <MatrixCheckbox
         checked={false}
-        columnLabel="Slack"
+        columnLabel="Email"
         onCheckedChange={() => {}}
         rowLabel="Payment failed"
         showColumnLabel
       />,
     );
 
-    expect(screen.getByText("Slack")).toBeVisible();
+    expect(screen.getByText("Email")).toBeVisible();
   });
 });

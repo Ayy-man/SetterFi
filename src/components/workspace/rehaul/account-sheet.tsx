@@ -231,14 +231,8 @@ type LoadState = "loading" | "ready" | "error";
 const OWNER_DESTINATIONS = [
   { destination: "bell" as const, label: "Bell" },
   { destination: "email" as const, label: "Email" },
-  { destination: "slack" as const, label: "Slack" },
 ];
 
-/*
- * Slack is deliberately absent from the coach's list. The API can store it and the console offers
- * it, but it is a platform destination pointed at SetterFi's own channel, and the one time a
- * Slack-destined rule reached coaches it was a hand-inserted demo row. The console keeps all three.
- */
 const COACH_DESTINATIONS = [
   { destination: "bell" as const, label: "In the app" },
   { destination: "email" as const, label: "Email" },

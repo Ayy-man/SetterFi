@@ -106,8 +106,6 @@ export const ENV_CONTRACT_NAMES = [
   "RESEND_API_KEY",
   "RESEND_WEBHOOK_SIGNING_SECRET",
   "SETTERFI_EMAIL_FROM",
-  "SETTERFI_SLACK_DRIVER",
-  "SLACK_WEBHOOK_URL",
   // Phase 9
   // GHL_AGENCY_ACCESS_TOKEN survives as a bootstrap-only path: a hand-pasted agency token that
   // works until the stored install exists, and stops being consulted the moment it does. The
@@ -179,8 +177,7 @@ export type DriverName =
   // Phase 6
   | "stripe"
   // Phase 8
-  | "email"
-  | "slack";
+  | "email";
 export type DriverSelectorName = Extract<
   EnvironmentName,
   | "SETTERFI_GHL_DRIVER"
@@ -194,7 +191,6 @@ export type DriverSelectorName = Extract<
   | "SETTERFI_STRIPE_DRIVER"
   // Phase 8
   | "SETTERFI_EMAIL_DRIVER"
-  | "SETTERFI_SLACK_DRIVER"
 >;
 
 export class DriverConfigurationError extends Error {

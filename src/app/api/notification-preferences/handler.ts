@@ -6,7 +6,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { loadAlertActor } from "@/lib/auth/actors";
 
 const headers = { "Cache-Control": "no-store" };
-const DESTINATIONS = ["bell", "email", "slack"] as const;
+const DESTINATIONS = ["bell", "email"] as const;
 
 export type Preference = {
   ruleId: string;
@@ -105,9 +105,10 @@ export function createPreferenceRepository(): PreferenceRepository {
        * `alert-settings.tsx` title-cased its unknown category into a heading reading "Demo".
        *
        * That breaks two hard rules at once -- test data segregated and labelled on-screen, and
-       * honest states. Filtering here stops it being client-visible. It does NOT make it correct:
-       * the row is still live and still enabled, and the real fix is deleting it. Ayman has that
-       * call; this is the stopgap, and it should come out once the row is gone.
+       * honest states. The row itself is now deleted by
+       * `20261012000001_remove_slack_alert_destination.sql`, along with the Slack destination it
+       * pointed at. This filter stays as the general guard: any future `demo` category row is
+       * hidden from coaches by construction rather than by someone remembering to clean up.
        *
        * An admin is deliberately not filtered. Hiding the row from the only people who can delete
        * it is how it survives.
