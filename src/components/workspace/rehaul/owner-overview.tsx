@@ -15,6 +15,7 @@
  * slot renders its absence in words instead of an invented line.
  */
 
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
@@ -385,7 +386,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
   });
 
   const barsDrawable = history.length >= 2 && history.some((period) => period.value > 0);
-  const bars = useMeasuredWidth(640);
+  const { measure: measureBars, width: barsWidth } = useMeasuredWidth(640);
 
   return (
     <div className="flex min-w-0 flex-col gap-[var(--s-4)]">
@@ -573,7 +574,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
               trailing 30 days each
             </span>
           </div>
-          <div className="mt-[14px]" ref={bars.measure}>
+          <div className="mt-[14px]" ref={measureBars}>
             {barsDrawable ? (
               <BarChart
                 height={150}
@@ -585,7 +586,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
                   .join(", ")}`}
                 labels={history.map((period) => periodLabel(period.periodStart))}
                 values={history.map((period) => period.value)}
-                width={bars.width}
+                width={barsWidth}
               />
             ) : (
               <DataState
@@ -665,14 +666,10 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
         subscriptions={projected.subscriptions}
       />
 
-      {/*
-        TODO(rehaul): the context eye lands at src/components/workspace/rehaul/context-eye.tsx.
-        When it exists, import it and render exactly:
-        <ContextEye
+      <ContextEye
           screen="owner-overview"
           copy="Every figure here is read from one platform measurement snapshot at a single as-of instant. Gross MRR and active subscriptions are point-in-time; signups and booked calls are trailing 30 days; churn is the most recent complete billing cycle. Demo tenants and test rows are excluded at the source."
         />
-      */}
     </div>
   );
 }
@@ -742,7 +739,7 @@ function FiguresDialog({
   const opened = kpis.find((row) => row.key === openMetric) ?? null;
   const delta = signupDelta(history);
   const drawable = history.length >= 2;
-  const line = useMeasuredWidth(700);
+  const { measure: measureLine, width: lineWidth } = useMeasuredWidth(700);
 
   return (
     <Dialog onOpenChange={onOpenChange} open={openMetric !== null}>
@@ -810,12 +807,12 @@ function FiguresDialog({
         <div className="grid min-h-0 flex-1 gap-[20px] overflow-y-auto px-[24px] py-[20px] lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex min-w-0 flex-col gap-[18px]">
             <div className="flex flex-wrap items-center gap-[16px] text-[12.5px]">
-              <span className="text-[13px] font-semibold text-[var(--ink)]">
-                Signups by 30-day period
-              </span>
+              <h3 className="m-0 text-[13px] font-semibold text-[var(--ink)]">
+                Signups and active subscriptions
+              </h3>
             </div>
             {drawable ? (
-              <div ref={line.measure}>
+              <div ref={measureLine}>
                 <LineChart
                   height={260}
                   label="Signups by 30-day period"
@@ -823,7 +820,7 @@ function FiguresDialog({
                   series={[
                     { name: "Signups", values: history.map((period) => period.value) },
                   ]}
-                  width={line.width}
+                  width={lineWidth}
                 />
               </div>
             ) : (

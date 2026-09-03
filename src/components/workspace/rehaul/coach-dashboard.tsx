@@ -1,5 +1,6 @@
 "use client";
 
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -25,17 +26,6 @@ import type {
 } from "@/lib/repositories/analytics";
 import type { CoachChannelStatus } from "@/components/workspace/live/coach-channel-status";
 import type { MessagingChannel } from "@/lib/integrations/types";
-
-/*
- * TODO(rehaul): swap the inline eye for the shared component once
- * `src/components/workspace/rehaul/context-eye.tsx` lands. The exact JSX this file wants is:
- *
- *   <ContextEye copy={EYE_COPY} screen="coach-dashboard" />
- *
- * with `import { ContextEye } from "@/components/workspace/rehaul/context-eye";` at the top.
- * Until then `EYE_COPY` is rendered by `InlineEye` at the foot of the page body, so the sentences
- * the old surface printed under its headings are on the screen exactly once, in the eye's slot.
- */
 
 /**
  * Every explainer sentence the live coach dashboard printed under a heading, moved off the page.
@@ -672,16 +662,6 @@ function FirstRun({
  * Eye
  * ------------------------------------------------------------------------------------------ */
 
-/** TODO(rehaul): delete once `ContextEye` exists; see the note at the top of the file. */
-function InlineEye({ copy }: { copy: string }) {
-  return (
-    <details className="mt-6 text-[14px] text-[var(--muted)]" data-slot="context-eye">
-      <summary className="w-fit cursor-pointer font-medium">What these mean</summary>
-      <p className="m-0 mt-2 max-w-[70ch]">{copy}</p>
-    </details>
-  );
-}
-
 /* --------------------------------------------------------------------------------------------
  * The screen
  * ------------------------------------------------------------------------------------------ */
@@ -833,7 +813,7 @@ export function CoachDashboard({
         </>
       )}
 
-      <InlineEye copy={EYE_COPY} />
+      <ContextEye copy={EYE_COPY} screen="coach-dashboard" />
     </div>
   );
 }

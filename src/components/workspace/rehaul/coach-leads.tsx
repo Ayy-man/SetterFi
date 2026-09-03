@@ -1,5 +1,6 @@
 "use client";
 
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { useMemo, useState } from "react";
 
 import { Figure, MonoMeta, Surface } from "@/components/kit/atomics";
@@ -424,11 +425,10 @@ export function CoachLeads({
         </div>
       )}
 
-      {/* TODO: render once `src/components/workspace/rehaul/context-eye.tsx` lands:
-          <ContextEye
+      <ContextEye
             screen="coach-leads"
             copy="Everyone who has messaged you, and where each one got to. The board reads each lead's stage today, not the path it took. A card marked Needs you is sitting in a no show or a long-term follow-up with no automated touch left to run, so the next move is yours."
-          /> */}
+          />
     </div>
   );
 }
