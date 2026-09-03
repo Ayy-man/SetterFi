@@ -286,7 +286,7 @@ const QUIET_BUTTON_CLASS = [
 
 const PRIMARY_BUTTON_CLASS = [
   "inline-flex h-[56px] flex-1 items-center justify-center gap-[10px] rounded-[12px]",
-  "border border-[var(--accent-line)] bg-[var(--accent-fill)] px-[20px] text-[17px]",
+  "border border-[var(--accent-line)] [background:var(--accent-fill)] px-[20px] text-[17px]",
   "leading-none font-semibold text-[color:var(--on-accent)] no-underline",
 ].join(" ");
 
@@ -602,7 +602,7 @@ export function RehaulMeetAgent({
             />
             <button
               aria-label="Send as the lead"
-              className="inline-flex size-[44px] flex-[0_0_44px] items-center justify-center rounded-full border border-[var(--accent-line)] bg-[var(--accent-fill)] text-[color:var(--on-accent)] disabled:opacity-60"
+              className="inline-flex size-[44px] flex-[0_0_44px] items-center justify-center rounded-full border border-[var(--accent-line)] [background:var(--accent-fill)] text-[color:var(--on-accent)] disabled:opacity-60"
               disabled={sending || !draft.trim()}
               type="submit"
             >

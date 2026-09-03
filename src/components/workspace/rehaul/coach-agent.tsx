@@ -244,7 +244,7 @@ function Switch({
         "relative h-[30px] w-[52px] shrink-0 rounded-full border transition-colors " +
         "disabled:opacity-60 " +
         (checked
-          ? "border-[var(--accent-line)] bg-[var(--accent-fill)]"
+          ? "border-[var(--accent-line)] [background:var(--accent-fill)]"
           : "border-[var(--line-input)] bg-[var(--line-input)]")
       }
       disabled={disabled}

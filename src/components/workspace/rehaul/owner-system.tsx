@@ -116,6 +116,22 @@ const JOB_NAMES: Record<string, string> = {
   "ghl-install-reconcile": "Channel install reconcile",
 };
 
+/**
+ * What a failed receipt recorded, in the register the row is written in.
+ *
+ * Most details are the thrown code -- `PROVISIONING_TENANT_READ_FAILED` -- and a screaming
+ * constant in a sentence-case row is a machine name on an operator screen. Anything that is not a
+ * bare code (a provider's message, a network error) is kept verbatim, because lower-casing
+ * "ENOTFOUND db.example" would change what it says. The export carries the raw string for a log
+ * search.
+ */
+function displayErrorDetail(value: string) {
+  const trimmed = value.trim().replace(/\.$/u, "");
+  if (!/^[A-Z0-9_]+$/u.test(trimmed)) return trimmed;
+  const words = trimmed.replace(/[_-]+/g, " ").toLowerCase();
+  return `${words[0].toUpperCase()}${words.slice(1)}`;
+}
+
 function jobName(job: SystemHealth["jobs"][number]) {
   return JOB_NAMES[job.id]
     ?? sentenceCase(job.label.replace(/\bGHL\b/g, "Channel").replace(/\bTwilio\b/gi, "Carrier"));
@@ -528,7 +544,10 @@ function incidents(health: SystemHealth, span: WindowKey, now: number): Incident
       key: `job:${job.id}`,
       at: job.lastRunAt,
       title: `${jobName(job)}: ${jobPill(job.state).label.toLowerCase()}`,
-      detail: job.reason ?? "",
+      // The reason says the run failed; the receipt's own detail says why, and an operator
+      // reading the rail is the reader who needs the second half.
+      detail: [job.reason, job.errorDetail ? displayErrorDetail(job.errorDetail) : null]
+        .filter(Boolean).join(" "),
       tone: job.state === "failed" ? ("bad" as const) : ("amber" as const),
     }));
 
@@ -602,6 +621,8 @@ function JobsTab({ health }: { health: SystemHealth }) {
               reportedSinceYesterday: job.reportedSinceYesterday,
               receiptId: job.receiptId ?? "",
               reason: job.reason ?? "",
+              // Verbatim, because this is the string to paste into a log search.
+              lastError: job.errorDetail ?? "",
             }))}
           />
         </span>
@@ -625,6 +646,18 @@ function JobsTab({ health }: { health: SystemHealth }) {
               {job.reason ? (
                 <div className="mt-2 text-[12.5px] leading-[1.5] text-[color:var(--muted)]">
                   {job.reason}
+                </div>
+              ) : null}
+              {/*
+                Only a failed row carries one, so the label appears exactly where there is
+                something to act on. It stays on the muted ink: the pill beside it is already
+                the only colour this row spends.
+              */}
+              {job.errorDetail ? (
+                <div className="mt-1 text-[12.5px] leading-[1.5] text-[color:var(--muted)]">
+                  <span className="font-medium text-[color:var(--ink)]">Last error</span>
+                  {" "}
+                  <span>{displayErrorDetail(job.errorDetail)}</span>
                 </div>
               ) : null}
             </div>

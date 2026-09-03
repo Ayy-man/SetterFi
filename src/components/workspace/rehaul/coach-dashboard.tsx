@@ -679,7 +679,7 @@ function FirstRun({
       <StepRow
         action={(
           <Link
-            className="inline-flex h-11 items-center rounded-xl border border-transparent bg-[var(--accent-fill)] px-5 text-[16px] font-medium text-[var(--on-accent)] no-underline hover:no-underline"
+            className="inline-flex h-11 items-center rounded-xl border border-transparent [background:var(--accent-fill)] px-5 text-[16px] font-medium text-[var(--on-accent)] no-underline hover:no-underline"
             href="/coach/integrations"
           >
             Connect Instagram and Messenger

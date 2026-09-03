@@ -59,6 +59,7 @@ const health: SystemHealth = {
       reportedSinceYesterday: true,
       receiptId: "receipt-1",
       reason: null,
+      errorDetail: null,
     },
     {
       id: "a2p-probe",
@@ -69,6 +70,7 @@ const health: SystemHealth = {
       reportedSinceYesterday: false,
       receiptId: "receipt-2",
       reason: "The latest run report is outside its expected window.",
+      errorDetail: null,
     },
     {
       id: "ghl-install-reconcile",
@@ -79,6 +81,7 @@ const health: SystemHealth = {
       reportedSinceYesterday: true,
       receiptId: "receipt-3",
       reason: null,
+      errorDetail: null,
     },
   ],
   providers: [
