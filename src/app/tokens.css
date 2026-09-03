@@ -974,6 +974,17 @@ body {
   a:hover { text-decoration: underline; text-underline-offset: 2px; }
 }
 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--r-control); }
+/* The one exception, and it moves the ring rather than dropping it: the input inside a field shell
+   is a flex child rather than the shell's whole inside, so its own ring drew inset on the sides and
+   proud of the shell top and bottom. Same width, colour and offset, carried by the frame a reader
+   actually sees. The shell keeps its 9/10px radius because it never matches :focus-visible itself.
+   A trailing Show button still takes the rule above, which is what says focus left the field.
+   Reasoning in kit/atomics/field.tsx, both halves pinned by app/focus-ring.test.ts. */
+[data-slot="field-shell"]:has([data-slot="kit-input"]:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+[data-slot="field-shell"] [data-slot="kit-input"]:focus-visible { outline: none; }
 ::selection { background: var(--accent-wash); color: var(--ink); }
 /* Layered so utilities such as text-primary-foreground and aria-pressed:text-* keep winning;
    an unlayered element rule beats every @layer utility regardless of specificity. */

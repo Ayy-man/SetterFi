@@ -73,8 +73,10 @@ describe("Inputs", () => {
     const shell = slot("field-shell");
     // The shell paints the artifact's 3px teal tint...
     expect(shell.className).toContain("focus-within:[box-shadow:0_0_0_3px_var(--accent-wash-strong)]");
-    // ...and nothing here removes the global :focus-visible outline from the input itself, which
-    // is the indicator that actually clears WCAG 2.4.11.
+    // ...and the outline that does the WCAG 2.4.11 work rides on the shell too, from the pair of
+    // rules in tokens.css that `focus-ring.test.ts` pins. Neither element may kill an outline from
+    // its own class string: doing it here would take the ring off the shell as well, since the
+    // shell is the element that now carries it.
     expect(shell.className).not.toContain("outline-none");
     expect(slot("kit-input").className).not.toContain("outline-none");
   });

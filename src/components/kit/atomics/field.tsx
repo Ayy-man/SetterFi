@@ -12,9 +12,21 @@ import { cn } from "@/lib/utils";
  * is what makes a focused field read lit against the navy card. It is not, on its own, a legible
  * focus indicator: at `--accent-wash-strong` the ring is far under the 3:1 that WCAG 2.4.11 asks
  * of one. So both happen. The shell paints the artifact's tint on `:focus-within`, and the real
- * `<input>` inside keeps the product's global `:focus-visible` outline at `--focus-ring`, which is
- * `--accent-bright` at 0.6 and does the accessibility work. Removing the outline to "clean up" the
- * doubling would leave a keyboard user with a 14%-alpha wash as their only cue.
+ * outline at `--focus-ring`, which is `--accent-bright` at 0.6, does the accessibility work.
+ * Removing that outline to "clean up" the doubling would leave a keyboard user with a 17%-alpha
+ * wash as their only cue, so it is not the fix for anything.
+ *
+ * **Both treatments land on this shell, not one on the shell and one on the `<input>`.** The
+ * outline used to sit on the input, where the product's global `:focus-visible` rule puts it, and
+ * that was wrong for exactly one reason: the input is a flex child of the shell rather than the
+ * shell's whole inside. It is inset by the shell's padding, it shares the row with an optional
+ * leading glyph and with whatever `trailing` holds, and `coach.css` raises it to `--coach-target`,
+ * which on /auth/forgot-password is 44px inside a 34px frame. So its ring drew 11px inside the
+ * shell on the left and right and 2px proud of it top and bottom -- 9px proud where the coach
+ * target applies -- which reads as a second, looser rectangle escaping the field. The moved ring
+ * lives in `tokens.css` beside the global rule it is the one exception to; a trailing button still
+ * takes the global outline on itself, because that ring is the only thing distinguishing "focus is
+ * in the field" from "focus is on Show".
  */
 export function FieldShell({
   children,
