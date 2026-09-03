@@ -11,17 +11,25 @@ import {
   type CoachEscalationSummary,
   type CoachObjectionPushback,
 } from "@/components/workspace/live/coach-offer";
+import { CoachAgent } from "@/components/workspace/rehaul/coach-agent";
+import {
+  rehaulConnectionSurface,
+  type RehaulCalendarSnapshot,
+} from "@/components/workspace/rehaul/coach-agent-connection-view";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
 import type { MessagingChannel } from "@/lib/booking/types";
 import {
   brainObjectionsLive,
+  capiLive,
   inboxVerbsLive,
   phase1Live,
   phase2Live,
   phase3Live,
+  phase4Live,
   phase7MeetAgentLive,
+  uiRehaulLive,
 } from "@/lib/env-contract";
 import { workspaceDateFormat } from "@/lib/format/datetime";
 import { loadCoachTopObjections } from "@/lib/repositories/analytics";
@@ -29,6 +37,8 @@ import {
   listChannelConnections,
   type ChannelConnectionView,
 } from "@/lib/repositories/channel-connections";
+import { listCapiDatasets } from "@/lib/repositories/capi-datasets";
+import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
 import { resolveChannelCapability } from "@/lib/sends/channel-capabilities";
 import {
@@ -167,6 +177,37 @@ function publicationDateLabel(value: string | null) {
   return Number.isNaN(date.valueOf()) ? null : workspaceDateFormat.format(date);
 }
 
+
+/**
+ * The primary calendar row, read exactly as `/coach/integrations` reads it.
+ *
+ * A copy rather than an import: the loader there is a module-private function inside a page file,
+ * and a page cannot export one for another page to call. The columns, the filter and the failure
+ * arm are identical on purpose -- a `checked: false` read stays absent on the screen instead of
+ * collapsing to "not connected", which would claim a fact the read did not establish.
+ */
+async function rehaulCalendar(tenantId: string): Promise<RehaulCalendarSnapshot | null> {
+  const service = createSupabaseServiceClient();
+  const { data, error } = await service
+    .from("calendar_connections")
+    .select("calendar_name, provider, state, last_slot_fetch_at, last_slot_fetch_ok")
+    .eq("tenant_id", tenantId)
+    .eq("is_primary", true)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    name: data.calendar_name,
+    provider: data.provider,
+    state: data.state,
+    lastSlotFetchAt: data.last_slot_fetch_at,
+    lastSlotFetchOk: data.last_slot_fetch_ok,
+  };
+}
+
+type CoachAgentPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
 function CoachAgentShell({
   children,
   navCounts,
@@ -206,7 +247,7 @@ async function liveCoachContext() {
   return { actorId: claims.userId ?? null, tenantId: claims.tenantId };
 }
 
-export default async function CoachAgentPage() {
+export default async function CoachAgentPage({ searchParams }: CoachAgentPageProps) {
   if (!phase2Live()) {
     return (
       <CoachAgentShell>
@@ -252,6 +293,51 @@ export default async function CoachAgentPage() {
         ? loadCoachEscalations(tenantId, asOf)
         : Promise.resolve(null),
     ]);
+
+  if (uiRehaulLive()) {
+    /*
+     * The rehaul body. Same offer layer the old component gets, plus the connection surface the
+     * ladder's booking rung and the Connections tab read. Every extra read is an existing
+     * repository call behind the flag `/coach/integrations` already gates it with, and a read
+     * that refuses stays null so the screen says it could not read rather than "not connected".
+     */
+    const params = await searchParams;
+    const tabParam = params.tab;
+    const tab = (Array.isArray(tabParam) ? tabParam[0] : tabParam) === "connections"
+      ? ("connections" as const)
+      : ("ladder" as const);
+    const connectionsEnabled = phase1Live() && phase4Live();
+    const [channelRows, registration, calendar, datasets] = await Promise.all([
+      connectionsEnabled
+        ? listChannelConnections(tenantId).catch(() => null)
+        : Promise.resolve(null),
+      loadCoachA2pRegistration(tenantId).catch(() => null),
+      rehaulCalendar(tenantId).catch(() => null),
+      capiLive() ? listCapiDatasets(tenantId).catch(() => null) : Promise.resolve(null),
+    ]);
+
+    return (
+      <CoachAgentShell navCounts={await coachNavCounts(tenantId)}>
+        <CoachAgent
+          connections={rehaulConnectionSurface({
+            calendar,
+            connections: channelRows,
+            datasets,
+            registration,
+          })}
+          initialState={{ draft, published }}
+          key={`${draft?.id ?? "no-draft"}:${published?.id ?? "no-published"}`}
+          publishedDateLabel={
+            published && publicationReceipt?.offerId === published.id
+              ? publicationDateLabel(publicationReceipt.publishedAt)
+              : null
+          }
+          tab={tab}
+          testEnabled={phase7MeetAgentLive()}
+        />
+      </CoachAgentShell>
+    );
+  }
 
   const channels: CoachCadenceChannel[] = connections
     .filter(
