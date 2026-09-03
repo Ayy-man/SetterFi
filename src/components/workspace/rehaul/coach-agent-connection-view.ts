@@ -42,17 +42,35 @@ const CALENDAR_PROVIDER_LABELS: Record<RehaulCalendarSnapshot["provider"], strin
 
 const CHANNEL_ORDER = ["instagram", "messenger", "whatsapp", "sms"] as const;
 
+/**
+ * The coach-facing name for each card, indexed rather than derived.
+ *
+ * The repository's own `channelLabel` is an operator label ("Facebook Messenger", "Text messages
+ * (SMS)") and the old fallback upper-cased the raw key, which printed "Whatsapp" and would print a
+ * vendor key verbatim the day one appears. This map is the whole vocabulary: a key outside it has
+ * no card, so no string munging can leak one.
+ */
+const CHANNEL_LABELS: Record<(typeof CHANNEL_ORDER)[number], string> = {
+  instagram: "Instagram",
+  messenger: "Messenger",
+  sms: "SMS",
+  whatsapp: "WhatsApp",
+};
+
 function stamp(value: string | null): string | null {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? null : workspaceDateTimeFormat.format(date);
 }
 
-function channelCard(connection: ChannelConnectionView): RehaulConnectionCard {
+function channelCard(
+  connection: ChannelConnectionView,
+  channel: (typeof CHANNEL_ORDER)[number],
+): RehaulConnectionCard {
   const roundTrip = stamp(connection.receipts.signedRoundTripAt);
   const base = {
-    key: connection.channel,
-    label: connection.channelLabel,
+    key: channel,
+    label: CHANNEL_LABELS[channel],
     eyebrow: "Where it talks",
     rows: [] as readonly { label: string; value: string }[],
     footLabel: null as string | null,
@@ -72,13 +90,18 @@ function channelCard(connection: ChannelConnectionView): RehaulConnectionCard {
   }
 
   if (connection.state === "expired" || connection.state === "error") {
+    // The artboard dates the expiry. `tokenExpiresAt` is the column that records it, so the date
+    // is printed only where one was actually stored and the sentence drops it otherwise.
+    const expiredOn = connection.state === "expired" ? stamp(connection.tokenExpiresAt) : null;
     return {
       ...base,
       tone: "amber",
       stateLabel: connection.state === "expired" ? "Reconnect needed" : "Not sending",
       sentence:
         connection.error ??
-        "The stored sign-in stopped working, so replies here are paused until you reconnect.",
+        (expiredOn
+          ? `The sign-in expired on ${expiredOn}, so replies here are paused.`
+          : "The stored sign-in stopped working, so replies here are paused."),
       action: { label: "Reconnect", href: "/coach/integrations" },
     };
   }
@@ -88,7 +111,7 @@ function channelCard(connection: ChannelConnectionView): RehaulConnectionCard {
       ...base,
       tone: "amber",
       stateLabel: connection.state === "ready" ? "Not verified yet" : "Awaiting review",
-      sentence: "No signed round trip is recorded yet, so nothing claims it can send and receive.",
+      sentence: "No signed round trip recorded.",
       footLabel: "Account",
       footValue: connection.externalAccountLabel ?? "not recorded",
       action: null,
@@ -125,7 +148,7 @@ function calendarCard(calendar: RehaulCalendarSnapshot | null): RehaulConnection
         : "Availability not confirmed",
     sentence: verified
       ? "Slots read cleanly, so your agent can offer a time."
-      : "Booking stays off until an availability read succeeds.",
+      : "Booking is off.",
     footLabel: null,
     footValue: null,
     action: calendar.state === "disconnected" ? { label: "Connect", href: "/coach/integrations" } : null,
@@ -137,12 +160,19 @@ function smsRegistration(
   registration: CoachA2pRegistrationProjection | null,
 ): RehaulSmsRegistration | null {
   if (!registration) return null;
+  const done = !registration.terminalRejection && registration.registrationState === "done";
   return {
     submittedAt: registration.submittedAt,
     rejected: registration.terminalRejection,
+    /*
+     * The tone follows the state rather than the panel. Amber is the persistent pending colour and
+     * a refusal is not pending, so a terminal refusal drops out of amber; "Registered" is a state
+     * the carrier confirmed back to us, which is the only thing allowed to read green here.
+     */
+    tone: registration.terminalRejection ? "grey" : done ? "good" : "amber",
     stateLabel: registration.terminalRejection
       ? "Registration refused"
-      : registration.registrationState === "done"
+      : done
         ? "Registered"
         : "Awaiting carrier",
   };
@@ -158,7 +188,7 @@ function adPlatform(datasets: readonly CapiDatasetSnapshot[] | null) {
   const connected = datasets.some((dataset) => dataset.status === "connected");
   return {
     connected,
-    label: connected ? "Qualified and Booked, per keyword" : "Nothing is being sent yet",
+    label: connected ? "Qualified and booked, per keyword" : "Nothing is being sent yet",
   };
 }
 
@@ -177,10 +207,10 @@ export function rehaulConnectionSurface(input: {
         ? null
         : CHANNEL_ORDER.map((channel) => {
             const connection = byChannel.get(channel);
-            if (connection) return channelCard(connection);
+            if (connection) return channelCard(connection, channel);
             return {
               key: channel,
-              label: channel === "sms" ? "SMS" : channel[0].toUpperCase() + channel.slice(1),
+              label: CHANNEL_LABELS[channel],
               eyebrow: "Where it talks",
               tone: "grey" as const,
               stateLabel: "Not connected",

@@ -137,7 +137,10 @@ describe("rehaul coach agent", () => {
 
     // A figure that came from storage, not from the artboard's demo coach.
     expect(screen.getByText("$2,500.00 once")).toBeInTheDocument();
-    expect(screen.getByLabelText("Do you know your credit score roughly?")).toHaveValue("700");
+    // Rows are named for the fact they store. The question's wording lives in the platform brain,
+    // so nothing here puts words in the agent's mouth that no payload supplies.
+    expect(screen.getByLabelText("Credit score")).toHaveValue("700");
+    expect(screen.queryByText("Do you know your credit score roughly?")).not.toBeInTheDocument();
 
     // Both keywords, each with its own goal segment.
     expect(screen.getByRole("button", { name: "CCA" })).toBeInTheDocument();
@@ -145,6 +148,10 @@ describe("rehaul coach agent", () => {
 
     // The five follow-up touches come off DURABLE_TOUCHES, which runs fourteen days.
     expect(screen.getByText("5 times over 14 days")).toBeInTheDocument();
+
+    // The keyword segments write on click, so the row carries its own accountability line.
+    expect(screen.getAllByLabelText("Keyword goal change recorded in the audit log").length)
+      .toBeGreaterThan(0);
 
     for (const sentence of OLD_EXPLAINERS) {
       expect(screen.queryByText(sentence)).not.toBeInTheDocument();
@@ -168,6 +175,63 @@ describe("rehaul coach agent", () => {
     expect(screen.getByText("Awaiting carrier")).toBeInTheDocument();
     expect(document.querySelector(".daycount")).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/registration[^.]*\d+%/i);
+    // The explainer moved to the eye; the day counter above it already states the wait.
+    expect(
+      screen.queryByText("The carrier owns this review, so there is nothing here to test or press yet."),
+    ).not.toBeInTheDocument();
+    // The channel name is indexed, never munged out of the raw key.
+    expect(screen.queryByText("Whatsapp")).not.toBeInTheDocument();
+  });
+
+  it("drops the pending palette once the carrier has answered", () => {
+    const registered = rehaulConnectionSurface({
+      calendar: null,
+      connections: [],
+      datasets: null,
+      registration: {
+        submittedAt: "2026-08-25T13:41:00.000Z",
+        registrationState: "done",
+        terminalRejection: false,
+        terminalCode: null,
+      },
+    });
+    const { unmount } = render(
+      <CoachAgent
+        connections={registered}
+        initialKeywordGoals={goals}
+        initialState={{ draft: null, published }}
+        publishedDateLabel={null}
+        tab="connections"
+        testEnabled={false}
+      />,
+    );
+    // A state the carrier confirmed back is the only thing allowed out of amber.
+    expect(screen.getByText("Registered").className).toContain("--good-wash");
+    unmount();
+
+    const refused = rehaulConnectionSurface({
+      calendar: null,
+      connections: [],
+      datasets: null,
+      registration: {
+        submittedAt: "2026-08-25T13:41:00.000Z",
+        registrationState: "awaiting_provider",
+        terminalRejection: true,
+        terminalCode: "REJECTED",
+      },
+    });
+    render(
+      <CoachAgent
+        connections={refused}
+        initialKeywordGoals={goals}
+        initialState={{ draft: null, published }}
+        publishedDateLabel={null}
+        tab="connections"
+        testEnabled={false}
+      />,
+    );
+    // A refusal is not a wait, so it does not wear the pending colour either.
+    expect(screen.getByText("Registration refused").className).not.toContain("--warning-wash");
   });
 
   it("says a connection read did not answer instead of claiming nothing is connected", () => {

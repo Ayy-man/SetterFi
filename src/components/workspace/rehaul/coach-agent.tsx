@@ -26,7 +26,9 @@ import {
   type ReactNode,
 } from "react";
 
+import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { DayCounter } from "@/components/kit/day-counter";
+import { ShieldCheck } from "@/components/kit/icons";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { LoggedButton } from "@/components/kit/logged-button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +72,8 @@ export type RehaulSmsRegistration = {
   submittedAt: string | null;
   /** True once the registration reached a terminal refusal, which is not a wait any more. */
   rejected: boolean;
+  /** Amber only while the carrier still owns the wait; a refusal is not a pending state. */
+  tone: "good" | "amber" | "grey";
   stateLabel: string;
 };
 
@@ -127,8 +131,35 @@ const DOT_TONE: Record<"good" | "amber" | "grey", string> = {
   grey: "bg-[var(--dim,var(--line-input))]",
 };
 
+/** The pill face for the same three tones, so a state never wears a palette it did not earn. */
+const PILL_TONE: Record<"good" | "amber" | "grey", string> = {
+  amber: "border-[var(--warning-line)] bg-[var(--warning-wash)] text-[color:var(--warning-text)]",
+  good: "border-[var(--good-line)] bg-[var(--good-wash)] text-[color:var(--good-text)]",
+  grey: "border-[var(--line)] bg-[var(--well)] text-[color:var(--muted)]",
+};
+
 function Dot({ tone }: { tone: "good" | "amber" | "grey" }) {
   return <span aria-hidden className={`size-[8px] shrink-0 rounded-full ${DOT_TONE[tone]}`} />;
+}
+
+/**
+ * The standing accountability line for a control that writes on click.
+ *
+ * `LoggedButton` carries this caption under a button; the keyword-goal segmented group writes the
+ * moment a segment is pressed and has no button to hang it on, so the same registry microcopy and
+ * the same aria label render beside the group instead of after the fact.
+ */
+function LoggedNote({ actionKey }: { actionKey: keyof typeof AUDIT_ACTIONS }) {
+  const accountability = AUDIT_ACTIONS[actionKey];
+  return (
+    <span
+      aria-label={accountability.ariaLabel}
+      className="inline-flex shrink-0 items-center gap-[6px] text-[14px] text-[color:var(--muted)]"
+    >
+      <ShieldCheck aria-hidden className="size-[14px]" />
+      {accountability.microcopy}
+    </span>
+  );
 }
 
 function Panel({
@@ -281,12 +312,15 @@ function editableOffer(offer: PersistedOfferLayer | null): CoachOfferDraftInput 
  * platform brain, "admin edited, with no tenant column", so a control here would offer a setting
  * a coach cannot have. What a coach does own is the six numbers the answers are judged against,
  * and those are the rows below -- the same columns the old page's qualification card wrote, in the
- * same order, with the same save path. A row with a saved value is a fact the agent reads; a row
- * left empty stays unknown and the agent never guesses at it.
+ * same order, with the same save path. Each row is named for the fact it stores rather than for a
+ * question, because the question's wording is the brain's and printing one here would put words in
+ * the agent's mouth that no payload supplies. A row with a saved value is a fact the agent reads; a
+ * row left empty stays unknown and the agent never guesses at it.
  */
 const FACT_ROWS: readonly {
   key: string;
-  question: string;
+  /** The fact's own name. The question the agent asks in it is the brain's wording, not ours. */
+  label: string;
   tag: string;
   kind: "integer" | "cents" | "choice";
   field: keyof CoachOfferDraftInput;
@@ -294,35 +328,35 @@ const FACT_ROWS: readonly {
 }[] = [
   {
     key: "creditMin",
-    question: "Do you know your credit score roughly?",
+    label: "Credit score",
     tag: "credit score",
     kind: "integer",
     field: "creditMin",
   },
   {
     key: "fundingGoalMinCents",
-    question: "Roughly how much are you looking for?",
+    label: "Funding amount",
     tag: "funding amount",
     kind: "cents",
     field: "fundingGoalMinCents",
   },
   {
     key: "fundingGoalMaxCents",
-    question: "Is there a ceiling on what you need?",
+    label: "Funding ceiling",
     tag: "funding ceiling",
     kind: "cents",
     field: "fundingGoalMaxCents",
   },
   {
     key: "monthlyRevenueMinCents",
-    question: "Are you running a business today?",
+    label: "Monthly business revenue",
     tag: "business revenue",
     kind: "cents",
     field: "monthlyRevenueMinCents",
   },
   {
     key: "creditRepair",
-    question: "Does your credit need work first?",
+    label: "Credit repair",
     tag: "credit repair",
     kind: "choice",
     field: "creditRepair",
@@ -335,7 +369,7 @@ const FACT_ROWS: readonly {
   },
   {
     key: "refundPosture",
-    question: "What if it does not work out?",
+    label: "Refunds",
     tag: "refunds",
     kind: "choice",
     field: "refundPosture",
@@ -485,6 +519,8 @@ export function CoachAgent({
     initialKeywordGoals?.[0] ? toGoalDraft(initialKeywordGoals[0]) : null,
   );
   const [goalNotice, setGoalNotice] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newKeyword, setNewKeyword] = useState("");
 
   useEffect(() => {
     if (initialKeywordGoals !== undefined) return;
@@ -619,6 +655,51 @@ export function CoachAgent({
     [],
   );
 
+  /**
+   * A new trigger word, through the same route and the same audited action key the segments use.
+   *
+   * `saveGoal` updates a row it already has; a create has no row to update, so the readback is
+   * appended here and the new goal becomes the selected draft, which is what the rungs below it
+   * are editing.
+   */
+  const addKeyword = useCallback(async () => {
+    const keyword = newKeyword.trim();
+    if (!keyword) return;
+    setGoalNotice(null);
+    const response = await fetch("/api/coach/keyword-goals", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: null,
+        keyword,
+        goal: "book",
+        resourceUrl: null,
+        resourceMessage: null,
+        postBookingUrl: null,
+        postBookingMessage: null,
+      }),
+    });
+    const value: unknown = await response.json().catch(() => null);
+    const payload = value as
+      | { goal?: KeywordGoal; audit?: { actionKey?: string; auditId?: string } }
+      | null;
+    if (
+      !response.ok ||
+      !payload?.goal ||
+      payload.audit?.actionKey !== "keyword_goal.saved" ||
+      !payload.audit.auditId
+    ) {
+      setGoalNotice("This keyword was not saved. Try again.");
+      throw new Error("KEYWORD_GOAL_SAVE_REFUSED");
+    }
+    const saved = payload.goal;
+    setGoals((current) => [...(current ?? []), saved]);
+    setDraft(toGoalDraft(saved));
+    setAdding(false);
+    setNewKeyword("");
+    setGoalNotice("Saved and logged.");
+  }, [newKeyword]);
+
   const statusTone: "good" | "amber" = offers.published ? "good" : "amber";
   const statusLabel = offers.published
     ? publishedDateLabel
@@ -711,7 +792,25 @@ export function CoachAgent({
 
             {/* Step 1 */}
             <Step icon={<Glyph d="M4 7h16M4 12h16M4 17h10" />} tone="good">
-              <Panel eyebrow="Step 1" name="Keywords">
+              <Panel
+                action={
+                  goals === null || goalsFailed ? null : (
+                    <button
+                      className={QUIET_BUTTON_CLASS}
+                      onClick={() => {
+                        setAdding((current) => !current);
+                        setNewKeyword("");
+                        setGoalNotice(null);
+                      }}
+                      type="button"
+                    >
+                      {adding ? "Cancel" : "Add a keyword"}
+                    </button>
+                  )
+                }
+                eyebrow="Step 1"
+                name="Keywords"
+              >
                 {goalsFailed ? (
                   <p className="px-[20px] py-[16px] text-[length:var(--coach-body)] text-[color:var(--muted)]">
                     Your keywords could not be read just now.
@@ -773,11 +872,40 @@ export function CoachAgent({
                               </button>
                             ))}
                           </div>
+                          {/*
+                            The segments write on click, so the accountability line stands in the
+                            row itself rather than arriving underneath the panel afterwards.
+                          */}
+                          <span className="ml-auto">
+                            <LoggedNote actionKey="keyword_goal.saved" />
+                          </span>
                         </div>
                       );
                     })}
                   </div>
                 )}
+                {adding ? (
+                  <div className={ROW_CLASS}>
+                    <label className="min-w-0 flex-1">
+                      <span className={`mb-[6px] block ${COACH_EYEBROW_CLASS}`}>New keyword</span>
+                      <Input
+                        className={`${FIELD_CLASS} ${MONO_CLASS}`}
+                        onChange={(event) => setNewKeyword(event.target.value)}
+                        value={newKeyword}
+                      />
+                    </label>
+                    <LoggedButton
+                      actionKey="keyword_goal.saved"
+                      disabled={!newKeyword.trim()}
+                      onClick={() => addKeyword()}
+                      scale="coach"
+                      type="button"
+                      variant="secondary"
+                    >
+                      Save the keyword
+                    </LoggedButton>
+                  </div>
+                ) : null}
                 {goalNotice ? (
                   <p
                     className="border-t border-[var(--line-soft)] px-[20px] py-[12px] text-[15px] text-[color:var(--muted)]"
@@ -833,13 +961,9 @@ export function CoachAgent({
                         The artboard puts a switch here reading "Check in after 1 day if they
                         haven't replied". Cadence timing is platform-owned -- `DURABLE_TOUCHES`
                         fixes the first chase at two hours and there is no per-keyword override
-                        column -- so this states what we do rather than offering a switch that
-                        would write nowhere.
+                        column -- so the fact that SetterFi owns the chase is stated in the eye
+                        rather than offered here as a switch that would write nowhere.
                       */}
-                      <p className="flex items-center gap-[10px] border-t border-[var(--line-soft)] pt-[12px] text-[length:var(--coach-body)] text-[color:var(--muted)]">
-                        <Dot tone="good" />
-                        SetterFi checks in if they go quiet, on our schedule.
-                      </p>
                       <div className="flex items-center gap-[12px]">
                         <LoggedButton
                           actionKey="keyword_goal.saved"
@@ -866,7 +990,7 @@ export function CoachAgent({
               icon={<Glyph d="M9 9a3 3 0 1 1 4 2.8c-.7.3-1 .9-1 1.7V15M12 18h.01" />}
               tone="good"
             >
-              <Panel eyebrow="Step 3 · we choose the order" name="What your agent asks about">
+              <Panel eyebrow="Step 3 · SetterFi writes the questions" name="What your agent asks about">
                 <div className="flex flex-col">
                   {FACT_ROWS.map((row) => {
                     const value = form[row.field];
@@ -874,15 +998,12 @@ export function CoachAgent({
                     return (
                       <div className={ROW_CLASS} key={row.key}>
                         <span className="min-w-[220px] flex-1 text-[length:var(--coach-body)] text-[color:var(--ink)]">
-                          {row.question}
-                        </span>
-                        <span className={`${MONO_CLASS} text-[14px] text-[color:var(--faint)]`}>
-                          {row.tag}
+                          {row.label}
                         </span>
                         <div className="w-[200px] shrink-0">
                           {row.kind === "choice" ? (
                             <select
-                              aria-label={row.question}
+                              aria-label={row.label}
                               className={FIELD_CLASS}
                               onChange={(event) =>
                                 updateForm(
@@ -902,7 +1023,7 @@ export function CoachAgent({
                             </select>
                           ) : (
                             <Input
-                              aria-label={row.question}
+                              aria-label={row.label}
                               className={`${FIELD_CLASS} ${MONO_CLASS}`}
                               inputMode="numeric"
                               onChange={(event) => {
@@ -1037,9 +1158,6 @@ export function CoachAgent({
                         Conversion tracking is not set up.
                       </p>
                     )}
-                    <p className="mt-[6px] mb-0 max-w-[34ch] text-[15px] text-[color:var(--muted)]">
-                      Sent to Meta when it happens, never twice.
-                    </p>
                   </div>
                 </div>
               </Panel>
@@ -1181,7 +1299,7 @@ export function CoachAgent({
         page states facts and controls; the eye carries the words about them.
       */}
       <ContextEye
-        copy="This is your setter read top to bottom, in the order a lead meets it. You set the keywords, the resource it sends, the facts it asks about, your voice and your prices. SetterFi sets the questions and the order they come in, decides when it follows up and when it stops, and checks every reply against what you are allowed to claim. Saving keeps a draft; publishing is what your leads meet, and it is logged."
+        copy="This is your setter read top to bottom, in the order a lead meets it. You set the keywords, the resource it sends, the facts it asks about, your voice and your prices. SetterFi sets the questions and the order they come in, checks in if a lead goes quiet on our own schedule, decides when it stops, and checks every reply against what you are allowed to claim. A qualified lead and a booked call are sent to Meta when they happen, never twice. Texting registration sits with the carrier, who owns that review, so there is nothing on this page to test or press while it runs. Saving keeps a draft; publishing is what your leads meet, and it is logged."
         screen="coach-agent"
       />
     </div>
@@ -1192,10 +1310,91 @@ export function CoachAgent({
  * Connections tab
  * ------------------------------------------------------------------ */
 
+/**
+ * The 48px channel mark the Connections artboard puts at the head of each card.
+ *
+ * Decorative, and deliberately fixed per channel rather than tinted by state: the pill beside it
+ * is what carries the state, and a mark that changed colour with the connection would say the same
+ * thing twice in a palette that is only allowed to mean one thing.
+ */
+const CHANNEL_MARKS: Record<string, { face: string; paths: ReactNode }> = {
+  calendar: {
+    face: "border-[var(--accent-line)] bg-[var(--accent-wash)] text-[color:var(--accent-text)]",
+    paths: (
+      <>
+        <rect height="16" rx="3" width="18" x="3" y="5" />
+        <path d="M3 10h18M8 3v4M16 3v4" />
+      </>
+    ),
+  },
+  instagram: {
+    face: "border-[var(--line)] bg-[var(--control-fill)] text-[color:var(--body)]",
+    paths: (
+      <>
+        <rect height="18" rx="5" width="18" x="3" y="3" />
+        <circle cx="12" cy="12" r="4" />
+        <path d="M17.5 6.5h.01" />
+      </>
+    ),
+  },
+  messenger: {
+    face: "border-[var(--accent-line)] bg-[var(--accent-wash)] text-[color:var(--accent-text)]",
+    paths: (
+      <>
+        <path d="M12 3c-4.97 0-9 3.7-9 8.26 0 2.6 1.31 4.91 3.36 6.42V21l3.07-1.69c.82.23 1.69.35 2.57.35 4.97 0 9-3.7 9-8.26S16.97 3 12 3Z" />
+        <path d="m7.5 13 2.6-2.8 2.1 2 2.3-2.4" />
+      </>
+    ),
+  },
+  sms: {
+    face: "border-[var(--warning-line)] bg-[var(--warning-wash)] text-[color:var(--warning-text)]",
+    paths: (
+      <>
+        <rect height="19" rx="3" width="12" x="6" y="2.5" />
+        <path d="M10.5 18.5h3" />
+      </>
+    ),
+  },
+  whatsapp: {
+    face: "border-[var(--good-line)] bg-[var(--good-wash)] text-[color:var(--good-text)]",
+    paths: (
+      <>
+        <path d="M3.5 20.5 5 16.4A8.2 8.2 0 1 1 8.2 19.6l-4.7.9Z" />
+        <path d="M9 9.5c.4 2.4 3.1 5.1 5.5 5.5l1.2-1.4 1.8.9v1.6c-2.9.5-7.9-3.6-8.7-7.4l1.4-1.1.9 1.8Z" />
+      </>
+    ),
+  },
+};
+
+function ChannelMark({ channel }: { channel: string }) {
+  const mark = CHANNEL_MARKS[channel];
+  if (!mark) return null;
+  return (
+    <span
+      aria-hidden
+      className={`flex size-[48px] shrink-0 items-center justify-center rounded-[13px] border ${mark.face}`}
+    >
+      <svg
+        fill="none"
+        height="22"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+        width="22"
+      >
+        {mark.paths}
+      </svg>
+    </span>
+  );
+}
+
 function ConnectionCard({ card }: { card: RehaulConnectionCard }) {
   return (
-    <section className={`${PANEL_CLASS} min-h-[300px]`}>
+    <section className={`${PANEL_CLASS} min-h-[347px]`}>
       <div className={BAND_CLASS}>
+        <ChannelMark channel={card.key} />
         <div className="min-w-0">
           <span className={`block ${COACH_EYEBROW_CLASS}`}>{card.eyebrow}</span>
           <h2 className={NAME_CLASS}>{card.label}</h2>
@@ -1273,8 +1472,9 @@ function ConnectionsTab({ surface }: { surface: RehaulConnectionSurface | null }
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-[20px] lg:grid-cols-2">
         {sms ? (
-          <section className={`${PANEL_CLASS} min-h-[300px]`}>
+          <section className={`${PANEL_CLASS} min-h-[347px]`}>
             <div className={BAND_CLASS}>
+              <ChannelMark channel="sms" />
               <div className="min-w-0">
                 <span className={`block ${COACH_EYEBROW_CLASS}`}>{sms.eyebrow}</span>
                 <h2 className={NAME_CLASS}>{sms.label}</h2>
@@ -1284,8 +1484,13 @@ function ConnectionsTab({ surface }: { surface: RehaulConnectionSurface | null }
                 a carrier review is told about the review, and the connection underneath it has no
                 separate state to claim until the registration clears.
               */}
-              <span className="ml-auto inline-flex h-[30px] shrink-0 items-center gap-[8px] rounded-full border border-[var(--warning-line)] bg-[var(--warning-wash)] px-[12px] text-[14px] text-[color:var(--warning-text)]">
-                <Dot tone={surface.sms ? "amber" : sms.tone} />
+              <span
+                className={
+                  "ml-auto inline-flex h-[30px] shrink-0 items-center gap-[8px] rounded-full " +
+                  `border px-[12px] text-[14px] ${PILL_TONE[surface.sms ? surface.sms.tone : sms.tone]}`
+                }
+              >
+                <Dot tone={surface.sms ? surface.sms.tone : sms.tone} />
                 {surface.sms ? surface.sms.stateLabel : sms.stateLabel}
               </span>
             </div>
@@ -1303,9 +1508,6 @@ function ConnectionsTab({ surface }: { surface: RehaulConnectionSurface | null }
                     : "The filing date was not recorded, so no day count is shown."}
                 </p>
               )}
-              <p className="m-0 max-w-[52ch] text-[length:var(--coach-body)] text-[color:var(--muted)]">
-                The carrier owns this review, so there is nothing here to test or press yet.
-              </p>
             </div>
           </section>
         ) : null}

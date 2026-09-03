@@ -103,6 +103,9 @@ const OLD_EXPLAINERS = [
   "Leads the agent is talking to now, not counting finished or ruled-out conversations.",
   "Replies are counted per conversation, not per lead, so they are not shown against this figure.",
   "Counted over open conversations, which is a different population from the leads above.",
+  // Both of these are in EYE_COPY verbatim, so neither may appear a second time in the body.
+  "Everyone your agent reached this month.",
+  "From first message to a call on the calendar.",
 ];
 
 function renderDashboard(overrides: Partial<CoachDashboardProps> = {}) {
@@ -168,11 +171,32 @@ describe("CoachDashboard", () => {
     expect(screen.getByRole("img", { name: /CCA funnel: 96 opt-ins/u })).toBeTruthy();
   });
 
+  it("names the empty keyword table without explaining the feature", () => {
+    const empty = measurement();
+    renderDashboard({ measurement: { ...empty, keywords: [] } });
+
+    expect(document.body.textContent).toContain("No keyword rows yet.");
+    expect(document.body.textContent).not.toContain(
+      "Keyword rows appear once a conversation is attributed to a keyword.",
+    );
+  });
+
   it("renders the setup checklist with a texting day counter instead of the figures when nothing is live", () => {
-    renderDashboard({ channelStatus: FIRST_RUN_STATUS });
+    renderDashboard({
+      attention: { blockedSetupSteps: 2, leadsToCallBack: 0, threadsNeedingHuman: 0 },
+      channelStatus: FIRST_RUN_STATUS,
+    });
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Welcome, Reid");
     expect(screen.getByRole("heading", { name: "Your setup" })).toBeTruthy();
+    // The blocked-step count is a read of provisioning_steps, so it can stand in the status line.
+    expect(document.body.textContent).toContain("2 steps are waiting on you");
+    // The counter denominates over the rungs whose state this page actually read.
+    expect(document.body.textContent).toContain("0 of 3 done");
+    // The pill claims only what the read established: nothing is live, not that nothing exists.
+    expect(document.body.textContent).toContain("Not live yet");
+    expect(document.body.textContent).not.toContain("Not connected");
+    expect(screen.getByRole("link", { name: "Ask us" })).toHaveAttribute("href", "/coach/help");
     expect(screen.getByRole("heading", { name: "Texting registration" })).toBeTruthy();
     // A day counter, never a percentage or a predicted date.
     expect(document.body.textContent).toContain("Day 10");

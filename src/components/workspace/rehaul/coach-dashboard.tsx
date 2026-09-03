@@ -238,7 +238,15 @@ function nameList(names: readonly string[]) {
  * never told their agent is answering. The amber half is a day count and never a percentage or a
  * predicted date, because A2P vetting is a wait on a third party who publishes no schedule.
  */
-function StatusLine({ now, status }: { now?: Date; status: CoachChannelStatus | null | undefined }) {
+function StatusLine({
+  blockedSetupSteps,
+  now,
+  status,
+}: {
+  blockedSetupSteps: number;
+  now?: Date;
+  status: CoachChannelStatus | null | undefined;
+}) {
   if (!status) return null;
   const liveNames = status.liveChannels.map((channel) => COACH_CHANNEL_NAMES[channel]);
   const carrier = status.carrier;
@@ -246,7 +254,7 @@ function StatusLine({ now, status }: { now?: Date; status: CoachChannelStatus | 
     ? elapsedWorkspaceDays(carrier.submittedAt, now)
     : null;
   const carrierWaiting = carrier.kind === "in-review";
-  if (liveNames.length === 0 && !carrierWaiting) return null;
+  if (liveNames.length === 0 && !carrierWaiting && blockedSetupSteps < 1) return null;
 
   return (
     <p className="m-0 mt-[10px] flex flex-wrap items-center gap-5 text-[15px] text-[var(--muted)]">
@@ -267,6 +275,18 @@ function StatusLine({ now, status }: { now?: Date; status: CoachChannelStatus | 
                 <span className="font-mono">{carrierDay}</span>
               </>
             )}
+        </span>
+      ) : null}
+      {/*
+        The third dot on the first-run artboard, and a count rather than a phrase: it is
+        `provisioning_steps` rows in state `blocked`, which is the one number this page reads about
+        the rest of the setup.
+      */}
+      {blockedSetupSteps > 0 ? (
+        <span className="flex items-center gap-2">
+          <StatusDot tone="wait" />
+          <span className="font-mono">{workspaceCountFormat.format(blockedSetupSteps)}</span>{" "}
+          {blockedSetupSteps === 1 ? "step is" : "steps are"} waiting on you
         </span>
       ) : null}
     </p>
@@ -457,7 +477,7 @@ function KeywordPanel({
       </Band>
       {keywords.length === 0 ? (
         <p className="m-0 px-[26px] py-6 text-[14px] text-[var(--muted)]">
-          Keyword rows appear once a conversation is attributed to a keyword.
+          No keyword rows yet.
         </p>
       ) : (
         <table className="w-full border-collapse text-[16px]">
@@ -529,10 +549,42 @@ function setupIncomplete(status: CoachChannelStatus | null | undefined) {
   return Boolean(status && status.channelsChecked && status.liveChannels.length === 0);
 }
 
+/**
+ * The rung face, per state. Amber is the only pending colour and green is only ever a state the
+ * server confirmed, so the mark reads the same as the pill beside it rather than inventing a
+ * fourth vocabulary of its own.
+ */
+const RUNG_FACE: Record<"good" | "amber" | "wait" | "grey", string> = {
+  amber: "border-[var(--warning-line)] bg-[var(--warning-wash)] text-[var(--warning-text)]",
+  good: "border-[var(--good-line)] bg-[var(--good-wash)] text-[var(--good-text)]",
+  grey: "border-[var(--line)] bg-[var(--well)] text-[var(--muted)]",
+  wait: "border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[var(--accent-text)]",
+};
+
+/** A 24px stroke glyph, the artboard's own paths. Decorative: the row beside it carries the word. */
+function StepGlyph({ children }: { children: React.ReactNode }) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="24"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="24"
+    >
+      {children}
+    </svg>
+  );
+}
+
 function StepRow({
   action,
   children,
   eyebrow,
+  icon,
   name,
   status,
   tone,
@@ -540,6 +592,7 @@ function StepRow({
   action?: React.ReactNode;
   children?: React.ReactNode;
   eyebrow: string;
+  icon: React.ReactNode;
   name: string;
   status: React.ReactNode;
   tone: "good" | "amber" | "wait" | "grey";
@@ -548,9 +601,9 @@ function StepRow({
     <li className="flex list-none items-start gap-5">
       <span
         aria-hidden="true"
-        className="mt-0 flex size-16 flex-[0_0_64px] items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--well)]"
+        className={`relative z-[1] mt-0 flex size-16 flex-[0_0_64px] items-center justify-center rounded-2xl border ${RUNG_FACE[tone]}`}
       >
-        <StatusDot tone={tone} />
+        {icon}
       </span>
       <div className={`${PANEL_CLASS} flex-1`}>
         <Band eyebrow={eyebrow} name={name}>
@@ -592,8 +645,28 @@ function FirstRun({
     ? elapsedWorkspaceDays(carrier.submittedAt, now)
     : null;
 
+  /*
+   * The counter the artboard prints beside "Your setup". It counts only the rungs whose state this
+   * page actually read -- the channel row, the registration row, and the blocked-step row when
+   * there is one. "The rest of your setup" is excluded from both halves because it names no state,
+   * and a denominator that counted it would be a five-step promise off a two-step read.
+   */
+  const known = 2 + (blockedSetupSteps > 0 ? 1 : 0);
+  const done = carrier.kind === "live" ? 1 : 0;
+
   return (
-    <ol className="m-0 flex list-none flex-col gap-4 p-0">
+    <>
+      <div className="flex items-baseline gap-3">
+        <h2 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">Your setup</h2>
+        <span className="ml-auto font-mono text-[14px] text-[var(--faint)]">
+          {workspaceCountFormat.format(done)} of {workspaceCountFormat.format(known)} done
+        </span>
+      </div>
+      <ol className="relative m-0 flex list-none flex-col gap-4 p-0">
+        <span
+          aria-hidden="true"
+          className="absolute top-6 bottom-6 left-[31px] w-0.5 bg-[var(--line)]"
+        />
       <StepRow
         action={(
           <Link
@@ -604,22 +677,38 @@ function FirstRun({
           </Link>
         )}
         eyebrow="Step 1"
+        icon={
+          <StepGlyph>
+            <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.1A8.4 8.4 0 0 1 3.6 12a8.4 8.4 0 0 1 8.4-8.4 8.4 8.4 0 0 1 9 7.9Z" />
+          </StepGlyph>
+        }
         name="Instagram and Messenger"
-        status={<Pill tone="neutral">Not connected</Pill>}
+        /*
+         * `FirstRun` renders on "the read succeeded and nothing is live", which covers `ready`,
+         * `pending_review` and `error` as well as no row at all. "Not connected" would claim one
+         * of those; "not live yet" is exactly what the read established and nothing more.
+         */
+        status={<Pill className="text-[14px]" tone="neutral">Not live yet</Pill>}
         tone="grey"
       />
       <StepRow
         eyebrow="Step 2 · with the carrier"
+        icon={
+          <StepGlyph>
+            <rect height="19" rx="3" width="12" x="6" y="2.5" />
+            <path d="M11 18.5h2" />
+          </StepGlyph>
+        }
         name="Texting registration"
         status={
           carrier.kind === "in-review"
             ? (
-              <Pill tone="amber">
+              <Pill className="text-[14px]" tone="amber">
                 <StatusDot tone="amber" />
                 {carrierDay === null ? "In review" : `Day ${carrierDay}`}
               </Pill>
             )
-            : <Pill tone="neutral">Not filed</Pill>
+            : <Pill className="text-[14px]" tone="neutral">Not filed</Pill>
         }
         tone={carrier.kind === "in-review" ? "amber" : "grey"}
       >
@@ -641,10 +730,16 @@ function FirstRun({
             </Link>
           )}
           eyebrow="Waiting on you"
+          icon={
+            <StepGlyph>
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7.5v5M12 16h.01" />
+            </StepGlyph>
+          }
           name={`${workspaceCountFormat.format(blockedSetupSteps)} ${
             blockedSetupSteps === 1 ? "step is" : "steps are"
           } blocked`}
-          status={<Pill tone="amber">Blocked</Pill>}
+          status={<Pill className="text-[14px]" tone="amber">Blocked</Pill>}
           tone="amber"
         />
       ) : null}
@@ -659,10 +754,17 @@ function FirstRun({
         )}
         eyebrow="Calendar, offer, and the safe test"
         name="The rest of your setup"
+        icon={
+          <StepGlyph>
+            <path d="M20.5 13.5 13 21a2 2 0 0 1-2.8 0l-7-7A2 2 0 0 1 2.6 12V4.5A1.5 1.5 0 0 1 4.1 3h7.4a2 2 0 0 1 1.4.6l7.6 7.5a2 2 0 0 1 0 2.4Z" />
+            <path d="M7 7.5h.01" />
+          </StepGlyph>
+        }
         status={null}
         tone="grey"
       />
-    </ol>
+      </ol>
+    </>
   );
 }
 
@@ -705,17 +807,23 @@ export function CoachDashboard({
               ? `${firstRun ? "Welcome" : "Welcome back"}, ${greeting}`
               : "Dashboard"}
           </h1>
-          <StatusLine now={now} status={channelStatus} />
+          <StatusLine blockedSetupSteps={attention.blockedSetupSteps} now={now} status={channelStatus} />
         </div>
-        {firstRun ? null : <WindowPills window={window} />}
+        {firstRun ? (
+          <Link
+            className="ml-auto inline-flex h-11 items-center rounded-xl border border-[var(--line-input)] bg-[var(--card)] px-5 text-[16px] font-medium text-[var(--ink)] no-underline hover:no-underline"
+            href="/coach/help"
+          >
+            Ask us
+          </Link>
+        ) : (
+          <WindowPills window={window} />
+        )}
       </div>
 
       {firstRun && channelStatus ? (
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
           <div className="flex min-w-0 flex-col gap-4">
-            <div className="flex items-baseline gap-3">
-              <h2 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">Your setup</h2>
-            </div>
             <FirstRun
               blockedSetupSteps={attention.blockedSetupSteps}
               now={now}
@@ -723,7 +831,12 @@ export function CoachDashboard({
             />
           </div>
           <div className="flex min-w-0 flex-col gap-5">
-            <h2 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">Your numbers</h2>
+            <div className="flex items-baseline gap-3">
+              <h2 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">Your numbers</h2>
+              {[leads, booked, timeToBook].every((reading) => reading.kind === "absent") ? (
+                <span className="ml-auto font-mono text-[14px] text-[var(--faint)]">nothing yet</span>
+              ) : null}
+            </div>
             {([
               { name: "Leads", reading: leads },
               { name: "Booked calls", reading: booked },
@@ -733,6 +846,14 @@ export function CoachDashboard({
                 <Band eyebrow={when} name={panel.name} />
                 <div className="flex flex-1 flex-col p-5">
                   <HeroFigure reading={panel.reading} />
+                  {/* The artboard's dashed rule under an empty tile: a baseline with no series on
+                      it, so the panel reads as waiting rather than as a chart at zero. */}
+                  {panel.reading.kind === "absent" ? (
+                    <div
+                      aria-hidden="true"
+                      className="mt-3.5 h-0 border-t-2 border-dashed border-[var(--line)]"
+                    />
+                  ) : null}
                 </div>
               </section>
             ))}
@@ -742,10 +863,34 @@ export function CoachDashboard({
         <>
           <div className="grid gap-6 lg:grid-cols-3">
             <section aria-labelledby="rehaul-leads-heading" className={PANEL_CLASS}>
-              <Band eyebrow={when} name="Leads" titleId="rehaul-leads-heading" />
+              {/*
+                The artboard puts a drill-in chevron on all three tiles. Only Leads has a screen to
+                drill into -- the nav's own Leads route -- so the other two carry no control rather
+                than a chevron that would go nowhere.
+              */}
+              <Band eyebrow={when} name="Leads" titleId="rehaul-leads-heading">
+                <Link
+                  aria-label="Open your leads"
+                  className="flex size-11 items-center justify-center rounded-[10px] bg-[var(--well)] text-[var(--muted)] no-underline hover:no-underline"
+                  href="/coach/contacts"
+                >
+                  <svg
+                    aria-hidden="true"
+                    fill="none"
+                    height="16"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                    width="16"
+                  >
+                    <path d="m9 6 6 6-6 6" />
+                  </svg>
+                </Link>
+              </Band>
               <div className="flex flex-1 flex-col p-5">
                 <HeroFigure reading={leads} />
-                <Sentence>Everyone your agent reached {when}.</Sentence>
                 {monthTotals.length >= 2 ? (
                   <Sparkline
                     className="mt-auto w-full pt-4"
@@ -795,7 +940,6 @@ export function CoachDashboard({
               <Band eyebrow={when} name="Time to book" titleId="rehaul-ttb-heading" />
               <div className="flex flex-1 flex-col p-5">
                 <HeroFigure reading={timeToBook} />
-                <Sentence>From first message to a call on the calendar.</Sentence>
               </div>
             </section>
           </div>
