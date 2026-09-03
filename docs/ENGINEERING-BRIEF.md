@@ -132,6 +132,12 @@ split:
   from `unknown` before use.
 - One integration client per provider under `src/lib/integrations/`; no raw fetch to providers
   scattered through routes.
+- **A constant two sides of the server-client boundary share lives in a module with no directive.**
+  When a server component imports from a `"use client"` module, Next replaces every export with a
+  client *reference*, so a frozen array stops being an array and a resolver stops being callable at
+  runtime while `tsc` and Vitest both stay green. Two screens shipped that way and both threw in
+  production. Shared route identities therefore live in plain modules such as
+  `src/lib/console-tabs.ts`; `src/app/server-client-boundary.test.ts` holds the rule.
 - Webhooks: verify signature, acknowledge in under a second, process in `waitUntil`. Idempotency
   keys everywhere.
 - Every privileged mutation writes `audit_log`. If the UI shows "Logged", the backend logged it.

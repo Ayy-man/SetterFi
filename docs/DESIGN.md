@@ -252,7 +252,7 @@ because those screens had not been read when `tokens.css` was written. Each foll
   card, `--line-input` .16 for input borders. All three are `rgba(120, 150, 200, α)`.
 - **Text ramp**, brightest to dimmest, with contrast on `--canvas` / `--card`:
   `--ink` 17.1 / 16.0 · `--body` 12.6 / 11.9 · `--muted` 9.7 / 9.1 · `--faint` 7.1 / 6.7 ·
-  `--meta` 5.8 · `--overline` 4.8 · `--dim` 3.8 · `--glyph` 3.6.
+  `--meta` 5.8 · `--overline` 4.8 · `--dim` 3.8 · `--glyph` 3.6. **SUPERSEDED 2026-09-04 for `--muted` and `--faint` in the two dark blocks: both lifted, and the ramp differs per palette. see Corrections, at the end of this file.**
 
 ### Named Rules
 
@@ -309,7 +309,7 @@ Every other colour in the system is the artifact's own value, unrounded.
 ## 3. Typography
 
 **UI Font:** Archivo 400/500/600/700 (variable), with `system-ui, sans-serif` behind it.
-**Numeral / Label Font:** IBM Plex Mono 400/500, with `ui-monospace, monospace` behind it.
+**Numeral / Label Font:** IBM Plex Mono 400/500, with `ui-monospace, monospace` behind it. **SUPERSEDED 2026-09-04: five of the scale's weights are palette-forked rather than fixed, and the dark blocks take 450, 540 and mono 500. see Corrections, at the end of this file.**
 
 Both load in `src/app/layout.tsx` under the historical variable names `--font-geist-sans` /
 `--font-geist-mono`, which `globals.css` maps onto `--font-sans` / `--font-mono`. The names stayed;
@@ -475,6 +475,58 @@ at all** — an absence in a pill reads as a state the reader has to weigh again
 Tones are `good` / `warning` / `critical` / `info` / `neutral`; `info` is reserved for genuinely
 in-progress states, because a row full of info pills reads as selected. Pills in cards, bare dots in
 tables, one treatment per list.
+
+### Charts (added 2026-09-04)
+
+Three shapes, and which one a surface may draw is decided by how many readings it has rather than
+by how the card looks. `src/components/kit/chart-theme.ts` is where all three take their colours,
+so a bar and a line on one screen are the same series in the same order.
+
+**The Six Point Rule.** `Sparkline` refuses to draw below `SPARKLINE_MIN_POINTS`, which is **6**,
+and a caller under the floor renders nothing. The floor used to be two, which was the wrong test:
+two points are enough to compute a direction, but the component draws a smoothed spline, and a
+spline through three thirty-day periods reading 0, 0 and 7 comes out as a hockey stick with no
+axis, no dates and no values beside it. The reader cannot tell whether the curve moved by fifty
+dollars or two thousand, so the shape is making a claim the readings never held. Six is where the
+smoothing interpolates between real points instead of rounding two of them into a story.
+
+**Sparser than six is bars, or words.** `BarChart` is the period strip: 4px rounded tops on one
+baseline, past periods at 28% opacity so the current one, drawn solid, is where the eye lands, no
+gridlines and no axis box, and labels at the two ends only. Every exact figure goes to an
+`sr-only` table, and `currentValueLabel` puts the latest reading on the bar itself so a sighted
+reader gets a magnitude rather than only a shape. That label is 14px, not the 10px the axis ends
+carry, because it is the one figure on the chart and it has to clear the floor
+`docs/SIMPLIFICATION-SPEC.md` §5 sets for anything a coach page can mount. `fill`, `baselineColor`
+and `axisColor` exist so a drenched panel can pass its own values instead of hardcoding a colour
+against the theme.
+
+**No series is a shorter card, not an empty slot.** A card whose measure carries no history ends
+after its figure rather than reserving the chart's height and printing an apology in it. An empty
+frame reads as a chart that failed to load, which is the same failure the `CellQuiet` rule answers
+in a table: an absence has to say which absence it is, or say nothing at all.
+
+### Message bubbles (added 2026-09-04)
+
+The owner inbox thread and the shared `Transcript` draw the same two bubbles, because a reader who
+moves between the two support surfaces should not have to relearn what a message looks like.
+
+The incoming bubble sits on **`--raised`**, which is the only surface token above `--card` in both
+palettes, with `--line-strong` on its edge and `--shadow-card` under it. It used to take `--well`, `--quiet`
+or `--card`, and all three are wrong for the same reason: on a card face a recessed ground puts the
+message *below* the pane it lives on, so a message was findable only by its hairline. The edge and
+the shadow move with the ground, because a lift only reads as a surface when all three agree. Body
+copy is the 15px `--t-read` role rather than the 13px `--t-body` one: a thread is read, not
+scanned.
+
+The reader's own side takes `--accent-wash-strong` on `--accent-edge` instead of the neutral lift,
+which is what makes the column read as a conversation with a speaker on each side. It is a wash
+and not a fill, so it does not spend the page's one accent under the One Fill Rule. The square
+corner points down at the avatar on the speaker's side, so a reader can tell who is talking before
+reading a word.
+
+The internal note is the deliberate exception: flat on the card, dashed, with no lift and no
+shadow. Its weight is what says the coach cannot see it, and that is the one thing a reader here
+must never get wrong.
 
 ### Tables (two treatments)
 
@@ -653,3 +705,49 @@ true when written and is what let a reader trust the teal block a day later. Tha
 date on it too. Separately, every canvas artboard is still drawn
 dark and teal: on colour the code is ahead of the canvas, and the canvas remains the authority on
 layout, anatomy, copy and ordering.
+
+### 2026-09-04: stroke weight and smoothing fork with the palette
+
+Alec read the console on a dark screen and said the text was hard to read. It measured fine, which
+is the whole point of the entry: a glyph drawn light on dark loses apparent stroke width that the
+same glyph drawn dark on light keeps, and subpixel antialiasing shaves off more in the same
+direction. Archivo at 400 over a navy card therefore read as grey fuzz at 13px while the identical
+number over the light ground read correctly. Contrast was never the failing quantity, so raising
+contrast alone would not have fixed it.
+
+Three weight tokens and one smoothing token now live in the palette blocks rather than in the type
+scale, and the scale reads them:
+
+| token | light | dark | who reads it |
+|---|---|---|---|
+| `--w-body` | 400 | 450 | `--t-body-w`, `--t-read-w` |
+| `--w-row` | 500 | 540 | `--t-row-w` |
+| `--w-mono` | 400 | 500 | `--t-mono-meta-w`, `--t-mono-crumb-w` |
+| `--smoothing` | `antialiased` | `auto` | `body`, in `globals.css` |
+
+The fork sits next to the grounds that cause it, because the grounds are the reason it exists and
+the scale is authored once for both. Archivo is variable, so 450 and 540 come off the same axis at
+no download cost; IBM Plex Mono ships 400 and 500 only, which is why `--w-mono` has two steps and
+not four. Everything already at 600, and the 500s that are heavy enough, are untouched: the
+problem is thin text, and lifting a semibold title would only make the page louder.
+
+`--muted` and `--faint` also lift in the two dark blocks, to lightness 0.81 and 0.745. **The lift
+is bounded, not chosen.** 0.82 was tried first and broke `tokens.test.ts`, which holds each of the
+four text roles at least 1.3 of contrast clear of the role above it; `--body` sitting at 12.6 is
+what stops `--muted` going any higher than it now does. Read the ratios from the comments beside
+the values in `src/app/tokens.css`, per the rule at the top of this section.
+
+`src/app/css-budget.test.ts` moved its cap from 3,000 to 3,100 lines to let this land: the two
+stylesheets stood at 2,999, so a change that forks four tokens per palette block and explains why
+could not fit at all. The 100 buys the fork and its comments. It is not headroom for a new surface.
+
+**What this superseded in this document**, each marked in place:
+
+| where | what it said | what is true now |
+|---|---|---|
+| §2 Neutral, the text ramp | one ramp of ratios, `--muted` 9.7 / 9.1 and `--faint` 7.1 / 6.7 | those were the dark values; both roles lifted in dark and the ramp now differs per palette |
+| §3 opening | "Archivo 400/500/600/700", "IBM Plex Mono 400/500", as fixed weights | five of the scale's weights are palette-forked, and dark takes the heavier step of each pair |
+
+**What did not change.** The type scale's sizes, its role names, the 11px floor, the token count
+`tokens.test.ts` pins, the Mono Licence Rule and the Four Roles Rule. This moved weight and
+smoothing, which are properties of the ground a glyph sits on, and nothing else.

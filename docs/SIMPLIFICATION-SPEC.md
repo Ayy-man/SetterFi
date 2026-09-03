@@ -321,6 +321,11 @@ Non-negotiable minimums for every coach, affiliate, and consumer surface. Admin 
 text **14px minimum** — nothing below it, ever. Figures on the bubbles **32px minimum**. Page
 title **28px**. Section headings **20px**.
 
+"Nothing below it, ever" includes text a chart draws for itself. `BarChart`'s `currentValueLabel`
+sets the latest reading at 14px rather than the 10px its axis ends carry, because it is the one
+figure on the chart and a figure nobody can read defeats the point of drawing it. A chart that
+cannot put its own value above the floor states the value in words beside it instead.
+
 **The 9.5px mono overline is banned on the coach side.** `Overline`
 (`src/components/kit/atomics/type.tsx:20`) may not render on `/coach/*`, `/affiliate`, or
 `/consumer`. Where a label is genuinely needed it is 14px sentence-case regular weight. The

@@ -208,7 +208,7 @@ self-serve onboarding, and the shared "Meet Your Agent" surface.
 9. **Settings and billing.** Four tabs (round 2): **Notifications** (platform notification
    preferences), **Alerts** (rules → destinations: in-app bell / email; prebuilt:
    booking made, payment failed, completed payment, channel disconnected, A2P cleared, agent
-   inactive 72h, onboarding stalled, client upgraded), **Billing** (billing contact, payment
+   inactive 72h, onboarding stalled, client upgraded; see the pairing note below), **Billing** (billing contact, payment
    details, exportable invoice history — separate from Tiers and billing, which owns product
    pricing and per-client metering), and **Privacy and DNC** (global contact search across
    tenants; platform + per-client DNC/STOP list, auto-maintained and exportable; delete-lead
@@ -231,6 +231,29 @@ self-serve onboarding, and the shared "Meet Your Agent" surface.
    Dropping the suppression to honour a deletion would guarantee a future violation against the
    same person, and 47 CFR 64.1200(d)(3)/(d)(6) requires honouring a do-not-call request for five
    years.
+
+   **Alert rules come in pairs, and the pair is not a duplicate.** `alert_rules` is unique on
+   `(event_key, scope)`, and the seeds pair most events: one platform-scoped rule addressed to
+   `{owner,admin}`, one tenant-scoped rule addressed to `{coach}`. They have different audiences,
+   different suppressibility and their own `notification_preferences` rows, so every surface that
+   lists rules unfiltered by scope draws both, and the seed convention is that each half is named
+   from the vantage of whoever receives it (platform "Tripwire escalation" against tenant
+   "Conversation escalated"). Three pairs shipped with one name across both scopes, which rendered
+   as the same words twice over two independent sets of checkboxes with nothing saying which was
+   which; `supabase/migrations/20261012000002_disambiguate_platform_alert_rule_names.sql` renames
+   the platform half of each, guarded on the current value so a later hand edit by the client's
+   team is not reverted. Because these names live in a table that team can edit, the account
+   sheet's matrix also carries a general guard: a name appearing more than once in the set being
+   drawn takes a scope qualifier beside it, and a unique name takes nothing.
+
+   **Destination columns are derived, never listed.** The matrix reads its columns off the distinct
+   destinations in the preferences payload and fills each cell from an index keyed by rule and
+   destination, so a column drawn from the payload is filled from the same payload and a
+   destination that stops being returned stops being drawn with no edit in the component. The words
+   and the ordering for categories, scopes and destinations live in one module,
+   `src/components/workspace/live/notification-taxonomy.ts`, read by both the account sheet and the
+   notifications page; an unmapped value still renders, title-cased in its own words, so a newly
+   seeded category is a heading rather than a blank.
 
 ## AFFILIATE VIEW (smallest surface)
 

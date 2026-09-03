@@ -19,6 +19,10 @@ GoHighLevel API v2, Meta Graph API. TypeScript, zod on every boundary. Base rule
   rule is: verify the signature against the raw request bytes → read `locationId` out of the body →
   look up `ghl_installs` → **reject an unknown `locationId` outright**. The body stays untrusted for
   every field except that one lookup key, whose only power is to select a row we already own.
+- **Count round trips, not milliseconds of SQL.** A trip to the Supabase region costs roughly 350 ms
+  against queries that run in single-digit milliseconds, so a screen's latency is set by how many
+  times it goes to the database and not by how the statements are written. The measurements and the
+  read-path rules they produced are in §9.1.
 - Vector search gotcha: RLS post-filtering can return < K rows — query with iterative index
   scans / raised `ef_search`, over-fetch then filter.
 - API routes live under `app/api/*`; internal handlers verify auth via Supabase JWT; webhook
@@ -776,6 +780,42 @@ create table commission_ledger ( id uuid pk, referral_id uuid references referra
   per step. Platform rollup: MRR (Stripe), signups, churn, LTV, retention (Stripe events).
 - **CSV/JSON export:** every admin/coach table gets `GET /api/export/:resource?format=csv|json`
   scoped by RLS; streams; audit-logged.
+- **The preview fork:** `SETTERFI_PLATFORM_PREVIEW_DATA` does not filter the analytics read, it
+  replaces it. With the flag on, `platformMeasurementSource` calls
+  `read_platform_measurement_preview_for_actor` and returns a stored snapshot stamped with the
+  caller's as-of instant, so the owner Overview reaches no `analytics_*` view and no seed,
+  backfill or correction can move a figure on it. Check the flag first when a data change does not
+  appear. Off on production and preview as of 2026-09-04; the name is documented in
+  `docs/SETUP.md` §1.4.
+
+### 9.1 Console read paths: the round-trip budget (measured 2026-09-04)
+
+**Console latency is a function of how many round trips a screen makes, not of its SQL.** Measured
+against the hosted project on 2026-09-04, from the deployed region: a bare `select 1` costs **297
+to 357 ms**, while the queries a Money page view runs finish in **0.1 to 17.3 ms** each (the
+analytics subscription view 1.4 ms, `read_money_mrr_history` 17.3 ms, the price views under 1.3 ms).
+Every trip is therefore worth roughly twenty of the query it carries, and optimising a statement
+that already runs in single-digit milliseconds buys nothing a reader can perceive. Count trips.
+
+**A screen must not feed its own table from an `/api/exports/...` route.** That pattern costs three
+serial round trips at roughly 350 ms each, because the route writes a `start_platform_export` audit
+row, opens a cursor and queries, then writes a `finish_export` row. It also files two export audit
+receipts on every page view for a download nobody requested, which puts noise in the ledger the
+compliance surface reads. The Subscriptions table on Money did exactly this: the page HTML finished
+around 2.0 s and the table appeared around 3.8 s.
+
+**The fix is a repository read on the server, inside the page's existing `Promise.allSettled`.**
+`loadSubscriptionRows` on the billing repository projects the shape the table's own normaliser
+already consumes, so `/admin/billing` ships its 24 rows in the first HTML and the page totals 1.7
+to 2.3 s warm. It is not the slowest of that page's three reads, so server render time is
+unchanged. **No Suspense skeleton**, deliberately: the delay was a removable round trip rather than
+an irreducible cost, and a skeleton would have hidden something we could delete instead. Real
+exports through the Export menu still audit normally, and access is unchanged.
+
+**Still outstanding.** `fetchCostRows` reads `/api/exports/billing-cost-rollups` the same way, for
+another trip and two more audit writes per Money page view. Nothing on screen waits for it, since
+those rows only fill a tab behind a click, so it was left alone rather than swept in; the open
+question is whether that read should become lazy on the click.
 
 ## 10. Security section (the bar the client's next technical hire will retest)
 

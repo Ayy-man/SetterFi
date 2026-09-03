@@ -217,7 +217,14 @@ a visible unapproved label, and the real filing paths reject a placeholder outri
 `_ALLOWANCE_NOTICE`, `_DISPUTE_PATH`, and `_AFFILIATE_TERMS`.
 `SETTERFI_PLATFORM_PREVIEW_DATA` selects the synthetic platform snapshot on any build that also
 runs demo logins, production included since 2026-09-04 (the owner reads the console there); real
-analytics always reads the `analytics_*` projection and never includes that snapshot.
+analytics always reads the `analytics_*` projection and never includes that snapshot. **The flag is
+a fork in the read path, not a filter on it.** With it on, `platformMeasurementSource` in
+`src/lib/repositories/platform-analytics.ts` calls `read_platform_measurement_preview_for_actor`
+and returns a stored snapshot stamped with the caller's as-of instant, so the owner Overview never
+reaches the analytics projection at all and nothing seeded, backfilled or corrected in the database
+can move a figure on it. That is the first thing to check when a change to the data does not show
+up on Overview. It is set to `false` on both the Vercel production and preview environments as of
+2026-09-04, so the console reads real analytics on the deployment the owner opens.
 
 **A2P probe pins.** `SETTERFI_A2P_PROBE_TARGET` and `SETTERFI_A2P_PROBE_TARGET_HASH` name the phone
 number the readiness probe sends to. See chapter 4.
@@ -265,7 +272,25 @@ node scripts/seed-demo-gaps.mjs --confirm --acknowledge-stale-rollups
 node scripts/seed-platform-review-data.mjs --confirm --acknowledge-stale-rollups
 node scripts/seed-demo-complete.mjs --confirm --acknowledge-stale-rollups
 node scripts/run-phase7-demo.mjs --acknowledge-stale-rollups
+node scripts/seed-demo-history.mjs --confirm-hosted   # last, and only after the chain above
 ```
+
+**The history seeder runs last, and the order is a hard requirement rather than a preference.**
+`scripts/seed-demo-history.mjs` (added 2026-09-04, `npm run demo:seed-history`) puts the demo
+platform on a twelve-month grid: the owner Overview windows all three of its trend series into
+twelve contiguous 30-day periods, and every demo tenant had been seeded within the same few weeks,
+so signups, active subscriptions and recognised revenue each drew one tall bar at the right edge
+with eleven empty ones behind it. The seeder moves `tenants.created_at` for the eight existing demo
+tenants onto that grid, upserts the sixteen cohort tenants the curve needs (eight cannot draw
+eleven months of growth), opens each subscription's mirrored period at its signup, and writes one
+cost rollup per subscribed tenant per period. It **moves** tenants rather than creating them, so a
+run against a database where the earlier seeders have not landed exits with
+`DEMO_HISTORY_TENANT_MISSING` naming the slugs it could not find. Every tenant it touches is
+re-read and refused unless `is_demo` is true whatever the fixture claims, the whole run is one
+transaction, and rerunning on the same day writes the same instants. The schedule itself lives in
+`scripts/fixtures/demo-history.mjs`, whose header also records the one thing this does not fix: the
+phase 6 money story is pinned to absolute 2026 dates and its two newest revenue bars will drift out
+of the trailing window as real time passes.
 
 Hosted runs need `SUPABASE_DB_PASSWORD` as well as the service-role key, because phases 5 to 8, the
 showcase and the platform-review seeders open a direct Postgres connection. Run them with the
