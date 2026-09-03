@@ -14,7 +14,7 @@ session's permission classifier blocked deriving a session from the repo's demo 
 every "on/off in production" statement below rests on public routes (which check the flag before
 any session) and on the production configuration as recorded on 2026-09-02. Signed-in behaviour of
 workspace pages and role-gated APIs, the row counts in `tier_offer_terms`, `account_terms_versions`
-and `tenants.is_demo`, and any real Stripe, Meta, Resend, Slack or Google round trip were not
+and `tenants.is_demo`, and any real Stripe, Meta, Resend or Google round trip were not
 measured.
 
 ## 1. Live measurements (unauthenticated, 2026-09-01 22:35 to 22:41 UTC)
@@ -120,7 +120,7 @@ L1-L4: the four states above. No proof needed.
 | A3 client book, impersonate read only, logged | BUILT | `src/components/workspace/live/success-client-book.tsx:509,529`; impersonation read-only policies `supabase/migrations/20260817000001_phase1_demo_path.sql:2184-2185`, test `supabase/tests/rls.test.ts:291` |
 | A4 texting provider marketplace install | WAIT | `MessagingInstallPanel` `src/app/(workspace)/admin/provisioning/page.tsx:14,286,331`; agency grants never refreshed since Aug 21, install pending a call with the client (`docs/SETUP.md`, GoHighLevel chapter) |
 | A5 plan prices and terms table empty | OWED | `tier_offer_terms` writer `supabase/migrations/20261003000002_tier_offer_term_writer.sql`; zero rows; admin page `src/app/(workspace)/admin/tiers/render-tiers-page.tsx:48` |
-| A6 alerts by email and Slack | OWED | delivery job `src/app/api/jobs/notification-deliveries/handler.ts:30-136`; Resend real `src/lib/integrations/email/real.ts:16`; Slack real `src/lib/integrations/slack/real.ts:115`; `RESEND_API_KEY`, `SETTERFI_EMAIL_FROM`, `SLACK_WEBHOOK_URL` not yet configured (`docs/LAUNCH-CHECKLIST.md` E4) |
+| A6 alerts by email | OWED | delivery job `src/app/api/jobs/notification-deliveries/handler.ts:30-136`; Resend real `src/lib/integrations/email/real.ts:16`; `RESEND_API_KEY`, `SETTERFI_EMAIL_FROM` and `SETTERFI_EMAIL_DRIVER` were not configured at this commit. Updated after the pin: the Slack destination was removed on 2026-09-03 (`supabase/migrations/20261012000001_remove_slack_alert_destination.sql`), and the Resend names were set in Vercel production the same day, unmeasured here (`docs/LAUNCH-CHECKLIST.md` E4) |
 | A7 audit log, "Logged" | BUILT | append-only trigger `supabase/migrations/20260817000001_phase1_demo_path.sql:1080-1094`; `src/lib/audit/actions.ts` (95 keys) |
 | A8 system page shows real vs stand-in per provider | BUILT | `src/lib/operations/system-health.ts:11-43`; `docs/operations/operator-guide.md:287` |
 | A9 operator walkthrough recordings | LATER | `docs/operations/recording-01-diagnose.md:3`, `docs/operations/recording-02-brain-publish-rollback.md:3` ("Recording required") |
@@ -159,7 +159,7 @@ L1-L4: the four states above. No proof needed.
 | D1 plan names, prices, terms | as S2, A5 |
 | D2 live payment keys | as T6 |
 | D3 Meta app credentials | as T1 |
-| D4 email sending account and Slack webhook | as A6 |
+| D4 email sending account | as A6 |
 | D5 OpenAI key for the Brain search index | as T5; `src/lib/integrations/embeddings/selector.ts:13-20`; live `/api/health/ready` `requiredProviders:false` |
 | D6 purchase-value ruling for ad conversions | as I9 |
 | D7 approved legal copy: terms, privacy, texting campaign wording | campaign copy approval `src/app/api/onboarding/run/handler.ts:88-115`; terms receipt gate `src/lib/env-contract.ts:510`; `docs/LAUNCH-CHECKLIST.md` E7 |

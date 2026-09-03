@@ -2307,7 +2307,14 @@ is the wrong one.
 
 ### 4. Does your team actually use Slack — and one channel or one per person?
 
-**Why it matters.** Slack is one of the three places alerts can go, and it was specified before
+**Answered by removing it, 2026-09-03.** Slack was never asked for: it appears once in the intake,
+in the Tier 1 access list, which was you handing over logins rather than requesting a feature. Since
+nobody could say the team would switch it on, the destination has been taken out. Alerts go to the
+in-app bell and to email, and per-person routing works on both. If a chat destination is ever wanted
+we would build a generic webhook, which is about a day's work and covers Slack, Teams and anything
+else that accepts one. The rest of this section is kept for the record.
+
+**Why it mattered.** Slack was one of the three places alerts could go, and it was specified before
 anyone checked whether your team uses it. If you are on Teams, or you run on WhatsApp, or you simply
 do not want another feed, then we are building a destination nobody switches on — and we would
 rather spend that time on the two destinations you will use.

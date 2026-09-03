@@ -54,7 +54,7 @@ describe("Phase 8 catalog contract", () => {
         (table_name = 'notifications' and column_name in
           ('rule_id','source_event_id','content','is_test','recipient_email'))
         or (table_name = 'alert_rules' and column_name in
-          ('email_subject','email_body','slack_text'))
+          ('email_subject','email_body'))
         or (table_name = 'notification_deliveries' and column_name in
           ('next_attempt_at','lease_token','lease_expires_at','terminal_at','last_error_code'))
       ) order by 1
@@ -62,7 +62,6 @@ describe("Phase 8 catalog contract", () => {
     expect(columns.rows.map((row) => row.signature)).toEqual([
       "alert_rules.email_body:text:YES",
       "alert_rules.email_subject:text:YES",
-      "alert_rules.slack_text:text:YES",
       "notification_deliveries.last_error_code:text:YES",
       "notification_deliveries.lease_expires_at:timestamptz:YES",
       "notification_deliveries.lease_token:uuid:YES",
@@ -207,12 +206,10 @@ describe("Phase 8 catalog contract", () => {
       select count(*) filter (where event_key <> 'conversation.outbound_send_unconfirmed')::text as count,
         count(*) filter (where email_subject like 'SETTERFI_DEMO_PLACEHOLDER_%'
           and email_body like 'SETTERFI_DEMO_PLACEHOLDER_%'
-          and slack_text like 'SETTERFI_DEMO_PLACEHOLDER_%'
           and event_key <> 'conversation.outbound_send_unconfirmed')::text as placeholder,
         count(*) filter (where event_key = 'conversation.outbound_send_unconfirmed'
           and email_subject not like 'SETTERFI_DEMO_PLACEHOLDER_%'
-          and email_body not like 'SETTERFI_DEMO_PLACEHOLDER_%'
-          and slack_text not like 'SETTERFI_DEMO_PLACEHOLDER_%')::text as rendered
+          and email_body not like 'SETTERFI_DEMO_PLACEHOLDER_%')::text as rendered
       from public.alert_rules
     `);
     expect(copy.rows[0].count).toBe("35");

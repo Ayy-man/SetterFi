@@ -98,7 +98,7 @@ names and never values.
 
 The selectors in use: `SETTERFI_GHL_DRIVER`, `SETTERFI_OPENROUTER_DRIVER`, `SETTERFI_META_DRIVER`,
 `SETTERFI_NOTION_DRIVER`, `SETTERFI_EMBEDDINGS_DRIVER`, `SETTERFI_GHL_PROVISIONING_DRIVER`,
-`SETTERFI_STRIPE_DRIVER`, `SETTERFI_EMAIL_DRIVER`, `SETTERFI_SLACK_DRIVER`.
+`SETTERFI_STRIPE_DRIVER`, `SETTERFI_EMAIL_DRIVER`.
 
 Phase flags are a separate mechanism and follow a different rule: they are read as exactly the
 string `true` and are otherwise off, and a child flag reads its parent first. Turning a child on
@@ -164,7 +164,6 @@ the demo identities, revoke their sessions, and confirm the shortcuts are gone f
 | `META_WHATSAPP_SYSTEM_USER_TOKEN` / `META_WABA_ID` / `META_WHATSAPP_PHONE_NUMBER_ID` | WhatsApp sender |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Billing |
 | `RESEND_API_KEY` / `RESEND_WEBHOOK_SIGNING_SECRET` / `SETTERFI_EMAIL_FROM` | Outbound email |
-| `SLACK_WEBHOOK_URL` | Internal alert delivery |
 | `GOOGLE_CALENDAR_CLIENT_ID` / `GOOGLE_CALENDAR_CLIENT_SECRET` | Our own Google Calendar OAuth app |
 
 The backend specification's own table adds three names that are not in `.env.example` today and are

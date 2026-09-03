@@ -371,7 +371,7 @@ flowchart TD
   system message inserted, ALL scheduled followups canceled, agent hard-stops (checked at turn
   entry — the AI "stands down cleanly" per §2.8). `.../handback` restores agent with context.
 - **Booking notifications** (§2.8): on appointment create → notify coach via GHL (SMS/email per
-  coach notification rules) + in-app bell + optional Slack-webhook style alert (§ alerts).
+  coach notification rules) + in-app bell + optional email alert (§ alerts).
 
 ## 4. Dual channel architecture
 

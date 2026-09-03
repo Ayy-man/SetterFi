@@ -63,7 +63,7 @@ immutable audit evidence, restores the deterministic baseline, and prints post-r
 - **Meta Real:** proves only the sandbox webhook/message arm actually exercised.
 - **SKIPPED:** proves nothing beyond the named missing prerequisite.
 
-No external email or Slack delivery is claimed by this phase. CSV/JSON export availability is tested
+No external email delivery is claimed by this phase. CSV/JSON export availability is tested
 separately from a deployed 100,000-row load; the provisional cap remains UNVERIFIED for production
 until that deployed load evidence exists.
 

@@ -206,7 +206,7 @@ self-serve onboarding, and the shared "Meet Your Agent" surface.
    support threads use their own coach/platform model; the attention tab keeps compliance
    triggers, repeated agent failures, and STOP events.
 9. **Settings and billing.** Four tabs (round 2): **Notifications** (platform notification
-   preferences), **Alerts** (rules → destinations: in-app bell / email / Slack webhook; prebuilt:
+   preferences), **Alerts** (rules → destinations: in-app bell / email; prebuilt:
    booking made, payment failed, completed payment, channel disconnected, A2P cleared, agent
    inactive 72h, onboarding stalled, client upgraded), **Billing** (billing contact, payment
    details, exportable invoice history — separate from Tiers and billing, which owns product
