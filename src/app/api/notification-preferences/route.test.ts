@@ -24,10 +24,11 @@ function setup(overrides: Record<string, unknown> = {}) {
     set: vi.fn(async () => preference),
   };
   const session = vi.fn(async () => actor);
+  const audit = vi.fn(async () => {});
   const handlers = createNotificationPreferenceHandlers({
-    enabled: () => true, session, repository: () => repository, ...overrides,
+    enabled: () => true, session, repository: () => repository, audit, ...overrides,
   } as Parameters<typeof createNotificationPreferenceHandlers>[0]);
-  return { handlers, repository, session };
+  return { audit, handlers, repository, session };
 }
 
 describe("notification preference API", () => {
@@ -48,6 +49,52 @@ describe("notification preference API", () => {
     expect(response.status).toBe(200);
     expect(values.repository.set).toHaveBeenCalledWith("user", { ruleId: "rule", destination: "email", enabled: false });
     expect(await response.json()).toEqual({ preference });
+  });
+
+  /*
+   * The account panel prints "Notification change logged" over this control, so the record is part
+   * of what a 200 promises. The recorded value is the database's read-back, not the browser's ask:
+   * a locked rule can clamp the write, and logging the request would log something that never
+   * happened.
+   */
+  it("records the change the database settled on, not the one that was asked for", async () => {
+    const values = setup();
+    values.repository.set.mockResolvedValueOnce({ ...preference, enabled: true });
+    const response = await values.handlers.PUT(new Request("http://local", {
+      method: "PUT", body: JSON.stringify({ ruleId: "rule", destination: "email", enabled: false }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(values.audit).toHaveBeenCalledWith("user", {
+      ruleId: "rule",
+      destination: "email",
+      enabled: true,
+    });
+  });
+
+  it("fails the request when the change cannot be recorded, and still returns the new value", async () => {
+    const values = setup();
+    values.audit.mockRejectedValueOnce(new Error("NOTIFICATION_PREFERENCE_AUDIT_WRITE_FAILED"));
+    const response = await values.handlers.PUT(new Request("http://local", {
+      method: "PUT", body: JSON.stringify({ ruleId: "rule", destination: "email", enabled: false }),
+    }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "Notification preference change could not be recorded.",
+      preference,
+    });
+  });
+
+  it("writes no audit row when the preference write itself was refused", async () => {
+    const values = setup();
+    values.repository.set.mockRejectedValueOnce(new Error("NOTIFICATION_PREFERENCE_LOCKED"));
+    const response = await values.handlers.PUT(new Request("http://local", {
+      method: "PUT", body: JSON.stringify({ ruleId: "rule", destination: "email", enabled: false }),
+    }));
+
+    expect(response.status).toBe(409);
+    expect(values.audit).not.toHaveBeenCalled();
   });
 
   it("refuses extra authority, invalid destinations, locked changes, and impersonation", async () => {

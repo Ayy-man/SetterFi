@@ -182,13 +182,31 @@ describe("the owner's account sheet", () => {
  * so the receipt beside the button is a fact. The open and password modes end no session and write
  * nothing, so they must not show one.
  */
+/*
+ * Every toggle under these headers fires a write that the handler records as
+ * `notification.preference.changed`. One receipt over the group rather than one per row: the pill
+ * is a statement about the control, and forty of them would be noise.
+ */
+describe("the notification receipt", () => {
+  for (const variant of ["owner", "coach"] as const) {
+    it(`states that a ${variant} notification change is logged`, async () => {
+      mountSheet(variant);
+      const panel = await sheetPanel();
+
+      await waitFor(() =>
+        expect(within(panel).getAllByText("Notification change logged")).toHaveLength(1));
+    });
+  }
+});
+
 describe("the sign-out receipt", () => {
   for (const variant of ["owner", "coach"] as const) {
     it(`states that sign out is logged on the ${variant} side`, async () => {
       mountSheet(variant);
       const panel = await sheetPanel();
 
-      expect(within(panel).getByText("Sign out logged")).toBeTruthy();
+      // The words come from the registry entry for `auth.signed_out`, which mirrors its migration.
+      expect(within(panel).getByText("Sign-out logged")).toBeTruthy();
       expect(within(panel).getByText("Sign out")).toBeTruthy();
     });
   }

@@ -1,12 +1,19 @@
 /**
  * Typed mirror of the Phase 1 audit registry seed.
  *
- * CLOSED TO NEW KEYS. This is the Plan 01 seed as it was frozen, not the list of audit actions
- * that exist. Its own test pins it byte-for-byte against a literal inventory, so adding a key here
- * fails the suite even when that key is real and a migration writes it. Every action added after
- * Plan 01 — the `tenant.membership.*`, `tenant.ownership.*` and `account.terms.*` families among
- * them — lives in its own migration and in the `AUDIT_KEYS` array in
- * `supabase/tests/phase1-schema.test.ts`, and nowhere else. Put a new key there.
+ * CLOSED TO NEW KEYS, with one narrow exception. This is the Plan 01 seed as it was frozen, not
+ * the list of audit actions that exist. Its own test pins it byte-for-byte against a literal
+ * inventory, so adding a key here fails the suite even when that key is real and a migration
+ * writes it. Every action added after Plan 01 — the `tenant.membership.*`, `tenant.ownership.*`
+ * and `account.terms.*` families among them — lives in its own migration and in the `AUDIT_KEYS`
+ * array in `supabase/tests/phase1-schema.test.ts`, and nowhere else. Put a new key there.
+ *
+ * The exception is `POST_SEED_UI_ACTIONS` below: a post-Plan-01 key whose action has a control in
+ * the interface needs its microcopy in TypeScript, because `LoggedPill` and `LoggedButton` take an
+ * `AuditActionKey` and read their words from this map. Those keys are still declared in a
+ * migration and in the `AUDIT_KEYS` array first; the block below mirrors the migration's own
+ * `microcopy` and `aria_label` text, and `actions.test.ts` holds it to that. It is a mirror of
+ * something already true, not a second place to invent a key.
  *
  * UI accountability copy comes from this registry contract only. Keeping action keys closed makes
  * an invented key fail at compile time, while the sorted-set test catches seed/type drift.
@@ -21,7 +28,7 @@ type AuditActionDefinition = {
   ariaLabel: string;
 };
 
-export const AUDIT_ACTIONS = {
+const SEED_AUDIT_ACTIONS = {
   "appointment.attendance_set": {
     actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
     microcopy: "Attendance logged", ariaLabel: "Attendance action recorded in the audit log",
@@ -423,6 +430,33 @@ export const AUDIT_ACTIONS = {
     microcopy: "Challenger model configuration created", ariaLabel: "Challenger model configuration creation recorded in the audit log",
   },
 } as const satisfies Record<string, AuditActionDefinition>;
+
+/**
+ * Post-Plan-01 keys the interface has to render copy for, mirrored from their own migrations.
+ *
+ * `auth.signed_out` is seeded by `20260909000001_auth_recovery_audit_actions.sql` and written by
+ * `/auth/signout`; `notification.preference.changed` by
+ * `20261010000001_notification_preference_audit_action.sql` and by the notification-preferences
+ * PUT. Both carry a control in the account panel, and a control that claims a record has to say
+ * which words the record uses. Every field here is copied from the migration that seeds it.
+ */
+const POST_SEED_UI_ACTIONS = {
+  "auth.signed_out": {
+    actorKind: "human", scope: "platform", reasonRequired: false, coachVisible: false,
+    microcopy: "Sign-out logged", ariaLabel: "Sign-out recorded in the audit log",
+  },
+  "notification.preference.changed": {
+    actorKind: "human", scope: "platform", reasonRequired: false, coachVisible: true,
+    microcopy: "Notification change logged",
+    ariaLabel: "Notification preference change recorded in the audit log",
+  },
+} as const satisfies Record<string, AuditActionDefinition>;
+
+export type PostSeedUiActionKey = keyof typeof POST_SEED_UI_ACTIONS;
+
+export const POST_SEED_UI_ACTION_KEYS = Object.keys(POST_SEED_UI_ACTIONS).sort() as PostSeedUiActionKey[];
+
+export const AUDIT_ACTIONS = { ...SEED_AUDIT_ACTIONS, ...POST_SEED_UI_ACTIONS };
 
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

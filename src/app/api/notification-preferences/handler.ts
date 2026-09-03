@@ -33,6 +33,12 @@ type PreferenceRepository = {
   set(userId: string, input: { ruleId: string; destination: NotificationDestination; enabled: boolean }): Promise<Pick<Preference, "ruleId" | "destination" | "enabled" | "locked">>;
 };
 
+export type PreferenceChangeRecord = {
+  ruleId: string;
+  destination: NotificationDestination;
+  enabled: boolean;
+};
+
 function ruleAudience(rule: {
   audience_roles: unknown;
   include_success_owner: unknown;
@@ -44,6 +50,36 @@ function ruleAudience(rule: {
   if (rule.include_success_owner === true) audience.push("success_owner");
   if (rule.include_billing_contact === true) audience.push("billing_contact");
   return audience.join("; ");
+}
+
+/**
+ * The audit row for a preference change, written the way `/auth/signout` writes its own: a direct
+ * service-client insert, platform-scoped, with no tenant to attribute it to.
+ *
+ * The payload names the rule and the destination and stores the value the database actually
+ * settled on, never the value the browser asked for. `notification_preferences` holds a locked
+ * flag, so a request to enable a required notice can come back clamped, and a record of the ask
+ * rather than the outcome would be a log of intentions.
+ */
+export async function writePreferenceAuditEvent(
+  actorId: string,
+  change: PreferenceChangeRecord,
+) {
+  const client = createSupabaseServiceClient();
+  const { error } = await client.from("audit_log").insert({
+    actor_id: actorId,
+    subject_user_id: actorId,
+    tenant_id: null,
+    action: "notification.preference.changed",
+    target_type: "notification_preference",
+    target_id: change.ruleId,
+    payload: {
+      destination: change.destination,
+      enabled: String(change.enabled),
+    },
+    source: "api",
+  });
+  if (error) throw new Error("NOTIFICATION_PREFERENCE_AUDIT_WRITE_FAILED");
 }
 
 /**
@@ -128,6 +164,7 @@ type Dependencies = {
   enabled(): boolean;
   session: typeof loadAlertActor;
   repository(): PreferenceRepository;
+  audit(actorId: string, change: PreferenceChangeRecord): Promise<void>;
 };
 
 export function createNotificationPreferenceHandlers(dependencies: Dependencies) {
@@ -165,6 +202,25 @@ export function createNotificationPreferenceHandlers(dependencies: Dependencies)
           destination: value.destination as NotificationDestination,
           enabled: value.enabled,
         });
+        /*
+         * Recorded before the response, and a failure to record fails the request -- the same
+         * order `/auth/signout` uses, and for the same reason: the panel prints "Notification
+         * change logged" beside this control, so a 200 has to mean both the change and its record
+         * landed. The preference travels back in the error body regardless, because the row did
+         * change and a client left showing the old value would be the second wrong answer.
+         */
+        try {
+          await dependencies.audit(actor.userId, {
+            ruleId: preference.ruleId,
+            destination: preference.destination,
+            enabled: preference.enabled,
+          });
+        } catch {
+          return Response.json(
+            { error: "Notification preference change could not be recorded.", preference },
+            { status: 503, headers },
+          );
+        }
         return Response.json({ preference }, { headers });
       } catch {
         return Response.json({ error: "Notification preference update refused." }, { status: 409, headers });
@@ -177,6 +233,7 @@ const handlers = createNotificationPreferenceHandlers({
   enabled: phase8AlertsLive,
   session: loadAlertActor,
   repository: createPreferenceRepository,
+  audit: writePreferenceAuditEvent,
 });
 export const GET = handlers.GET;
 export const PUT = handlers.PUT;

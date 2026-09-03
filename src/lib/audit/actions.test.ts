@@ -8,6 +8,7 @@ import {
   AUDIT_ACTIONS,
   PHASE7_AUDIT_KEYS,
   PHASE8_AUDIT_KEYS,
+  POST_SEED_UI_ACTION_KEYS,
 } from "@/lib/audit/actions";
 
 const SEEDED_ACTION_MICROCOPY = [
@@ -115,6 +116,16 @@ const SEEDED_ACTION_MICROCOPY = [
   ["onboarding.signup_completed", "Signup logged"],
 ] as const;
 
+/**
+ * The post-seed keys the interface renders copy for, and the migration each one is copied from.
+ * These are not part of the Plan 01 seed, so the seed's own inventory above must not carry them:
+ * they are asserted separately, against the SQL that actually seeds the row.
+ */
+const POST_SEED_UI_ACTION_SOURCES = [
+  ["auth.signed_out", "20260909000001_auth_recovery_audit_actions.sql"],
+  ["notification.preference.changed", "20261010000001_notification_preference_audit_action.sql"],
+] as const;
+
 const PHASE3_AUDIT_KEYS = [
   "contact.delete.preview",
   "conversation.tripwire.refused",
@@ -163,15 +174,47 @@ function quotedConstValues(source: string, name: string) {
 describe("AUDIT_ACTIONS", () => {
   // If this fails after you added an audit action: the registry is closed to new keys. The action
   // belongs in its migration and in `AUDIT_KEYS` in supabase/tests/phase1-schema.test.ts instead.
-  it("equals the sorted Plan 01 seed contract instead of accepting invented keys", () => {
-    expect(AUDIT_ACTION_KEYS).toEqual(SEEDED_ACTION_MICROCOPY.map(([key]) => key).sort());
+  // If this fails after you added an audit action: the seed is closed. A key whose action has a
+  // control in the interface goes in POST_SEED_UI_ACTIONS, its migration, and AUDIT_KEYS in
+  // supabase/tests/phase1-schema.test.ts. Every other key goes in the last two only.
+  it("equals the sorted Plan 01 seed plus the declared post-seed UI keys, and nothing else", () => {
+    expect(AUDIT_ACTION_KEYS).toEqual([
+      ...SEEDED_ACTION_MICROCOPY.map(([key]) => key),
+      ...POST_SEED_UI_ACTION_SOURCES.map(([key]) => key),
+    ].sort());
+    expect(POST_SEED_UI_ACTION_KEYS)
+      .toEqual(POST_SEED_UI_ACTION_SOURCES.map(([key]) => key).sort());
   });
 
   it("keeps every registry-backed Logged label equal to the Plan 01 seed", () => {
+    const seeded = new Set(SEEDED_ACTION_MICROCOPY.map(([key]) => key) as readonly string[]);
     const expected = [...SEEDED_ACTION_MICROCOPY].sort(([left], [right]) =>
       left < right ? -1 : left > right ? 1 : 0);
-    expect(AUDIT_ACTION_KEYS.map((key) => [key, AUDIT_ACTIONS[key].microcopy]))
+    expect(AUDIT_ACTION_KEYS.filter((key) => seeded.has(key))
+      .map((key) => [key, AUDIT_ACTIONS[key].microcopy]))
       .toEqual(expected);
+  });
+
+  /*
+   * The post-seed block is a mirror, so its words have to be the migration's words. A pill reading
+   * one thing while the audit row it points at stores another is the exact failure this catches.
+   */
+  it("copies each post-seed UI action's words from the migration that seeds it", () => {
+    for (const [key, file] of POST_SEED_UI_ACTION_SOURCES) {
+      const migration = readFileSync(
+        resolve(process.cwd(), "supabase/migrations", file),
+        "utf8",
+      );
+      expect(migration, key).toContain(`'${key}'`);
+      expect(migration, key).toContain(`'${AUDIT_ACTIONS[key].microcopy}'`);
+      expect(migration, key).toContain(`'${AUDIT_ACTIONS[key].ariaLabel}'`);
+
+      const phase1Test = readFileSync(
+        resolve(process.cwd(), "supabase/tests/phase1-schema.test.ts"),
+        "utf8",
+      );
+      expect(quotedConstValues(phase1Test, "AUDIT_KEYS"), key).toContain(key);
+    }
   });
 
   it("keeps the Phase 3 migration, TypeScript registry, and exact Phase 1 array byte-identical", () => {

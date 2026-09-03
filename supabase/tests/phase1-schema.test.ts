@@ -162,6 +162,7 @@ const AUDIT_KEYS = [
   "notification.inbox.read",
   "notification.inbox.read_all",
   "notification.onboarding.stalled",
+  "notification.preference.changed",
   "offer.changed",
   "offer.draft.saved",
   "offer.published",

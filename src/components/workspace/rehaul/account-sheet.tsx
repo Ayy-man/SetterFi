@@ -13,11 +13,11 @@ import {
   MessageSquare,
   Monitor,
   Shield,
-  ShieldCheck,
   X,
 } from "lucide-react";
 
 import type { Preference } from "@/app/api/notification-preferences/handler";
+import { LoggedPill } from "@/components/kit/confirm-flow";
 import { MatrixCheckbox } from "@/components/kit/matrix-checkbox";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
@@ -202,28 +202,17 @@ function ExitControl({
   }
 
   /*
-   * The "Logged" microcopy, and it is the true word rather than a decoration: `/auth/signout`
-   * writes an `auth.signed_out` row into `audit_log` through `writeAuthAuditEvent`, and refuses
-   * the sign-out outright when that write fails. It cannot be a `LoggedPill`, whose `actionKey`
-   * has to name an entry in `AUDIT_ACTIONS` and this auth action is not one of them, so the pill's
-   * own shape is reproduced here: shield, microcopy, neutral border, no semantic fill.
+   * The receipt is the true word rather than a decoration: `/auth/signout` writes an
+   * `auth.signed_out` row through `writeAuthAuditEvent` and refuses the sign-out outright when
+   * that write fails, so the pill's words come from the registry entry for that exact key.
    *
    * It hangs off the supabase branch alone. The open and password modes end no session and write
    * no row, so a receipt there would claim a record that was never made.
    */
   return (
     <form action="/auth/signout?next=%2Flogin" className="flex items-center gap-2" method="post">
-      <span
-        aria-label="Sign out recorded in the audit log"
-        className={cn(
-          "inline-flex w-fit items-center gap-1 rounded-lg border border-[var(--line)]",
-          "px-2 py-0.5 text-[var(--muted)]",
-          variant === "owner" ? "text-[11px]" : "text-[14px]",
-        )}
-        data-slot="account-sheet-signout-logged"
-      >
-        <ShieldCheck aria-hidden="true" className="size-3" />
-        Sign out logged
+      <span data-slot="account-sheet-signout-logged">
+        <LoggedPill actionKey="auth.signed_out" />
       </span>
       <button className={face} type="submit">
         <LogOut aria-hidden="true" className="size-[15px]" strokeWidth={2} />
@@ -372,6 +361,7 @@ function OwnerNotificationMatrix({
     <div data-slot="account-sheet-matrix">
       <div className="mb-1.5 flex h-[34px] items-center gap-2.5 border-b border-[var(--line)]">
         <span className="text-[13px] text-[var(--muted)]">Notifications</span>
+        <LoggedPill actionKey="notification.preference.changed" />
         <div className="ml-auto flex">
           {OWNER_DESTINATIONS.map((column) => (
             <span
@@ -427,6 +417,7 @@ function CoachNotificationList({
     <>
       <div className="flex h-[60px] flex-[0_0_60px] items-center gap-3 border-b border-[var(--line)] px-6">
         <span className={COACH_SECTION_NAME}>Notifications</span>
+        <LoggedPill actionKey="notification.preference.changed" />
         <div
           aria-label="Where notices arrive"
           className="ml-auto inline-flex rounded-[10px] border border-[var(--line)] bg-[var(--card)] p-[3px]"
