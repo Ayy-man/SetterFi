@@ -549,7 +549,8 @@
     var p = phone.getBoundingClientRect();
     var f = friday.getBoundingClientRect();
     var x0 = (p.right - camRect.left) / z, y0 = (p.top - camRect.top) / z + 250;
-    var x1 = (f.left + f.width / 2 - camRect.left) / z, y1 = (f.top + f.height / 2 - camRect.top) / z;
+    // Land just short of the slot's left edge, not inside it.
+    var x1 = (f.left - camRect.left) / z - 12, y1 = (f.top + f.height / 2 - camRect.top) / z;
     var d = 'M' + x0 + ' ' + y0 + ' C ' + (x0 + (x1 - x0) * 0.45) + ' ' + y0 + ', ' + (x0 + (x1 - x0) * 0.6) + ' ' + y1 + ', ' + x1 + ' ' + y1;
     linePath.setAttribute('d', d);
     lineGlow.setAttribute('d', d);
