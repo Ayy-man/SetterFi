@@ -60,6 +60,18 @@ describe("operations view models", () => {
       .toMatchObject({ planDisplayLabel: "Growth" });
   });
 
+  it("strips the seeded marker from the plan label, which the row's Demo label already carries", () => {
+    const view = clientBookView({
+      ...client,
+      client: { ...client.client, isDemo: true },
+      planId: "tier-growth",
+      planLabel: "Growth (demo)",
+    });
+
+    expect(view.planDisplayLabel).toBe("Growth");
+    expect(view.dataLabel).toBe("Demo");
+  });
+
   it("derives reassignment candidates only from named persisted owners or the success actor", () => {
     expect(successOwnerCandidates({ rows: [client], actorId: "success-1", actorRole: "admin" })).toEqual([]);
     expect(successOwnerCandidates({ rows: [client], actorId: "success-1", actorRole: "success" })).toEqual([

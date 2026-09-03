@@ -5,6 +5,7 @@
  * the screen promises; the database payload never enters this type boundary.
  */
 
+import { displayNameOrNull } from "@/lib/format/display-name";
 import type { UserRole } from "@/lib/auth/claims";
 import type { SuccessClientBookRead } from "@/lib/repositories/support";
 import { reassignmentControlState } from "./support-view-models";
@@ -39,7 +40,9 @@ export function clientBookView(row: SuccessClientBookRead): ClientBookView {
     supportStatusLabel: row.supportStatus
       ? row.supportStatus.replaceAll("_", " ")
       : "No support request",
-    planDisplayLabel: row.planLabel ?? "No plan",
+    // The seeded `(demo)` marker is stripped where a person reads the plan name; the row's own
+    // Demo label, one line below, is what says the account is seeded.
+    planDisplayLabel: displayNameOrNull(row.planLabel) ?? "No plan",
     dataLabel: row.client.isDemo ? "Demo" : null,
   };
 }

@@ -43,6 +43,22 @@ function stubFetch() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CoachBillingRehaul", () => {
+  it("shows a seeded plan by its name, without the marker the seeder staples on", () => {
+    stubFetch();
+    const { container } = render(
+      <CoachBillingRehaul
+        checkoutReturn={null}
+        enabled
+        initialSnapshot={{ ...snapshot, isDemo: true, tierName: "Growth (demo)" }}
+      />,
+    );
+
+    expect(screen.getByText("Growth plan")).toBeVisible();
+    // A coach reading their own billing page is not chasing a record by its stored name, so the
+    // marker has nothing to say here and appears nowhere on the screen.
+    expect(container.textContent).not.toContain("(demo)");
+  });
+
   it("renders the title, the charge and the attendance verbs", () => {
     stubFetch();
     render(<CoachBillingRehaul checkoutReturn={null} enabled initialSnapshot={snapshot} />);

@@ -88,6 +88,7 @@ import {
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { OWNER_MONEY_TABS, type OwnerMoneyTab } from "@/lib/console-tabs";
 import { workspaceCountFormat } from "@/lib/format/datetime";
+import { displayNameOrNull } from "@/lib/format/display-name";
 import { formatMetric, money } from "@/lib/format/metric";
 import type {
   MoneyBillingRead,
@@ -743,7 +744,7 @@ function MoneyBillingTab({
                         )}
                       </td>
                       <td className={`${CARD_TABLE.td} text-[var(--body)]`}>
-                        {client?.plan ?? absentValue("no plan recorded")}
+                        {displayNameOrNull(client?.plan) ?? absentValue("no plan recorded")}
                       </td>
                       <td className={CARD_TABLE.td}>
                         <Pill tone={tone === "amber" ? "amber" : "neutral"}>

@@ -285,6 +285,54 @@ describe("OwnerMoney, honest states", () => {
     ]);
   });
 
+  it("strips the seeded marker off a plan name, the way the business name beside it is stripped", () => {
+    const { container } = render(
+      <OwnerMoney
+        actorRole="owner"
+        authorized
+        billing={{
+          ...BILLING,
+          rows: [client({
+            businessName: "Reid Funding Group (demo)",
+            dataLabel: "Demo",
+            plan: "Growth (demo)",
+            tenantId: "tenant-reid",
+          })],
+        }}
+        enabled
+        initialRows={[{ ...ROWS[0], businessName: "Reid Funding Group (demo)", dataLabel: "Demo" }]}
+        movement={MOVEMENT}
+        tab="billing"
+      />,
+    );
+
+    const cells = [...(container.querySelectorAll('[data-slot="card-table"] tbody tr td') ?? [])]
+      .map((cell) => cell.textContent?.trim());
+    // The name cell keeps the Demo pill's word; neither cell repeats the parenthesised marker.
+    expect(cells[0]).toBe("Reid Funding GroupDemo");
+    expect(cells[1]).toBe("Growth");
+    expect(container.textContent).not.toContain("(demo)");
+  });
+
+  it("renders the server's subscription rows without asking the export route for them", () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => new Response(String(input), { status: 500 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const { container } = renderBilling();
+
+      const names = [...container.querySelectorAll('[data-slot="card-table"] tbody tr td:first-child')]
+        .map((cell) => cell.textContent?.trim());
+      expect(names).toEqual(["Reid Funding Group", "Cedar Ridge Credit Coaching"]);
+      // The table used to fetch itself after hydration, which is what put a round trip between the
+      // page painting and the rows appearing. Given rows, it asks the export route for nothing.
+      // The cost read is a different fetch, on a different route, and nothing on screen waits for it.
+      expect(fetchSpy.mock.calls.some(([input]) =>
+        String(input).includes("/api/exports/platform-billing"))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("says so where the priced read carried no plan and no amount", () => {
     const { container } = render(
       <OwnerMoney

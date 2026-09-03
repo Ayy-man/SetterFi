@@ -454,3 +454,14 @@ them alone would separate them from the invoice story they exist to explain.
 Doing it properly means anchoring the whole phase 6 money story onto a grid that is stable within a
 period rather than per run. The exact drift is also recorded in the header of
 `scripts/fixtures/demo-history.mjs`.
+
+## Backlog: the Money cost rows still read through the export route (logged 2026-09-04)
+
+The Subscriptions table was fed after hydration by a call to `/api/exports/platform-billing`, which
+costs a client round trip plus a `start_platform_export` and a `finish_export` audit write on every
+page view, for a download nobody asked for. That read moved onto the server and now ships in the
+first HTML. `fetchCostRows` still does exactly the same thing against
+`/api/exports/billing-cost-rollups`: another round trip and two more audit writes per Money page
+view. It was left alone because nothing on screen waits for it, since those rows only fill a tab
+behind a click, so it is not the reported bug. The open question is whether that read should become
+lazy on the click rather than eager on page load.

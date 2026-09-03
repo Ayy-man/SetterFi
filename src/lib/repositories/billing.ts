@@ -149,6 +149,27 @@ export type MoneyBillingRead = {
   }[];
 };
 
+/**
+ * One row of the Money page's Subscriptions table, in the shape the table's own normaliser reads.
+ *
+ * The table used to feed itself from `/api/exports/platform-billing` after hydration, which cost a
+ * client round trip and two `export.*` audit writes on every page view, for a read no one had
+ * asked to export. The projection moved here so the page can render the table in its first HTML;
+ * the export route keeps its own copy of the same shape for the file a reader actually downloads.
+ */
+export type MoneySubscriptionRow = {
+  tenantId: string;
+  businessName: string;
+  accountStatus: string;
+  subscriptionStatus: string | null;
+  providerUpdatedAt: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  pendingTierId: string | null;
+  pendingEffectiveAt: string | null;
+  dataLabel: string | null;
+};
+
 export type BillingRepository = {
   updateTier(input: {
     actorId: string;
@@ -212,6 +233,7 @@ export type BillingRepository = {
   loadOwnBilling(tenantId: string, asOf?: Date): Promise<CoachBillingRead | null>;
   loadMrrMovement(asOf: string): Promise<MrrMovementRead>;
   loadMoneyBilling(asOf: string): Promise<MoneyBillingRead>;
+  loadSubscriptionRows(): Promise<readonly MoneySubscriptionRow[]>;
   loadSubscription(tenantId: string): Promise<BillingSubscriptionReadback>;
   loadCheckoutTenant(tenantId: string): Promise<CheckoutTenant | null>;
   loadCheckoutTierPrices(tierId: string): Promise<readonly CheckoutTierPrice[]>;
@@ -268,6 +290,7 @@ export type BillingRepositoryDependencies = {
     tenantPriceOverrides: unknown;
   }>;
   readMoneyBilling(asOf: string): Promise<unknown>;
+  readSubscriptionRows(): Promise<unknown>;
   readSubscription(tenantId: string): Promise<Record<string, unknown> | null>;
   readCheckoutTenant(tenantId: string): Promise<Record<string, unknown> | null>;
   readCheckoutTierPrices(tierId: string): Promise<unknown>;
@@ -810,6 +833,60 @@ function parseMoneyBilling(value: unknown): MoneyBillingRead {
   return { mrrByPeriod, rows };
 }
 
+/**
+ * Every tenant the Subscriptions table draws, newest movement first.
+ *
+ * There is no page size because there is no pagination: the table shows the whole book at once and
+ * sorts it by how much attention a row needs, so a page boundary would silently hide accounts. The
+ * cap is a guard against a runaway read rather than a window, and a book that ever reaches it has
+ * outgrown a single-table screen.
+ */
+const SUBSCRIPTION_ROW_CAP = 2_000;
+
+const SUBSCRIPTION_ROW_SELECT = [
+  "id,name,status,is_demo",
+  "billing_subscriptions(status,provider_updated_at,current_period_end,cancel_at_period_end)",
+  "allowance_actions(pending_tier_id,effective_at,state)",
+].join(",");
+
+/** A to-one embed, which PostgREST hands back as an object or as a one-element array. */
+function embedded(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return embedded(value[0]);
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function embeddedRows(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((candidate): candidate is Record<string, unknown> =>
+      Boolean(candidate) && typeof candidate === "object" && !Array.isArray(candidate))
+    : [];
+}
+
+function parseSubscriptionRows(value: unknown): MoneySubscriptionRow[] {
+  const code = "BILLING_SUBSCRIPTION_ROWS_READ_INVALID";
+  return array(value, code).map((candidate) => {
+    const tenant = row(candidate, code);
+    const subscription = embedded(tenant.billing_subscriptions);
+    // The one pending tier change a reader is owed, on the same rule the export applies: a
+    // scheduled or consent-blocked action is the change that has not landed yet, and anything
+    // else has either landed or been abandoned.
+    const pending = embeddedRows(tenant.allowance_actions)
+      .find((action) => action.state === "scheduled" || action.state === "awaiting_consent") ?? null;
+    return {
+      tenantId: string(tenant.id, code),
+      businessName: string(tenant.name, code),
+      accountStatus: string(tenant.status, code),
+      subscriptionStatus: nullableString(subscription?.status ?? null, code),
+      providerUpdatedAt: nullableString(subscription?.provider_updated_at ?? null, code),
+      currentPeriodEnd: nullableString(subscription?.current_period_end ?? null, code),
+      cancelAtPeriodEnd: subscription?.cancel_at_period_end === true,
+      pendingTierId: nullableString(pending?.pending_tier_id ?? null, code),
+      pendingEffectiveAt: nullableString(pending?.effective_at ?? null, code),
+      dataLabel: tenant.is_demo === true ? "Demo" : null,
+    };
+  });
+}
+
 async function liveDependencies(): Promise<BillingRepositoryDependencies> {
   const service = createSupabaseServiceClient();
   const user = await createSupabaseServerClient();
@@ -991,6 +1068,14 @@ async function liveDependencies(): Promise<BillingRepositoryDependencies> {
         throw new BillingRepositoryError("MONEY_BILLING_READ_FAILED");
       }
       return data;
+    },
+    readSubscriptionRows: async () => {
+      const { data, error } = await service.from("tenants")
+        .select(SUBSCRIPTION_ROW_SELECT)
+        .order("updated_at", { ascending: false })
+        .limit(SUBSCRIPTION_ROW_CAP);
+      if (error) throw new BillingRepositoryError("BILLING_SUBSCRIPTION_ROWS_READ_FAILED");
+      return data ?? [];
     },
     readSubscription: async (tenantId) => {
       const [subscription, tenant] = await Promise.all([
@@ -1258,6 +1343,8 @@ export function createBillingRepository(
       if (!MOVEMENT_ISO.test(asOf)) throw new BillingRepositoryError("MONEY_BILLING_AS_OF_INVALID");
       return parseMoneyBilling(await (await dependencies()).readMoneyBilling(asOf));
     },
+    loadSubscriptionRows: async () =>
+      parseSubscriptionRows(await (await dependencies()).readSubscriptionRows()),
     loadSubscription: async (tenantId) => {
       const deps = await dependencies();
       const persisted = await deps.readSubscription(tenantId);

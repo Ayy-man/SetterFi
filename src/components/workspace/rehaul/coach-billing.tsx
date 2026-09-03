@@ -62,6 +62,7 @@ import {
   workspaceCountFormat,
   workspaceDateFormat,
 } from "@/lib/format/datetime";
+import { displayName } from "@/lib/format/display-name";
 import { money } from "@/lib/format/metric";
 
 /* The sentences this screen used to print as help text, handed to the eye instead. */
@@ -464,7 +465,7 @@ export function CoachBillingRehaul({
             <div className="mt-[10px] flex flex-wrap items-center gap-[20px] text-[16px] text-[color:var(--body)]">
               <span className="flex items-center gap-[8px]">
                 <StatusDot size={6} tone={STATE_TONE_TO_TONE[subscription.tone]} />
-                {snapshot.tierName}
+                {displayName(snapshot.tierName)}
                 <span aria-hidden className="text-[color:var(--faint)]">·</span>
                 {/* The plan's own state in words. The period end is a labelled sentence on the
                     charge panel now, so it is not repeated here as a bare date. */}
@@ -532,7 +533,7 @@ export function CoachBillingRehaul({
                 <DeckPanel
                   drench="live"
                   eyebrow="Charged each month"
-                  name={`${snapshot.tierName} plan`}
+                  name={`${displayName(snapshot.tierName)} plan`}
                 >
                   <Figure className={TABULAR_CLASS} size="hero">
                     <span data-slot="billing-charge">

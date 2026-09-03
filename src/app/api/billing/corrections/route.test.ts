@@ -33,6 +33,7 @@ function repositoryDependencies(
     projectOwnBilling: vi.fn(),
     readMovementSources: vi.fn(),
     readSubscription: vi.fn(),
+    readSubscriptionRows: vi.fn(),
     readCheckoutTenant: vi.fn(),
     readCheckoutTierPrices: vi.fn(),
     readAllowedPrices: vi.fn(),

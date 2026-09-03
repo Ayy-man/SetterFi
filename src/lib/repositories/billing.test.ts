@@ -19,11 +19,85 @@ function dependencies(overrides: Partial<BillingRepositoryDependencies> = {}): B
     readAttendance: vi.fn(), projectCorrections: vi.fn(), projectOwnBilling: vi.fn(),
     readSubscription: vi.fn(), readMovementSources: vi.fn(), readMoneyBilling: vi.fn().mockResolvedValue(moneyBillingFixture()),
     readCheckoutTenant: vi.fn(), readCheckoutTierPrices: vi.fn(), readAllowedPrices: vi.fn(),
-    readCheckoutSession: vi.fn(), ...overrides,
+    readCheckoutSession: vi.fn(), readSubscriptionRows: vi.fn(), ...overrides,
   };
 }
 
 describe("billing repository", () => {
+  describe("subscription rows", () => {
+    const tenant = (overrides: Record<string, unknown> = {}) => ({
+      id: "tenant-reid",
+      name: "Reid Funding Group (demo)",
+      status: "active",
+      is_demo: true,
+      billing_subscriptions: {
+        status: "past_due",
+        provider_updated_at: "2026-09-03T07:00:00.000Z",
+        current_period_end: "2026-09-28T00:00:00.000Z",
+        cancel_at_period_end: false,
+      },
+      allowance_actions: [
+        { pending_tier_id: "tier-old", effective_at: "2026-07-01T00:00:00.000Z", state: "applied" },
+        { pending_tier_id: "tier-growth", effective_at: "2026-10-01T00:00:00.000Z", state: "scheduled" },
+      ],
+      ...overrides,
+    });
+
+    it("projects the row the Subscriptions table reads, taking only the change that has not landed", async () => {
+      const repository = createBillingRepository(dependencies({
+        readSubscriptionRows: vi.fn().mockResolvedValue([tenant()]),
+      }));
+
+      expect(await repository.loadSubscriptionRows()).toEqual([{
+        tenantId: "tenant-reid",
+        businessName: "Reid Funding Group (demo)",
+        accountStatus: "active",
+        subscriptionStatus: "past_due",
+        providerUpdatedAt: "2026-09-03T07:00:00.000Z",
+        currentPeriodEnd: "2026-09-28T00:00:00.000Z",
+        cancelAtPeriodEnd: false,
+        // The applied action is history, not a pending change, so the scheduled one is the answer.
+        pendingTierId: "tier-growth",
+        pendingEffectiveAt: "2026-10-01T00:00:00.000Z",
+        // The marker stays on the stored name; the label is what the screen strips it in favour of.
+        dataLabel: "Demo",
+      }]);
+    });
+
+    it("carries a tenant that has no subscription and no pending change, rather than dropping it", async () => {
+      const repository = createBillingRepository(dependencies({
+        readSubscriptionRows: vi.fn().mockResolvedValue([tenant({
+          allowance_actions: [],
+          billing_subscriptions: [],
+          is_demo: false,
+          name: "Cedar Ridge Credit Coaching",
+        })]),
+      }));
+
+      expect(await repository.loadSubscriptionRows()).toEqual([{
+        tenantId: "tenant-reid",
+        businessName: "Cedar Ridge Credit Coaching",
+        accountStatus: "active",
+        subscriptionStatus: null,
+        providerUpdatedAt: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        pendingTierId: null,
+        pendingEffectiveAt: null,
+        dataLabel: null,
+      }]);
+    });
+
+    it("refuses a row with no account reference rather than drawing a nameless one", async () => {
+      const repository = createBillingRepository(dependencies({
+        readSubscriptionRows: vi.fn().mockResolvedValue([tenant({ id: "" })]),
+      }));
+
+      await expect(repository.loadSubscriptionRows())
+        .rejects.toThrow("BILLING_SUBSCRIPTION_ROWS_READ_INVALID");
+    });
+  });
+
   it("keeps twelve receipt-backed MRR periods and only real client rows, with raw status distinct from live MRR", async () => {
     const row = (overrides: Record<string, unknown> = {}) => ({
       tenantId: "tenant-active",
