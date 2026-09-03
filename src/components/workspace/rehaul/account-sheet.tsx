@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Monitor,
   Shield,
+  ShieldCheck,
   X,
 } from "lucide-react";
 
@@ -200,8 +201,30 @@ function ExitControl({
     );
   }
 
+  /*
+   * The "Logged" microcopy, and it is the true word rather than a decoration: `/auth/signout`
+   * writes an `auth.signed_out` row into `audit_log` through `writeAuthAuditEvent`, and refuses
+   * the sign-out outright when that write fails. It cannot be a `LoggedPill`, whose `actionKey`
+   * has to name an entry in `AUDIT_ACTIONS` and this auth action is not one of them, so the pill's
+   * own shape is reproduced here: shield, microcopy, neutral border, no semantic fill.
+   *
+   * It hangs off the supabase branch alone. The open and password modes end no session and write
+   * no row, so a receipt there would claim a record that was never made.
+   */
   return (
-    <form action="/auth/signout?next=%2Flogin" method="post">
+    <form action="/auth/signout?next=%2Flogin" className="flex items-center gap-2" method="post">
+      <span
+        aria-label="Sign out recorded in the audit log"
+        className={cn(
+          "inline-flex w-fit items-center gap-1 rounded-lg border border-[var(--line)]",
+          "px-2 py-0.5 text-[var(--muted)]",
+          variant === "owner" ? "text-[11px]" : "text-[14px]",
+        )}
+        data-slot="account-sheet-signout-logged"
+      >
+        <ShieldCheck aria-hidden="true" className="size-3" />
+        Sign out logged
+      </span>
       <button className={face} type="submit">
         <LogOut aria-hidden="true" className="size-[15px]" strokeWidth={2} />
         Sign out

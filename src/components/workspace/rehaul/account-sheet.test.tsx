@@ -67,17 +67,18 @@ const TERMS: AccountSheetTerms = {
 
 function mountSheet(
   variant: "owner" | "coach",
-  extra: { terms?: AccountSheetTerms } = {},
+  extra: { terms?: AccountSheetTerms; mode?: "open" | "password" | "supabase" } = {},
 ) {
+  const { mode = "supabase", ...props } = extra;
   return render(
     <WorkspaceEnvProvider
       account={{ fullName: "Delia Hartman", firstName: "Delia", business: "SetterFi platform" }}
       demoAccountSwitching={false}
       demoViews={demoViewTargets}
-      mode="supabase"
+      mode={mode}
       rehaulLive
     >
-      <AccountSheet onOpenChange={() => {}} open variant={variant} {...extra} />
+      <AccountSheet onOpenChange={() => {}} open variant={variant} {...props} />
     </WorkspaceEnvProvider>,
   );
 }
@@ -173,6 +174,31 @@ describe("the owner's account sheet", () => {
     expect(within(panel).getAllByLabelText("Email for Appointment booked").length).toBeGreaterThan(0);
     expect(within(panel).getAllByLabelText("Slack for Appointment booked").length).toBeGreaterThan(0);
     expect(within(panel).getByText("Required")).toBeTruthy();
+  });
+});
+
+/*
+ * `/auth/signout` writes an `auth.signed_out` row and refuses the sign-out when that write fails,
+ * so the receipt beside the button is a fact. The open and password modes end no session and write
+ * nothing, so they must not show one.
+ */
+describe("the sign-out receipt", () => {
+  for (const variant of ["owner", "coach"] as const) {
+    it(`states that sign out is logged on the ${variant} side`, async () => {
+      mountSheet(variant);
+      const panel = await sheetPanel();
+
+      expect(within(panel).getByText("Sign out logged")).toBeTruthy();
+      expect(within(panel).getByText("Sign out")).toBeTruthy();
+    });
+  }
+
+  it("claims no receipt where there is no session to end", async () => {
+    mountSheet("owner", { mode: "open" });
+    const panel = await sheetPanel();
+
+    expect(within(panel).getByText("Switch view")).toBeTruthy();
+    expect(panel.querySelector('[data-slot="account-sheet-signout-logged"]')).toBeNull();
   });
 });
 
