@@ -16,7 +16,8 @@ import { parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { demoLoginAccounts } from "@/lib/auth/demo-logins";
 import { internalRedirectPath } from "@/lib/auth/internal-redirect";
 import { authMode } from "@/lib/auth/mode";
-import { phase5Live } from "@/lib/env-contract";
+import { RehaulLoginForm } from "@/components/workspace/rehaul/login-form";
+import { phase5Live, uiRehaulLive } from "@/lib/env-contract";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -105,6 +106,25 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     ? loginAccessDescriptor({ state: "not_onboarding" })
     : null;
   const demoAccounts = demoLoginAccounts();
+
+  /*
+   * The rehaul seam. Same action, same `next`, same four error branches, same session read -- the
+   * only thing the flag changes is which component draws them. The old path below is untouched.
+   */
+  if (uiRehaulLive()) {
+    return (
+      <RehaulLoginForm
+        demoAccounts={demoAccounts}
+        error={error}
+        next={internalRedirectPath(next, null)}
+        session={session}
+        setupAccess={setupAccess}
+        signupOpen={phase5Live()}
+        submit={submit}
+        unattached={unattached}
+      />
+    );
+  }
 
   return (
     <AuthStage>

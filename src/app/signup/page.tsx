@@ -6,7 +6,8 @@ import { AuthHeader, AuthStage } from "@/components/auth/auth-shell";
 import { referralCodeFromParam, type SignupTierChoice } from "@/components/onboarding/view-models";
 import { loadCurrentAccountTerms } from "@/lib/account/terms";
 import { REFERRAL_QUERY_PARAM } from "@/lib/affiliates/referral-attribution";
-import { accountTermsLive, phase5Live } from "@/lib/env-contract";
+import { RehaulSignupForm } from "@/components/workspace/rehaul/signup-form";
+import { accountTermsLive, phase5Live, uiRehaulLive } from "@/lib/env-contract";
 
 export const metadata: Metadata = {
   title: "Create your SetterFi account",
@@ -116,6 +117,17 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     } catch {
       terms = null;
     }
+  }
+
+  /*
+   * The rehaul seam. The catalogue read, the terms read and the referral prefill above are the same
+   * ones the old path gets; the flag only decides which form draws them. The rehaul card carries its
+   * own stage and its own `<h1>`, so it replaces the header too.
+   */
+  if (uiRehaulLive()) {
+    return (
+      <RehaulSignupForm enabled={enabled} referralCode={referralCode} terms={terms} tiers={tiers} />
+    );
   }
 
   return (
