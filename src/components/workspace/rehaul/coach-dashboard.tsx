@@ -315,15 +315,16 @@ function WindowPills({ window }: { window: CoachMeasurementWindow }) {
  * ------------------------------------------------------------------------------------------ */
 
 /**
- * The two-line chart, drawn from `read_coach_lead_composition_for_actor` through the kit's
- * `LineChart`, which owns the scale, the legend, the axis ends, the crosshair and the sr-only
- * table so this file owns none of them.
+ * Leads and booked calls over six months, through the kit's `LineChart`, which owns the scale,
+ * the legend, the axis ends, the crosshair and the sr-only table so this file owns none of them.
  *
- * The artboard's second series is booked calls. The composition rows carry `total`, `qualified`,
- * `disqualified` and `active` and no booked count at all, and a booked-per-month read does not
- * exist on this page, so the second line is Qualified. It comes from the same six rows as the
- * first, which is the property that matters: both lines are one query's answer about one cohort,
- * so the gap between them is a fact rather than two windows compared by eye.
+ * Both series come from one read. `loadCoachLeadComposition` returns `bookedByPeriod` zero-filled
+ * to the same six months as `months` and refuses a snapshot whose two arrays disagree, so the two
+ * lines are one query's answer about one span rather than two windows compared by eye. The booked
+ * series is still matched by month here rather than by position: the repository's guarantee is
+ * about what it returns, and a caller that builds a snapshot by hand -- every unit fixture -- has
+ * made no such promise. A month with no booked row drops the whole second line, because a zero we
+ * invented would read as a month with no bookings.
  *
  * The legend carries each series' total, which is the artboard's "Leads · 214" wording, and the
  * partial-month flag is the one fact `LineChart`'s own table cannot know: a month still filling
@@ -340,7 +341,9 @@ function LeadsTrend({ composition }: { composition: CoachLeadComposition }) {
   }
 
   const totals = months.map((month) => month.total);
-  const qualified = months.map((month) => month.qualified);
+  const bookedByMonth = new Map(composition.bookedByPeriod.map((row) => [row.month, row.booked]));
+  const booked = months.map((month) => bookedByMonth.get(month.month));
+  const bookedComplete = booked.every((value): value is number => typeof value === "number");
   const sum = (values: readonly number[]) => values.reduce((total, value) => total + value, 0);
   const partial = months.filter((month) => month.partial).map((month) => month.label);
 
@@ -349,11 +352,16 @@ function LeadsTrend({ composition }: { composition: CoachLeadComposition }) {
       <LineChart
         className="w-full"
         height={220}
-        label="Leads and qualified leads by month"
+        label="Leads and booked calls by month"
         labels={months.map((month) => month.label)}
         series={[
           { name: `Leads · ${workspaceCountFormat.format(sum(totals))}`, values: totals },
-          { name: `Qualified · ${workspaceCountFormat.format(sum(qualified))}`, values: qualified },
+          ...(bookedComplete
+            ? [{
+              name: `Booked · ${workspaceCountFormat.format(sum(booked))}`,
+              values: booked,
+            }]
+            : []),
         ]}
         width={440}
       />
@@ -802,7 +810,7 @@ export function CoachDashboard({
             <section aria-labelledby="rehaul-trend-heading" className={PANEL_CLASS}>
               <Band
                 eyebrow="Six months"
-                name="Leads and qualified leads"
+                name="Leads and booked calls"
                 titleId="rehaul-trend-heading"
               />
               <div className="flex flex-1 flex-col p-5">

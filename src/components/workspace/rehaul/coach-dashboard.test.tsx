@@ -70,6 +70,10 @@ function measurement(): CoachMeasurement {
 function composition(): CoachLeadComposition {
   return {
     asOf: "2026-09-03T12:00:00.000Z",
+    bookedByPeriod: [
+      { booked: 4, month: "2026-08-01" },
+      { booked: 7, month: "2026-09-01" },
+    ],
     months: [
       { active: 2, disqualified: 1, label: "Aug 2026", month: "2026-08-01", partial: false, qualified: 5, total: 8 },
       { active: 3, disqualified: 1, label: "Sep 2026", month: "2026-09-01", partial: true, qualified: 6, total: 10 },
@@ -140,6 +144,18 @@ describe("CoachDashboard", () => {
     expect(pills.textContent).toBe("1D1W1M3MAll");
     expect(screen.getByRole("link", { name: "3M" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "1W" })).toHaveAttribute("href", "/coach/home?window=1w");
+  });
+
+  it("draws the six-month chart as leads against booked calls", () => {
+    renderDashboard();
+
+    const trend = screen.getByRole("region", { name: "Leads and booked calls" });
+    // Both legend totals are sums of the same six months, so the two lines are comparable.
+    expect(trend.textContent).toContain("Leads · 18");
+    expect(trend.textContent).toContain("Booked · 11");
+    expect(trend.textContent).not.toContain("Qualified");
+    // The month still filling reads low, so the chart says which one it is.
+    expect(trend.textContent).toContain("Sep 2026 is still filling.");
   });
 
   it("shows the keyword row with its counts and a funnel line", () => {
