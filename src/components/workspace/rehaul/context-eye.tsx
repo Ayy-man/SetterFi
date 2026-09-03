@@ -1,0 +1,241 @@
+"use client";
+
+import { Eye } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+
+import { cn } from "@/lib/utils";
+
+/**
+ * The context eye: one per rehaul screen, and the only place explanatory prose is allowed to live.
+ *
+ * The rehaul rule is that no screen carries an explainer sentence under a heading -- a heading, a
+ * figure, a table, a control, nothing else. That rule only works if the sentences have somewhere
+ * to go, and this is it. A page passes the sentences it used to print as `copy` and they become a
+ * thing a reviewer opens on purpose rather than a thing every reader scrolls past forever.
+ *
+ * Hiding is deliberately weak. "Hide for now" writes to sessionStorage, not localStorage, so the
+ * eye comes back on the next page load: this exists for a review pass, and a reviewer who dismissed
+ * it on Tuesday should still see it on Wednesday.
+ */
+
+export type ContextEyeProps = {
+  /** Stable screen id. Scopes the hide, so hiding on one screen leaves the others alone. */
+  screen: string;
+  /** The sentences the screen no longer prints. Plain prose, no markup. */
+  copy: string;
+  /**
+   * `absolute` (the default) pins the eye to the nearest positioned ancestor, which is the page
+   * container every rehaul screen already sets `relative` on. Pages without such a container pass
+   * `fixed` so the eye still lands bottom-right of the viewport instead of the document.
+   */
+  position?: "absolute" | "fixed";
+  className?: string;
+};
+
+/**
+ * Left empty on purpose. Screens pass their own `screen` string today; if a shared list of ids
+ * turns out to be worth keeping, this is where it goes and nothing has to move to get it.
+ */
+export const CONTEXT_EYE_SCREENS: readonly string[] = [];
+
+export function contextEyeStorageKey(screen: string) {
+  return `setterfi.eye.hidden.${screen}`;
+}
+
+/**
+ * Hidden screens for this visit, held in the module as well as in storage.
+ *
+ * Storage is the part that survives a client-side navigation, but it is also the part that can
+ * fail: Safari's private mode throws on `sessionStorage` rather than returning null, and a browser
+ * set to block site data throws on both read and write. When it does, this set still carries the
+ * hide for as long as the tab lives, so pressing "Hide for now" always hides something. An eye that
+ * takes the page down, or one that ignores the button it just rendered, are both worse.
+ */
+const hiddenThisVisit = new Set<string>();
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function isHidden(screen: string): boolean {
+  if (hiddenThisVisit.has(screen)) {
+    return true;
+  }
+
+  try {
+    return window.sessionStorage.getItem(contextEyeStorageKey(screen)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function hide(screen: string) {
+  hiddenThisVisit.add(screen);
+
+  try {
+    window.sessionStorage.setItem(contextEyeStorageKey(screen), "1");
+  } catch {
+    // Unwritable storage costs the reviewer a re-hide after a reload, nothing more.
+  }
+
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+export function ContextEye({
+  className,
+  copy,
+  position = "absolute",
+  screen,
+}: ContextEyeProps) {
+  /**
+   * `useSyncExternalStore` rather than state seeded in an effect. The server has no sessionStorage,
+   * so the server snapshot is always "visible" and React re-renders with the real one after
+   * hydration -- which is the same one-frame flash a state-in-effect version would give, without
+   * the cascading render the lint rule is right to flag.
+   */
+  const hidden = useSyncExternalStore(
+    subscribe,
+    () => isHidden(screen),
+    () => false,
+  );
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+
+  const close = useCallback((refocus: boolean) => {
+    setOpen(false);
+    if (refocus) {
+      buttonRef.current?.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close(true);
+      }
+    }
+
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        close(false);
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [close, open]);
+
+  if (hidden) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "z-40 right-6 bottom-6",
+        position === "fixed" ? "fixed" : "absolute",
+        className,
+      )}
+      data-screen={screen}
+      data-slot="context-eye"
+      ref={rootRef}
+    >
+      {open ? (
+        <div
+          aria-labelledby={`${panelId}-heading`}
+          className={cn(
+            "absolute right-2 bottom-[68px] w-[340px] rounded-[14px]",
+            "bg-[oklch(0.2325_0.023_262)] px-[18px] py-4 text-[14px] leading-[1.5]",
+            "text-[oklch(0.97_0.004_262)]",
+            "shadow-[0_18px_40px_-18px_rgba(28,42,82,0.6)]",
+            // The enter animation is `@starting-style`, not a state flag: the panel mounts already
+            // transitioning, so there is no second render and nothing to get out of sync.
+            "origin-bottom-right translate-y-0 opacity-100",
+            "transition-[opacity,translate] duration-150 ease-out",
+            "starting:translate-y-1 starting:opacity-0",
+            "motion-reduce:transition-none motion-reduce:transform-none",
+          )}
+          data-slot="context-eye-panel"
+          id={panelId}
+          role="dialog"
+        >
+          <div
+            className="mb-1.5 flex items-center gap-2 font-semibold"
+            id={`${panelId}-heading`}
+          >
+            <Eye
+              aria-hidden="true"
+              className="size-4 text-[oklch(0.8_0.1_71)]"
+              strokeWidth={1.75}
+            />
+            About this screen
+          </div>
+          <p className="m-0 text-[oklch(0.85_0.01_262)]">{copy}</p>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              className={cn(
+                "inline-flex min-h-8 items-center rounded-lg bg-white/12 px-3 py-1.5",
+                "text-[14px] font-medium text-[oklch(0.97_0.004_262)]",
+                "transition-colors duration-150 hover:bg-white/20",
+                "motion-reduce:transition-none",
+              )}
+              onClick={() => {
+                setOpen(false);
+                hide(screen);
+              }}
+              type="button"
+            >
+              Hide for now
+            </button>
+            <span className="ml-auto font-mono text-[11px] text-[oklch(0.7_0.02_262)]">
+              review only
+            </span>
+          </div>
+          <div
+            aria-hidden="true"
+            className="absolute right-5 -bottom-2 size-4 rotate-45 rounded-[2px] bg-[oklch(0.2325_0.023_262)]"
+          />
+        </div>
+      ) : null}
+
+      <button
+        aria-expanded={open}
+        aria-label="About this screen"
+        className={cn(
+          "relative flex size-11 items-center justify-center rounded-full",
+          "bg-[oklch(0.2325_0.023_262)] text-[oklch(0.96_0.004_262)]",
+          "shadow-[0_10px_26px_-10px_rgba(28,42,82,0.5),0_0_0_3px_rgba(176,116,32,0.25)]",
+          "transition-transform duration-150 hover:scale-105",
+          "motion-reduce:transition-none motion-reduce:hover:scale-100",
+        )}
+        onClick={() => (open ? close(false) : setOpen(true))}
+        ref={buttonRef}
+        type="button"
+        {...(open ? { "aria-controls": panelId } : {})}
+      >
+        <Eye aria-hidden="true" className="size-5" strokeWidth={1.75} />
+        <span
+          aria-hidden="true"
+          className="absolute top-0.5 right-0.5 size-2.5 rounded-full border-2 border-[var(--pane)] bg-[var(--warning)]"
+        />
+      </button>
+    </div>
+  );
+}
