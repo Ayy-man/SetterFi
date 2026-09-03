@@ -1051,10 +1051,10 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
             const copy = missionFieldCopy(item.label);
             return (
               <li
-                className="@container border-b border-[var(--line-soft)] px-[var(--s-4)] py-[var(--s-4)] last:border-b-0"
+                className="@container/mission-row border-b border-[var(--line-soft)] px-[var(--s-4)] py-[var(--s-4)] last:border-b-0"
                 key={item.id}
               >
-                <div className="grid min-w-0 gap-[var(--s-3)] @min-[640px]:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <div className="grid min-w-0 gap-[var(--s-3)] @min-[640px]/mission-row:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                   <div className="min-w-0">
                     <h3 className="t-row">{copy.title}</h3>
                   </div>
@@ -1191,10 +1191,10 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
           <ul className="m-0 list-none border-t border-[var(--line)] p-0">
             {state.snapshots.map((snapshot) => (
               <li
-                className="@container border-b border-[var(--line-soft)] px-[var(--s-4)] py-[var(--s-3)] last:border-b-0"
+                className="@container/snapshot-row border-b border-[var(--line-soft)] px-[var(--s-4)] py-[var(--s-3)] last:border-b-0"
                 key={snapshot.id}
               >
-                <article className="grid min-w-0 gap-[var(--s-3)] @min-[560px]:grid-cols-[auto_minmax(0,1fr)_auto] @min-[560px]:items-start">
+                <article className="grid min-w-0 gap-[var(--s-3)] @min-[560px]/snapshot-row:grid-cols-[auto_minmax(0,1fr)_auto] @min-[560px]/snapshot-row:items-start">
                   <KitFigure
                     className="self-start rounded-[var(--r-input)] bg-[var(--quiet)] px-[var(--s-2)] py-[var(--s-1)]"
                     size="sm"

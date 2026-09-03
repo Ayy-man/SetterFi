@@ -432,7 +432,6 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
     context.impersonation ? Promise.resolve(null) : loadCoachGreeting(context.actorId),
   ]);
 
-  const navCounts = await coachNavCounts(context.tenantId);
   const billingPeriod = billing === "unavailable"
     ? "unavailable" as const
     : billing
@@ -446,7 +445,7 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
   if (uiRehaulLive()) {
     const { CoachDashboard } = await import("@/components/workspace/rehaul/coach-dashboard");
     return (
-      <CoachHomeShell navCounts={navCounts}>
+      <CoachHomeShell navCounts={await coachNavCounts(context.tenantId)}>
         <CoachDashboard
           {...query}
           attention={attention}
@@ -461,7 +460,7 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
   }
 
   return (
-    <CoachHomeShell navCounts={navCounts}>
+    <CoachHomeShell navCounts={await coachNavCounts(context.tenantId)}>
       <CoachMeasurementSurface
         {...query}
         attention={attention}

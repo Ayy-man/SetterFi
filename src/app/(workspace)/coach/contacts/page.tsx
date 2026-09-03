@@ -189,10 +189,9 @@ export default async function CoachContactsPage() {
     loadAppointmentEvidence(context.tenantId, contactIds),
     loadNextSetterTouch(context.tenantId, contactIds),
   ]);
-  const navCounts = await coachNavCounts(context.tenantId);
   if (uiRehaulLive()) {
     return (
-      <LeadsShell navCounts={navCounts}>
+      <LeadsShell navCounts={await coachNavCounts(context.tenantId)}>
         <CoachLeads
           appointmentEvidence={appointmentEvidence}
           defaultView="table"
@@ -205,7 +204,7 @@ export default async function CoachContactsPage() {
     );
   }
   return (
-    <LeadsShell navCounts={navCounts}>
+    <LeadsShell navCounts={await coachNavCounts(context.tenantId)}>
       <LeadsSurface
         appointmentEvidence={appointmentEvidence}
         nextSetterTouch={nextSetterTouch}

@@ -32,6 +32,13 @@ import { ArrowDown, ArrowUp, ShieldCheck } from "@/components/kit/icons";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { LoggedButton } from "@/components/kit/logged-button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { COACH_EYEBROW_CLASS } from "@/components/workspace/live/coach-type";
 import {
@@ -120,6 +127,14 @@ const ROW_CLASS =
 const MONO_CLASS = "font-mono font-medium tracking-[-0.05em]";
 const FIELD_CLASS =
   "h-[48px] w-full rounded-[10px] border border-[var(--line-input)] bg-[var(--well)] px-[14px] " +
+  "text-[length:var(--coach-body)] text-[color:var(--ink)]";
+/*
+ * The same face as FIELD_CLASS on the kit's select trigger, which brings its own smaller console
+ * sizing. The trigger is a <button>, so coach.css raises it to --coach-target on its own; the type
+ * size is restated here because the kit's `text-xs` sits under the coach surface's 14px floor.
+ */
+const SELECT_TRIGGER_CLASS =
+  "h-[48px] w-full rounded-[10px] border-[var(--line-input)] bg-[var(--well)] px-[14px] " +
   "text-[length:var(--coach-body)] text-[color:var(--ink)]";
 const QUIET_BUTTON_CLASS =
   "inline-flex h-[46px] shrink-0 items-center justify-center gap-[8px] rounded-[12px] border " +
@@ -1223,25 +1238,31 @@ export function CoachAgent({
                         </span>
                         <div className="w-[200px] shrink-0">
                           {row.kind === "choice" ? (
-                            <select
-                              aria-label={row.label}
-                              className={FIELD_CLASS}
-                              onChange={(event) =>
+                            <Select
+                              onValueChange={(next) =>
                                 updateForm(
                                   row.field,
-                                  (event.target.value ||
+                                  ((next as string) ||
                                     null) as CoachOfferDraftInput[typeof row.field],
                                 )
                               }
                               value={typeof value === "string" ? value : ""}
                             >
-                              <option value="">Not set</option>
-                              {(row.options ?? []).map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
+                              <SelectTrigger
+                                aria-label={row.label}
+                                className={SELECT_TRIGGER_CLASS}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent align="start" alignItemWithTrigger={false}>
+                                <SelectItem value="">Not set</SelectItem>
+                                {(row.options ?? []).map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <Input
                               aria-label={row.label}
@@ -1297,7 +1318,7 @@ export function CoachAgent({
                         <Dot tone={tier.tone} />
                         {tier.label}
                       </p>
-                      <p className="mt-[6px] mb-0 max-w-[34ch] text-[15px] text-[color:var(--muted)]">
+                      <p className="mt-[6px] mb-0 max-w-[var(--measure-deck)] text-[15px] text-[color:var(--muted)]">
                         {tier.sentence}
                       </p>
                       <p className={`${MONO_CLASS} mt-[12px] mb-0 text-[14px] ${tier.outcomeTone}`}>
@@ -1621,7 +1642,7 @@ function ConnectionCard({ card }: { card: RehaulConnectionCard }) {
           {card.stateLabel}
         </span>
         {card.sentence ? (
-          <p className="m-0 max-w-[34ch] text-[length:var(--coach-body)] text-[color:var(--muted)]">
+          <p className="m-0 max-w-[var(--measure-deck)] text-[length:var(--coach-body)] text-[color:var(--muted)]">
             {card.sentence}
           </p>
         ) : null}

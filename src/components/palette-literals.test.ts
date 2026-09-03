@@ -52,6 +52,13 @@ const SPECULAR = /\[?box-shadow|shadow-\[/;
  * `coach.css` says so above the block.
  */
 const OVER_DRENCH = new Set([
+  // Both literals sit inside PANEL_DARK_CLASS, the dashboard's drenched panel: the same
+  // oklch(0.30 0.07 262) -> oklch(0.19 0.045 262) gradient the drench tokens carry, dark under
+  // every theme, so a white alpha is the correct value and a page-palette token would be wrong.
+  "workspace/rehaul/coach-dashboard.tsx",
+  // The `overview-pulse` section is the one drenched surface that screen is allowed, and the
+  // hairline at :554 divides two columns inside it -- dark ground in both palettes.
+  "workspace/rehaul/owner-overview.tsx",
   "marketing/landing-page.tsx",
   "workspace/live/coach-tips.tsx",
   "onboarding/coach-onboarding.tsx",

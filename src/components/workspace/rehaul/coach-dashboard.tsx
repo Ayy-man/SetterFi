@@ -196,7 +196,7 @@ function Band({
 function Sentence({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
   return (
     <p
-      className={`m-0 mt-[10px] max-w-[34ch] text-[14px] ${
+      className={`m-0 mt-[10px] max-w-[var(--measure-deck)] text-[14px] ${
         dark ? "text-[oklch(0.78_0.02_262)]" : "text-[var(--muted)]"
       }`}
     >

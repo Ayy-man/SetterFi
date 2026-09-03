@@ -57,7 +57,11 @@ import {
   BILLING_SUBSCRIPTION_STATE_COPY,
   type StateCopy,
 } from "@/lib/copy/states";
-import { workspaceCountFormat, workspaceDateFormat } from "@/lib/format/datetime";
+import {
+  WORKSPACE_DISPLAY_TIMEZONE,
+  workspaceCountFormat,
+  workspaceDateFormat,
+} from "@/lib/format/datetime";
 import { money } from "@/lib/format/metric";
 
 /* The sentences this screen used to print as help text, handed to the eye instead. */
@@ -76,7 +80,7 @@ const MONO_META_CLASS =
   "font-[family-name:var(--font-mono)] text-[14px] leading-[1.4] text-[color:var(--muted)] "
   + "[font-variant-numeric:tabular-nums_lining-nums]";
 const SENT_CLASS =
-  "m-0 mt-[10px] max-w-[34ch] text-[16px] leading-[1.5] text-[color:var(--muted)]";
+  "m-0 mt-[10px] max-w-[var(--measure-deck)] text-[16px] leading-[1.5] text-[color:var(--muted)]";
 const ROW_NAME_CLASS = "m-0 text-[18px] leading-[1.35] font-medium text-[color:var(--ink)]";
 const ACTION_CLASS =
   "inline-flex h-[46px] items-center gap-[8px] rounded-[12px] border border-[var(--line-input)] "
@@ -86,7 +90,10 @@ const FIELD_CLASS =
   "h-[48px] w-full rounded-[10px] border border-[var(--line-input)] bg-[var(--well)] px-[14px] "
   + "text-[16px] leading-[1.4] text-[color:var(--ink)] placeholder:text-[color:var(--muted)]";
 
-const MONTH_FORMAT = new Intl.DateTimeFormat("en-US", { month: "short" });
+const MONTH_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  timeZone: WORKSPACE_DISPLAY_TIMEZONE,
+});
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

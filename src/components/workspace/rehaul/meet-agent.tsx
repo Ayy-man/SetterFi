@@ -315,7 +315,7 @@ const TURN_DELAY_MS = 900;
 /** One line of the ledger. Shared by both groups so a written row cannot be drawn as a live one. */
 function TraceLine({ label, row }: { label: string; row: TraceRow }) {
   return (
-    <li className="flex min-h-[var(--coach-target,44px)] flex-1 flex-wrap items-center gap-[16px] border-b border-[var(--line-soft)] px-[24px] py-[14px] last:border-b-0">
+    <li className="flex min-h-[var(--coach-target,var(--t-target))] flex-1 flex-wrap items-center gap-[16px] border-b border-[var(--line-soft)] px-[24px] py-[14px] last:border-b-0">
       <span
         aria-hidden
         className={cn("size-[8px] flex-[0_0_8px] rounded-full", DOT_TONE[row.tone])}

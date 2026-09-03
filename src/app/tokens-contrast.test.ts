@@ -539,6 +539,11 @@ const ON_DRENCH = {
      so a tone that clears 4.5 sits near white and its hue survives as a tint; the `-body` roles
      land ON their `-text` roles for the same reason --meta and --overline land on --faint. */
   "on-accent": [0.99, 0.012, 265],
+  /* A face in the palette, a foreground here: three surfaces paint an inverted chip as
+     `bg-[var(--ink)] text-[color:var(--card)]`, so the discovery below reads it as a text role and
+     the drench has to carry it. Level with --ink and --on-accent, because on a drench the lightest
+     face and the lightest foreground are the same colour. */
+  card: [0.99, 0.012, 265],
   "accent-text": [0.945, 0.026, 265],
   "good-text": [0.945, 0.05, 164],
   "warning-text": [0.945, 0.041, 71],
@@ -568,6 +573,7 @@ const ON_DRENCH_TEXT = [
   "meta",
   "overline",
   "on-accent",
+  "card",
   "accent-text",
   "good-text",
   "warning-text",

@@ -10,6 +10,7 @@ import { ConfirmFlow, type Result } from "@/components/kit/confirm-flow";
 import { DayCounter, elapsedWorkspaceDays } from "@/components/kit/day-counter";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { KitButton } from "@/components/kit/atomics";
+import { Select } from "@/components/ui/select";
 import {
   assigneeOptionsFor,
   type AssigneeOption,
@@ -32,7 +33,7 @@ import {
 } from "@/components/workspace/rehaul/_primitives";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import type { UserRole } from "@/lib/auth/claims";
-import { workspaceTimestampFormat } from "@/lib/format/datetime";
+import { WORKSPACE_DISPLAY_TIMEZONE, workspaceTimestampFormat } from "@/lib/format/datetime";
 import { PROVISIONING_STEPS, type ProvisioningTrackerRow } from "@/lib/onboarding/contracts";
 import type { AgentRoster, AgentRosterEntry } from "@/lib/operations/agent-roster";
 import type { PlatformMeasurement } from "@/lib/repositories/platform-analytics";
@@ -145,7 +146,11 @@ function timestamp(value: string) {
   return Number.isNaN(date.getTime()) ? "Time not recorded" : workspaceTimestampFormat.format(date);
 }
 
-const SINCE_FORMAT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+const SINCE_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  timeZone: WORKSPACE_DISPLAY_TIMEZONE,
+});
 
 function sinceLabel(value: string) {
   const date = new Date(value);
@@ -724,17 +729,15 @@ export function OwnerClients({
             {actorRole === "success" ? "Take ownership" : "Reassign"}
           </KitButton>
           {candidates.length > 0 && actorRole !== "success" ? (
-            <select
-              aria-label="Assignee"
-              className="rounded-md border border-[var(--line-input)] bg-[var(--card)] px-2 py-1 text-[12.5px] text-[var(--body)]"
-              onChange={(event) => setAssigneeChoice(event.currentTarget.value)}
-              value={assigneeId}
-            >
-              <option value="">Choose an owner</option>
-              {candidates.map((candidate) => (
-                <option key={candidate.value} value={candidate.value}>{candidate.label}</option>
-              ))}
-            </select>
+            <Select
+              className="min-w-[180px]"
+              label="Assignee"
+              onValueChange={(value) => setAssigneeChoice(value)}
+              options={candidates}
+              placeholder="Choose an owner"
+              srOnly
+              value={assigneeId || null}
+            />
           ) : null}
           <Link className="text-[12.5px] text-[var(--accent-text)]" href="/admin/support">Open in Support</Link>
         </div>

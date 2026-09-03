@@ -675,6 +675,16 @@
    * to the palette because leaving a role to the palette is what this block keeps being wrong
    * about, not because its base value was failing. */
   --on-accent: oklch(0.99 0.012 265);        /* 5.96 / 14.3 */
+
+  /* `--card` is a face in the palette and a foreground here, which is why it is in this block at
+   * all: three surfaces paint an inverted chip as `bg-[var(--ink)] text-[color:var(--card)]`, so
+   * `tokens-contrast.test.ts` discovers it as a text role out of the components and holds it to
+   * 1.4.3 on the drench. Left to the palette it would be the page's card face -- near-white in
+   * light, near-black in dark -- so inside a drench it read as an unlit patch in one theme and an
+   * invisible label in the other. It takes `--ink`'s value for the same reason `--on-accent` does:
+   * on a drench the lightest face and the lightest foreground are the same colour, and the octave
+   * has no room for a fifth step. */
+  --card: oklch(0.99 0.012 265);             /* 5.96 / 14.3 */
   --accent-text: oklch(0.945 0.026 265);     /* 5.24 / 12.5 -- 5.04 on its own wash */
   --good-text: oklch(0.945 0.05 164);        /* 5.34 / 12.8 -- 4.93 on its own wash */
   --warning-text: oklch(0.945 0.041 71);     /* 5.22 / 12.5 -- 4.89 on its own wash */
