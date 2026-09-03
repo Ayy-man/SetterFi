@@ -63,15 +63,21 @@ export default async function OnboardingOfferPage() {
      * that showed an unpublished draft as the current state would tell a coach their agent is
      * using words it has never seen. The read-back says which of the two it is looking at.
      */
+    /*
+     * The connections read is the four-step strip's, and the strip only exists on the pre-rehaul
+     * path -- the rehaul screen draws the step position in its own chrome. Under the flag it is a
+     * query whose answer nothing reads, so it is not made.
+     */
+    const rehaul = uiRehaulLive();
     const [published, draft, connections] = await Promise.all([
       repository.loadOffer({ status: "published", tenantId }),
       repository.loadOffer({ status: "draft", tenantId }),
-      listChannelConnections(tenantId).catch(() => []),
+      rehaul ? Promise.resolve([]) : listChannelConnections(tenantId).catch(() => []),
     ]);
     review = published
       ? offerReview(published, "published")
       : offerReview(draft, draft ? "draft" : "none");
-    connectDone = connectStepComplete(connections);
+    connectDone = rehaul ? false : connectStepComplete(connections);
   } catch {
     review = null;
   }

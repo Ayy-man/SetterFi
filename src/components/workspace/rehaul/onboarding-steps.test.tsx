@@ -126,6 +126,8 @@ describe("OnboardingCalendarRehaul", () => {
     expect(await screen.findByRole("link", { name: "Connect Google Calendar" })).toBeVisible();
     expect(screen.getByText("Availability not verified, so your agent cannot book yet")).toBeVisible();
     expect(screen.getByLabelText("Calendar timezone")).toBeVisible();
+    // The optional name the legacy form posted, which the flag path had been dropping.
+    expect(screen.getByLabelText("Calendar name (optional)")).toBeVisible();
     // Every write on this screen carries the same accountability line, the receipt included.
     expect(await screen.findAllByText("Connection logged")).toHaveLength(2);
 

@@ -80,6 +80,10 @@ describe("AffiliateHome", () => {
     }
 
     expect(toneOf("Recorded sent")).toContain("var(--good)");
+    // A referral mid-setup owes the affiliate commission that has not started, so it is pending.
+    expect(toneOf("Still setting up")).toContain("var(--warning)");
+    // Cancelled is finished rather than waiting, so it keeps the inert colour.
+    expect(toneOf("Cancelled")).not.toContain("var(--warning)");
     // Approved and unsent is a pending payout, and amber is the only colour a pending thing wears.
     expect(toneOf("Approved for payout")).toContain("var(--warning)");
     expect(container.querySelector('[data-slot="affiliate-payout-table"]')).not.toBeNull();

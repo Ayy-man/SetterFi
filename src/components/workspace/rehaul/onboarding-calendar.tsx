@@ -385,6 +385,21 @@ export function OnboardingCalendarRehaul() {
               />
             </OnboardingField>
 
+            {/*
+              Optional, and restored: the flag path was posting `calendarName: null` on every
+              manual receipt, so a calendar the coach had named came back nameless in the
+              provider read-back above.
+            */}
+            <OnboardingField id="calendar-name" label="Calendar name (optional)">
+              <KitInput
+                className="text-[16px]"
+                id="calendar-name"
+                onChange={(event) => change("calendarName", event.target.value)}
+                shellClassName={ONBOARDING_FIELD_CLASS}
+                value={form.calendarName}
+              />
+            </OnboardingField>
+
             <OnboardingField id="calendar-timezone" label="Calendar timezone">
               <KitInput
                 className={`text-[16px] ${ONBOARDING_MONO_CLASS}`}

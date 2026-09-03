@@ -93,16 +93,17 @@ const WELL_CLASS =
  * The four account states, reduced to the three things the affiliate is allowed to read: the word,
  * the dot tone, and nothing about the coach behind it.
  *
- * Amber is on `payment_problem` alone and it is earned -- it is the one state where the
- * affiliate's own commission has stopped accruing and the situation is still recoverable.
- * `setting_up` is grey because a coach mid-setup is a referral working normally, and `cancelled`
- * is grey because it is finished rather than failing.
+ * Amber on the two states that are still moving and still owe the affiliate something:
+ * `payment_problem`, where commission has stopped accruing and the situation is recoverable, and
+ * `setting_up`, where a referral has been made and no commission has started yet. Both are pending
+ * and amber is the only colour a pending thing may wear. `cancelled` stays grey because it is
+ * finished rather than waiting, and grey is the colour of a row with nothing left to happen.
  */
 const REFERRAL_STATE: Record<AffiliateAccountState, { label: string; tone: StatusTone }> = {
   cancelled: { label: "Cancelled", tone: "grey" },
   paying: { label: "Paying", tone: "good" },
   payment_problem: { label: "Payment problem", tone: "amber" },
-  setting_up: { label: "Still setting up", tone: "grey" },
+  setting_up: { label: "Still setting up", tone: "amber" },
 };
 
 /**
