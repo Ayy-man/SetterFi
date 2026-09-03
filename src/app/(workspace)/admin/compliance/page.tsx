@@ -15,13 +15,14 @@ import {
 import { hasImpersonationMarker, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { previewLeadDeletion } from "@/lib/deletion/preview";
 import { deleteLead } from "@/lib/deletion/service";
-import { contactDeleteLive, phase1Live, phase3Live } from "@/lib/env-contract";
+import { contactDeleteLive, phase1Live, phase3Live, uiRehaulLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import {
   contactDeletedEvent,
   createComplianceEventEmitter,
   createNotificationRepository,
 } from "@/lib/notifications/events";
+import { OwnerCompliance } from "@/components/workspace/rehaul/owner-compliance";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Compliance" };
@@ -305,13 +306,23 @@ export default async function AdminCompliancePage() {
     <ComplianceShell
       failedConfirmations={suppressions.filter((row) => row.providerSyncState === "failed").length}
     >
-      <AdminCompliance
-        actions={{ preview: previewAdminDeletion, remove: executeAdminDeletion }}
-        impersonation={context.impersonation}
-        initialContacts={contacts}
-        suppressions={suppressions}
-        tombstones={tombstones}
-      />
+      {uiRehaulLive() ? (
+        <OwnerCompliance
+          actions={{ preview: previewAdminDeletion, remove: executeAdminDeletion }}
+          impersonation={context.impersonation}
+          initialContacts={contacts}
+          suppressions={suppressions}
+          tombstones={tombstones}
+        />
+      ) : (
+        <AdminCompliance
+          actions={{ preview: previewAdminDeletion, remove: executeAdminDeletion }}
+          impersonation={context.impersonation}
+          initialContacts={contacts}
+          suppressions={suppressions}
+          tombstones={tombstones}
+        />
+      )}
     </ComplianceShell>
   );
 }
