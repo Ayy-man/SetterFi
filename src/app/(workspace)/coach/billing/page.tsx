@@ -5,9 +5,10 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/kit/app-shell";
 import { loadRouteActor } from "@/lib/auth/actors";
 import { CoachBilling } from "@/components/workspace/live/coach-billing";
+import { CoachBillingRehaul } from "@/components/workspace/rehaul/coach-billing";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
-import { phase6Live } from "@/lib/env-contract";
+import { phase6Live, uiRehaulLive } from "@/lib/env-contract";
 
 export const metadata: Metadata = { title: "Billing" };
 export const dynamic = "force-dynamic";
@@ -39,7 +40,13 @@ export default async function CoachBillingPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   if (!phase6Live()) {
-    return <CoachBillingShell><CoachBilling enabled={false} /></CoachBillingShell>;
+    return (
+      <CoachBillingShell>
+        {uiRehaulLive()
+          ? <CoachBillingRehaul enabled={false} />
+          : <CoachBilling enabled={false} />}
+      </CoachBillingShell>
+    );
   }
   const actor = await loadRouteActor();
   if (!actor) redirect("/login?next=%2Fcoach%2Fbilling");
@@ -48,7 +55,9 @@ export default async function CoachBillingPage({
   const checkoutReturn = checkout === "returned" || checkout === "canceled" ? checkout : null;
   return (
     <CoachBillingShell navCounts={await coachNavCounts(actor.tenantId)}>
-      <CoachBilling checkoutReturn={checkoutReturn} enabled />
+      {uiRehaulLive()
+        ? <CoachBillingRehaul checkoutReturn={checkoutReturn} enabled />
+        : <CoachBilling checkoutReturn={checkoutReturn} enabled />}
     </CoachBillingShell>
   );
 }
