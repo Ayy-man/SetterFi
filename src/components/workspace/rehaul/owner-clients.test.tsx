@@ -20,6 +20,7 @@ import {
   type OwnerClientsHealth,
   type OwnerClientsPerformance,
 } from "@/components/workspace/rehaul/owner-clients";
+import { ownerClientPaneSection } from "@/lib/console-tabs";
 import type { ProvisioningTrackerRow } from "@/lib/onboarding/contracts";
 import type { AgentRoster } from "@/lib/operations/agent-roster";
 import type { SuccessClientBookRead } from "@/lib/repositories/support";
@@ -205,8 +206,10 @@ describe("OwnerClients", () => {
     expect(screen.getByRole("table").textContent).not.toMatch(/\d{1,2} (Sep|Oct|Nov)/u);
   });
 
-  it("opens the drawer for the selected client and draws the six stages on the Health tab", () => {
-    renderPage({ selectedClientId: "tenant-1", tab: "health" });
+  it("opens the drawer for the selected client and draws the six stages on its Health section", () => {
+    // The pane's section is the pane's own param now, so this names it rather than borrowing the
+    // page tab. The page tab stays where it was, which is the whole point of the split.
+    renderPage({ paneSection: "health", selectedClientId: "tenant-1", tab: "status" });
 
     const drawer = document.querySelector("[data-slot='owner-clients-drawer']");
     expect(drawer).not.toBeNull();
@@ -215,6 +218,107 @@ describe("OwnerClients", () => {
     expect(within(drawer as HTMLElement).getByText("Texting registration")).toBeInTheDocument();
     expect(within(drawer as HTMLElement).getByText("with carrier")).toBeInTheDocument();
     expect(within(drawer as HTMLElement).getByText("Logged")).toBeInTheDocument();
+  });
+
+  it("states booked calls as figures rather than a sparkline nobody can read a value off", () => {
+    renderPage({
+      performance: {
+        kind: "ready",
+        value: {
+          ...performance,
+          tenantPerformance: [
+            { tenantId: "tenant-1", bookedAppointments: 7, grossMrrCents: 59_700 },
+            { tenantId: "tenant-2", bookedAppointments: 11, grossMrrCents: 40_000 },
+          ],
+        },
+      },
+      tab: "performance",
+    });
+
+    const strip = document.querySelector("[data-slot='owner-clients-booked-total']") as HTMLElement;
+    expect(strip).not.toBeNull();
+    expect(within(strip).getByText("18")).toBeInTheDocument();
+    expect(strip.textContent).toContain("over 2 measured clients");
+    expect(strip.textContent).toContain("most on one client");
+    // The card that used to sit here drew a 96x24 line off the platform's signup history under a
+    // "Booked calls" label, which was the wrong measure drawn at a size with no scale on it.
+    expect(document.querySelector("[data-slot='sparkline']")).toBeNull();
+  });
+
+  it("draws no booked-call strip when the snapshot measured no client", () => {
+    renderPage({
+      performance: { kind: "ready", value: { ...performance, tenantPerformance: [] } },
+      tab: "performance",
+    });
+
+    // A labelled card over nothing reads as a measured zero. There is no card instead.
+    expect(document.querySelector("[data-slot='owner-clients-booked-total']")).toBeNull();
+  });
+
+  it("moves the client pane's section without touching the page tab", () => {
+    renderPage({ paneSection: "status", selectedClientId: "tenant-1", tab: "performance" });
+
+    // The page is on Performance and the pane is on Status: two controls, two values. Before the
+    // split both wrote `tab`, so opening a pane section silently reordered the table behind it.
+    const pane = document.querySelector("[data-slot='owner-clients-drawer']") as HTMLElement;
+    const paneRow = within(pane).getByRole("group", { name: "Client detail sections" });
+    const health = within(paneRow).getByRole("link", { name: "Health" });
+    const target = new URL(health.getAttribute("href") as string, "https://example.test");
+
+    expect(target.searchParams.get("section")).toBe("health");
+    expect(target.searchParams.get("tab")).toBe("performance");
+    expect(target.searchParams.get("client")).toBe("tenant-1");
+  });
+
+  it("moves the page tab without touching the client pane's section", () => {
+    renderPage({ paneSection: "health", selectedClientId: "tenant-1", tab: "status" });
+
+    // The page tab row writes `tab` and never `section`. It also drops `client`, which closes the
+    // pane, so it cannot leave a pane open on a section the new tab knows nothing about.
+    const pageRow = screen.getByRole("navigation", { name: "Client sections" });
+    const target = new URL(
+      within(pageRow).getByRole("link", { name: "Team" }).getAttribute("href") as string,
+      "https://example.test",
+    );
+
+    expect(target.searchParams.get("tab")).toBe("team");
+    expect(target.searchParams.has("section")).toBe(false);
+
+    // And the pane is still reading its own section rather than the page's.
+    const pane = document.querySelector("[data-slot='owner-clients-drawer']") as HTMLElement;
+    expect(within(pane).getByText("Texting registration")).toBeInTheDocument();
+  });
+
+  it("falls back to the first pane section rather than rendering an empty pane", () => {
+    // This is what the route hands the component, and it takes a page tab name the pane has no
+    // section for, or anything else typed by hand, back to Status.
+    expect(ownerClientPaneSection("team")).toBe("status");
+    expect(ownerClientPaneSection("setup")).toBe("status");
+    expect(ownerClientPaneSection("nonsense")).toBe("status");
+    expect(ownerClientPaneSection(undefined)).toBe("status");
+    expect(ownerClientPaneSection("health")).toBe("health");
+
+    renderPage({
+      paneSection: ownerClientPaneSection("team"),
+      selectedClientId: "tenant-1",
+      tab: "team",
+    });
+
+    // Team is a page tab, so the page draws the owner board and no client pane at all. Nothing
+    // renders a client on a section that does not exist.
+    expect(document.querySelector("[data-slot='owner-clients-stepper']")).toBeNull();
+  });
+
+  it("carries the reader's pane section across to another client", () => {
+    renderPage({ paneSection: "agent", selectedClientId: "tenant-1", tab: "status" });
+
+    const target = new URL(
+      screen.getByRole("link", { name: "Northstar Funding" }).getAttribute("href") as string,
+      "https://example.test",
+    );
+
+    expect(target.searchParams.get("client")).toBe("tenant-2");
+    expect(target.searchParams.get("section")).toBe("agent");
   });
 
   it("draws the Team tab as counted tiles and one card per person, with the clients nobody owns", () => {

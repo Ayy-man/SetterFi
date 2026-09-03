@@ -425,3 +425,32 @@ in the migration history; the switch is on there). Test rows inside real tenants
 The seeded plans had no `tier_price_versions` entry, so Money priced nothing; the phase 6 seeder
 now writes an opening version per plan dated 2025-10-01, and the hosted rows were written by hand
 the same way. Money's TypeScript read keeps a demo row and labels it instead of dropping it.
+
+## Backlog: The Brain needs its own redesign (logged 2026-09-04)
+
+The owner's Brain view has not had the pass the rest of the console got and it needs a large one,
+not a tidy-up. Logged here rather than fixed in the current round because the surface is big enough
+that folding it into a session about charts, type weight and thread bubbles would produce a half
+answer to both. Nothing about it is scheduled yet; this note exists so the next person picking up
+the rehaul does not read the console as finished.
+
+## Backlog: the phase 6 money story is pinned to absolute dates (logged 2026-09-04)
+
+`scripts/seed-phase6-demo.mjs` writes its receipts, invoice, commission reversal, payout and
+allowance rows on hardcoded 2026 dates rather than deriving them from an anchor, so as real time
+passes those rows slide out of the trailing twelve month window and the two newest revenue bars on
+the owner Overview fall by 99,100 and 59,700 cents with no code change and no explanation. The demo
+history fixture added this session is anchored and does not have this problem; the phase 6 seeder
+around it does.
+
+It was deliberately not fixed in the same pass, for three reasons that are worth keeping. The rows
+already in the hosted database cannot be moved, because `tenant_cost_rollups` is append-only and
+relaxing that guard to tidy a demo would be the wrong trade. A rollup is keyed by tenant plus both
+window bounds, so deriving the window from an anchor that moves per run appends a fresh row on every
+run and grows the table forever. And the August window is deliberately zero-revenue because the
+failed-invoice path runs against that month, so the receipts are not free standing and anchoring
+them alone would separate them from the invoice story they exist to explain.
+
+Doing it properly means anchoring the whole phase 6 money story onto a grid that is stable within a
+period rather than per run. The exact drift is also recorded in the header of
+`scripts/fixtures/demo-history.mjs`.

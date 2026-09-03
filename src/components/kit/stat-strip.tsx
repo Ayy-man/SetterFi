@@ -45,6 +45,11 @@ export type StatStripItem = Pick<HeadlineStatProps, "label" | "action"> & {
   /**
    * The series behind the figure, oldest first. Given this, the tile draws the kit's `Sparkline`
    * itself, so a caller does not have to know the chart theme to get a themed line.
+   *
+   * It has to be dense enough for a smoothed line to describe rather than invent the series --
+   * `SPARKLINE_MIN_POINTS` is the floor -- and a shorter one draws nothing rather than a curve
+   * through a handful of points. A tile with a sparse period series wants `sparkline` and a shape
+   * that can be counted, or the note line, not this.
    */
   points?: readonly number[];
   /** Optional inline trend, rendered under the figure. Wins over `points` when both are given. */

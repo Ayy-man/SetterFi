@@ -107,7 +107,10 @@
     letter-spacing: var(--t-body-tr);
     margin: 0;
     min-height: 100dvh;
-    -webkit-font-smoothing: antialiased;
+    /* Palette-forked, not fixed. Subpixel antialiasing thins a light glyph on a dark ground,
+       which is the opposite of what it does dark-on-light, so the dark palettes set --smoothing
+       to `auto` and only the light ones stay antialiased. */
+    -webkit-font-smoothing: var(--smoothing);
   }
 
   button:not(:disabled),

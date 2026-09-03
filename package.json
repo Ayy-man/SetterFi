@@ -33,6 +33,7 @@
     "demo:seed-complete": "node scripts/seed-demo-complete.mjs",
     "demo:seed-gaps": "node scripts/seed-demo-gaps.mjs",
     "demo:seed-showcase": "node scripts/seed-showcase-leads.mjs",
+    "demo:seed-history": "node --env-file-if-exists=.env.local scripts/seed-demo-history.mjs",
     "demo:seed-platform-review": "node --env-file-if-exists=.env.local scripts/seed-platform-review-data.mjs",
     "demo:contract-phase5": "node scripts/phase5-demo-contract.mjs",
     "demo:test-phase5": "npm run demo:seed-phase5 && npm run demo:seed-phase5 && npm run demo:contract-phase5 -- --expect=seeded && npm run demo:reset-phase5 && npm run demo:contract-phase5 -- --expect=reset",

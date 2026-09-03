@@ -2,11 +2,11 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CHART_ACCENT, seriesColor } from "@/components/kit/chart-theme";
-import { ProportionBar, Sparkline } from "@/components/kit/sparkline";
+import { ProportionBar, SPARKLINE_MIN_POINTS, Sparkline } from "@/components/kit/sparkline";
 
 describe("Sparkline", () => {
   it("draws a labelled line, a fading area and an endpoint dot in the accent series", () => {
-    render(<Sparkline label="Booked calls, last 14 days" points={[2, 5, 3, 9]} />);
+    render(<Sparkline label="Booked calls, last 14 days" points={[2, 5, 3, 9, 6, 11]} />);
 
     const svg = screen.getByRole("img", { name: "Booked calls, last 14 days" });
     expect(svg).toHaveAttribute("data-slot", "sparkline");
@@ -36,8 +36,8 @@ describe("Sparkline", () => {
   it("gives each instance its own gradient so a strip of tiles keeps its fills apart", () => {
     render(
       <>
-        <Sparkline label="First" points={[1, 4, 2]} />
-        <Sparkline label="Second" points={[3, 1, 5]} />
+        <Sparkline label="First" points={[1, 4, 2, 5, 3, 6]} />
+        <Sparkline label="Second" points={[3, 1, 5, 2, 6, 4]} />
       </>,
     );
 
@@ -55,7 +55,7 @@ describe("Sparkline", () => {
   });
 
   it("puts the endpoint dot on the last point, at the drawn size in CSS pixels", () => {
-    render(<Sparkline height={24} label="Rising" points={[0, 10]} width={96} />);
+    render(<Sparkline height={24} label="Rising" points={[0, 2, 4, 6, 8, 10]} width={96} />);
 
     const svg = screen.getByRole("img", { name: "Rising" });
     // viewBox matches the drawn box one-to-one: no preserveAspectRatio stretch turning the
@@ -63,28 +63,39 @@ describe("Sparkline", () => {
     expect(svg).toHaveAttribute("viewBox", "0 0 96 24");
 
     const dot = svg.querySelector('[data-slot="sparkline-endpoint"]');
-    // Padding is 4px, so a two-point rising series ends at the right edge and the top.
+    // Padding is 4px, so a rising series ends at the right edge and the top.
     expect(Number(dot?.getAttribute("cx"))).toBeCloseTo(92, 5);
     expect(Number(dot?.getAttribute("cy"))).toBeCloseTo(4, 5);
   });
 
   it("draws no axes, no gridlines and no baseline", () => {
-    const { container } = render(<Sparkline label="Quiet" points={[1, 2, 3, 4]} />);
+    const { container } = render(<Sparkline label="Quiet" points={[1, 2, 3, 4, 5, 6]} />);
 
     expect(container.querySelectorAll("line")).toHaveLength(0);
     expect(container.querySelectorAll("text")).toHaveLength(0);
     expect(container.querySelector('[data-slot="chart-baseline"]')).toBeNull();
   });
 
-  it("renders nothing rather than a one-point 'trend'", () => {
-    const { container } = render(<Sparkline label="Too short" points={[7]} />);
+  it("refuses to smooth a handful of points into a curve", () => {
+    // Six is the floor, and it is a floor on the shape rather than on the arithmetic: a direction
+    // can be computed from two readings, but a spline through three thirty-day periods draws a
+    // sweep between them that the series never held. The caller's own copy carries the reason.
+    expect(SPARKLINE_MIN_POINTS).toBe(6);
 
-    // One reading is a dot, not a direction. The tile's note carries the reason instead.
-    expect(container.querySelector('[data-slot="sparkline"]')).toBeNull();
+    for (const points of [[7], [0, 0, 7], [1, 2, 3, 4, 5]]) {
+      const { container } = render(<Sparkline label="Too short" points={points} />);
+      expect(container.querySelector('[data-slot="sparkline"]')).toBeNull();
+    }
+  });
+
+  it("draws once the series reaches the floor", () => {
+    render(<Sparkline label="Just enough" points={[1, 2, 3, 4, 5, 6]} />);
+
+    expect(screen.getByRole("img", { name: "Just enough" })).toBeInTheDocument();
   });
 
   it("stays inside its own data on a spike instead of overshooting below it", () => {
-    render(<Sparkline height={24} label="Spike" points={[0, 0, 40]} width={96} />);
+    render(<Sparkline height={24} label="Spike" points={[0, 0, 0, 0, 0, 40]} width={96} />);
 
     const path = screen
       .getByRole("img", { name: "Spike" })

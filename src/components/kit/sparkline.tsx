@@ -14,7 +14,10 @@ import {
 import { cn } from "@/lib/utils";
 
 export type SparklineProps = {
-  /** The series, oldest first. Two points is the minimum a trend can honestly be drawn from. */
+  /**
+   * The series, oldest first. It has to be dense enough for a curve to mean something: see
+   * `SPARKLINE_MIN_POINTS` for the floor and why it sits where it does.
+   */
   points: readonly number[];
   /**
    * What the line is, for assistive tech: "Booked calls, last 14 days". The SVG is `role="img"`
@@ -27,11 +30,22 @@ export type SparklineProps = {
 };
 
 /**
- * The minimum series a sparkline will draw. One point is a dot, not a trend, and a tile that shows
- * a one-point "trend" is claiming a direction it cannot know -- so the component renders nothing
- * and the tile's own note carries the reason.
+ * The minimum series a sparkline will draw.
+ *
+ * The floor used to be two, which was the wrong test. Two points is enough to compute a direction,
+ * but this component does not draw a direction: it draws a smoothed spline, and a spline through a
+ * handful of points asserts a shape the data never held. Three thirty-day periods reading 0, 0 and
+ * 7 come out as a swooping hockey stick with no axis, no dates and no values beside it, so a reader
+ * cannot tell whether the curve moved by fifty dollars or two thousand -- the curve is doing the
+ * talking and it is saying more than the evidence does.
+ *
+ * Six is the point where the smoothing describes the series rather than inventing it: enough
+ * points that the spline is interpolating between real readings instead of rounding two of them
+ * into a story. Anything sparser belongs in a form the reader can count, which is bars -- see
+ * `BarChart` for a period strip and `BarSparkline` for the inline version -- or in words. A caller
+ * under the floor renders nothing, and its own copy has to carry the reason.
  */
-export const SPARKLINE_MIN_POINTS = 2;
+export const SPARKLINE_MIN_POINTS = 6;
 
 const DEFAULT_WIDTH = 96;
 const DEFAULT_HEIGHT = 24;

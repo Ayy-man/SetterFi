@@ -191,6 +191,79 @@ describe("OwnerInbox", () => {
     expect(selected.className).not.toContain("border-l-");
   });
 
+  it("lifts both message bubbles off the pane and keeps the internal note flat", () => {
+    // --well is a step down from --card in the light palette and barely above it in the dark one,
+    // so a bubble painted on it sat at the value of the pane behind it. --raised is the only
+    // surface token above --card in both palettes, which is why both sides use it as the lift.
+    const { container } = surface({
+      requests: [clientRequest({
+        messages: [
+          {
+            id: "message-1",
+            authorId: "coach-1",
+            authorName: "Reid Calloway (demo)",
+            body: "Can we switch my bookings to my Calendly instead of Google?",
+            internal: false,
+            isTest: false,
+            createdAt: "2026-08-31T09:12:00.000Z",
+          },
+          {
+            id: "message-2",
+            authorId: ACTOR,
+            authorName: "Dana Whitfield (demo)",
+            body: "Calendly is on the roadmap and Google stays connected until then.",
+            internal: false,
+            isTest: false,
+            createdAt: "2026-08-31T10:02:00.000Z",
+          },
+          {
+            id: "message-3",
+            authorId: ACTOR,
+            authorName: "Dana Whitfield (demo)",
+            body: "The calendar token expired overnight, and it is reconnected now.",
+            internal: true,
+            isTest: false,
+            createdAt: "2026-08-31T10:04:00.000Z",
+          },
+        ],
+      })],
+    });
+
+    const bubbles = Array.from(container.querySelectorAll('[data-slot="inbox-bubble"]'));
+    expect(bubbles).toHaveLength(2);
+
+    const [incoming, own] = bubbles;
+    expect(incoming).toHaveAttribute("data-mine", "false");
+    expect(incoming.className).toContain("bg-[var(--raised)]");
+    expect(incoming.className).toContain("border-[var(--line-strong)]");
+    expect(incoming.className).not.toContain("bg-[var(--well)]");
+
+    expect(own).toHaveAttribute("data-mine", "true");
+    expect(own.className).toContain("bg-[var(--accent-wash-strong)]");
+    expect(own.className).toContain("border-[var(--accent-edge)]");
+
+    for (const bubble of bubbles) {
+      // The shadow is the page's own material, not a popover shadow, so the lift reads as a
+      // surface rather than as something floating over the pane.
+      expect(bubble.className).toContain("shadow-[var(--shadow-card)]");
+      // The body is text a person reads, so it takes the read role rather than the body role.
+      expect(bubble.className).toContain("text-[color:var(--ink)]");
+      expect(bubble.className).toContain("text-[15px]");
+      expect(bubble.className).toContain("leading-[1.55]");
+    }
+
+    // The corner still points each bubble at its own avatar.
+    expect(incoming.className).toContain("rounded-[12px_12px_12px_4px]");
+    expect(own.className).toContain("rounded-[12px_12px_4px_12px]");
+
+    // The internal note stays a flat dashed block, so nothing about its weight suggests the coach
+    // can read it.
+    const note = container.querySelector('[data-slot="inbox-internal-note"]');
+    expect(note?.querySelector('[data-slot="inbox-bubble"]')).toBeNull();
+    expect(note?.innerHTML).toContain("border-dashed");
+    expect(note?.innerHTML).not.toContain("shadow-[var(--shadow-card)]");
+  });
+
   it("filters the list by the search box and says so when nothing matches", async () => {
     const user = userEvent.setup();
     surface();

@@ -246,18 +246,30 @@ function TranscriptRow({
   const side = messageSide(message.author, variant)
   const right = side === "right"
   const messageCap = variant === "consumer" ? "max-w-[var(--measure-tight)]" : "max-w-[var(--measure-wide)]"
+  /*
+   * The bubble surfaces, the same two the owner inbox thread uses, because a reader who moves
+   * between the two support surfaces should not have to relearn what a message looks like.
+   *
+   * The bubbles sit on a --card face, and the incoming side used to be painted at --card or at
+   * --quiet, which is the recessed ground: one was the exact value of the face behind it and the
+   * other is a step down from it in the light palette, so a message read as text inside a faint
+   * rectangle rather than as a surface of its own. --raised is the only surface token that sits
+   * above --card in both palettes, so it is the one value that lifts the bubble whichever theme
+   * the reader has on, and the hairline moves to --line-strong and the bubble takes
+   * --shadow-card, the page's own material, so that the edge and the shadow agree with the lift.
+   *
+   * The reader's own side takes the accent wash instead of the neutral lift, which is what makes
+   * the column read as a conversation with a speaker on each side rather than as one stack of
+   * identical boxes. Who wrote a message on that side, the agent or a person, is still carried by
+   * the bot avatar and the run name above the bubble, so nothing is lost by giving both the same
+   * ground. The square corner still points down at the avatar on the speaker's side.
+   */
   const messageClassName = [
-    "msg__text text-read m-0 whitespace-pre-wrap break-words rounded-[var(--r-card)] bg-[var(--quiet)] px-[var(--s-4)] py-[var(--s-3)] text-[color:var(--body)]",
+    "msg__text text-read m-0 whitespace-pre-wrap break-words rounded-[var(--r-card)] px-[var(--s-4)] py-[var(--s-3)] text-[color:var(--ink)] shadow-[var(--shadow-card)]",
     messageCap,
-    message.author === "lead"
-      ? "border border-[var(--line)] bg-[var(--card)]"
-      : "",
-    message.author === "human"
-      ? "border border-[var(--line-strong)] bg-[var(--raised)] text-[color:var(--ink)]"
-      : "",
     side === "left"
-      ? "rounded-bl-[var(--r-control)]"
-      : "rounded-br-[var(--r-control)]",
+      ? "rounded-bl-[var(--r-control)] border border-[var(--line-strong)] bg-[var(--raised)]"
+      : "rounded-br-[var(--r-control)] border border-[var(--accent-edge)] bg-[var(--accent-wash-strong)]",
   ]
     .filter(Boolean)
     .join(" ")

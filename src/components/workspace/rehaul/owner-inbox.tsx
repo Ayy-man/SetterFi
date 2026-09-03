@@ -557,8 +557,8 @@ function Avatar({ mine, name }: { mine: boolean; name: string }) {
       className={[
         "inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border text-[10.5px] font-[600]",
         mine
-          ? "border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[color:var(--accent-text)]"
-          : "border-[var(--line)] bg-[var(--well)] text-[color:var(--muted)]",
+          ? "border-[var(--accent-edge)] bg-[var(--accent-wash-strong)] text-[color:var(--accent-text)]"
+          : "border-[var(--line-strong)] bg-[var(--raised)] text-[color:var(--muted)]",
       ].join(" ")}
     >
       {initials(name)}
@@ -570,7 +570,9 @@ function Avatar({ mine, name }: { mine: boolean; name: string }) {
  * One message in the thread.
  *
  * An internal note is drawn as a dashed rule with its own label rather than as another bubble,
- * because the one thing a reader must never get wrong here is which lines the coach can see.
+ * because the one thing a reader must never get wrong here is which lines the coach can see. It
+ * also stays flat on the card, with no lifted ground and no shadow, so the visual weight itself
+ * says the note is not part of the conversation the coach reads.
  */
 function ThreadMessage({ actorId, message }: { actorId: string; message: PlatformSupportMessageRead }) {
   const name = displayName(message.authorName?.trim() ?? "") || "Author not recorded";
@@ -603,13 +605,39 @@ function ThreadMessage({ actorId, message }: { actorId: string; message: Platfor
             {shortTimestamp(message.createdAt)}
           </span>
         </div>
+        {/*
+          The bubble surfaces.
+
+          These used to sit on --well, which is the recessed ground: it is a step down from --card
+          in the light palette and only a hair above it in the dark one, so the bubble was painted
+          at very nearly the value of the pane it sits on and the thread read as loose text inside
+          faint rectangles. --raised is the only surface token that sits above --card in both
+          palettes, 0.9975 against 0.9905 in light and 0.2196 against 0.1802 in dark, so it is the
+          one value that lifts the bubble whichever theme the reader has on. The hairline moves
+          with it to --line-strong and the bubble picks up --shadow-card, the page's own material
+          rather than a popover shadow, because the lift only reads as a surface when the edge and
+          the shadow agree with the ground.
+
+          The reader's own messages keep the accent instead of the neutral lift, at
+          --accent-wash-strong rather than --accent-wash so the tint survives sitting on a lifted
+          card, which is what makes the two sides read as a conversation with a speaker on each
+          side rather than as two grey boxes in a column. The asymmetric corner stays: the square
+          corner points at the avatar, so a reader can tell who is talking before reading a word.
+
+          The body text moves from --body to --ink and from the 13px body role to the 15px read
+          role, which is what the shared transcript already uses for a message. A message is text
+          someone reads rather than a label they scan, and the two chat surfaces in the console
+          should not disagree about that.
+        */}
         <div
           className={[
-            "mt-[4px] px-[12px] py-[10px] text-left text-[13px] leading-[1.5] text-[color:var(--body)]",
+            "mt-[4px] px-[12px] py-[10px] text-left text-[15px] leading-[1.55] text-[color:var(--ink)] shadow-[var(--shadow-card)]",
             mine
-              ? "rounded-[12px_12px_4px_12px] border border-[var(--accent-edge)] bg-[var(--accent-wash)]"
-              : "rounded-[12px_12px_12px_4px] border border-[var(--line)] bg-[var(--well)]",
+              ? "rounded-[12px_12px_4px_12px] border border-[var(--accent-edge)] bg-[var(--accent-wash-strong)]"
+              : "rounded-[12px_12px_12px_4px] border border-[var(--line-strong)] bg-[var(--raised)]",
           ].join(" ")}
+          data-mine={mine ? "true" : "false"}
+          data-slot="inbox-bubble"
         >
           {displayName(message.body)}
         </div>

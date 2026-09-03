@@ -10,6 +10,7 @@ import {
   type OwnerClientsPerformance,
   type OwnerClientsTab,
 } from "@/components/workspace/rehaul/owner-clients";
+import { ownerClientPaneSection } from "@/lib/console-tabs";
 import { phase5Live, phase7AnalyticsLive, phase8SupportLive } from "@/lib/env-contract";
 import type { ProvisioningTrackerRow } from "@/lib/onboarding/contracts";
 import { loadAgentRoster, type AgentRoster } from "@/lib/operations/agent-roster";
@@ -166,6 +167,9 @@ export default async function PlatformClientsPage({ searchParams }: PageProps) {
 
   const params = await searchParams;
   const tab = tabOf(first(params.tab));
+  // The client pane's own section, read from its own param. `paneSectionOf` falls back to the first
+  // section, so a hand-typed or stale `section` opens the pane rather than emptying it.
+  const paneSection = ownerClientPaneSection(first(params.section));
   const book: SupportBook = first(params.book) === "mine" ? "mine" : "all";
   const [{ rows, error }, agents, performance, health] = await Promise.all([
     clientBook(session, book),
@@ -183,6 +187,7 @@ export default async function PlatformClientsPage({ searchParams }: PageProps) {
       enabled
       health={health}
       nowIso={new Date().toISOString()}
+      paneSection={paneSection}
       performance={performance}
       rows={rows}
       rowsError={error}

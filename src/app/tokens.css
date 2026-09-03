@@ -105,6 +105,21 @@
   --body: oklch(0.2905 0.032 262);           /* 12.6 / 13.7 */
   --muted: oklch(0.3604 0.036 262);          /*  9.7 / 10.6 */
   --faint: oklch(0.4349 0.039 262);          /*  7.1 /  7.7 */
+
+  /* ---- Stroke weight and smoothing, which are palette properties rather than type properties.
+     A glyph drawn light on dark loses stroke width that the same glyph drawn dark on light keeps,
+     so one weight cannot serve both palettes: at 400 the dark theme's 13px body read as grey fuzz
+     on the navy cards while the light theme at the same number read correctly. The type scale
+     below reads these three rather than carrying a literal, because the scale is authored once and
+     the fork belongs here, next to the grounds that cause it. Archivo is variable, so 450 and 540
+     come off the same axis at no download cost; IBM Plex Mono ships 400 and 500 only, which is why
+     --w-mono has two steps and not four. Light keeps the values the scale shipped with. */
+  --w-body: 400;                             /* --t-body-w and --t-read-w */
+  --w-row: 500;                              /* --t-row-w */
+  --w-mono: 400;                             /* --t-mono-meta-w and --t-mono-crumb-w */
+  /* Read by `globals.css` on body. Subpixel antialiasing thins light-on-dark strokes further,
+     compounding the problem the weights above answer, so the dark palettes ask for none. */
+  --smoothing: antialiased;
   --meta: oklch(0.4819 0.04 262);            /*  5.8 */
   --overline: oklch(0.5261 0.041 262);       /*  4.8 */
   --dim: oklch(0.5819 0.042 262);            /*  3.8, weekend letters */
@@ -425,8 +440,20 @@
        (9.5px mono overlines, weekend letters, icon strokes) and never carry body copy. */
     --ink: oklch(0.9449 0.0133 262.4);         /* 17.1 on canvas / 16.0 on card */
     --body: oklch(0.8492 0.0303 262.5);        /* 12.6 / 11.9 */
-    --muted: oklch(0.7709 0.0342 262.7);       /*  9.7 /  9.1 */
-    --faint: oklch(0.687 0.0466 262.3);        /*  7.1 /  6.7 */
+    /* Lifted 2026-09-04, from 0.7709 and 0.687. Light-on-dark strokes read thinner than the same
+       ratio read the other way around, so the two quiet roles were measuring correctly and still
+       rendering as grey fuzz at 13px and below; the lift is bounded by `tokens.test.ts`, which
+       holds each role at least 1.3 of contrast clear of the one above it, and --body at 12.6 is
+       what stops --muted going any higher than this. */
+    --muted: oklch(0.81 0.0342 262.7);         /* 11.1 / 10.4 */
+    --faint: oklch(0.745 0.0466 262.3);        /*  8.8 /  8.3 */
+
+    /* ---- Stroke weight and smoothing. The bare :root block above explains why these fork with
+       the palette; dark takes the heavier step of each pair and turns subpixel smoothing off. */
+    --w-body: 450;
+    --w-row: 540;
+    --w-mono: 500;
+    --smoothing: auto;
     --meta: oklch(0.6343 0.0443 262.2);        /*  5.8 */
     --overline: oklch(0.5871 0.0471 261.6);    /*  4.8 */
     --dim: oklch(0.5297 0.0479 262.8);         /*  3.8, weekend letters */
@@ -567,8 +594,20 @@
      (9.5px mono overlines, weekend letters, icon strokes) and never carry body copy. */
   --ink: oklch(0.9449 0.0133 262.4);         /* 17.1 on canvas / 16.0 on card */
   --body: oklch(0.8492 0.0303 262.5);        /* 12.6 / 11.9 */
-  --muted: oklch(0.7709 0.0342 262.7);       /*  9.7 /  9.1 */
-  --faint: oklch(0.687 0.0466 262.3);        /*  7.1 /  6.7 */
+  /* Lifted 2026-09-04, from 0.7709 and 0.687. Light-on-dark strokes read thinner than the same
+     ratio read the other way around, so the two quiet roles were measuring correctly and still
+     rendering as grey fuzz at 13px and below; the lift is bounded by `tokens.test.ts`, which
+     holds each role at least 1.3 of contrast clear of the one above it, and --body at 12.6 is
+     what stops --muted going any higher than this. */
+  --muted: oklch(0.81 0.0342 262.7);         /* 11.1 / 10.4 */
+  --faint: oklch(0.745 0.0466 262.3);        /*  8.8 /  8.3 */
+
+  /* ---- Stroke weight and smoothing. The bare :root block above explains why these fork with
+     the palette; dark takes the heavier step of each pair and turns subpixel smoothing off. */
+  --w-body: 450;
+  --w-row: 540;
+  --w-mono: 500;
+  --smoothing: auto;
   --meta: oklch(0.6343 0.0443 262.2);        /*  5.8 */
   --overline: oklch(0.5871 0.0471 261.6);    /*  4.8 */
   --dim: oklch(0.5297 0.0479 262.8);         /*  3.8, weekend letters */
@@ -761,6 +800,21 @@
   --body: oklch(0.2905 0.032 262);           /* 12.6 / 13.7 */
   --muted: oklch(0.3604 0.036 262);          /*  9.7 / 10.6 */
   --faint: oklch(0.4349 0.039 262);          /*  7.1 /  7.7 */
+
+  /* ---- Stroke weight and smoothing, which are palette properties rather than type properties.
+     A glyph drawn light on dark loses stroke width that the same glyph drawn dark on light keeps,
+     so one weight cannot serve both palettes: at 400 the dark theme's 13px body read as grey fuzz
+     on the navy cards while the light theme at the same number read correctly. The type scale
+     below reads these three rather than carrying a literal, because the scale is authored once and
+     the fork belongs here, next to the grounds that cause it. Archivo is variable, so 450 and 540
+     come off the same axis at no download cost; IBM Plex Mono ships 400 and 500 only, which is why
+     --w-mono has two steps and not four. Light keeps the values the scale shipped with. */
+  --w-body: 400;                             /* --t-body-w and --t-read-w */
+  --w-row: 500;                              /* --t-row-w */
+  --w-mono: 400;                             /* --t-mono-meta-w and --t-mono-crumb-w */
+  /* Read by `globals.css` on body. Subpixel antialiasing thins light-on-dark strokes further,
+     compounding the problem the weights above answer, so the dark palettes ask for none. */
+  --smoothing: antialiased;
   --meta: oklch(0.4819 0.04 262);            /*  5.8 */
   --overline: oklch(0.5261 0.041 262);       /*  4.8 */
   --dim: oklch(0.5819 0.042 262);            /*  3.8, weekend letters */
@@ -973,14 +1027,21 @@ svg.i.i-lg { width: 20px; height: 20px; }
   --t-target: 44px;
 }
 
-/* Type scale: fixed product roles from fonts/REPORT.md. */
+/* Type scale: fixed product roles from fonts/REPORT.md.
+
+   Five of the weights read --w-body, --w-row or --w-mono instead of a literal, because a stroke
+   that is legible dark-on-light is not legible at the same weight light-on-dark and the palette
+   blocks are where that fork is declared. Everything at 600 and the 500s that are already heavy
+   enough are left alone: the problem is thin text, so lifting a semibold title would only make
+   the page louder without making anything easier to read. --t-label-w stays at 500 for the same
+   reason, and --t-over-w at 600. */
 :root {
   --t-title: 24px; --t-title-w: 600; --t-title-lh: 1.2; --t-title-tr: -0.018em;
   --t-metric: 30px; --t-metric-w: 600; --t-metric-lh: 1.0; --t-metric-tr: -0.022em;
   --t-section: 16px; --t-section-w: 600; --t-section-lh: 1.35; --t-section-tr: -0.008em;
-  --t-row: 14px; --t-row-w: 500; --t-row-lh: 1.3; --t-row-tr: -0.003em;
-  --t-read: 15px; --t-read-w: 400; --t-read-lh: 1.55; --t-read-tr: 0;
-  --t-body: 13px; --t-body-w: 400; --t-body-lh: 1.5; --t-body-tr: 0;
+  --t-row: 14px; --t-row-w: var(--w-row); --t-row-lh: 1.3; --t-row-tr: -0.003em;
+  --t-read: 15px; --t-read-w: var(--w-body); --t-read-lh: 1.55; --t-read-tr: 0;
+  --t-body: 13px; --t-body-w: var(--w-body); --t-body-lh: 1.5; --t-body-tr: 0;
   --t-nav: 13.5px; --t-nav-w: 500; --t-nav-lh: 1.35;
   --t-badge: 12px; --t-badge-w: 600; --t-badge-lh: 1.0; --t-badge-tr: 0.002em;
   --t-over: 11px; --t-over-w: 600; --t-over-lh: 1.2; --t-over-tr: 0.085em;
@@ -993,7 +1054,7 @@ svg.i.i-lg { width: 20px; height: 20px; }
   --t-figure: 22px; --t-figure-w: 500; --t-figure-lh: 1.1; --t-figure-tr: -0.01em;
   /* One hero figure per page, Overview only: the number the owner opens the page for. */
   --t-hero: 44px; --t-hero-w: 500; --t-hero-lh: 1.0; --t-hero-tr: -0.024em;
-  --t-mono-meta: 12px; --t-mono-meta-w: 400; --t-mono-meta-lh: 1.4;
+  --t-mono-meta: 12px; --t-mono-meta-w: var(--w-mono); --t-mono-meta-lh: 1.4;
   /* 11.5px because that is what the console is drawn at, in both of this token's majority
      roles: the breadcrumb trail on all 24 admin artboards that render the owner rail, and the
      mono count beside a nav item 216 times across the same set. Nothing in the admin canvas
@@ -1003,7 +1064,7 @@ svg.i.i-lg { width: 20px; height: 20px; }
      agree today. It is not that here: the two dominant consumers are drawn at the same 11.5px,
      so the token is right to be shared and simply carried the wrong number. It also sits above
      the 11px floor, so it needs none of the label-face exemptions. */
-  --t-mono-crumb: 11.5px; --t-mono-crumb-w: 400; --t-mono-crumb-lh: 1.3;
+  --t-mono-crumb: 11.5px; --t-mono-crumb-w: var(--w-mono); --t-mono-crumb-lh: 1.3;
 
   /* Measures: the Line Length rule as tokens. `docs/DESIGN.md` names the rule and, before
      these existed, every screen hand-rolled it -- 62 sites across 11 different ch values,

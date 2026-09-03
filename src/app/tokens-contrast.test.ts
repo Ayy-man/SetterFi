@@ -137,8 +137,8 @@ const DARK = {
   /** The sentence under the numeral -- "Card declined, retry 2 of 4" -- not the numeral itself. */
   "failure-body": [0.747, 0.0304, 39.3],
   /** The two text roles a group band prints in: its label and its annotation. */
-  muted: [0.7709, 0.0342, 262.7],
-  faint: [0.687, 0.0466, 262.3],
+  muted: [0.81, 0.0342, 262.7],
+  faint: [0.745, 0.0466, 262.3],
 } as const satisfies Record<string, Oklch>;
 
 const DARK_WASHES = {

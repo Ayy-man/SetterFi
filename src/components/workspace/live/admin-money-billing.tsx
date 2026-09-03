@@ -745,8 +745,12 @@ function CostComposition({ row }: { row: CostRow }) {
  * The Cost tab lists a client's periods as separate blocks, so whether the account is growing or
  * shrinking is something the reader has to reconstruct by scrolling and comparing. One line says
  * it. A period with no recorded revenue is not a point -- it is dropped rather than plotted as a
- * zero the client never billed -- and with fewer than two points left the line is not drawn at
- * all, because two readings is the least a direction can honestly be claimed from.
+ * zero the client never billed -- and under `SPARKLINE_MIN_POINTS` the line is not drawn at all.
+ * That floor is the component's, and it is a floor on the shape rather than on the arithmetic: a
+ * direction can be computed from two readings, but the smoothed curve this draws would be
+ * inventing every point between them. A young account therefore shows its periods as blocks and
+ * no trend, which is what the evidence supports, and the sentence beside the line still names how
+ * many periods it covers when there are enough of them to draw.
  */
 export function CostRevenueTrend({ rows }: { rows: readonly CostRow[] }) {
   const dated = rows

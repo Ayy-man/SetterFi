@@ -310,7 +310,7 @@ describe("StatStrip", () => {
 
   it("draws the kit sparkline itself from a series of points", () => {
     render(
-      <StatStrip items={[{ ...tile("Booked calls", 12), points: [2, 5, 3, 9] }]} />,
+      <StatStrip items={[{ ...tile("Booked calls", 12), points: [2, 5, 3, 9, 6, 11] }]} />,
     );
 
     const spark = screen.getByRole("img", { name: "Booked calls trend" });

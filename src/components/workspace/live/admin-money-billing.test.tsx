@@ -446,7 +446,7 @@ describe("AdminMoneyBilling cost composition", () => {
     expect(document.querySelector('[data-slot="sparkline"]')).toBeNull();
   });
 
-  it("draws the revenue line across the periods, oldest first, skipping unrecorded ones", async () => {
+  it("draws no revenue line off a run too short to smooth", async () => {
     renderBilling(
       [subscription],
       [
@@ -456,22 +456,36 @@ describe("AdminMoneyBilling cost composition", () => {
           rollupId: "rollup-3",
           windowStart: "2026-06-01T00:00:00.000Z",
         },
-        {
-          ...costPeriod,
-          revenueCents: null,
-          rollupId: "rollup-4",
-          windowStart: "2026-05-01T00:00:00.000Z",
-        },
         costPeriod,
       ],
     );
     await openCostTab();
 
-    // Three periods, one with no recorded revenue: it is dropped rather than plotted as a zero
-    // the client never billed, so the line runs June to July and claims nothing about May.
+    // Two readings are enough to compute a direction and not enough to draw one: the smoothed
+    // curve would be inventing every point between them. The period blocks carry the figures.
+    expect(document.querySelector('[data-slot="sparkline"]')).toBeNull();
+  });
+
+  it("draws the revenue line across the periods, oldest first, skipping unrecorded ones", async () => {
+    renderBilling(
+      [subscription],
+      [
+        { ...costPeriod, revenueCents: 40_000, rollupId: "r-2", windowStart: "2026-02-01T00:00:00.000Z" },
+        { ...costPeriod, revenueCents: 50_000, rollupId: "r-3", windowStart: "2026-03-01T00:00:00.000Z" },
+        { ...costPeriod, revenueCents: 60_000, rollupId: "r-4", windowStart: "2026-04-01T00:00:00.000Z" },
+        { ...costPeriod, revenueCents: null, rollupId: "r-5", windowStart: "2026-05-01T00:00:00.000Z" },
+        { ...costPeriod, revenueCents: 70_000, rollupId: "r-6", windowStart: "2026-06-01T00:00:00.000Z" },
+        { ...costPeriod, revenueCents: 80_000, rollupId: "r-7", windowStart: "2026-06-15T00:00:00.000Z" },
+        costPeriod,
+      ],
+    );
+    await openCostTab();
+
+    // Seven periods, one with no recorded revenue: it is dropped rather than plotted as a zero the
+    // client never billed, so the line runs across six readings and claims nothing about May.
     expect(
       screen.getByRole("img", {
-        name: "Revenue across 2 recorded periods, $400.00 to $1,000.00",
+        name: "Revenue across 6 recorded periods, $400.00 to $1,000.00",
       }),
     ).toBeInTheDocument();
   });

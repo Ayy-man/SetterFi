@@ -149,8 +149,10 @@ describe("OwnerOverview", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
     expect(screen.getByText("Thursday 3 September 2026")).toBeInTheDocument();
-    // Gross MRR leads the pulse for an owner: 298,200 cents read back as money.
-    expect(screen.getByText("$2,982")).toBeInTheDocument();
+    // Gross MRR leads the pulse for an owner: 298,200 cents read back as money. It is spelled
+    // three times and identically each time -- the headline figure, the label on the latest bar of
+    // the strip under it, and that period's row in the strip's sr-only table.
+    expect(screen.getAllByText("$2,982")).toHaveLength(3);
     // The trialing row has collected nothing, so it is named apart rather than counted active.
     expect(screen.getByText("across 1 active subscription · 1 trialing")).toBeInTheDocument();
   });
@@ -211,14 +213,84 @@ describe("OwnerOverview", () => {
     expect(screen.getByText("Demo and test rows excluded")).toBeInTheDocument();
   });
 
-  it("draws the revenue and active-subscription series the snapshot carries", () => {
-    render(<OwnerOverview measurement={measurement()} role="owner" />);
+  it("draws the pulse as a period bar strip that names every period and its reading", () => {
+    const { container } = render(<OwnerOverview measurement={measurement()} role="owner" />);
 
-    expect(screen.getByRole("img", { name: "Gross MRR by 30-day period" })).toBeInTheDocument();
+    // The strip's accessible name carries each period and its own money reading, so the shape is
+    // never the only thing on offer. It is one line rather than a smoothed curve because two
+    // periods cannot be smoothed into anything honest.
     expect(
-      screen.getByRole("img", { name: "Active subscriptions by 30-day period" }),
+      screen.getByRole("img", {
+        name: "Gross MRR by 30-day period: Jul 2026 $2,100, Aug 2026 $2,982",
+      }),
     ).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="sparkline"]')).toBeNull();
+
+    const pulse = container.querySelector('[data-slot="overview-pulse"]') as HTMLElement;
+    // The latest bar is the only solid one and it carries its own figure; the earlier period is
+    // drawn back so the eye lands on the reading the page is opened for.
+    expect(pulse.querySelectorAll('rect[data-slot="bar-current"]')).toHaveLength(1);
+    expect(pulse.querySelectorAll('rect[data-slot="bar"]')).toHaveLength(1);
+    expect(pulse.querySelector('[data-slot="bar-current-value"]')?.textContent).toBe("$2,982");
+    // The two ends are dated underneath, so a bar can be placed in time without a hover.
+    expect(pulse.textContent).toContain("Jul 2026");
+    expect(pulse.textContent).toContain("Aug 2026");
+    // The sr-only table reads money as money rather than as a raw count of cents.
+    expect(pulse.querySelector("table")?.textContent).toContain("$2,100");
+
     expect(screen.queryByText("No revenue period recorded yet")).toBeNull();
+  });
+
+  it("replaces the KPI trend slot with a comparison against the prior period", () => {
+    const { container } = render(<OwnerOverview measurement={measurement()} role="owner" />);
+
+    expect(screen.getByText("3 this period, 1 last period")).toBeInTheDocument();
+    expect(screen.getByText("6 active, 4 a period ago")).toBeInTheDocument();
+    // No card draws a 36px curve any more, and none of them tells the reader about a chart that
+    // was never going to exist.
+    expect(container.querySelectorAll('[data-slot="sparkline"]')).toHaveLength(0);
+    expect(screen.queryByText("No period series recorded")).toBeNull();
+  });
+
+  it("gives churn and time to live no comparison line at all", () => {
+    const { container } = render(<OwnerOverview measurement={measurement()} role="owner" />);
+
+    const cards = [...container.querySelectorAll('[data-slot="overview-kpi"]')];
+    expect(cards).toHaveLength(4);
+    // The snapshot carries no period series for either, so those two cards simply end after their
+    // figure and pill rather than spending a line saying a chart is missing.
+    const withComparison = cards.filter((card) =>
+      card.querySelector('[data-slot="kpi-comparison"]') !== null,
+    );
+    expect(withComparison).toHaveLength(2);
+    expect(screen.getByText("most recent cycle")).toBeInTheDocument();
+    expect(screen.getByText("median")).toBeInTheDocument();
+  });
+
+  it("says so rather than inventing a comparison when there is no prior period", () => {
+    const base = measurement();
+    render(
+      <OwnerOverview
+        measurement={{
+          ...base,
+          activeSubscriptionsByPeriod: base.activeSubscriptionsByPeriod.slice(-1),
+          history: base.history.slice(-1),
+        }}
+        role="owner"
+      />,
+    );
+
+    expect(screen.getByText("3 this period, no prior period recorded")).toBeInTheDocument();
+    expect(screen.getByText("6 active, no prior period recorded")).toBeInTheDocument();
+  });
+
+  it("prints the latest signup period's own figure on its bar", () => {
+    const { container } = render(<OwnerOverview measurement={measurement()} role="owner" />);
+
+    const panel = container.querySelector('[data-slot="signups-panel"]') as HTMLElement;
+    expect(panel.querySelector('[data-slot="bar-current-value"]')?.textContent).toBe("3");
+    // The bar panel is now the only place this series is drawn.
+    expect(panel.querySelector('[data-slot="sparkline"]')).toBeNull();
   });
 
   it("holds the absence when a period carries no measured reading", () => {
@@ -237,7 +309,9 @@ describe("OwnerOverview", () => {
     );
 
     expect(screen.getByText("No revenue period recorded yet")).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "Gross MRR by 30-day period" })).toBeNull();
+    expect(
+      screen.queryByRole("img", { name: /^Gross MRR by 30-day period/u }),
+    ).toBeNull();
   });
 
   it("draws signups and active subscriptions as two named lines in the dialog", async () => {
@@ -258,7 +332,7 @@ describe("OwnerOverview", () => {
   it("refuses revenue to a success reviewer rather than substituting a figure", () => {
     render(<OwnerOverview measurement={measurement()} role="success" />);
 
-    expect(screen.queryByText("$2,982")).toBeNull();
+    expect(screen.queryAllByText("$2,982")).toHaveLength(0);
     expect(screen.queryByText("Margin")).toBeNull();
     // The pulse falls to signups rather than promoting another figure into the money slot.
     expect(screen.getAllByText("New signups").length).toBeGreaterThan(0);

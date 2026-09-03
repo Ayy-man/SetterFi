@@ -134,6 +134,18 @@ export type MetricDefinition = {
   audience: MetricAudience;
   economics: MetricEconomics;
   requiresPositiveDenominator: boolean;
+  /**
+   * A percent that measures a change rather than a share of a population.
+   *
+   * Every other percent metric is a part over a whole, so its numerator sits between zero and its
+   * denominator and its value between 0 and 100. A period-over-period change is neither: the
+   * numerator is a net movement that goes negative when the platform shrinks, and the value passes
+   * 100 the moment a period more than doubles the one before it. Reading a change as a share meant
+   * the parser refused the whole platform snapshot with `MEASUREMENT_RATE_POPULATION_INVALID` on
+   * the first month with fewer signups than the last, so the Overview would go dark exactly when
+   * the number it exists to show turned bad. Set it only on a metric whose cohort rule is a change.
+   */
+  signedRate?: boolean;
 };
 
 export type MetricEvidence = {
@@ -426,7 +438,7 @@ export const METRIC_DEFINITIONS = {
     cohortRule: "Current-period net active-subscription change divided by the prior-period active population.",
     sources: [{ table: "public.analytics_billing_subscriptions", columns: ["tenant_id", "status", "created_at", "provider_updated_at"] }],
     population: "Real subscription mirror rows with two complete comparable periods.", history: "Needs two complete comparable periods and a positive prior population; otherwise ABSENT.",
-    audience: "admin_only", economics: "none", requiresPositiveDenominator: true,
+    audience: "admin_only", economics: "none", requiresPositiveDenominator: true, signedRate: true,
   }),
   "platform.guardrail_block_rate": defineMetric({
     key: "platform.guardrail_block_rate", name: "guardrailBlockRate", label: "Guardrail block rate", unit: "percent",

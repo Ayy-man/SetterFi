@@ -131,13 +131,35 @@ describe("hosted measurement round-trip", () => {
     for (const row of snapshot.metrics) {
       if (row.value !== null) expect(["available", "still_filling"]).toContain(row.state);
     }
-    // A demo tenant is a tenant the platform aggregate must never contain, whatever the coach
-    // read in the same session did.
+    /*
+     * A demo tenant is a tenant the platform aggregate must never contain, whatever the coach read
+     * in the same session did. `platform_demo_visible()` (20261011000001) is the one deliberate
+     * exception: while the client is reviewing the console on a platform that has no real tenants
+     * yet, the switch relaxes every analytics view to let the seeded demo rows through.
+     *
+     * So the check follows the switch rather than ignoring it. With the switch off this is the
+     * segregation rule, unchanged. With it on, the absence of demo rows would mean the widening
+     * silently stopped working, and that is what gets asserted instead. Reading the switch here is
+     * the point: a hard exclusion assertion would have to be deleted to run against a review
+     * database, and a deleted assertion protects nothing when the switch goes back off.
+     */
+    const { data: switchRow, error: switchError } = await client.rpc("platform_demo_visible");
+    // Never infer the switch from a failed read. An unreadable switch that defaulted either way
+    // would decide which assertion runs on the strength of a network error.
+    if (switchError) throw new Error(`PLATFORM_DEMO_VISIBLE_UNREADABLE: ${switchError.message}`);
+    if (typeof switchRow !== "boolean") throw new Error("PLATFORM_DEMO_VISIBLE_NOT_BOOLEAN");
+    const demoVisible = switchRow;
     const { data: demoTenants } = await client.from("tenants").select("id").eq("is_demo", true);
     const demoIds = (demoTenants ?? []).map((row) => row.id as string);
-    for (const id of demoIds) {
-      expect(snapshot.tenantPerformance.map((row) => row.tenantId)).not.toContain(id);
-      expect(snapshot.subscriptions.map((row) => row.tenantId)).not.toContain(id);
+    const aggregateIds = new Set([
+      ...snapshot.tenantPerformance.map((row) => row.tenantId),
+      ...snapshot.subscriptions.map((row) => row.tenantId),
+    ]);
+    console.log(`    platform_demo_visible=${demoVisible} demo_tenants=${demoIds.length}`);
+    if (demoVisible) {
+      expect(demoIds.some((id) => aggregateIds.has(id))).toBe(true);
+    } else {
+      for (const id of demoIds) expect(aggregateIds.has(id)).toBe(false);
     }
   });
 

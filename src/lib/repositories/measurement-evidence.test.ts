@@ -153,6 +153,60 @@ describe("the five row shapes the measurement RPCs actually emit", () => {
       .toEqual([{ ...zeroCount, windowStart: null, windowEnd: null }]);
   });
 
+  /**
+   * A shrinking platform is not a corrupt one.
+   *
+   * `platform.growth_rate` is the period-over-period change in signups
+   * (20260823000001:399), so its numerator is a net movement rather than a part of a whole. Reading
+   * it as a share refused the entire platform snapshot the first month with fewer signups than the
+   * last, and the Overview renders its unavailable state for a refused snapshot, so the console
+   * went dark exactly when the number it exists to show turned negative. Backdating the demo
+   * dataset onto twelve real months is what surfaced it.
+   */
+  it("accepts a negative growth rate, because a change is signed and a share is not", () => {
+    const decline = {
+      metricKey: "platform.growth_rate",
+      numerator: -1,
+      denominator: 3,
+      value: -33.333333,
+      state: "available",
+    };
+    expect(parseMetricEvidenceRows([decline], ["platform.growth_rate"], PLATFORM_OPTIONS))
+      .toEqual([{ ...decline, windowStart: null, windowEnd: null }]);
+  });
+
+  it("accepts growth above 100 per cent, because a period can more than double the last", () => {
+    const surge = {
+      metricKey: "platform.growth_rate",
+      numerator: 6,
+      denominator: 3,
+      value: 200,
+      state: "available",
+    };
+    expect(parseMetricEvidenceRows([surge], ["platform.growth_rate"], PLATFORM_OPTIONS))
+      .toEqual([{ ...surge, windowStart: null, windowEnd: null }]);
+  });
+
+  it("still refuses a decline larger than the population it is measured against", () => {
+    expect(() => parseMetricEvidenceRows([{
+      metricKey: "platform.growth_rate",
+      numerator: -4,
+      denominator: 3,
+      value: -133.3,
+      state: "available",
+    }], ["platform.growth_rate"], PLATFORM_OPTIONS)).toThrow("MEASUREMENT_RATE_POPULATION_INVALID");
+  });
+
+  it("keeps every other percent bounded to its own population", () => {
+    expect(() => parseMetricEvidenceRows([{
+      metricKey: "platform.churn_rate",
+      numerator: -1,
+      denominator: 24,
+      value: -4.16,
+      state: "available",
+    }], ["platform.churn_rate"], PLATFORM_OPTIONS)).toThrow("MEASUREMENT_RATE_POPULATION_INVALID");
+  });
+
   it("accepts an unavailable margin whose numerator is null rather than zero", () => {
     const margin = {
       metricKey: "platform.margin",

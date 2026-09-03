@@ -23,7 +23,6 @@ import { useCallback, useMemo, useState } from "react";
 import { BarChart } from "@/components/kit/bar-chart";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { LineChart } from "@/components/kit/line-chart";
-import { Sparkline, SPARKLINE_MIN_POINTS } from "@/components/kit/sparkline";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { formatMetric } from "@/lib/format/metric";
 import type {
@@ -113,6 +112,58 @@ function periodLabel(value: string) {
 function shortDate(value: string) {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "Not recorded" : SHORT_DATE.format(parsed);
+}
+
+/** Money with no cents part, which is how `adminMeasurementView` spells a cents-unit figure. */
+const PERIOD_MONEY = new Intl.NumberFormat("en-US", {
+  currency: "USD",
+  maximumFractionDigits: 0,
+  style: "currency",
+});
+
+/**
+ * One period's own reading, in the same spelling the figure above it uses.
+ *
+ * The revenue series is carried in cents, so a bar labelled through `formatMetric(value, "money")`
+ * would read "$2,982.00" directly under a headline figure reading "$2,982". Two spellings of one
+ * number on one card is the reader's problem rather than a rounding detail, so the money case is
+ * formatted here the way the projection formats it.
+ */
+function periodValueText(key: string | null, value: number) {
+  return key === "platform.gross_mrr"
+    ? PERIOD_MONEY.format(value / 100)
+    : formatMetric(value, "count");
+}
+
+/**
+ * A KPI card's one comparison line: this period against the one before it.
+ *
+ * It replaced a 36px sparkline drawn from series like 0, 0, 7, which rendered as a hockey stick a
+ * reader could take no number off. Two figures and the words tying them together say the same
+ * thing exactly, and say it in a form that is still true when the snapshot carries one period.
+ * Where there is no prior period the line says so rather than implying a comparison against a
+ * zero nobody measured, and a metric the snapshot carries no series for gets no line at all: its
+ * own pill already names the window the figure covers.
+ */
+function comparisonLine(
+  key: string,
+  series: readonly PlatformHistoryPeriod[],
+): string | null {
+  const current = series.at(-1);
+  if (!current) return null;
+  const previous = series.at(-2);
+
+  if (key === "platform.new_signups") {
+    const now = formatMetric(current.value, "count");
+    return previous
+      ? `${now} this period, ${formatMetric(previous.value, "count")} last period`
+      : `${now} this period, no prior period recorded`;
+  }
+
+  const now = `${formatMetric(current.value, "count")} active`;
+  return previous
+    ? `${now}, ${formatMetric(previous.value, "count")} a period ago`
+    : `${now}, no prior period recorded`;
 }
 
 /**
@@ -449,9 +500,15 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
   const { measure: measurePulse, width: pulseWidth } = useMeasuredWidth(420);
 
   // The pulse draws the series belonging to the figure it leads on, so a role refused revenue is
-  // refused the revenue line with it rather than being shown a shape it cannot read a value off.
+  // refused the revenue strip with it rather than being shown a shape it cannot read a value off.
+  //
+  // One measured period is enough for a bar. That was not true of the smoothed line this strip
+  // replaced, which needed a run long enough for the curve to describe rather than invent the
+  // series; a bar makes exactly one claim, "this period read this much", and a single bar with its
+  // own figure printed on it makes that claim honestly.
   const pulseSeries = pulseKey === "platform.gross_mrr" ? revenueByPeriod : history;
-  const pulseSeriesDrawable = pulseSeries.length >= SPARKLINE_MIN_POINTS;
+  const pulseLatest = pulseSeries.at(-1) ?? null;
+  const pulseLabels = pulseSeries.map((period) => periodLabel(period.periodStart));
 
   return (
     <div className="flex min-w-0 flex-col gap-[var(--s-4)]">
@@ -537,12 +594,22 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
               : absenceText(pulse)}
           </p>
           <div className="mt-auto pt-[var(--s-4)]" ref={measurePulse}>
-            {pulseSeriesDrawable ? (
-              <Sparkline
-                className="h-[44px] w-full"
-                height={44}
-                label={`${pulse?.label ?? "Gross MRR"} by 30-day period`}
-                points={pulseSeries.map((period) => period.value)}
+            {pulseLatest ? (
+              <BarChart
+                axisColor="oklch(0.74 0.02 262)"
+                baselineColor="rgba(255,255,255,0.18)"
+                currentValueLabel={periodValueText(pulseKey, pulseLatest.value)}
+                fill="oklch(0.84 0.10 264)"
+                height={72}
+                label={`${pulse?.label ?? "Gross MRR"} by 30-day period: ${pulseSeries
+                  .map(
+                    (period, index) =>
+                      `${pulseLabels[index]} ${periodValueText(pulseKey, period.value)}`,
+                  )
+                  .join(", ")}`}
+                labels={pulseLabels}
+                valueText={(value) => periodValueText(pulseKey, value)}
+                values={pulseSeries.map((period) => period.value)}
                 width={pulseWidth}
               />
             ) : (
@@ -611,18 +678,16 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
                 <Pill>median</Pill>
               )}
             </div>
-            <div className="mt-[10px] h-[36px]">
-              <KpiSparkline
-                label={`${view.label} by 30-day period`}
-                series={
-                  key === "platform.new_signups"
-                    ? history
-                    : key === "platform.active_subscriptions"
-                      ? activeByPeriod
-                      : []
-                }
-              />
-            </div>
+            <KpiComparison
+              metricKey={key}
+              series={
+                key === "platform.new_signups"
+                  ? history
+                  : key === "platform.active_subscriptions"
+                    ? activeByPeriod
+                    : []
+              }
+            />
             <button
               aria-label={`Expand ${view.label}`}
               className="absolute top-[14px] right-[14px] text-[var(--faint)] hover:text-[var(--ink)]"
@@ -655,6 +720,7 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
           <div className="mt-[14px]" ref={measureBars}>
             {barsDrawable ? (
               <BarChart
+                currentValueLabel={formatMetric(history[history.length - 1]?.value ?? 0, "count")}
                 height={150}
                 label={`Signups by 30-day period: ${history
                   .map(
@@ -747,31 +813,29 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
 }
 
 /**
- * A card's 36px trend, or the sentence that says there isn't one.
+ * A card's one comparison line, or nothing at all.
  *
- * Churn and time to live carry no period series in the snapshot, so their slot holds the absence
- * rather than a line borrowed from a neighbouring measure.
+ * Churn and time to live carry no period series in the snapshot. The old slot filled that gap with
+ * "No period series recorded", which spent a line of the card telling the reader about a chart
+ * that was never going to exist. Those two cards now simply end after their figure and pill, which
+ * already name the window the reading covers, and the card is shorter for it.
  */
-function KpiSparkline({
-  label,
+function KpiComparison({
+  metricKey,
   series,
 }: {
-  label: string;
+  metricKey: string;
   series: readonly PlatformHistoryPeriod[];
 }) {
-  if (series.length < SPARKLINE_MIN_POINTS) {
-    return (
-      <p className="m-0 font-mono text-[11px] text-[var(--faint)]">No period series recorded</p>
-    );
-  }
+  const line = comparisonLine(metricKey, series);
+  if (!line) return null;
   return (
-    <Sparkline
-      className="h-[36px] w-full"
-      height={36}
-      label={label}
-      points={series.map((period) => period.value)}
-      width={220}
-    />
+    <p
+      className="m-0 mt-[10px] font-mono text-[11.5px] text-[var(--muted)] tabular-nums"
+      data-slot="kpi-comparison"
+    >
+      {line}
+    </p>
   );
 }
 

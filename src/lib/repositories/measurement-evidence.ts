@@ -148,7 +148,17 @@ export function parseMetricEvidenceRows(
       )) {
         throw new MeasurementEvidenceError("MEASUREMENT_COUNT_INVALID");
       }
-      if (definition.unit === "percent") {
+      if (definition.unit === "percent" && definition.signedRate) {
+        // A change, not a share. The numerator is a net movement, so it is signed, and the only
+        // floor it has is losing the entire prior population; the value has no ceiling, because a
+        // period that more than doubles the one before it is above 100 per cent and is real.
+        if (numerator === null || numerator < -denominator) {
+          throw new MeasurementEvidenceError("MEASUREMENT_RATE_POPULATION_INVALID");
+        }
+        if (metricValue < -100) {
+          throw new MeasurementEvidenceError("MEASUREMENT_RATE_VALUE_INVALID");
+        }
+      } else if (definition.unit === "percent") {
         if (numerator === null || numerator < 0 || numerator > denominator) {
           throw new MeasurementEvidenceError("MEASUREMENT_RATE_POPULATION_INVALID");
         }

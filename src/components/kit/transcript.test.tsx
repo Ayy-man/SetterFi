@@ -56,6 +56,43 @@ describe("Transcript", () => {
     expect(getComputedStyle(message).fontSize).toBe("15px")
   })
 
+  it("lifts both sides of the thread off the card with the same treatment as the owner inbox", () => {
+    // The bubbles sit on a --card face. --card and --quiet both painted the incoming side at or
+    // below the value of that face, so a message read as text in a faint rectangle. --raised is
+    // the only surface token above --card in both palettes, so it is the lift on the incoming
+    // side, and the reader's own side takes the accent wash so the two read as a conversation.
+    render(
+      <Transcript
+        messages={[
+          { id: "one", author: "lead", body: "Incoming message", at: "9:41 AM" },
+          { id: "two", author: "human", body: "Own message", at: "9:42 AM" },
+        ]}
+        variant="coach"
+      />,
+    )
+
+    const incoming = screen.getByText("Incoming message")
+    expect(incoming).toHaveClass(
+      "bg-[var(--raised)]",
+      "border-[var(--line-strong)]",
+      "shadow-[var(--shadow-card)]",
+      "text-[color:var(--ink)]",
+    )
+    expect(incoming.className).not.toContain("bg-[var(--quiet)]")
+
+    const own = screen.getByText("Own message")
+    expect(own).toHaveClass(
+      "bg-[var(--accent-wash-strong)]",
+      "border-[var(--accent-edge)]",
+      "shadow-[var(--shadow-card)]",
+      "text-[color:var(--ink)]",
+    )
+
+    // The square corner still points down at each speaker's avatar.
+    expect(incoming).toHaveClass("rounded-bl-[var(--r-control)]")
+    expect(own).toHaveClass("rounded-br-[var(--r-control)]")
+  })
+
   it("keeps consumer team messages with the agent on the left", () => {
     render(
       <Transcript

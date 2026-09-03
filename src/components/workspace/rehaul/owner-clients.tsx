@@ -7,7 +7,6 @@ import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } 
 import { AppShell } from "@/components/kit/app-shell";
 import { DataTableFacetedFilter } from "@/components/kit/data-table-faceted-filter";
 import { Search } from "@/components/kit/icons";
-import { Sparkline, SPARKLINE_MIN_POINTS } from "@/components/kit/sparkline";
 import { ConfirmFlow, type Result } from "@/components/kit/confirm-flow";
 import { DayCounter, elapsedWorkspaceDays } from "@/components/kit/day-counter";
 import { ExportMenu } from "@/components/kit/export-menu";
@@ -53,6 +52,10 @@ import {
   type StatusTone,
 } from "@/components/workspace/rehaul/_primitives";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
+import {
+  OWNER_CLIENT_PANE_SECTIONS,
+  type OwnerClientPaneSection,
+} from "@/lib/console-tabs";
 import type { UserRole } from "@/lib/auth/claims";
 import { displayName, displayNameOrNull } from "@/lib/format/display-name";
 import { WORKSPACE_DISPLAY_TIMEZONE, workspaceTimestampFormat } from "@/lib/format/datetime";
@@ -68,6 +71,16 @@ import { cn } from "@/lib/utils";
 
 export const OWNER_CLIENT_TABS = ["status", "agent", "performance", "health", "team", "setup"] as const;
 export type OwnerClientsTab = (typeof OWNER_CLIENT_TABS)[number];
+
+/**
+ * The client pane's sections live in `@/lib/console-tabs`, not here.
+ *
+ * They are not this page's tabs: the page also has Team and Setup, neither of which is a thing one
+ * client has. And the server page has to narrow `?section=` before it renders this `"use client"`
+ * module, so the list belongs to neither side. `src/app/server-client-boundary.test.ts` holds that
+ * rule and the production failures behind it.
+ */
+export type OwnerClientsPaneSection = OwnerClientPaneSection;
 
 /**
  * A folded tab either has its read or says why it does not.
@@ -97,6 +110,12 @@ export type OwnerClientsProps = {
   enabled: boolean;
   book: SupportBook;
   tab: OwnerClientsTab;
+  /**
+   * Which section the open client pane is on. Separate from `tab` on purpose; see
+   * `OWNER_CLIENT_PANE_SECTIONS`. Absent means the first section, so a link with no `section` param
+   * opens the pane where a reader expects it rather than nowhere.
+   */
+  paneSection?: OwnerClientsPaneSection;
   selectedClientId: string | null;
   selectedOwnerId: string | null;
   rows: readonly SuccessClientBookRead[];
@@ -276,17 +295,26 @@ function stageState(row: ProvisioningTrackerRow | null, step: string): StageStat
  * The page
  * ------------------------------------------------------------------------------------------ */
 
+/**
+ * The page's one link builder.
+ *
+ * `tab` is the page's tab and keeps its meaning exactly: saved views and the filter chips are keyed
+ * to it. `section` is the client pane's, written only on a link that opens or moves the pane, so
+ * the two controls can never write each other's state.
+ */
 function href(input: {
   tab: OwnerClientsTab;
   book: SupportBook;
   client?: string | null;
   owner?: string | null;
+  section?: OwnerClientsPaneSection | null;
 }) {
   const params = new URLSearchParams();
   params.set("tab", input.tab);
   if (input.book === "mine") params.set("book", "mine");
   if (input.client) params.set("client", input.client);
   if (input.owner) params.set("owner", input.owner);
+  if (input.client && input.section) params.set("section", input.section);
   return `/admin/platform-clients?${params.toString()}`;
 }
 
@@ -388,6 +416,7 @@ export function OwnerClients({
   enabled,
   health,
   nowIso,
+  paneSection = OWNER_CLIENT_PANE_SECTIONS[0],
   performance,
   rows,
   rowsError,
@@ -577,7 +606,7 @@ export function OwnerClients({
       <td className={CARD_TABLE.td}>
         <Link
           className="font-medium text-[var(--ink)] no-underline hover:underline"
-          href={href({ tab, book, client: row.client.id })}
+          href={href({ tab, book, client: row.client.id, section: paneSection })}
         >
           {displayName(row.client.name)}
         </Link>
@@ -712,9 +741,32 @@ export function OwnerClients({
       : tab === "health" && health.kind === "refused" ? health
         : null;
 
-  const historyPoints = performance.kind === "ready"
-    ? performance.value.history.filter((point) => point.state === "available").map((point) => point.value)
-    : [];
+  /**
+   * The Performance tab's own headline, counted off the rows the tab already draws.
+   *
+   * The card that used to sit here drew `performance.value.history` under the label "Booked calls
+   * across the platform". That series is the platform's *signup* history -- the RPC behind it is
+   * `app.phase7_platform_signup_history`, and the Overview draws the same array as "Signups by
+   * period" -- so the card was labelled as one measure and drawn from another. It also drew it as
+   * a 96x24 sparkline pinned beside a label in a full-width card, with no scale and no dates, off
+   * a handful of 30-day periods.
+   *
+   * Both problems have the same fix, which is to say the thing the label promised. Booked calls
+   * across the platform is the sum of the per-client counts this tab's own table lists, over the
+   * clients the snapshot measured, and those are three figures rather than a shape. The window is
+   * the measurement snapshot's, which is why it is named rather than dated: this fold carries no
+   * period boundaries to date it with.
+   */
+  const bookedTotals = useMemo(() => {
+    if (performance.kind !== "ready") return null;
+    const measured = performance.value.tenantPerformance;
+    if (measured.length === 0) return null;
+    return {
+      clients: measured.length,
+      most: Math.max(...measured.map((entry) => entry.bookedAppointments)),
+      total: measured.reduce((running, entry) => running + entry.bookedAppointments, 0),
+    };
+  }, [performance]);
 
 
   /* ------------------------------------------------------------------------------------------
@@ -822,17 +874,23 @@ export function OwnerClients({
           </div>
         </div>
 
+        {/*
+          The pane's own row. Every link keeps `tab` at whatever the page is on and moves `section`
+          instead, so reading this client's Health does not reorder the table behind the pane. The
+          label differs from the page tab row's for the same reason the state does: two controls
+          named "Client sections" were one control as far as a screen reader was concerned.
+        */}
         <Seg
-          items={OWNER_CLIENT_TABS.filter((key) => key !== "team" && key !== "setup").map((key) => ({
-            active: key === tab,
-            href: href({ tab: key, book, client: row.client.id }),
+          items={OWNER_CLIENT_PANE_SECTIONS.map((key) => ({
+            active: key === paneSection,
+            href: href({ tab, book, client: row.client.id, section: key }),
             label: key === "status" ? "Status" : key === "agent" ? "Agent"
               : key === "performance" ? "Performance" : "Health",
           }))}
-          label="Client sections"
+          label="Client detail sections"
         />
 
-        {tab === "health" ? (
+        {paneSection === "health" ? (
           <div className="flex flex-col" data-slot="owner-clients-stepper">
             {stages.map((stage, index) => (
               <div
@@ -852,7 +910,7 @@ export function OwnerClients({
           </div>
         ) : null}
 
-        {tab === "agent" ? (
+        {paneSection === "agent" ? (
           <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-2 text-[12.5px]">
             <dt className="text-[var(--faint)]">Agent</dt>
             <dd className="m-0 text-[var(--body)]">
@@ -873,7 +931,7 @@ export function OwnerClients({
           </dl>
         ) : null}
 
-        {tab === "performance" ? (
+        {paneSection === "performance" ? (
           <div className="flex flex-col gap-2 text-[12.5px]">
             <div className="flex items-baseline gap-3">
               <Figure size="md">{measured ? measured.bookedAppointments : "—"}</Figure>
@@ -882,7 +940,7 @@ export function OwnerClients({
           </div>
         ) : null}
 
-        {tab === "status" ? (
+        {paneSection === "status" ? (
           <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-2 text-[12.5px]">
             <dt className="text-[var(--faint)]">Plan</dt>
             <dd className="m-0 text-[var(--body)]">{planLabel(row)}</dd>
@@ -966,7 +1024,7 @@ export function OwnerClients({
                   className={`flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 no-underline ${
                     row.supportStatus === "open" ? "bg-[var(--warning-wash)]" : "bg-[var(--well)]"
                   }`}
-                  href={href({ tab: "status", book, client: row.client.id })}
+                  href={href({ tab: "status", book, client: row.client.id, section: paneSection })}
                   key={row.client.id}
                 >
                   <StatusDot tone={SUPPORT_TONE[row.supportStatus as keyof typeof SUPPORT_TONE]} />
@@ -1161,10 +1219,19 @@ export function OwnerClients({
             <div className="flex min-w-0 flex-col gap-4">
               {foldRefusal ? <Refusal reason={foldRefusal.reason} title="This tab could not be read" /> : null}
 
-              {tab === "performance" && historyPoints.length >= SPARKLINE_MIN_POINTS ? (
-                <div className={`${CARD_TABLE.card} flex items-center gap-4 px-4 py-3`}>
+              {tab === "performance" && bookedTotals ? (
+                <div
+                  className={`${CARD_TABLE.card} flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3`}
+                  data-slot="owner-clients-booked-total"
+                >
                   <span className="text-[12.5px] text-[var(--faint)]">Booked calls across the platform</span>
-                  <Sparkline label="Booked calls across the platform, by period" points={historyPoints} />
+                  <Figure size="md">{bookedTotals.total}</Figure>
+                  <span className="text-[12.5px] text-[var(--faint)]">
+                    over {bookedTotals.clients}
+                    {bookedTotals.clients === 1 ? " measured client" : " measured clients"}
+                    {" · most on one client "}
+                    <span className="font-mono tabular-nums">{bookedTotals.most}</span>
+                  </span>
                 </div>
               ) : null}
 
@@ -1235,7 +1302,7 @@ export function OwnerClients({
                           <td className={CARD_TABLE.td}>
                             <Link
                               className="font-medium text-[var(--ink)] no-underline hover:underline"
-                              href={href({ tab: "status", book, client: row.client.id })}
+                              href={href({ tab: "status", book, client: row.client.id, section: paneSection })}
                             >
                               {displayName(row.client.name)}
                             </Link>

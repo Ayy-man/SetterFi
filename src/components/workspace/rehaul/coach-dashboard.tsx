@@ -6,7 +6,8 @@ import { useState } from "react";
 
 import { DayCounter, elapsedWorkspaceDays } from "@/components/kit/day-counter";
 import { SegmentedControl } from "@/components/kit/segmented-control";
-import { Sparkline } from "@/components/kit/sparkline";
+import { BarSparkline } from "@/components/kit/atomics";
+import { Sparkline, SPARKLINE_MIN_POINTS } from "@/components/kit/sparkline";
 import { LineChart } from "@/components/kit/line-chart";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { Figure, Pill, StatusDot } from "@/components/workspace/rehaul/_primitives";
@@ -410,17 +411,25 @@ function LeadsTrend({ composition }: { composition: CoachLeadComposition }) {
 type KeywordRow = CoachMeasurement["keywords"][number];
 
 /**
- * The per-row line, which is a funnel and is labelled as one.
+ * The per-row shape, which is a funnel and is labelled as one.
  *
  * The artboard draws a time sparkline beside each keyword. There is no per-keyword time series on
  * this page -- `read_coach_measurement_for_actor` returns one aggregate row per keyword over the
  * chosen window -- so a trend line here would be four made-up points. What the row does carry is
  * its own four stages, and those descend, which is the shape the artboard draws. The label says
  * "funnel", never "trend", so nothing claims a direction over time.
+ *
+ * Four bars rather than a smoothed line, and for the reason `SPARKLINE_MIN_POINTS` now encodes: a
+ * spline through four readings draws a curve between stages that has no meaning, because there is
+ * nothing between "replied" and "qualified" for the line to pass through. Four bars are four
+ * countable stages and claim nothing in the gaps. Every bar is emphasised because none of these is
+ * more recent than another; they are stages of one window.
  */
 function KeywordShape({ row }: { row: KeywordRow }) {
   return (
-    <Sparkline
+    <BarSparkline
+      className="w-[100px]"
+      emphasisCount={4}
       height={24}
       label={`${row.keyword} funnel: ${row.conversations} opt-ins, ${row.respondedConversations} replied, ${row.qualifiedContacts} qualified, ${row.bookedContacts} booked`}
       points={[
@@ -429,7 +438,6 @@ function KeywordShape({ row }: { row: KeywordRow }) {
         row.qualifiedContacts,
         row.bookedContacts,
       ]}
-      width={100}
     />
   );
 }
@@ -922,7 +930,14 @@ export function CoachDashboard({
               </Band>
               <div className="flex flex-1 flex-col p-5">
                 <HeroFigure reading={leads} />
-                {monthTotals.length >= 2 ? (
+                {/*
+                  The guard is the component's own floor rather than a looser one of this page's:
+                  `Sparkline` draws nothing under `SPARKLINE_MIN_POINTS`, and a page that thought
+                  two points were enough would reserve the space and paint nothing into it. The
+                  composition read validates that it returns exactly six months, so in practice
+                  this is a floor the series clears rather than a branch a coach sees.
+                */}
+                {monthTotals.length >= SPARKLINE_MIN_POINTS ? (
                   <Sparkline
                     className="mt-auto w-full pt-4"
                     height={44}
