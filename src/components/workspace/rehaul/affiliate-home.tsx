@@ -106,6 +106,20 @@ const REFERRAL_STATE: Record<AffiliateAccountState, { label: string; tone: Statu
 };
 
 /**
+ * The three words `affiliatePayoutLabel` can return, and the only colour each is allowed.
+ *
+ * Green on the one state the ledger confirmed, amber on the approved-but-unsent row because that
+ * is a pending payout and amber is the only colour a pending thing may wear, and grey on a payout
+ * marked sent whose reference never arrived -- that is a missing record rather than a wait, and
+ * painting it amber would put it in a queue nobody is working.
+ */
+const PAYOUT_TONE: Record<string, StatusTone> = {
+  "Approved for payout": "amber",
+  "Payout record unavailable": "grey",
+  "Recorded sent": "good",
+};
+
+/**
  * A `YYYY-MM-DD` read back as the day it names, in UTC.
  *
  * `new Date("2026-03-04")` parses as UTC midnight, which formats as the third of March for any
@@ -485,7 +499,7 @@ export function AffiliateHome({
                     <tr key={row.rowId}>
                       <td className={`${TD_CLASS} text-[color:var(--body)]`}>
                         <span className="flex items-center gap-[9px]">
-                          <StatusDot tone={row.status === "Recorded sent" ? "good" : "wait"} />
+                          <StatusDot tone={PAYOUT_TONE[row.status] ?? "grey"} />
                           {row.status}
                         </span>
                       </td>
@@ -518,13 +532,16 @@ export function AffiliateHome({
 
           {/*
             Terms are set by SetterFi rather than edited here, so this states a value rather than
-            offering a control. The unapproved marker stays a real status: a placeholder that does
-            not say it is a placeholder is the honest-states failure.
+            offering a control. The marker describes the row beside it: configured terms are the
+            configured text, and only an absent value is the placeholder. A badge that called real
+            configured copy a demo placeholder was as wrong as one that called a placeholder real.
           */}
           <Surface className="max-w-[var(--measure-prose)] p-[var(--s-5)]" variant="well">
             <div className="flex flex-wrap items-center justify-between gap-[var(--s-2)]">
               <span className={EYEBROW_CLASS}>Partner terms</span>
-              <Status label="Demo placeholder: unapproved" tone="warning" treatment="bare" />
+              {termsCopy ? null : (
+                <Status label="Not configured" tone="warning" treatment="bare" />
+              )}
             </div>
             <Prose className="mt-[var(--s-2)] text-[15px] leading-[1.5] text-[color:var(--body)]">
               {termsCopy ?? "Partner terms have not been approved or configured."}

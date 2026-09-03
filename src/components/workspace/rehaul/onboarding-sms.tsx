@@ -177,6 +177,15 @@ export function OnboardingSmsRehaul() {
       ? "day 0"
       : null;
   const matches = (screen?.matches ?? []).filter(isMatch);
+  const waitingSentence = review.kind === "unchecked"
+    ? "The carrier registration check did not run."
+    : review.kind === "live"
+      ? "Carrier registration is complete."
+      : review.kind === "failed"
+        ? "Text messaging setup did not complete. SetterFi owns the next step."
+        : review.kind === "blocked"
+          ? "Carrier registration was permanently declined. SetterFi is reviewing it."
+          : null;
 
   return (
     <OnboardingShell
@@ -203,17 +212,16 @@ export function OnboardingSmsRehaul() {
               </>
             ) : null}
 
-            <p className="m-0 max-w-[36ch] text-[16px] leading-[1.5] text-[color:var(--coach-on-drench-sub)]">
-              {review.kind === "unchecked"
-                ? "The carrier registration check did not run, so nothing here claims a review state."
-                : review.kind === "live"
-                  ? "Carrier registration is complete, so there is no review left to count."
-                  : review.kind === "failed"
-                    ? "Text messaging setup did not complete, so SetterFi owns the next step."
-                    : review.kind === "blocked"
-                      ? "Carrier registration was permanently declined, and SetterFi is reviewing it."
-                      : "Carriers publish no decision schedule, so this counts days rather than predicting one."}
-            </p>
+{/*
+              Only the arms with no figure get a line, and each states what happened rather than
+              explaining it. The two waiting arms carry the day count above instead: their sentence
+              was the eye's own wording about carriers publishing no schedule.
+            */}
+            {waitingSentence ? (
+              <p className="m-0 max-w-[36ch] text-[16px] leading-[1.5] text-[color:var(--coach-on-drench-sub)]">
+                {waitingSentence}
+              </p>
+            ) : null}
 
             <div className="mt-auto flex flex-col">
               <DarkRow
@@ -270,7 +278,7 @@ export function OnboardingSmsRehaul() {
                         {match.phrase}
                       </span>
                       <span className="min-w-0 flex-1 text-[15px] text-[color:var(--body)]">{match.page}</span>
-                      <span className={`text-[13px] text-[color:var(--warning-text)] ${ONBOARDING_MONO_CLASS}`}>
+                      <span className={`text-[14px] text-[color:var(--warning-text)] ${ONBOARDING_MONO_CLASS}`}>
                         carriers may refuse
                       </span>
                     </li>
@@ -309,7 +317,7 @@ export function OnboardingSmsRehaul() {
                   size="lg"
                   variant="primary"
                 >
-                  Start registration
+                  Record acknowledgement
                 </KitButton>
                 <span className="inline-flex items-center gap-[8px] text-[14px] text-[color:var(--muted)]">
                   <ShieldCheck aria-hidden className="size-[16px]" />

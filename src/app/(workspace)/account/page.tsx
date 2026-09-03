@@ -22,7 +22,8 @@ const EYE_COPY =
   + "notice reaches you, and the way out. The owner side also carries the account terms registry -- "
   + "the contract a coach accepts at signup, which SetterFi stores and hashes but never writes -- "
   + "and the operator runbooks. Deep links open a section directly: /account?section=terms and "
-  + "/account?section=help both land on the panel already scrolled to that part.";
+  + "/account?section=help both land on the panel already scrolled to that part. The tips this "
+  + "panel used to list are not gone: every screen carries its own eye, and that is where they live.";
 
 const HOME_HREF = {
   admin: "/admin/overview",

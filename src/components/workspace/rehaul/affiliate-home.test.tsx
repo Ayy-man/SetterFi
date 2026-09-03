@@ -71,6 +71,36 @@ describe("AffiliateHome", () => {
     expect(chart?.querySelectorAll('[data-slot="bar-current"]')).toHaveLength(1);
   });
 
+  it("keeps amber on the pending payout and off the row with no record", () => {
+    const { container } = renderHome();
+
+    function toneOf(label: string) {
+      const cell = screen.getAllByText(label)[0].closest("span");
+      return cell?.querySelector("span[aria-hidden]")?.className ?? "";
+    }
+
+    expect(toneOf("Recorded sent")).toContain("var(--good)");
+    // Approved and unsent is a pending payout, and amber is the only colour a pending thing wears.
+    expect(toneOf("Approved for payout")).toContain("var(--warning)");
+    expect(container.querySelector('[data-slot="affiliate-payout-table"]')).not.toBeNull();
+  });
+
+  it("marks the partner terms only when nothing is configured", () => {
+    renderHome();
+    expect(screen.getByText("Not configured")).toBeVisible();
+
+    render(
+      <AffiliateHome
+        enabled
+        initialPayouts={payouts}
+        initialReferrals={referrals}
+        termsCopy="Commission is 20% of collected subscription revenue."
+      />,
+    );
+    // Configured copy is real copy, so it carries no placeholder marker.
+    expect(screen.getAllByText("Not configured")).toHaveLength(1);
+  });
+
   it("prints none of the explainer sentences the old page carried", () => {
     renderHome();
 

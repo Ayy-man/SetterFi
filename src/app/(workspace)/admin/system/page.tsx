@@ -12,7 +12,9 @@ import { withWorkspaceNavCounts, workspaceNavigationFor } from "@/lib/workspace-
 export const metadata: Metadata = { title: "System" };
 export const dynamic = "force-dynamic";
 
-const CRUMBS = [{ label: "Run" }, { label: "System" }] as const;
+// System sits in the rail's Platform group, which is what the artboard's crumb reads. "Platform"
+// is a group and not a page, so it names itself without linking anywhere.
+const CRUMBS = [{ label: "Platform" }, { label: "System" }] as const;
 
 export default async function AdminSystemPage() {
   if (!phase8Live()) {

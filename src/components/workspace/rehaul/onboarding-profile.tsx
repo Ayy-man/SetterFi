@@ -104,12 +104,12 @@ export function OnboardingProfileRehaul() {
     <OnboardingShell
       status={[{
         /*
-         * Amber until the profile is saved, and never green: a saved profile is a saved profile,
-         * which is why the good arm says that and not that anything is filed. Nothing on this
-         * screen can prove a carrier has seen anything, so nothing on it claims one has.
+         * Amber on both arms. Saving is a real step forward, but the state it leaves behind is
+         * still "nothing is filed with a carrier", which is a pending state and pending is amber.
+         * Green here would be the screen's own save reading as a carrier's answer.
          */
         label: saved ? "Saved, and not yet filed with a carrier" : "Nothing is filed with a carrier yet",
-        tone: saved ? "good" : "warning",
+        tone: "warning",
       }]}
       step={1}
       title="Your business details"

@@ -153,9 +153,18 @@ function formatDateTime(value: string | null, absent: string) {
   return Number.isNaN(date.getTime()) ? "time not recorded" : workspaceDateTimeFormat.format(date);
 }
 
+/**
+ * A failed job takes a neutral pill and a red dot rather than an amber one.
+ *
+ * Amber is the pending colour, and a job that failed is not pending: it ran and it did not work.
+ * `PillTone` carries no red, and `_primitives.tsx` is not this screen's file to change, so the
+ * artboard's own pattern for a settled bad outcome applies -- a neutral pill whose dot carries the
+ * colour, the way `OwnerAudit.body.html` draws "Reversed". Amber stays on the states that really
+ * are waiting on something: a stale report, a job that has never run.
+ */
 function jobPill(state: SystemHealthState): { label: string; tone: PillTone } {
   if (state === "healthy") return { label: "Healthy", tone: "good" };
-  if (state === "failed") return { label: "Failed", tone: "amber" };
+  if (state === "failed") return { label: "Failed", tone: "neutral" };
   return { label: "No recent report", tone: "amber" };
 }
 
@@ -222,19 +231,19 @@ function ServicesCard({ rows }: { rows: readonly ServiceRow[] }) {
             <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[color:var(--ink)]">
               {row.name}
             </span>
-            <span className="hidden shrink-0 text-[11.5px] text-[color:var(--faint)] sm:inline">
+            <span className="hidden shrink-0 text-[12.5px] text-[color:var(--faint)] sm:inline">
               {row.provider}
             </span>
             <span
               className={cn(
-                "hidden w-[150px] shrink-0 text-right font-mono text-[12px] md:inline",
+                "hidden w-[120px] shrink-0 text-right font-mono text-[12px] md:inline",
                 row.metaAmber ? "text-[color:var(--warning-text)]" : "text-[color:var(--muted)]",
               )}
             >
               {row.meta}
             </span>
             <Pill className="shrink-0" tone={row.pill.tone}>
-              <StatusDot tone={row.pill.tone === "good" ? "good" : row.pill.tone === "amber" ? "amber" : "grey"} />
+              <StatusDot tone={row.dot} />
               {row.pill.label}
             </Pill>
           </li>
@@ -311,7 +320,7 @@ function incidents(health: SystemHealth, span: WindowKey, now: number): Incident
 function IncidentsRail({ incidents: rows }: { incidents: readonly Incident[] }) {
   return (
     <div className="flex min-w-0 flex-col gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--card)] p-[18px_20px] shadow-[var(--shadow-card)]">
-      <div className="text-[11.5px] font-medium text-[color:var(--faint)]">Incidents</div>
+      <div className="text-[12.5px] font-medium text-[color:var(--faint)]">Incidents</div>
       {rows.length === 0 ? (
         <p className="m-0 font-mono text-[12px] text-[color:var(--muted)]">
           Nothing recorded in this window
@@ -333,7 +342,7 @@ function IncidentsRail({ incidents: rows }: { incidents: readonly Incident[] }) 
               <div className="mt-[2px] text-[13px] font-medium text-[color:var(--ink)]">
                 {incident.title}
               </div>
-              <div className="mt-[2px] text-[12px] leading-[1.5] text-[color:var(--muted)]">
+              <div className="mt-[2px] text-[12.5px] leading-[1.5] text-[color:var(--faint)]">
                 {incident.detail}
               </div>
             </div>

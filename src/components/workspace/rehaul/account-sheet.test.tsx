@@ -177,7 +177,7 @@ describe("the owner's account sheet", () => {
 });
 
 describe("the coach's account sheet", () => {
-  it("renders its three sections, the open count, and the tips row", async () => {
+  it("renders its three sections and the open count", async () => {
     mountSheet("coach");
     const panel = await sheetPanel();
 
@@ -189,8 +189,10 @@ describe("the coach's account sheet", () => {
 
     // Two of the three fixture threads are unresolved; the resolved one is not open.
     await waitFor(() => expect(within(panel).getByText("2 open")).toBeTruthy());
-    expect(within(panel).getByText("Tips now live behind the eye on each screen")).toBeTruthy();
     expect(within(panel).getByText("Being written")).toBeTruthy();
+
+    // The tips row was an explainer sentence in the body of a panel. The eye carries it now.
+    expect(panel.textContent).not.toContain("Tips now live behind the eye");
 
     for (const sentence of RETIRED_EXPLAINERS) {
       expect(panel.textContent).not.toContain(sentence);

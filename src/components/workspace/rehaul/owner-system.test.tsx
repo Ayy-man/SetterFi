@@ -131,6 +131,27 @@ describe("OwnerSystem", () => {
     expect(incidents[1]).toHaveTextContent("Texting registration: no recent report");
   });
 
+  /*
+   * A failed job used to draw a red dot beside an amber pill, which said "waiting" and "broken" in
+   * the same row. Amber is the pending colour, so the failure keeps the red dot and the pill goes
+   * neutral: one state, one colour, and the dot in the pill agrees with the dot on the row.
+   */
+  it("gives a failed job one colour, not two", () => {
+    const failing: SystemHealth = {
+      ...health,
+      jobs: [{ ...health.jobs[0]!, state: "failed", reason: "The last run threw." }],
+    };
+    navigation.searchParams = new URLSearchParams("");
+    render(<OwnerSystem health={failing} nowIso={NOW_ISO} />);
+
+    const row = screen.getAllByTestId("owner-system-service-row")
+      .find((candidate) => candidate.textContent?.includes("Failed"))!;
+    const dots = [...row.querySelectorAll('[data-slot="status-dot"]')];
+    expect(dots).toHaveLength(2);
+    for (const dot of dots) expect(dot.getAttribute("data-tone")).toBe("bad");
+    expect(row.querySelector('[data-slot="pill"]')?.getAttribute("data-tone")).toBe("neutral");
+  });
+
   it("swaps in the jobs and integrations bodies from the tab query", () => {
     const jobs = renderAt("?tab=jobs");
     expect(screen.getAllByTestId("owner-system-job-row")).toHaveLength(3);

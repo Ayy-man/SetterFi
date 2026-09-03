@@ -66,11 +66,11 @@ const PICKED_ROW_CLASS =
 const CALLBACK_SENTENCES: Readonly<Record<string, string>> = {
   ready: "Google Calendar is connected and SetterFi read your availability back successfully.",
   choose: "Google Calendar is connected. Choose the calendar your agent should book into.",
-  unverified: "Google Calendar is connected, but SetterFi could not read your availability yet. Booking stays off until that read succeeds.",
+  unverified: "Google Calendar is connected. SetterFi could not read your availability yet, so booking stays off.",
   declined: "The Google window was closed before access was granted. Nothing was changed, and you can connect whenever you are ready.",
-  reauthorize: "Google did not return a lasting authorization, so SetterFi cannot keep the connection alive on its own. Connect again and accept the access request.",
-  scopes: "Some of the calendar permissions were not granted, so SetterFi cannot read availability or place bookings. Connect again and leave every calendar permission ticked.",
-  nocalendars: "A calendar came back, but it has no time zone set, so a booking could land at the wrong hour. Set a time zone on it in Google Calendar, or leave this with your SetterFi contact.",
+  reauthorize: "Google did not return a lasting authorization. Connect again and accept the access request.",
+  scopes: "Some of the calendar permissions were not granted. Connect again and leave every calendar permission ticked.",
+  nocalendars: "A calendar came back with no time zone set. Set one on it in Google Calendar, or leave this with your SetterFi contact.",
   error: "The connection did not finish. Nothing was changed. Try again, and tell your SetterFi contact if it keeps stopping here.",
 };
 
@@ -82,8 +82,11 @@ export const ONBOARDING_CALENDAR_EYE_COPY =
   + "stored authorization is not the same as a verified availability read, and booking depends on "
   + "the second, so this screen stays amber until SetterFi has read the calendar back. While "
   + "SetterFi is in review with Google, Google ends calendar permissions on a schedule: nothing "
-  + "you did caused that, and reconnecting takes one press. The manual fields are provider-issued "
-  + "identifiers for SetterFi to complete with you, never an OAuth access token.";
+  + "you did caused that, and reconnecting takes one press. Without a lasting authorization "
+  + "SetterFi cannot keep the connection alive on its own, and without every calendar permission "
+  + "it can neither read availability nor place a booking. A calendar with no time zone set can "
+  + "land a call at the wrong hour, which is why one is required. The manual fields are "
+  + "provider-issued identifiers for SetterFi to complete with you, never an OAuth access token.";
 
 export function OnboardingCalendarRehaul() {
   const [form, setForm] = useState<Form>(EMPTY);
@@ -222,18 +225,24 @@ export function OnboardingCalendarRehaul() {
             dataSlot="rehaul-calendar-provider"
             eyebrow="Where your calls land"
             headingId="rehaul-calendar-provider"
+            /* The artboard's "One press" meta, shown only while there is a press to make. */
+            meta={showConnect ? (
+              <span className={`text-[14px] text-[color:var(--warning-text)] ${ONBOARDING_MONO_CLASS}`}>
+                One press
+              </span>
+            ) : undefined}
             name="Calendar provider"
           >
             <div className="flex flex-col gap-[16px]">
               <div className="grid gap-[16px] @min-[640px]:grid-cols-2">
                 <div className="min-w-0">
-                  <p className="mb-[6px] text-[13px] font-medium text-[color:var(--muted)]">Provider</p>
+                  <p className="mb-[6px] text-[14px] font-medium text-[color:var(--muted)]">Provider</p>
                   <OnboardingReadback absent={!connection}>
                     {connection ? PROVIDER_LABELS[connection.provider] : "No provider connected yet"}
                   </OnboardingReadback>
                 </div>
                 <div className="min-w-0">
-                  <p className="mb-[6px] text-[13px] font-medium text-[color:var(--muted)]">Connected as</p>
+                  <p className="mb-[6px] text-[14px] font-medium text-[color:var(--muted)]">Connected as</p>
                   <OnboardingReadback absent={!grant?.connectedAs} mono={Boolean(grant?.connectedAs)}>
                     {grant?.connectedAs ?? "No account recorded"}
                   </OnboardingReadback>
@@ -297,7 +306,7 @@ export function OnboardingCalendarRehaul() {
                     />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="text-[16px] font-medium text-[color:var(--ink)]">{calendar.name}</span>
-                      <span className={`text-[13px] text-[color:var(--muted)] ${ONBOARDING_MONO_CLASS}`}>
+                      <span className={`text-[14px] text-[color:var(--muted)] ${ONBOARDING_MONO_CLASS}`}>
                         {timezoneDisplayLabel(calendar.timeZone) ?? "Time zone set in Google"}
                       </span>
                     </span>
@@ -408,6 +417,13 @@ export function OnboardingCalendarRehaul() {
             >
               {saving ? "Recording…" : "Record the receipt"}
             </KitButton>
+            <span
+              aria-label={accountability.ariaLabel}
+              className="inline-flex items-center gap-[8px] text-[14px] text-[color:var(--muted)]"
+            >
+              <ShieldCheck aria-hidden className="size-[16px]" />
+              {accountability.microcopy}
+            </span>
           </form>
         </DeckPanel>
       </div>

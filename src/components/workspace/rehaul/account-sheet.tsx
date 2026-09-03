@@ -8,7 +8,6 @@ import {
   CalendarCheck,
   ChevronRight,
   CreditCard,
-  Eye,
   FileText,
   LogOut,
   MessageSquare,
@@ -182,9 +181,9 @@ function ExitControl({
   variant: AccountSheetVariant;
 }) {
   const face = cn(
-    "inline-flex items-center gap-2 rounded-[12px] border border-[var(--line)]",
+    "inline-flex items-center gap-2 border border-[var(--line)]",
     "bg-[var(--card)] font-medium text-[var(--ink)] no-underline",
-    variant === "owner" ? "h-[30px] px-2.5 text-[12.5px]" : "h-[44px] px-4 text-[16px]",
+    variant === "owner" ? "h-8 rounded-lg px-3 text-[13px]" : "h-[44px] rounded-[12px] px-5 text-[16px]",
   );
 
   /*
@@ -307,9 +306,25 @@ function useNotificationPreferences(active: boolean) {
   return { rules, saving, state, update };
 }
 
-function NotificationsUnavailable({ state }: { state: LoadState }) {
+/**
+ * The coach app holds a 14px floor, so this line cannot take the console's 13px on that side. It
+ * is the same sentence either way; only the size moves.
+ */
+function NotificationsUnavailable({
+  state,
+  variant,
+}: {
+  state: LoadState;
+  variant: AccountSheetVariant;
+}) {
   return (
-    <p className="m-0 py-2 text-[13px] text-[var(--muted)]" data-slot="account-sheet-alerts-state">
+    <p
+      className={cn(
+        "m-0 py-2 text-[var(--muted)]",
+        variant === "owner" ? "text-[13px]" : "text-[16px]",
+      )}
+      data-slot="account-sheet-alerts-state"
+    >
       {state === "loading" ? "Reading your notification settings" : "Your notification settings could not be read"}
     </p>
   );
@@ -327,12 +342,12 @@ function OwnerNotificationMatrix({
   onChange(preference: Preference, enabled: boolean): void;
 }) {
   if (state !== "ready" || rules.length === 0) {
-    return <NotificationsUnavailable state={state} />;
+    return <NotificationsUnavailable state={state} variant="owner" />;
   }
 
   return (
     <div data-slot="account-sheet-matrix">
-      <div className="flex h-[34px] items-center gap-2.5 border-b border-[var(--line)]">
+      <div className="mb-1.5 flex h-[34px] items-center gap-2.5 border-b border-[var(--line)]">
         <span className="text-[13px] text-[var(--muted)]">Notifications</span>
         <div className="ml-auto flex">
           {OWNER_DESTINATIONS.map((column) => (
@@ -414,7 +429,7 @@ function CoachNotificationList({
       </div>
       {state !== "ready" || rules.length === 0 ? (
         <div className="px-6">
-          <NotificationsUnavailable state={state} />
+          <NotificationsUnavailable state={state} variant="coach" />
         </div>
       ) : (
         rules.map((rule) => {
@@ -467,7 +482,7 @@ function TermsRow({ version }: { version: AccountSheetTermsVersion }) {
         <span className="block font-mono text-[13px] font-medium text-[var(--ink)]">
           {version.versionKey}
         </span>
-        <span className="block text-[11.5px] text-[var(--faint)]">
+        <span className="block text-[12.5px] text-[var(--faint)]">
           {published ? "Published" : "Saved"} {displayDay(version.publishedAt ?? version.createdAt)}
           {" · "}
           <span className="font-mono">{version.contentHash.slice(0, 12)}</span>
@@ -764,8 +779,8 @@ export function AccountSheet({
                 ))}
                 <Link
                   className={cn(
-                    "mt-2.5 flex h-[30px] items-center justify-center gap-2 rounded-[12px]",
-                    "border border-[var(--line)] bg-[var(--card)] text-[12.5px] font-medium",
+                    "mt-2.5 flex h-8 items-center justify-center gap-2 rounded-lg",
+                    "border border-[var(--line)] bg-[var(--card)] text-[13px] font-medium",
                     "text-[var(--ink)] no-underline",
                   )}
                   href="/admin/help"
@@ -804,10 +819,6 @@ export function AccountSheet({
                     <StatusDot tone="amber" />
                     Being written
                   </span>
-                </div>
-                <div className="flex h-[52px] items-center gap-3 px-6 text-[var(--muted)]">
-                  <Eye aria-hidden="true" className="size-[18px] text-[var(--faint)]" strokeWidth={1.75} />
-                  <span>Tips now live behind the eye on each screen</span>
                 </div>
               </>
             )}

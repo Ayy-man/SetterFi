@@ -30,6 +30,10 @@ function json(value: unknown) {
   });
 }
 
+function body0() {
+  return document.body.textContent ?? "";
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("OnboardingProfileRehaul", () => {
@@ -48,8 +52,10 @@ describe("OnboardingProfileRehaul", () => {
     expect(await screen.findByDisplayValue("85281")).toBeVisible();
     expect(screen.getByText("Step 1 of 5")).toBeVisible();
     expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
+    // A saved profile is still a profile no carrier has seen, so the status stays amber.
+    expect(screen.getByText("Nothing is filed with a carrier yet")).toBeVisible();
 
-    const body = document.body.textContent ?? "";
+    const body = body0();
     expect(body).not.toContain("These legal details are what the phone carriers check");
     expect(body).not.toContain("We record whether you have an EIN");
   });
@@ -82,7 +88,7 @@ describe("OnboardingConnectRehaul", () => {
     expect(screen.getByText(/typically 14 to 21 days once filed/)).toBeVisible();
     expect(screen.getByText("No page chosen yet")).toBeVisible();
 
-    const body = document.body.textContent ?? "";
+    const body = body0();
     expect(body).not.toContain("Your agent answers every DM and every story reply");
     expect(body).not.toContain("Sending business texts in the US means the phone carriers vet");
     // The wait is never dressed as progress, and nothing here is GoHighLevel's.
@@ -99,7 +105,7 @@ describe("OnboardingOfferRehaul", () => {
     expect(screen.getByText("You have not named your programme yet")).toBeVisible();
     expect(screen.getAllByText("No minimum").length).toBeGreaterThan(0);
 
-    const body = document.body.textContent ?? "";
+    const body = body0();
     expect(body).not.toContain("Your agent uses this name in every message");
     expect(body).not.toContain("Your agent will never invent a number");
   });
@@ -120,8 +126,10 @@ describe("OnboardingCalendarRehaul", () => {
     expect(await screen.findByRole("link", { name: "Connect Google Calendar" })).toBeVisible();
     expect(screen.getByText("Availability not verified, so your agent cannot book yet")).toBeVisible();
     expect(screen.getByLabelText("Calendar timezone")).toBeVisible();
+    // Every write on this screen carries the same accountability line, the receipt included.
+    expect(await screen.findAllByText("Connection logged")).toHaveLength(2);
 
-    const body = document.body.textContent ?? "";
+    const body = body0();
     expect(body).not.toContain("SetterFi asks Google for permission to read your availability");
     expect(body).not.toContain("Nothing else on your Google account is touched");
     expect(body).not.toMatch(/gohighlevel|ghl branding|twilio/i);
@@ -146,10 +154,13 @@ describe("OnboardingSmsRehaul", () => {
       .toBeVisible();
     expect(await screen.findByText("credit repair")).toBeVisible();
     expect(screen.getByText("day 0")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Start registration" })).toBeVisible();
+    // The post records an acknowledgement and files nothing, so the button may not say it does.
+    expect(screen.getByRole("button", { name: "Record acknowledgement" })).toBeVisible();
     expect(screen.getByText("Not filed")).toBeVisible();
+    // The waiting arm's sentence was the eye's own wording about carriers publishing no schedule.
+    expect(body0()).not.toContain("Carriers publish no decision schedule");
 
-    const body = document.body.textContent ?? "";
+    const body = body0();
     // No percentage, no predicted decision date, and nothing that reads as carrier approval.
     expect(body).not.toMatch(/%|all set|approved/i);
     expect(body).not.toMatch(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}\b/);
