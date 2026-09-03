@@ -1,18 +1,81 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBillingRepository, type BillingRepositoryDependencies } from "@/lib/repositories/billing";
 
+function moneyBillingFixture(rows: readonly Record<string, unknown>[] = []) {
+  return {
+    mrrByPeriod: Array.from({ length: 12 }, (_, index) => ({
+      periodStart: new Date(Date.UTC(2025, index, 1)).toISOString(),
+      periodEnd: new Date(Date.UTC(2025, index + 1, 1)).toISOString(),
+      mrrCents: index === 11 ? 30_000 : 0,
+    })),
+    rows,
+  };
+}
+
 function dependencies(overrides: Partial<BillingRepositoryDependencies> = {}): BillingRepositoryDependencies {
   return {
     serviceRpc: vi.fn(), userRpc: vi.fn(), readTierVersion: vi.fn(), readOverride: vi.fn(),
     readCorrectionRequest: vi.fn(), readCorrectionDecision: vi.fn(), readTenantStatus: vi.fn(),
     readAttendance: vi.fn(), projectCorrections: vi.fn(), projectOwnBilling: vi.fn(),
-    readSubscription: vi.fn(), readMovementSources: vi.fn(),
+    readSubscription: vi.fn(), readMovementSources: vi.fn(), readMoneyBilling: vi.fn().mockResolvedValue(moneyBillingFixture()),
     readCheckoutTenant: vi.fn(), readCheckoutTierPrices: vi.fn(), readAllowedPrices: vi.fn(),
     readCheckoutSession: vi.fn(), ...overrides,
   };
 }
 
 describe("billing repository", () => {
+  it("keeps twelve receipt-backed MRR periods and only real client rows, with raw status distinct from live MRR", async () => {
+    const row = (overrides: Record<string, unknown> = {}) => ({
+      tenantId: "tenant-active",
+      businessName: "Northstar Fitness",
+      accountStatus: "active",
+      subscriptionStatus: "active",
+      providerUpdatedAt: "2025-12-15T00:00:00.000Z",
+      currentPeriodEnd: "2026-01-01T00:00:00.000Z",
+      cancelAtPeriodEnd: false,
+      pendingTierId: null,
+      pendingEffectiveAt: null,
+      dataLabel: null,
+      plan: "Growth",
+      monthlyAmountCents: 30_000,
+      status: "active",
+      countsAsLive: true,
+      isTest: false,
+      isDemo: false,
+      ...overrides,
+    });
+    const repository = createBillingRepository(dependencies({
+      readMoneyBilling: vi.fn().mockResolvedValue(moneyBillingFixture([
+        row(),
+        row({ tenantId: "tenant-trial", subscriptionStatus: "trialing", status: "trialing", countsAsLive: false }),
+        row({ tenantId: "tenant-due", subscriptionStatus: "past_due", status: "past_due", countsAsLive: false }),
+        row({ tenantId: "tenant-cancelling", cancelAtPeriodEnd: true }),
+        row({ tenantId: "tenant-cancelled", subscriptionStatus: "canceled", status: "canceled", countsAsLive: false }),
+        row({ tenantId: "tenant-test", isTest: true }),
+      ])),
+    }));
+
+    const billing = await repository.loadMoneyBilling("2026-01-15T00:00:00.000Z");
+
+    expect(billing.mrrByPeriod).toHaveLength(12);
+    expect(billing.mrrByPeriod.at(-1)).toEqual({
+      periodStart: "2025-12-01T00:00:00.000Z",
+      periodEnd: "2026-01-01T00:00:00.000Z",
+      mrrCents: 30_000,
+    });
+    expect(billing.rows).toHaveLength(5);
+    expect(billing.rows.map((client) => client.plan)).toEqual([
+      "Growth", "Growth", "Growth", "Growth", "Growth",
+    ]);
+    expect(billing.rows.map((client) => client.monthlyAmountCents)).toEqual([
+      30_000, 30_000, 30_000, 30_000, 30_000,
+    ]);
+    expect(billing.rows.map((client) => [client.status, client.countsAsLive])).toEqual([
+      ["active", true], ["trialing", false], ["past_due", false], ["active", true], ["canceled", false],
+    ]);
+    expect(billing.rows.map((client) => client.tenantId)).not.toContain("tenant-test");
+  });
+
   it("accepts only the exact coach-own billing projection and maps its rendered state", async () => {
     const projection = {
       tier_name: "Synthetic Growth",

@@ -117,6 +117,38 @@ export type MrrMovementRead = {
   missingSources: readonly MrrMovementMissingSource[];
 };
 
+export type MoneyMrrPeriod = {
+  periodStart: string;
+  periodEnd: string;
+  mrrCents: number | null;
+};
+
+/**
+ * The server-side billing read used by the Money page's MRR chart and client rows.
+ *
+ * `status` remains the provider's raw subscription state.  `countsAsLive` deliberately has a
+ * narrower meaning: only a receipt whose status is exactly `active` counts as live MRR.
+ */
+export type MoneyBillingRead = {
+  mrrByPeriod: readonly MoneyMrrPeriod[];
+  rows: readonly {
+    tenantId: string;
+    businessName: string;
+    accountStatus: string;
+    subscriptionStatus: string;
+    providerUpdatedAt: string;
+    currentPeriodEnd: string;
+    cancelAtPeriodEnd: boolean;
+    pendingTierId: string | null;
+    pendingEffectiveAt: string | null;
+    dataLabel: string | null;
+    plan: string | null;
+    monthlyAmountCents: number | null;
+    status: string;
+    countsAsLive: boolean;
+  }[];
+};
+
 export type BillingRepository = {
   updateTier(input: {
     actorId: string;
@@ -179,6 +211,7 @@ export type BillingRepository = {
   listCorrections(): Promise<readonly BillingCorrectionProjection[]>;
   loadOwnBilling(tenantId: string, asOf?: Date): Promise<CoachBillingRead | null>;
   loadMrrMovement(asOf: string): Promise<MrrMovementRead>;
+  loadMoneyBilling(asOf: string): Promise<MoneyBillingRead>;
   loadSubscription(tenantId: string): Promise<BillingSubscriptionReadback>;
   loadCheckoutTenant(tenantId: string): Promise<CheckoutTenant | null>;
   loadCheckoutTierPrices(tierId: string): Promise<readonly CheckoutTierPrice[]>;
@@ -234,6 +267,7 @@ export type BillingRepositoryDependencies = {
     tierPriceVersions: unknown;
     tenantPriceOverrides: unknown;
   }>;
+  readMoneyBilling(asOf: string): Promise<unknown>;
   readSubscription(tenantId: string): Promise<Record<string, unknown> | null>;
   readCheckoutTenant(tenantId: string): Promise<Record<string, unknown> | null>;
   readCheckoutTierPrices(tierId: string): Promise<unknown>;
@@ -534,9 +568,9 @@ function instant(value: unknown, code: string) {
   return parsed;
 }
 
-function exactly(candidate: Record<string, unknown>, keys: string) {
+function exactly(candidate: Record<string, unknown>, keys: string, code = MOVEMENT_INVALID) {
   if (Object.keys(candidate).sort().join(",") !== keys) {
-    throw new BillingRepositoryError(MOVEMENT_INVALID);
+    throw new BillingRepositoryError(code);
   }
   return candidate;
 }
@@ -704,6 +738,72 @@ function projectMrrMovement(asOf: string, sources: {
     scheduledCancellations: live.filter((subscription) => subscription.cancelAtPeriodEnd).length,
     missingSources: [...missing].sort(),
   };
+}
+
+const MONEY_BILLING_KEYS = ["mrrByPeriod", "rows"].join(",");
+const MONEY_MRR_PERIOD_KEYS = ["mrrCents", "periodEnd", "periodStart"].join(",");
+const MONEY_BILLING_ROW_KEYS = [
+  "accountStatus", "businessName", "cancelAtPeriodEnd", "countsAsLive", "currentPeriodEnd",
+  "dataLabel", "isDemo", "isTest", "monthlyAmountCents", "pendingEffectiveAt", "pendingTierId",
+  "plan", "providerUpdatedAt", "status", "subscriptionStatus", "tenantId",
+].join(",");
+
+function nullableInteger(value: unknown, code: string) {
+  return value === null ? null : integer(value, code);
+}
+
+function parseMoneyBilling(value: unknown): MoneyBillingRead {
+  const result = exactly(row(value, "MONEY_BILLING_READ_INVALID"), MONEY_BILLING_KEYS, "MONEY_BILLING_READ_INVALID");
+  const mrrByPeriod = array(result.mrrByPeriod, "MONEY_BILLING_READ_INVALID").map((value) => {
+    const period = exactly(row(value, "MONEY_BILLING_READ_INVALID"), MONEY_MRR_PERIOD_KEYS, "MONEY_BILLING_READ_INVALID");
+    const periodStart = string(period.periodStart, "MONEY_BILLING_READ_INVALID");
+    const periodEnd = string(period.periodEnd, "MONEY_BILLING_READ_INVALID");
+    const periodStartAt = Date.parse(periodStart);
+    const periodEndAt = Date.parse(periodEnd);
+    if (!Number.isFinite(periodStartAt) || !Number.isFinite(periodEndAt) || periodEndAt <= periodStartAt) {
+      throw new BillingRepositoryError("MONEY_BILLING_READ_INVALID");
+    }
+    return {
+      periodStart,
+      periodEnd,
+      mrrCents: nullableInteger(period.mrrCents, "MONEY_BILLING_READ_INVALID"),
+    };
+  });
+  if (mrrByPeriod.length !== 12) throw new BillingRepositoryError("MONEY_BILLING_READ_INVALID");
+
+  const rows = array(result.rows, "MONEY_BILLING_READ_INVALID").flatMap((value) => {
+    const persisted = exactly(row(value, "MONEY_BILLING_READ_INVALID"), MONEY_BILLING_ROW_KEYS, "MONEY_BILLING_READ_INVALID");
+    if (typeof persisted.isTest !== "boolean" || typeof persisted.isDemo !== "boolean") {
+      throw new BillingRepositoryError("MONEY_BILLING_READ_INVALID");
+    }
+    // The database projection excludes both cases. Keeping this defensive filter makes a widened
+    // RPC response fail safe rather than allowing a fixture or future query change onto Money.
+    if (persisted.isTest || persisted.isDemo) return [];
+    if (typeof persisted.cancelAtPeriodEnd !== "boolean" || typeof persisted.countsAsLive !== "boolean") {
+      throw new BillingRepositoryError("MONEY_BILLING_READ_INVALID");
+    }
+    const status = string(persisted.status, "MONEY_BILLING_READ_INVALID");
+    if (persisted.countsAsLive !== (status === "active")) {
+      throw new BillingRepositoryError("MONEY_BILLING_READ_INVALID");
+    }
+    return [{
+      tenantId: string(persisted.tenantId, "MONEY_BILLING_READ_INVALID"),
+      businessName: string(persisted.businessName, "MONEY_BILLING_READ_INVALID"),
+      accountStatus: string(persisted.accountStatus, "MONEY_BILLING_READ_INVALID"),
+      subscriptionStatus: string(persisted.subscriptionStatus, "MONEY_BILLING_READ_INVALID"),
+      providerUpdatedAt: string(persisted.providerUpdatedAt, "MONEY_BILLING_READ_INVALID"),
+      currentPeriodEnd: string(persisted.currentPeriodEnd, "MONEY_BILLING_READ_INVALID"),
+      cancelAtPeriodEnd: persisted.cancelAtPeriodEnd,
+      pendingTierId: nullableString(persisted.pendingTierId, "MONEY_BILLING_READ_INVALID"),
+      pendingEffectiveAt: nullableString(persisted.pendingEffectiveAt, "MONEY_BILLING_READ_INVALID"),
+      dataLabel: nullableString(persisted.dataLabel, "MONEY_BILLING_READ_INVALID"),
+      plan: nullableString(persisted.plan, "MONEY_BILLING_READ_INVALID"),
+      monthlyAmountCents: nullableInteger(persisted.monthlyAmountCents, "MONEY_BILLING_READ_INVALID"),
+      status,
+      countsAsLive: persisted.countsAsLive,
+    }];
+  });
+  return { mrrByPeriod, rows };
 }
 
 async function liveDependencies(): Promise<BillingRepositoryDependencies> {
@@ -880,6 +980,13 @@ async function liveDependencies(): Promise<BillingRepositoryDependencies> {
         tierPriceVersions: tierPriceVersions.data ?? [],
         tenantPriceOverrides: tenantPriceOverrides.data ?? [],
       };
+    },
+    readMoneyBilling: async (asOf) => {
+      const { data, error } = await service.rpc("read_money_mrr_history", { p_as_of: asOf });
+      if (error || data === null || data === undefined) {
+        throw new BillingRepositoryError("MONEY_BILLING_READ_FAILED");
+      }
+      return data;
     },
     readSubscription: async (tenantId) => {
       const [subscription, tenant] = await Promise.all([
@@ -1142,6 +1249,10 @@ export function createBillingRepository(
     loadMrrMovement: async (asOf) => {
       const deps = await dependencies();
       return projectMrrMovement(asOf, await deps.readMovementSources(asOf));
+    },
+    loadMoneyBilling: async (asOf) => {
+      if (!MOVEMENT_ISO.test(asOf)) throw new BillingRepositoryError("MONEY_BILLING_AS_OF_INVALID");
+      return parseMoneyBilling(await (await dependencies()).readMoneyBilling(asOf));
     },
     loadSubscription: async (tenantId) => {
       const deps = await dependencies();

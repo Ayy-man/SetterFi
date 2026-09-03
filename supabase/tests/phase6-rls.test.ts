@@ -101,6 +101,33 @@ afterEach(async () => {
 });
 
 describe("Phase 6 financial RLS", () => {
+  it("keeps the month-end MRR projection server-only and filters test and demo receipts in SQL", async () => {
+    const projection = await db.query<{
+      security_definer: boolean;
+      config: string[] | null;
+      authenticated_execute: boolean;
+      service_execute: boolean;
+      definition: string;
+    }>(`
+      select p.prosecdef as security_definer, p.proconfig as config,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        has_function_privilege('service_role', p.oid, 'execute') as service_execute,
+        pg_get_functiondef(p.oid) as definition
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.oid = 'public.read_money_mrr_history(timestamptz)'::regprocedure
+    `);
+
+    expect(projection.rows).toHaveLength(1);
+    expect(projection.rows[0]).toMatchObject({
+      security_definer: true,
+      authenticated_execute: false,
+      service_execute: true,
+    });
+    expect(projection.rows[0].config).toContain('search_path=""');
+    expect(projection.rows[0].definition).toMatch(/not candidate\.is_test\s+and not tenant\.is_demo/i);
+  });
+
   it("returns only the coach session tenant billing row with no platform economics", async () => {
     await db.query(`
       insert into public.billing_subscriptions (
