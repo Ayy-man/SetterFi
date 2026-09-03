@@ -181,13 +181,50 @@ describe("OwnerClients", () => {
     expect(within(drawer as HTMLElement).getByText("Logged")).toBeInTheDocument();
   });
 
-  it("lists the success-team roster on the Team tab with the clients nobody owns", () => {
+  it("draws the Team tab as counted tiles and one card per person, with the clients nobody owns", () => {
     renderPage({ tab: "team" });
 
-    expect(screen.getByRole("columnheader", { name: "Person" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Theo Brightwell" })).toBeInTheDocument();
+    // Four tiles: one person holds a book, two of the three clients are assigned to them, one of
+    // those has an open request, and the third client has no owner at all.
+    const tiles = document.querySelector("[data-slot='owner-clients-team-tiles']");
+    expect(tiles).not.toBeNull();
+    expect(within(tiles as HTMLElement).getByText("person with a book").previousSibling)
+      .toHaveTextContent("1");
+    expect(within(tiles as HTMLElement).getByText("clients assigned").previousSibling)
+      .toHaveTextContent("2");
+    expect(within(tiles as HTMLElement).getByText("open requests").previousSibling)
+      .toHaveTextContent("1");
+    expect(within(tiles as HTMLElement).getByText("unassigned").previousSibling)
+      .toHaveTextContent("1");
+
+    const cards = document.querySelector("[data-slot='owner-clients-team-cards']");
+    expect(cards).not.toBeNull();
+    const card = within(cards as HTMLElement).getByRole("link", { name: /Theo Brightwell/u });
+    expect(card).toHaveTextContent("1 live · 1 onboarding · 1 open");
+    expect(card).toHaveTextContent("Reid Funding Group");
+    // No reply clock is recorded per owner, so the card says so rather than standing a number in.
+    expect(card).toHaveTextContent("not measured");
+    // The roster is a board now, so the tab carries no column set of its own.
+    expect(screen.queryByRole("columnheader", { name: "Person" })).toBeNull();
+
     expect(screen.getByText("Waiting for an owner")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Evergreen Funding" })).toBeInTheDocument();
+    // The unassigned table carries its own export, scoped to the rows it draws.
+    const waiting = screen.getByText("Waiting for an owner").closest("div") as HTMLElement;
+    expect(within(waiting).getByRole("button", { name: /Export/u })).toBeInTheDocument();
+  });
+
+  it("opens the owner drawer with the book, the open requests and a reassign route", () => {
+    renderPage({ selectedOwnerId: "owner-1", tab: "team" });
+
+    const drawer = document.querySelector("[data-slot='owner-clients-drawer']") as HTMLElement;
+    expect(drawer).not.toBeNull();
+    expect(within(drawer).getByText("Success owner · 2 clients")).toBeInTheDocument();
+    expect(within(drawer).getByText("Book")).toBeInTheDocument();
+    expect(within(drawer).getByText("Open requests")).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Reassign a client" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("link", { name: "Open in Support" })).toBeInTheDocument();
+    expect(within(drawer).getByText("Logged")).toBeInTheDocument();
   });
 
   it("keeps a folded tab's own refusal rather than showing it as an empty table", () => {

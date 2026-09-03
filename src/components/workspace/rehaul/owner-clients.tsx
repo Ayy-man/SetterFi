@@ -247,6 +247,46 @@ function Quiet({ children }: { children: ReactNode }) {
   return <span className="text-[12.5px] text-[var(--faint)]">{children}</span>;
 }
 
+/**
+ * The rail's monogram, at the size the artboard draws it.
+ *
+ * Two letters at most, taken from the name the projection actually returned. An owner the store
+ * never named comes through as "Owner not named" from `ownerBooks`, so the monogram reads "ON"
+ * rather than inventing a person's initials.
+ */
+function Monogram({ name }: { name: string }) {
+  const initials = name
+    .split(/\s+/u)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toLocaleUpperCase() ?? "")
+    .join("");
+  return (
+    <span
+      aria-hidden
+      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[rgba(60,90,150,0.1)] font-mono text-[11px] font-medium text-[var(--body)]"
+    >
+      {initials}
+    </span>
+  );
+}
+
+/** A counted tile: the figure, then what it counts. Amber only where the count is work waiting. */
+function Tile({ amber, label, value }: { amber?: boolean; label: string; value: number }) {
+  return (
+    <div
+      className={`flex items-baseline gap-3 rounded-[14px] border px-[18px] py-3.5 ${
+        amber
+          ? "border-[var(--warning-line)] bg-[var(--warning-wash)]"
+          : "border-[var(--line)] bg-[linear-gradient(180deg,var(--card-top),var(--card))]"
+      }`}
+    >
+      <Figure className={amber ? "text-[var(--warning-text)]" : undefined} size="md">{value}</Figure>
+      <div className="text-[12.5px] font-medium text-[var(--faint)]">{label}</div>
+    </div>
+  );
+}
+
 export function OwnerClients({
   actorId = "",
   actorRole,
@@ -332,7 +372,7 @@ export function OwnerClients({
    * The table, one head and one row shape per tab
    * ---------------------------------------------------------------------------------------- */
 
-  const HEADS: Record<OwnerClientsTab, readonly { label: string; num?: boolean }[]> = {
+  const HEADS: Record<Exclude<OwnerClientsTab, "team">, readonly { label: string; num?: boolean }[]> = {
     agent: [
       { label: "Client" }, { label: "Agent" }, { label: "Live version", num: true },
       { label: "Unpublished edits", num: true }, { label: "From the brain" }, { label: "Open threads", num: true },
@@ -347,10 +387,6 @@ export function OwnerClients({
     status: [
       { label: "Client" }, { label: "Plan" }, { label: "State" }, { label: "Success owner" },
       { label: "Since", num: true }, { label: "Support" },
-    ],
-    team: [
-      { label: "Person" }, { label: "Clients", num: true }, { label: "Live", num: true },
-      { label: "Onboarding", num: true }, { label: "Open requests", num: true }, { label: "Share of the largest book" },
     ],
   };
 
@@ -477,32 +513,8 @@ export function OwnerClients({
     );
   }
 
-  const tableRows = tab === "team"
-    ? books.map((entry) => (
-      <tr key={entry.id} className={entry.id === selectedOwnerId ? "bg-[var(--accent-wash)]" : undefined}>
-        <td className={CARD_TABLE.td}>
-          <Link
-            className="font-medium text-[var(--ink)] no-underline hover:underline"
-            href={href({ tab, book, owner: entry.id })}
-          >
-            {entry.name}
-          </Link>
-        </td>
-        <td className={`${CARD_TABLE.td} ${CARD_TABLE.num}`}>{entry.clients}</td>
-        <td className={`${CARD_TABLE.td} ${CARD_TABLE.num}`}>{entry.live}</td>
-        <td className={`${CARD_TABLE.td} ${CARD_TABLE.num}`}>{entry.onboarding}</td>
-        <td className={`${CARD_TABLE.td} ${CARD_TABLE.num}`}>{entry.openRequests}</td>
-        <td className={CARD_TABLE.td}>
-          <span aria-hidden className="block h-1 w-full max-w-[140px] rounded-sm bg-[rgba(60,90,150,0.12)]">
-            <span
-              className="block h-1 rounded-sm bg-[var(--accent)]"
-              style={{ width: `${largest > 0 ? Math.round((entry.clients / largest) * 100) : 0}%` }}
-            />
-          </span>
-        </td>
-      </tr>
-    ))
-    : ordered.map((row) => (
+  const heads = tab === "team" ? [] : HEADS[tab];
+  const tableRows = tab === "team" ? [] : ordered.map((row) => (
       <tr key={row.client.id} className={row.client.id === selectedClientId ? "bg-[var(--accent-wash)]" : undefined}>
         {clientCell(row)}
         {tab === "status" ? statusRow(row) : null}
@@ -510,7 +522,7 @@ export function OwnerClients({
         {tab === "performance" ? performanceRow(row) : null}
         {tab === "health" ? healthRow(row) : null}
       </tr>
-    ));
+  ));
 
   const foldRefusal = tab === "agent" && agents.kind === "refused" ? agents
     : tab === "performance" && performance.kind === "refused" ? performance
@@ -520,6 +532,90 @@ export function OwnerClients({
   const historyPoints = performance.kind === "ready"
     ? performance.value.history.filter((point) => point.state === "available").map((point) => point.value)
     : [];
+
+
+  /* ------------------------------------------------------------------------------------------
+   * The Team tab
+   *
+   * A roster of people, drawn as cards rather than as a sixth column set: the question this tab
+   * answers is who is carrying what, and a card holds the whole book beside the counts. The four
+   * tiles above it are the same rows counted a different way, so nothing here is a second read.
+   * ---------------------------------------------------------------------------------------- */
+
+  function teamBoard() {
+    const assigned = rows.filter((row) => row.successOwner).length;
+    const openRequests = rows.filter(isOpenRequest).length;
+    return (
+      <>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-slot="owner-clients-team-tiles">
+          <Tile label={books.length === 1 ? "person with a book" : "people with a book"} value={books.length} />
+          <Tile label="clients assigned" value={assigned} />
+          <Tile amber={openRequests > 0} label="open requests" value={openRequests} />
+          <Tile amber={unassigned.length > 0} label="unassigned" value={unassigned.length} />
+        </div>
+
+        {books.length === 0 ? (
+          <div className={`${CARD_TABLE.card} px-4 py-3 text-[12.5px] text-[var(--faint)]`}>
+            No success owner holds a client in this book.
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2" data-slot="owner-clients-team-cards">
+            {books.map((entry) => {
+              const held = rows.filter((row) => row.successOwner?.id === entry.id);
+              const selected = entry.id === selectedOwnerId;
+              return (
+                <Link
+                  aria-current={selected ? "true" : undefined}
+                  className={`${CARD_TABLE.card} flex flex-col gap-2.5 p-[16px_18px] no-underline ${
+                    selected ? "border-[var(--accent-line)] bg-[var(--accent-wash)]" : ""
+                  }`}
+                  href={href({ tab: "team", book, owner: entry.id })}
+                  key={entry.id}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Monogram name={entry.name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13.5px] font-semibold text-[var(--ink)]">{entry.name}</div>
+                      <div className="text-[12.5px] text-[var(--faint)]">
+                        {entry.id === actorId ? "Your book" : "Success owner"}
+                      </div>
+                    </div>
+                    <Figure size="md">{entry.clients}</Figure>
+                  </div>
+
+                  {/* Share of the heaviest book, which is the only comparison the counts support. */}
+                  <span aria-hidden className="block h-1 w-full rounded-sm bg-[rgba(60,90,150,0.12)]">
+                    <span
+                      className={`block h-1 rounded-sm ${entry.openRequests > 0 ? "bg-[var(--warning)]" : "bg-[var(--accent)]"}`}
+                      style={{ width: `${largest > 0 ? Math.round((entry.clients / largest) * 100) : 0}%` }}
+                    />
+                  </span>
+
+                  <div className="font-mono text-[11.5px] text-[var(--meta)]">
+                    {entry.live} live · {entry.onboarding} onboarding · {entry.openRequests} open
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {held.map((row) => <Pill key={row.client.id}>{row.client.name}</Pill>)}
+                  </div>
+
+                  {/*
+                    * The artboard puts a median reply time here. Nothing on the client book or the
+                    * support projection records a reply clock per owner, so the row states the
+                    * absence rather than standing a number in for it.
+                    */}
+                  <div className="mt-auto flex items-center gap-2 border-t border-[var(--line-soft)] pt-1.5">
+                    <span className="text-[12.5px] text-[var(--faint)]">Median reply</span>
+                    <span className="ml-auto font-mono text-[12px] text-[var(--overline)]">not measured</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </>
+    );
+  }
 
   /* ------------------------------------------------------------------------------------------
    * The drawer
@@ -536,9 +632,9 @@ export function OwnerClients({
     return (
       <div className={`${CARD_TABLE.card} flex flex-col gap-3.5 p-[18px_20px]`} data-slot="owner-clients-drawer">
         <div>
-          <div className="text-[11.5px] font-medium text-[var(--faint)]">Client</div>
+          <div className="text-[12.5px] font-medium text-[var(--faint)]">Client</div>
           <div className="mt-0.5 text-[17px] font-semibold tracking-[-0.01em] text-[var(--ink)]">{row.client.name}</div>
-          <div className="text-[11.5px] text-[var(--faint)]">
+          <div className="text-[12.5px] text-[var(--faint)]">
             {planLabel(row)} · {successOwnerDisplayLabel(row.successOwner)} · since {sinceLabel(row.updatedAt)}
           </div>
         </div>
@@ -600,7 +696,6 @@ export function OwnerClients({
               <Figure size="md">{measured ? measured.bookedAppointments : "—"}</Figure>
               <span className="text-[var(--faint)]">booked calls in the measured window</span>
             </div>
-            <Quiet>Leads, conversion and time to book are not measured per client.</Quiet>
           </div>
         ) : null}
 
@@ -653,16 +748,20 @@ export function OwnerClients({
 
   function ownerDrawer(entry: (typeof books)[number]) {
     const held = rows.filter((row) => row.successOwner?.id === entry.id);
+    const openRequests = held.filter(isOpenRequest);
     return (
       <div className={`${CARD_TABLE.card} flex flex-col gap-3.5 p-[18px_20px]`} data-slot="owner-clients-drawer">
-        <div>
-          <div className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--ink)]">{entry.name}</div>
-          <div className="text-[11.5px] text-[var(--faint)]">
-            Success owner · {entry.clients} {entry.clients === 1 ? "client" : "clients"}
+        <div className="flex items-start gap-2.5">
+          <Monogram name={entry.name} />
+          <div>
+            <div className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--ink)]">{entry.name}</div>
+            <div className="text-[12.5px] text-[var(--faint)]">
+              Success owner · {entry.clients} {entry.clients === 1 ? "client" : "clients"}
+            </div>
           </div>
         </div>
         <div>
-          <div className="mb-1.5 text-[11.5px] font-medium text-[var(--faint)]">Book</div>
+          <div className="mb-1.5 text-[12.5px] font-medium text-[var(--faint)]">Book</div>
           <div className="flex flex-col">
             {held.map((row, index) => (
               <div
@@ -676,7 +775,54 @@ export function OwnerClients({
             ))}
           </div>
         </div>
-        <Link className="text-[12.5px] text-[var(--accent-text)]" href="/admin/support">Open Inbox</Link>
+
+        {openRequests.length > 0 ? (
+          <div>
+            <div className="mb-1.5 text-[12.5px] font-medium text-[var(--faint)]">Open requests</div>
+            <div className="flex flex-col gap-2">
+              {openRequests.map((row) => (
+                <Link
+                  className={`flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 no-underline ${
+                    row.supportStatus === "open" ? "bg-[var(--warning-wash)]" : "bg-[var(--well)]"
+                  }`}
+                  href={href({ tab: "status", book, client: row.client.id })}
+                  key={row.client.id}
+                >
+                  <StatusDot tone={SUPPORT_TONE[row.supportStatus as keyof typeof SUPPORT_TONE]} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium text-[var(--ink)]">
+                      {SUPPORT_LABEL[row.supportStatus as keyof typeof SUPPORT_LABEL]}
+                    </span>
+                    <span className="block truncate text-[12.5px] text-[var(--faint)]">{row.client.name}</span>
+                  </span>
+                  {/*
+                    * The client book records when the row last moved and nothing else about the
+                    * request, so this is a last-change date and never a wait: a wait would claim a
+                    * clock nobody started.
+                    */}
+                  <span
+                    className={`shrink-0 font-mono text-[11.5px] ${
+                      row.supportStatus === "open" ? "text-[var(--warning-text)]" : "text-[var(--meta)]"
+                    }`}
+                  >
+                    {sinceLabel(row.updatedAt)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-auto flex flex-wrap items-center gap-2">
+          <KitButton
+            onClick={() => router.push(href({ tab: "status", book }))}
+            size="sm"
+            variant="primary"
+          >
+            Reassign a client
+          </KitButton>
+          <Link className="text-[12.5px] text-[var(--accent-text)]" href="/admin/support">Open in Support</Link>
+        </div>
         <div className="font-mono text-[11px] text-[var(--overline)]">Logged</div>
       </div>
     );
@@ -755,11 +901,12 @@ export function OwnerClients({
                 </div>
               ) : null}
 
+              {tab === "team" ? teamBoard() : (
               <CardTable>
                 <table className={CARD_TABLE.table}>
                   <thead>
                     <tr>
-                      {HEADS[tab].map((column) => (
+                      {heads.map((column) => (
                         <th className={`${CARD_TABLE.th} ${column.num ? "text-right" : ""}`} key={column.label} scope="col">
                           {column.label}
                         </th>
@@ -769,8 +916,8 @@ export function OwnerClients({
                   <tbody>
                     {tableRows.length === 0 ? (
                       <tr>
-                        <td className={`${CARD_TABLE.td} text-[var(--faint)]`} colSpan={HEADS[tab].length}>
-                          {tab === "team" ? "No success owner holds a client in this book." : "No clients in this book."}
+                        <td className={`${CARD_TABLE.td} text-[var(--faint)]`} colSpan={heads.length}>
+                          No clients in this book.
                         </td>
                       </tr>
                     ) : tableRows}
@@ -782,6 +929,7 @@ export function OwnerClients({
                   </div>
                 ) : null}
               </CardTable>
+              )}
 
               {tab === "team" && unassigned.length > 0 ? (
                 <CardTable className="border-[var(--warning-line)]">
@@ -789,6 +937,19 @@ export function OwnerClients({
                     <StatusDot tone="amber" />
                     <span className="text-[13px] font-semibold text-[var(--ink)]">Waiting for an owner</span>
                     <span className="font-mono text-[11.5px] text-[var(--warning-text)]">{unassigned.length}</span>
+                    <span className="ml-auto">
+                      <ExportMenu
+                        filename="setterfi-clients-waiting-for-an-owner"
+                        mode="local"
+                        rows={unassigned.map((row) => ({
+                          client: row.client.name,
+                          lifecycle: humanize(row.status),
+                          plan: planLabel(row),
+                          request: row.supportStatus ? SUPPORT_LABEL[row.supportStatus] : "No request",
+                          last_change: row.updatedAt,
+                        }))}
+                      />
+                    </span>
                   </div>
                   <table className={CARD_TABLE.table}>
                     <thead>

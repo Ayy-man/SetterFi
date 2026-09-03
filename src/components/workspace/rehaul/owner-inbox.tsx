@@ -216,8 +216,12 @@ export function OwnerInbox({ actorId, lanes, queue }: OwnerInboxProps) {
           tone={longest === null ? undefined : "warning"}
           value={longest === null ? "none" : formatElapsed(longest.minutes)}
         />
+        {/*
+          * `clearedInWindow` counts notices whose `readAt` falls inside the window. Nothing in the
+          * payload counts opens, so the label says cleared and claims no more than the field holds.
+          */}
         <Tile
-          label="opened this week"
+          label="cleared this week"
           value={workspaceCountFormat.format(queue.summary.clearedInWindow)}
         />
       </div>
@@ -235,6 +239,7 @@ export function OwnerInbox({ actorId, lanes, queue }: OwnerInboxProps) {
                       ? "not counted"
                       : workspaceCountFormat.format(laneRows.length)
                   }
+                  first={lane === (lanes.clientRequests === undefined ? "system" : "client")}
                   title={LANE_TITLES[lane]}
                 />
                 {lane === "handoff" && lanes.handoff.state === "unavailable" ? (
@@ -325,9 +330,14 @@ function Tile({ label, tone, value }: { label: string; tone?: "warning"; value: 
   );
 }
 
-function LaneBand({ count, title }: { count: string; title: string }) {
+function LaneBand({ count, first, title }: { count: string; first: boolean; title: string }) {
   return (
-    <div className="flex items-center gap-[8px] border-b border-[var(--line)] px-[16px] py-[12px]">
+    <div
+      className={[
+        "flex items-center gap-[8px] border-b border-[var(--line)] px-[16px] py-[12px]",
+        first ? "" : "mt-[8px] border-t border-[var(--line)]",
+      ].join(" ")}
+    >
       <span className="text-[13.5px] font-[600] text-[color:var(--ink)]">{title}</span>
       <span className="mono text-[11.5px] text-[color:var(--meta)]">{count}</span>
     </div>
@@ -615,10 +625,6 @@ function HandoffDetail({ handoff, row }: { handoff: InboxHandoffRow | null; row:
           { label: "Waiting", value: wait(row.waitMinutes) },
         ]}
       />
-
-      <p className="mt-auto mb-0 text-[12px] leading-[1.5] text-[color:var(--muted)]">
-        The coach takes this over in their own inbox.
-      </p>
     </>
   );
 }

@@ -105,7 +105,9 @@ describe("OwnerInbox", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Inbox" })).toBeInTheDocument();
     // Both rows are in the reader's own book, so the default "Assigned to me" scope holds both.
     expect(screen.getByText("waiting on you").previousSibling).toHaveTextContent("2");
-    expect(screen.getByText("opened this week").previousSibling).toHaveTextContent("6");
+    // `clearedInWindow` counts reads, so the tile says cleared: nothing in the payload counts opens.
+    expect(screen.queryByText("opened this week")).toBeNull();
+    expect(screen.getByText("cleared this week").previousSibling).toHaveTextContent("6");
     expect(screen.getByText("longest wait").previousSibling).toHaveTextContent("15d");
   });
 
@@ -129,5 +131,7 @@ describe("OwnerInbox", () => {
     expect(screen.queryByText(/Everything here is waiting on a person, not a job/)).toBeNull();
     expect(screen.queryByText(/Nothing records who is working a system problem/)).toBeNull();
     expect(screen.queryByText(/Longest wait first, in both lanes/)).toBeNull();
+    // The handoff pane's "the coach takes this over" line now lives only in the eye copy.
+    expect(screen.queryByText("The coach takes this over in their own inbox.")).toBeNull();
   });
 });
