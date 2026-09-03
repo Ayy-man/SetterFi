@@ -4,16 +4,15 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
-import {
-  LeadsSurface,
-  type AppointmentEvidenceByContact,
-  type NextSetterTouchByContact,
+import type {
+  AppointmentEvidenceByContact,
+  NextSetterTouchByContact,
 } from "@/components/workspace/live/leads-surface";
 import { CoachLeads } from "@/components/workspace/rehaul/coach-leads";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
-import { phase1Live, pipelineWriteLive, uiRehaulLive } from "@/lib/env-contract";
+import { phase1Live } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import { listContacts } from "@/lib/repositories/contacts";
 import { listFollowups } from "@/lib/repositories/followups";
@@ -189,30 +188,15 @@ export default async function CoachContactsPage() {
     loadAppointmentEvidence(context.tenantId, contactIds),
     loadNextSetterTouch(context.tenantId, contactIds),
   ]);
-  if (uiRehaulLive()) {
-    return (
-      <LeadsShell navCounts={await coachNavCounts(context.tenantId)}>
-        <CoachLeads
-          appointmentEvidence={appointmentEvidence}
-          defaultView="table"
-          impersonation={context.impersonation}
-          initialContacts={items}
-          nextSetterTouch={nextSetterTouch}
-          nowIso={nowIso}
-        />
-      </LeadsShell>
-    );
-  }
   return (
     <LeadsShell navCounts={await coachNavCounts(context.tenantId)}>
-      <LeadsSurface
+      <CoachLeads
         appointmentEvidence={appointmentEvidence}
+        defaultView="table"
+        impersonation={context.impersonation}
+        initialContacts={items}
         nextSetterTouch={nextSetterTouch}
         nowIso={nowIso}
-        defaultView="table"
-        initialContacts={items}
-        impersonation={context.impersonation}
-        writeEnabled={pipelineWriteLive()}
       />
     </LeadsShell>
   );

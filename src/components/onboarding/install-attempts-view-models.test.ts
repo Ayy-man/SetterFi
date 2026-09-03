@@ -280,7 +280,9 @@ describe("installEventGloss", () => {
 
 describe("the install attempts surface", () => {
   const component = readFileSync("src/components/onboarding/install-attempts.tsx", "utf8");
-  const page = readFileSync("src/app/(workspace)/admin/provisioning/page.tsx", "utf8");
+  /* The install arm now lives on the Clients screen's Setup tab; `/admin/provisioning` is a
+     redirect. Same assertion, the file that holds the mount. */
+  const page = readFileSync("src/app/(workspace)/admin/platform-clients/install-section.tsx", "utf8");
 
   it("renders the attempts through the view models and nothing else", () => {
     expect(component).toContain("installAttempts");
@@ -289,7 +291,7 @@ describe("the install attempts surface", () => {
     expect(component).not.toContain("refreshCredentialEnvelope");
   });
 
-  it("is mounted on the page behind the same flag as the buttons above it", () => {
+  it("is mounted on the setup section behind the same flag as the buttons above it", () => {
     expect(page).toContain("InstallAttempts");
     expect(page).toContain("phase9GhlOAuthLive");
   });

@@ -3,13 +3,10 @@ import { forbidden, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { AlertSettings } from "@/components/workspace/live/alert-settings";
-import {
-  AdminInboxSurface,
-  AdminInboxUnavailable,
-} from "@/components/workspace/live/admin-inbox";
+import { AdminInboxUnavailable } from "@/components/workspace/live/admin-inbox";
 import { inboxLanes } from "@/components/workspace/live/inbox-lanes";
 import { OwnerInbox } from "@/components/workspace/rehaul/owner-inbox";
-import { navFoldLive, phase8AlertsLive, uiRehaulLive } from "@/lib/env-contract";
+import { phase8AlertsLive } from "@/lib/env-contract";
 import { loadAttentionQueue, type AttentionQueue } from "@/lib/operations/attention-queue";
 import {
   platformConversationQueueLive,
@@ -63,11 +60,9 @@ export default async function AdminAlertsPage() {
    * array: an unreadable lane must never render as nothing waiting.
    */
   const handoffs = await readHandoffLane(actor.userId);
-  // The folded Inbox owns the same platform support projection as Client requests. The repository
-  // remains its single query implementation; this route only decides whether the folded lane needs it.
-  const clientRequests = navFoldLive()
-    ? await listPlatformSupportThreads({ actorId: actor.userId, book: "all" })
-    : undefined;
+  // The folded Inbox owns the same platform support projection as Client requests, whose route is
+  // now a redirect here. The repository remains its single query implementation.
+  const clientRequests = await listPlatformSupportThreads({ actorId: actor.userId, book: "all" });
   const lanes = inboxLanes({
     queue: result.value,
     conversations: handoffs.ok ? handoffs.value : null,
@@ -77,11 +72,7 @@ export default async function AdminAlertsPage() {
 
   return (
     <InboxShell>
-      {uiRehaulLive() ? (
-        <OwnerInbox actorId={actor.userId} lanes={lanes} queue={result.value} />
-      ) : (
-        <AdminInboxSurface actorId={actor.userId} lanes={lanes} queue={result.value} />
-      )}
+      <OwnerInbox actorId={actor.userId} lanes={lanes} queue={result.value} />
     </InboxShell>
   );
 }

@@ -74,10 +74,6 @@ const OVER_DRENCH = new Set([
  * default, so each is a real defect and not a style preference.
  */
 const DEBT: Record<string, string> = {
-  "workspace/live/offer-editor-availability.tsx": "--control-fill",
-  "workspace/live/offer-editor-prices.tsx": "--control-fill",
-  "workspace/live/offer-editor-voice.tsx": "--control-fill",
-  "workspace/live/offer-editor-chrome.tsx": "--control-fill",
   "workspace/live/coach-integrations.tsx": "--control-fill",
   "workspace/live/account-security-settings.tsx": "--control-fill",
   "kit/meter.tsx": "--line",

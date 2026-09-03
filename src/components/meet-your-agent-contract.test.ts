@@ -144,9 +144,11 @@ describe("Meet Your Agent mount contract", () => {
 
   it("uses the canonical coach link outside fixture and alias compatibility sources", () => {
     // Get started left workspace-navigation.ts when the coach rail was cut from nine
-    // destinations to five: it no longer has a rail row, so the coach Home attention card at
-    // coach-measurement.tsx is the canonical (and now only) source of "/coach/get-started".
-    const measurement = source("src/components/workspace/live/coach-measurement.tsx");
+    // destinations to five: it no longer has a rail row, so the coach Home setup rail is the
+    // canonical (and now only) source of "/coach/get-started". That rail was the attention card
+    // in coach-measurement.tsx until the rehaul took Home; coach-dashboard.tsx draws it now, as a
+    // JSX `href` attribute on the "See setup" link rather than a row object's field.
+    const measurement = source("src/components/workspace/rehaul/coach-dashboard.tsx");
     const component = source("src/components/meet-your-agent.tsx");
     const legacySources = sourceFiles(SRC)
       .filter((path) => !path.endsWith(".test.ts"))
@@ -154,7 +156,7 @@ describe("Meet Your Agent mount contract", () => {
       .map((path) => relative(ROOT, path))
       .sort();
 
-    expect(measurement).toContain('href: "/coach/get-started"');
+    expect(measurement).toContain('href="/coach/get-started"');
     expect(component).toContain('context === "client" ? "/coach/agent"');
     expect(legacySources.every((path) => [
       "src/lib/workspace-navigation.ts",

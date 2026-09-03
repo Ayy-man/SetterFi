@@ -191,29 +191,22 @@ describe("MoneySurfaceGuard", () => {
    * The four Money pages had four refusals: Revenue, Cost evidence and Corrections called
    * `forbidden()` and landed on a bare centred page with no rail and no route onwards, Affiliates
    * showed a warning `Callout` over a second "unavailable" block, and Plans had a banner of its
-   * own. A success reviewer following a link from a client thread is a reader of this console, so
-   * they get the panel above; a coach or an affiliate has no business under /admin at all and
-   * keeps the bare page, which is why `forbidden()` still appears in every gate file.
+   * own. They are five tabs of one page now, but the rule did not change with the URL: a success
+   * reviewer following a link from a client thread is a reader of this console, so they get the
+   * panel above; a coach or an affiliate has no business under /admin at all and keeps the bare
+   * page, which is why `forbidden()` still appears in every gate file.
    */
   it("hands a refused success reviewer to this panel on every Money route", () => {
     const routes = {
       "src/app/(workspace)/admin/billing/page.tsx": true,
-      "src/app/(workspace)/admin/billing/costs/page.tsx": true,
-      "src/app/(workspace)/admin/affiliates/page.tsx": true,
       "src/app/(workspace)/admin/tiers/render-tiers-page.tsx": false,
-      "src/app/(workspace)/admin/corrections/page.tsx": false,
     };
 
     for (const [file, rendersRefusedComponent] of Object.entries(routes)) {
       const source = readFileSync(resolve(process.cwd(), file), "utf8");
-      if (file.endsWith("corrections/page.tsx")) {
-        // Success carries Corrections, so nobody who reads this console is refused it and the
-        // bare page is the only correct answer here.
-        expect(source).toContain("forbidden()");
-        continue;
-      }
-      // The bare page is reserved for a role that does not read this console at all.
-      expect(source).toContain('if (actor.role !== "success") forbidden();');
+      // The bare page is reserved for a role that does not read this console at all -- and for the
+      // Corrections tab, which a success reviewer carries, so nobody here is ever refused it.
+      expect(source).toMatch(/if \(actor\.role !== "success"[^)]*\) forbidden\(\);/u);
       if (rendersRefusedComponent) {
         // ...and the refused reviewer is handed the surface component with the gate shut, which
         // is what puts them in front of `MoneySurfaceGuard` inside the console shell.

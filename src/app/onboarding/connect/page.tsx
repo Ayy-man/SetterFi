@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { DataState } from "@/components/kit/data-state";
-import { ConnectChannels } from "@/components/onboarding/connect-channels";
 import {
   connectCards,
   connectStepComplete,
@@ -11,7 +10,7 @@ import { OnboardingStage } from "@/components/onboarding/onboarding-stage";
 import { SetupSteps } from "@/components/onboarding/setup-steps";
 import { OnboardingConnectRehaul } from "@/components/workspace/rehaul/onboarding-connect";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { phase5Live, uiRehaulLive } from "@/lib/env-contract";
+import { phase5Live } from "@/lib/env-contract";
 import { listChannelConnections } from "@/lib/repositories/channel-connections";
 import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -102,19 +101,5 @@ export default async function OnboardingConnectPage() {
   const complete = connectStepComplete(connections);
   const cards = connectCards({ connections, registration });
 
-  // Same cards, same completion evidence; the rehaul screen only draws them differently.
-  if (uiRehaulLive()) {
-    return <OnboardingConnectRehaul cards={cards} nextEnabled={complete} />;
-  }
-
-  return (
-    <OnboardingStage
-      lead={LEAD}
-      steps={<SetupSteps completed={complete ? ["connect"] : []} current="connect" />}
-      title={TITLE}
-      width="wide"
-    >
-      <ConnectChannels cards={cards} nextEnabled={complete} />
-    </OnboardingStage>
-  );
+  return <OnboardingConnectRehaul cards={cards} nextEnabled={complete} />;
 }

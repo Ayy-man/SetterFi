@@ -15,9 +15,10 @@ import { RecordSheet } from "@/components/kit/record-sheet";
 import { StateBadge, type StateTone } from "@/components/kit/state-badge";
 import { Segmented } from "@/components/kit/atomics";
 import { StatStrip, type StatStripItem } from "@/components/kit/stat-strip";
+import { PrimaryActionButton, type PrimaryAction } from "@/components/kit/primary-action";
 import { ListPage } from "@/components/kit/templates/list-page";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/kit/tooltip";
-import { wholePageProvenanceKind } from "@/components/kit/provenance-chip";
+import { ProvenanceChip, wholePageProvenanceKind } from "@/components/kit/provenance-chip";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 /*
  * The carrier window comes from the contract, never from a local copy. Three surfaces render this
@@ -240,6 +241,7 @@ export function provisioningViewRows(
 export function AdminProvisioning({
   a2pSubmittedAtByTenant = {},
   children,
+  chrome = "page",
   enabled = true,
   authorized = true,
   hasDemoData = false,
@@ -250,6 +252,13 @@ export function AdminProvisioning({
 }: {
   a2pSubmittedAtByTenant?: Readonly<Record<string, string | null>>;
   children?: ReactNode;
+  /**
+   * `"page"` is the route: rail, crumbs and the one `<h1>` this surface owns. `"embedded"` is the
+   * same tracker mounted inside a screen that has already drawn all three -- the Clients Setup tab
+   * -- so the shell and the list head are dropped and only the controls, the tiles and the body
+   * remain. Nothing about what is read or what is claimed changes with it.
+   */
+  chrome?: "page" | "embedded";
   enabled?: boolean;
   authorized?: boolean;
   hasDemoData?: boolean;
@@ -680,65 +689,39 @@ export function AdminProvisioning({
     </div>
   );
 
-  return (
-    <AppShell
-      activePath="/admin/provisioning"
-      crumbs={CRUMBS}
-      /*
-       * Only the rows somebody here can move. Provider-owned work is a real wait but not a queue
-       * depth: a carrier holding a filing for eleven days is not eleven days of unstarted work,
-       * and putting it in the rail would ask the team to act on something it cannot touch.
-       */
-      nav={withWorkspaceNavCounts(workspaceNavigationFor("admin"), {
-        "/admin/provisioning": view.rows.filter((row) => !row.terminal && row.group !== "provider").length,
+  /*
+   * The controls the head carries, hoisted out of the return so the embedded mount and the route
+   * mount draw the same ones. Only the chrome around them differs.
+   */
+  const installAction: PrimaryAction = { label: "Marketplace install", onClick: () => setInstallOpen(true) };
+  const scopeSwitch = view.enabled && view.authorized ? (
+    /* Which rows the page is about, not how they are filtered, so it sits above the
+       toolbar. The counts are the segments' own reason to exist: a reader picks Stalled
+       because a number told them there was something in it. */
+    <Segmented
+      label="Provisioning view"
+      onValueChange={(value) => setQueryValue("view", value)}
+      options={PROVISIONING_VIEWS.map((entry) => {
+        const count = provisioningViewRows(view.rows, entry.key).length;
+        return {
+          key: entry.key,
+          label: entry.label,
+          count,
+          tone: entry.key === "stalled" && count > 0 ? ("warning" as const) : undefined,
+        };
       })}
-      role="admin"
-    >
-      <ListPage
-        /*
-          The canvas's sentence, with its em dash spelled as a colon because `em-dash.test.ts`
-          bans the character in UI copy. Its second clause is a promise rather than a description: day counters only, never a percentage and never a predicted date. It is
-          worth saying on screen rather than only in `WaitingCell`, because it tells a reader that
-          the absence of an ETA is the product working, not a column that failed to load.
-          CLAUDE.md makes it a hard rule; this is where the reader is told about it.
+      value={rowView}
+    />
+  ) : undefined;
+  const statStrip = view.enabled && view.authorized ? (
+    <StatStrip ariaLabel="Provisioning summary" items={tiles} />
+  ) : undefined;
+  const provenanceLine = hasDemoData && visibleProvenanceKind === null
+    ? "Demo rows are labelled in the row and excluded from real analytics."
+    : undefined;
 
-          What the longer sentence this replaced also said -- that the queue is banded by who has
-          to move a row -- is not lost, because the bands are on screen with their own headings
-          and a description that narrates the layout is describing what the reader can already see.
-        */
-        description="Clients between signup and a live agent. Day counters only: nothing here shows a percentage or a predicted date."
-        primaryAction={{ label: "Marketplace install", onClick: () => setInstallOpen(true) }}
-        scope={view.enabled && view.authorized ? (
-          /* Which rows the page is about, not how they are filtered, so it sits above the
-             toolbar. The counts are the segments' own reason to exist: a reader picks Stalled
-             because a number told them there was something in it. */
-          <Segmented
-            label="Provisioning view"
-            onValueChange={(value) => setQueryValue("view", value)}
-            options={PROVISIONING_VIEWS.map((entry) => {
-              const count = provisioningViewRows(view.rows, entry.key).length;
-              return {
-                key: entry.key,
-                label: entry.label,
-                count,
-                tone: entry.key === "stalled" && count > 0 ? ("warning" as const) : undefined,
-              };
-            })}
-            value={rowView}
-          />
-        ) : undefined}
-        stats={view.enabled && view.authorized ? (
-          <StatStrip ariaLabel="Provisioning summary" items={tiles} />
-        ) : undefined}
-        provenance={hasDemoData && visibleProvenanceKind === null
-          ? "Demo rows are labelled in the row and excluded from real analytics."
-          : undefined}
-        provenanceKind={visibleProvenanceKind ?? undefined}
-        title="Provisioning"
-      >
-        {body}
-      </ListPage>
-
+  const overlays = (
+    <>
       <RecordSheet
         onOpenChange={(open) => { if (!open) setSelectedId(null); }}
         open={selected !== null}
@@ -893,6 +876,75 @@ export function AdminProvisioning({
         size="wide"
         title="Marketplace install"
       />
+    </>
+  );
+
+  if (chrome === "embedded") {
+    /*
+     * No shell and no list head: the screen mounting this has already drawn the rail, the crumbs
+     * and its own heading. What survives is the head's controls, because they are the tab -- the
+     * scope switch says which rows, the strip counts them, and the filled button is the only way
+     * into the marketplace install sheet.
+     */
+    return (
+      <div className="flex min-h-0 min-w-0 flex-col gap-[var(--s-4)]" data-slot="admin-provisioning-embedded">
+        <div className="flex flex-wrap items-center justify-between gap-[var(--s-3)]">
+          <div className="flex min-w-0 flex-col gap-[var(--s-1)]">
+            {visibleProvenanceKind ? <ProvenanceChip kind={visibleProvenanceKind} /> : null}
+            {scopeSwitch}
+            {provenanceLine ? (
+              <p className="m-0 max-w-[var(--measure-wide)] text-[length:var(--t-badge)] text-[color:var(--faint)]">
+                {provenanceLine}
+              </p>
+            ) : null}
+          </div>
+          <PrimaryActionButton action={installAction} />
+        </div>
+        {statStrip}
+        {body}
+        {overlays}
+      </div>
+    );
+  }
+
+  return (
+    <AppShell
+      activePath="/admin/provisioning"
+      crumbs={CRUMBS}
+      /*
+       * Only the rows somebody here can move. Provider-owned work is a real wait but not a queue
+       * depth: a carrier holding a filing for eleven days is not eleven days of unstarted work,
+       * and putting it in the rail would ask the team to act on something it cannot touch.
+       */
+      nav={withWorkspaceNavCounts(workspaceNavigationFor("admin"), {
+        "/admin/provisioning": view.rows.filter((row) => !row.terminal && row.group !== "provider").length,
+      })}
+      role="admin"
+    >
+      <ListPage
+        /*
+          The canvas's sentence, with its em dash spelled as a colon because `em-dash.test.ts`
+          bans the character in UI copy. Its second clause is a promise rather than a description: day counters only, never a percentage and never a predicted date. It is
+          worth saying on screen rather than only in `WaitingCell`, because it tells a reader that
+          the absence of an ETA is the product working, not a column that failed to load.
+          CLAUDE.md makes it a hard rule; this is where the reader is told about it.
+
+          What the longer sentence this replaced also said -- that the queue is banded by who has
+          to move a row -- is not lost, because the bands are on screen with their own headings
+          and a description that narrates the layout is describing what the reader can already see.
+        */
+        description="Clients between signup and a live agent. Day counters only: nothing here shows a percentage or a predicted date."
+        primaryAction={installAction}
+        scope={scopeSwitch}
+        stats={statStrip}
+        provenance={provenanceLine}
+        provenanceKind={visibleProvenanceKind ?? undefined}
+        title="Provisioning"
+      >
+        {body}
+      </ListPage>
+
+      {overlays}
     </AppShell>
   );
 }

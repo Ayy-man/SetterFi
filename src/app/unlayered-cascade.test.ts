@@ -449,7 +449,6 @@ const KNOWN: Record<string, "deliberate" | "debt"> = {
   // `border` shorthand into longhands was tried and does not work -- it moves the collision from
   // `border` to `border-color` and the utility still loses to the unlayered sheet. What is left here
   // is one padding override that has no ruling yet.
-  "src/components/workspace/live/admin-agents.tsx  surface-card  padding  p-[13px_16px]": "debt",
 
   // `tokens.css` states a colour on every type recipe and a size on every one of them, so a caller
   // that names a different colour or size beside the recipe gets the recipe. `.t-faint` keeps the
@@ -458,9 +457,6 @@ const KNOWN: Record<string, "deliberate" | "debt"> = {
   // `.t-body`, and record-sheet's `--t-body` on `.t-id`, are the same value twice over -- dead, but
   // drawing what the author meant.
   "src/components/kit/exception-tile.tsx  t-body  color  text-[var(--ink)]": "debt",
-  "src/components/workspace/live/admin-channel-health.tsx  t-body  color  text-[color:var(--body)]": "debt",
-  "src/components/workspace/live/admin-channel-health.tsx  t-body  color  text-[var(--body)]": "debt",
-  "src/components/workspace/live/admin-channel-health.tsx  t-body  color  text-[var(--muted)]": "debt",
 
   // Two duplicates rather than two overrides: `.mono` already declares `font-variant-numeric:
   // tabular-nums` and console.css already declares `min-width: 0` on an admin panel, so the utility

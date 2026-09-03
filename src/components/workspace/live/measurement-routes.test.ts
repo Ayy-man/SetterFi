@@ -15,9 +15,13 @@ const pages = [
   "src/app/(workspace)/coach/pipelines/page.tsx",
 ] as const;
 
+/*
+ * Overview is the last dedicated admin measurement route. Agent performance folded into
+ * `/admin/platform-clients?tab=performance`, so `/admin/agent-performance` is a redirect now and
+ * its surface is a tab of `owner-clients.tsx`, guarded by that component's own tests.
+ */
 const adminPages = [
   "src/app/(workspace)/admin/overview/page.tsx",
-  "src/app/(workspace)/admin/agent-performance/page.tsx",
 ] as const;
 
 describe("Phase 7 coach route ownership", () => {
@@ -87,7 +91,9 @@ describe("Phase 7 coach route ownership", () => {
 describe("persisted test-data labels", () => {
   it("carries repository isTest through deriveConversationView to a rendered provenance label", () => {
     const viewModel = source("src/components/workspace/live/view-models.ts");
-    const conversations = source("src/components/workspace/live/coach-conversations.tsx");
+    // `coach-inbox.tsx` since the rehaul took /coach/conversations. Same view model, same flag,
+    // same rule: a test row is labelled where it is shown.
+    const conversations = source("src/components/workspace/rehaul/coach-inbox.tsx");
     expect(viewModel).toContain("export function deriveConversationView");
     expect(viewModel).toContain("isTest: row.isTest");
     expect(conversations).toContain("deriveConversationView");
@@ -101,21 +107,21 @@ describe("persisted test-data labels", () => {
       .split("\n")
       .filter((line) => !line.trim().startsWith("//"))
       .join("\n");
-    expect(live).toMatch(/row\.isTest/);
-    expect(live).toMatch(/provenance=\{/);
-    // Behaviour that this label actually appears on screen is asserted in
-    // coach-conversations.test.tsx, which renders it.
+    expect(live).toMatch(/conversation\.isTest/);
+    expect(live).toMatch(/data-provenance="test"/);
+    // Behaviour that this label actually appears on screen is asserted in coach-inbox.test.tsx,
+    // which renders it.
   });
 
   it("keeps provider branding and coach-visible economics out of measurement surfaces", () => {
-    const measurement = source("src/components/workspace/live/coach-measurement.tsx");
+    const measurement = source("src/components/workspace/rehaul/coach-dashboard.tsx");
     const pipeline = source("src/components/workspace/live/coach-pipeline.tsx");
     expect(`${measurement}\n${pipeline}`).not.toMatch(/GoHighLevel|\bGHL\b|margin|provider cost|cost economics/iu);
   });
 });
 
 describe("Phase 7 admin route ownership", () => {
-  it("owns the admin root, Overview, and Agent Performance as dedicated routes", () => {
+  it("owns the admin root and Overview as dedicated routes", () => {
     const adminRoot = "src/app/(workspace)/admin/page.tsx";
     expect(existsSync(resolve(ROOT, adminRoot))).toBe(true);
     expect(source(adminRoot)).toContain('export const dynamic = "force-dynamic"');
@@ -125,7 +131,6 @@ describe("Phase 7 admin route ownership", () => {
       expect(source(page)).toContain('export const dynamic = "force-dynamic"');
     }
     expect(existsSync(resolve(ROOT, "src/app/(workspace)/admin/overview/loading.tsx"))).toBe(true);
-    expect(existsSync(resolve(ROOT, "src/app/(workspace)/admin/agent-performance/loading.tsx"))).toBe(true);
   });
 
   it("checks the analytics flag before any platform repository load", () => {
@@ -158,10 +163,8 @@ describe("Phase 7 admin route ownership", () => {
     expect(existsSync(resolve(ROOT, "src/components/workspace/workspace-screens.tsx"))).toBe(false);
   });
 
-  it("keeps success economics off the wire on both split measurement surfaces", () => {
+  it("keeps success economics off the wire on the measurement surfaces", () => {
     const overview = source("src/components/workspace/live/admin-overview.tsx");
-    const performance = source("src/components/workspace/live/admin-agent-performance.tsx");
-    const performancePage = source("src/app/(workspace)/admin/agent-performance/page.tsx");
     const tables = source("src/components/workspace/live/admin-measurement-tables.tsx");
     const reducer = source("src/components/workspace/live/admin-measurement-view-models.ts");
 
@@ -171,15 +174,11 @@ describe("Phase 7 admin route ownership", () => {
     expect(overview).toContain('role === "success"');
     expect(overview).toContain('role !== "success"');
 
-    // Agent performance is a client component, so its page must project before the boundary
-    // and hand over only the projected view, never the raw measurement.
-    expect(performance).toContain('"use client"');
-    expect(performance).toContain("view: AdminMeasurementView");
-    expect(performance).toContain('const economicsVisible = view.role !== "success"');
-    expect(performance).not.toMatch(/measurement: PlatformMeasurement;/u);
-    expect(performance).not.toContain("adminMeasurementView(");
-    expect(performancePage).toContain("adminMeasurementView(measurement, actor.role)");
-    expect(performancePage).not.toMatch(/<AdminAgentPerformanceSurface[^>]*measurement=\{measurement\}/u);
+    // The performance tab projects before the boundary too: its page hands `owner-clients.tsx`
+    // the projected view and never the raw snapshot.
+    const clientsPage = source("src/app/(workspace)/admin/platform-clients/page.tsx");
+    expect(clientsPage).toContain("adminMeasurementView(measurement, actor.role)");
+    expect(clientsPage).not.toMatch(/measurement=\{measurement\}/u);
 
     // The shared tables only ever receive already-projected rows.
     expect(tables).toContain('"use client"');
@@ -222,7 +221,7 @@ describe("Phase 7 admin route ownership", () => {
 
     // No collection is spread out of the snapshot, for any role.
     expect(reducer).not.toMatch(/snapshot\.\w+\.map\(\((\w+)\) => \(\{\s*\.\.\.\1/u);
-    expect(`${overview}\n${performance}\n${tables}\n${reducer}`)
+    expect(`${overview}\n${tables}\n${reducer}`)
       .not.toMatch(/workspace-fixtures|admin-demo-feedback-fixtures|GoHighLevel|\bGHL\b/u);
   });
 });

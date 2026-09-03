@@ -169,12 +169,11 @@ const THEME_CHOICES: ReadonlyArray<{ value: ThemePreference; label: string }> = 
 ];
 
 /**
- * The rehaul's account sheet, loaded only where it is rendered.
+ * The account sheet, loaded only where it is rendered.
  *
  * A static import would put the sheet -- and with it the notification view models, the guide
  * catalogue and the Base UI dialog -- into the chunk every page of every role downloads, including
- * the flag-off path that never renders it. `next/dynamic` keeps it in its own chunk, so with
- * `SETTERFI_UI_REHAUL` off nothing about this bundle changes.
+ * the affiliate portal, which never renders it. `next/dynamic` keeps it in its own chunk.
  */
 const AccountSheet = dynamic(() =>
   import("@/components/workspace/rehaul/account-sheet").then((module) => module.AccountSheet));
@@ -244,7 +243,7 @@ export function AppTopbar({
   const helpHref = ROLE_HELP_HREF[role];
   const tipsHref = ROLE_TIPS_HREF[role];
   const billingHref = ROLE_BILLING_HREF[role];
-  const { account, mode, rehaulLive } = useWorkspaceEnv();
+  const { account, mode } = useWorkspaceEnv();
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   /*
    * The chip only becomes the artboard's named one when there is a name to put in it. With no
@@ -557,21 +556,20 @@ export function AppTopbar({
         ) : null}
 
         {/*
-          The account chip, and the one place the rehaul reaches into this bar.
+          The account chip.
 
-          With `SETTERFI_UI_REHAUL` on, the chip opens the 520px account sheet instead of the
-          eleven-row dropdown: the same sections, over the page the reader is already on, rather
-          than six separate routes out of it. The chip itself is the same control in both branches
-          -- same face, same contents, same accessible name -- because the two share
-          `accountChipClassName` and `accountChipContent` above. With the flag off this whole
-          branch is dead and the dropdown below renders exactly what it always has.
+          For a coach or an owner it opens the 520px account sheet instead of the eleven-row
+          dropdown: the same sections, over the page the reader is already on, rather than six
+          separate routes out of it. The chip itself is the same control either way -- same face,
+          same contents, same accessible name -- because both share `accountChipClassName` and
+          `accountChipContent` above.
 
-          Affiliate is excluded rather than folded into the owner variant. The rehaul canvas draws
-          two account panels, `OwnerSettings` and `CoachSettings`, and the owner one carries the
+          Affiliate is excluded rather than folded into the owner variant. The canvas draws two
+          account panels, `OwnerSettings` and `CoachSettings`, and the owner one carries the
           account terms registry and the operator runbooks -- platform sections an affiliate must
           not be handed. With no artboard of its own, the affiliate portal keeps the menu it has.
         */}
-        {rehaulLive && role !== "affiliate" ? (
+        {role !== "affiliate" ? (
           <>
             <Button
               aria-label={ROLE_ACCOUNT_LABELS[role]}

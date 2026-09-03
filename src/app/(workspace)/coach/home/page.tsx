@@ -7,7 +7,7 @@ import { DataState } from "@/components/kit/data-state";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
-import { phase7AnalyticsLive, uiRehaulLive } from "@/lib/env-contract";
+import { phase7AnalyticsLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import { PROVISIONING_STEPS, type ProvisioningStep } from "@/lib/onboarding/contracts";
 import {
@@ -211,99 +211,6 @@ async function loadCoachAttention(tenantId: string, includeTestData: boolean, as
 }
 
 /**
- * The channel states that mean a connection which used to work has stopped working.
- *
- * `disconnected` is deliberately not one of them: a channel nobody ever connected is a setup step,
- * which the Get started journey already owns, and putting it here would tell a coach mid-onboarding
- * that something broke.
- */
-const BROKEN_CHANNEL_STATES = [
-  "error",
-  "expired",
-  "restricted",
-  "flagged",
-  "blocked_permanent",
-] as const;
-
-/**
- * The one blocked channel that leads screen 5c, and the custody facts it is allowed to state.
- *
- * The artifact's sentence is "14 threads are being held, nothing is dropped, and they replay in
- * order the moment you reconnect." None of the three halves of that survives contact with the
- * code, so none of them is rendered:
- *
- * - **Nothing replays on reconnect.** `POST /api/channel-actions/[connectionId]/replay` takes one
- *   explicit `sourceReceiptId`, loads that single `webhook_events` row and refuses it unless the
- *   row is already `failed`. One receipt, named by the caller, by hand. No bulk path exists and
- *   nothing runs it when a connection comes back.
- * - **There is no ordering.** Nothing anywhere sequences a replay.
- * - **"Held" means something else here.** `process-inbound.ts` uses the word for a reply the
- *   safety screen withheld, which has nothing to do with a channel outage. The word is avoided on
- *   this surface for that reason.
- *
- * What is true, and what the surface says instead: the inbound event is recorded, because
- * `webhook_events` is unique on `(provider, provider_event_id)`, and one that failed to process is
- * still on file. So the honest claim is that the messages are recorded and are not being answered,
- * which is weaker than the artifact and is the whole point.
- *
- * `channel_connections.error` **is** read, and an earlier version of this comment was wrong about
- * why it should not be. There are exactly three writers of that column and the claim that all of
- * them write `null` was false:
- *
- * - `20260905000010_backend_security_sagas.sql:62` sets it to
- *   `LEGACY_CREDENTIAL_REAUTHORIZATION_REQUIRED` on every connection whose credential was
- *   quarantined as undecryptable pre-envelope ciphertext, together with `state = 'error'`. It runs
- *   once as a migration, but the rows it wrote persist, so a production connection can carry that
- *   value today.
- * - `20260917000001_provider_connection_commands.sql:110` clears it on disconnect.
- * - `20260905000009_provider_connection_atomicity.sql:195` clears it on WhatsApp reconnect.
- *
- * So a coach blocked by exactly that quarantine would have been shown no cause at all while the
- * database held the reason. The contract in `channel-connections.ts` was right the whole time; the
- * premise about its writers was the defect. What stays true is that no *ongoing* application path
- * records a provider's own words when a live call fails.
- *
- * The count is of **events, not threads**. `webhook_events` carries a provider and a status but no
- * conversation, so grouping into threads would mean parsing payloads, and Instagram and Messenger
- * share the `meta` provider so it could not even be narrowed to the channel that broke.
- */
-async function loadBlockedChannel(
-  tenantId: string,
-  connections: readonly ChannelConnectionView[] | null,
-) {
-  if (!connections) return null;
-  const broken = connections
-    .filter((connection) => (BROKEN_CHANNEL_STATES as readonly string[]).includes(connection.state))
-    // Oldest break first: the one that has been costing the coach replies for longest leads.
-    .sort((left, right) => Date.parse(left.updatedAt) - Date.parse(right.updatedAt));
-  const connection = broken[0];
-  if (!connection) return null;
-
-  const provider = ["instagram", "messenger"].includes(connection.channel) ? "meta" : "ghl";
-  const service = createSupabaseServiceClient();
-  const { count, error } = await service
-    .from("webhook_events")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", tenantId)
-    .eq("provider", provider)
-    .eq("status", "failed");
-
-  return {
-    channelLabel: connection.channelLabel,
-    connectionId: connection.id,
-    // Straight off the row. Null stays null: an unrecorded cause is a fact and the surface says
-    // nothing rather than guessing one.
-    providerReason: connection.error,
-    // Null, not zero: a failed read has not established that nothing is waiting.
-    unprocessedEvents: error ? null : count ?? 0,
-    signedRoundTripAt: connection.receipts.signedRoundTripAt,
-    state: connection.state,
-    stoppedAt: connection.updatedAt,
-  };
-}
-
-
-/**
  * The coach's own first name, for the greeting, and nothing else.
  *
  * `public.users.full_name` is the only place a person's name is stored -- the signup RPC writes it
@@ -385,11 +292,9 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
   const query = measurementQuery(await searchParams);
   const context = await liveCoachContext();
   const [
-    { CoachMeasurementSurface },
     { loadCoachLeadComposition, loadCoachMeasurement },
     { createBillingRepository },
   ] = await Promise.all([
-    import("@/components/workspace/live/coach-measurement"),
     import("@/lib/repositories/analytics"),
     import("@/lib/repositories/billing"),
   ]);
@@ -418,13 +323,10 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
     createBillingRepository().loadOwnBilling(context.tenantId, new Date(asOf))
       .catch((): "unavailable" => "unavailable"),
   ]);
-  // One read of the connection list, shared by the two things that reason about it. The blocked
-  // channel is the negative -- one connection that used to work and stopped -- and the status line
-  // is the positive; deriving them from two separate queries let them disagree about the same row.
+  // One read of the connection list, shared by everything that reasons about it.
   const connections = await listChannelConnections(context.tenantId).catch(() => null);
-  const [attention, blockedChannel, channelStatus, greeting] = await Promise.all([
+  const [attention, channelStatus, greeting] = await Promise.all([
     loadCoachAttention(context.tenantId, measurement.isDemo, asOf),
-    loadBlockedChannel(context.tenantId, connections),
     loadChannelStatus(context.tenantId, connections),
     // Suppressed under impersonation. The reader there is a platform user with a real name of
     // their own, and putting it at the top of somebody else's dashboard names the wrong person on
@@ -438,38 +340,16 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
       ? { periodStart: billing.periodStart, periodEnd: billing.periodEnd }
       : null;
 
-  /*
-   * The rehaul seam. When the flag is on the new body renders from exactly the reads above -- no
-   * extra query, no different loader -- and when it is off the live surface is untouched.
-   */
-  if (uiRehaulLive()) {
-    const { CoachDashboard } = await import("@/components/workspace/rehaul/coach-dashboard");
-    return (
-      <CoachHomeShell navCounts={await coachNavCounts(context.tenantId)}>
-        <CoachDashboard
-          {...query}
-          attention={attention}
-          billingPeriod={billingPeriod}
-          channelStatus={channelStatus}
-          composition={composition}
-          greeting={greeting}
-          measurement={measurement}
-        />
-      </CoachHomeShell>
-    );
-  }
-
+  const { CoachDashboard } = await import("@/components/workspace/rehaul/coach-dashboard");
   return (
     <CoachHomeShell navCounts={await coachNavCounts(context.tenantId)}>
-      <CoachMeasurementSurface
+      <CoachDashboard
         {...query}
         attention={attention}
         billingPeriod={billingPeriod}
-        blockedChannel={blockedChannel}
         channelStatus={channelStatus}
         composition={composition}
         greeting={greeting}
-        impersonation={context.impersonation}
         measurement={measurement}
       />
     </CoachHomeShell>

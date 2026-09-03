@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
+import { ExportMenu } from "@/components/kit/export-menu";
 import { LEAD_FACT_LABELS } from "@/components/workspace/live/coach-type";
 import { handoffFor } from "@/components/workspace/live/escalation-queue";
 import {
@@ -334,9 +335,29 @@ export function CoachInbox({
             className="flex min-h-0 min-w-0 flex-col border-r border-[var(--line)] bg-[var(--well)]"
           >
             <div className="shrink-0 px-[24px] pt-[24px] pb-[16px]">
-              <h1 className="m-0 text-[32px] leading-[1.1] font-semibold tracking-[-0.025em] text-[color:var(--ink)]">
-                Inbox
-              </h1>
+              <div className="flex items-start gap-[12px]">
+                <h1 className="m-0 min-w-0 flex-1 text-[32px] leading-[1.1] font-semibold tracking-[-0.025em] text-[color:var(--ink)]">
+                  Inbox
+                </h1>
+                {/*
+                  The export the old console carried, back on the surface that replaced it.
+
+                  It is the server export rather than the local one, so the file is the whole
+                  conversation set the tenant can see rather than the rows this pane happens to
+                  hold, and the search box travels with it because that is the one filter the
+                  route can honour. The "Needs you" segment does not: it is a client-side read of
+                  `status`, the route has no key for it, and a control that quietly widened the
+                  file back to everything would be worse than one that never narrowed it. The
+                  menu already says "All matching rows" and carries the Logged microcopy from the
+                  shared component, because a server export writes an `export.started` row.
+                */}
+                <ExportMenu
+                  filename="setterfi-conversations"
+                  mode="server"
+                  query={{ order: "last_activity_desc", search: query }}
+                  resource="conversations"
+                />
+              </div>
               {/*
                 A stateful two-way switch, so it is buttons rather than the `Seg` primitive: `Seg`
                 renders spans and links for a control whose state lives in the URL, and this one
@@ -444,6 +465,21 @@ export function CoachInbox({
                           <span className={`${MONO_CLASS} text-[color:var(--faint)]`}>
                             {CHANNEL_TAGS[conversation.channel]}
                           </span>
+                          {/*
+                            Test rows say so on the row, which is a hard rule rather than a
+                            nicety: a seeded conversation that reads like a real lead is one a
+                            coach acts on. `deriveConversationView` already resolves `isTest` off
+                            the repository row, so this states what the read returned rather than
+                            inferring anything from the rows on screen.
+                          */}
+                          {conversation.isTest ? (
+                            <span
+                              className="rounded-[6px] border border-[var(--line)] px-[6px] text-[color:var(--muted)]"
+                              data-provenance="test"
+                            >
+                              Test data
+                            </span>
+                          ) : null}
                         </span>
                       </span>
                     </button>

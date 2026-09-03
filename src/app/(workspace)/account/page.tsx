@@ -10,7 +10,7 @@ import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { loadAccountTermsRegistry } from "@/lib/account/terms-publisher";
 import { loadPlatformActor } from "@/lib/auth/actors";
 import { workspaceForRole } from "@/lib/auth/claims";
-import { accountTermsLive, uiRehaulLive } from "@/lib/env-contract";
+import { accountTermsLive } from "@/lib/env-contract";
 
 export const metadata: Metadata = { title: "Account" };
 export const dynamic = "force-dynamic";
@@ -38,14 +38,8 @@ const HOME_HREF = {
  * thread and linked from a runbook. A sheet that only ever opened from a chip would have broken
  * every one of those links, so the sheet has a route of its own and `?section=` names the part.
  * The redirects from `/admin/account-terms` and `/admin/help` land here.
- *
- * With the rehaul off this route does not exist as anything new: it hands the reader to the
- * account page that was already there, rather than rendering a second, flagless copy of a panel
- * whose whole point is the rehaul.
  */
 export default async function AccountPage() {
-  if (!uiRehaulLive()) redirect("/account/security");
-
   const actor = await loadPlatformActor();
   if (!actor) redirect("/login?next=%2Faccount");
   const role = workspaceForRole(actor.role);

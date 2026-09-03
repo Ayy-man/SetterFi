@@ -418,7 +418,9 @@ describe("AdminSupport nav count", () => {
     const rail = screen.getByRole("navigation", { name: "Primary" });
     // Screen 5a renamed this destination: /admin/support is Client requests, and the Inbox label
     // now belongs to the merged attention-and-escalations queue at /admin/alerts.
-    const attention = within(rail).getByRole("link", { name: /Client requests/ });
+    // The rail folded to eight destinations: /admin/support has no row of its own any more and
+    // its depth lands on Inbox, the row `foldedNavTarget` maps it onto.
+    const attention = within(rail).getByRole("link", { name: /Inbox/ });
     // The badge is a sibling of the link, not part of its accessible name. Two waiting, one
     // resolved: a resolved thread is not waiting on anyone.
     const badge = attention

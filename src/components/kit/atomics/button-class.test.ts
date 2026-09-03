@@ -65,9 +65,10 @@ describe("the accent fill's shadow", () => {
    * quietly grows. Each should adopt the shared accent-shadow constant this file guards.
    */
   const NOT_YET_ADOPTED = [
-    "components/workspace/live/coach-offer.tsx",
+    // `coach-offer.tsx` and `coach-measurement.tsx` were the other two holdouts until the rehaul
+    // took their routes and both files were deleted. Neither adopted the constant; the surfaces
+    // that retyped the shadow are gone, which leaves one.
     "components/workspace/live/coach-integrations.tsx",
-    "components/workspace/live/coach-measurement.tsx",
   ];
 
   const hasAccentShadow = (path: string) =>
@@ -93,7 +94,7 @@ describe("the accent fill's shadow", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("still finds the three holdouts, so the exception list cannot go stale", () => {
+  it("still finds every holdout, so the exception list cannot go stale", () => {
     expect(NOT_YET_ADOPTED.filter((path) => hasAccentShadow(join(SRC, path))))
       .toEqual(NOT_YET_ADOPTED);
   });

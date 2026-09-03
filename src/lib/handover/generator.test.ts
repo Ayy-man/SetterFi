@@ -8,10 +8,12 @@ import {
   ADMIN_GUIDE_NAV_MAP,
   ADMIN_GUIDE_SURFACES,
 } from "@/lib/admin-help-guides";
+import { foldedRouteFor } from "@/lib/admin-route-fold";
 import { workspaceNavigation } from "@/lib/workspace-navigation";
 
 import {
   HANDOVER_CONTENT_FILES,
+  adminGuideSurfaceRoutes,
   assertAdminGuideCoverage,
   assertAdminGuideSurfaces,
   generatePhase8Handover,
@@ -78,7 +80,10 @@ describe("Phase 8 handover generation", () => {
     );
     const navigationGuideMap = ADMIN_GUIDE_NAV_MAP;
     expect(navigationGuideMap).not.toHaveProperty("/admin/settings");
-    expect(navigationGuideMap).toHaveProperty("/admin/brain/testing", "run-evals");
+    // The rail fold left Evals as a tab of /admin/brain and the terms registry as a section of
+    // /account, so no folded route may sit in the map: its keys are the rail, exactly.
+    expect(navigationGuideMap).toHaveProperty("/admin/brain", "publish-brain");
+    expect(Object.keys(navigationGuideMap).filter((path) => path in foldedRouteFor)).toEqual([]);
     expect(() => assertAdminGuideCoverage(
       adminPaths,
       ADMIN_GUIDES,
@@ -105,27 +110,36 @@ describe("Phase 8 handover generation", () => {
       group.items.map((item) => item.href)
     );
 
+    const surfaceRoutes = adminGuideSurfaceRoutes(adminPaths);
+
     expect(() => assertAdminGuideSurfaces(
-      adminPaths,
+      surfaceRoutes,
       ADMIN_GUIDES,
       ADMIN_GUIDE_SURFACES,
     )).not.toThrow();
 
+    // A folded route is a key of the fold map, never a destination, so it is still not a surface.
+    expect(() => assertAdminGuideSurfaces(
+      surfaceRoutes,
+      ADMIN_GUIDES,
+      { ...ADMIN_GUIDE_SURFACES, "run-evals": ["/admin/brain/testing"] },
+    )).toThrow(/HANDOVER_GUIDE_SURFACE_UNKNOWN:run-evals:\/admin\/brain\/testing/u);
+
     const phantom = { ...ADMIN_GUIDES[0], id: "read-a-trace-that-does-not-exist" };
     expect(() => assertAdminGuideSurfaces(
-      adminPaths,
+      surfaceRoutes,
       [...ADMIN_GUIDES, phantom],
       ADMIN_GUIDE_SURFACES,
     )).toThrow(/HANDOVER_GUIDE_WITHOUT_SURFACE:read-a-trace-that-does-not-exist/u);
 
     expect(() => assertAdminGuideSurfaces(
-      adminPaths,
+      surfaceRoutes,
       ADMIN_GUIDES,
       { ...ADMIN_GUIDE_SURFACES, "audit-log": ["/admin/conversations"] },
     )).toThrow(/HANDOVER_GUIDE_SURFACE_UNKNOWN:audit-log:\/admin\/conversations/u);
 
     expect(() => assertAdminGuideSurfaces(
-      adminPaths,
+      surfaceRoutes,
       ADMIN_GUIDES,
       { ...ADMIN_GUIDE_SURFACES, "read-trace": ["/admin/overview"] },
     )).toThrow(/HANDOVER_GUIDE_SURFACE_ORPHAN:read-trace/u);

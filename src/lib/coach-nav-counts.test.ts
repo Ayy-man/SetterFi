@@ -59,7 +59,7 @@ describe("coachNavCounts", () => {
  */
 const SURFACE_FOR_HREF: Record<string, readonly string[]> = {
   "/coach/home": ["src/app/(workspace)/coach/home/page.tsx"],
-  "/coach/conversations": ["src/components/workspace/live/coach-conversations.tsx"],
+  "/coach/conversations": ["src/components/workspace/rehaul/coach-inbox.tsx"],
   "/coach/contacts": [
     "src/app/(workspace)/coach/contacts/page.tsx",
     "src/app/(workspace)/coach/pipelines/page.tsx",
@@ -84,7 +84,7 @@ describe("every coach pill route passes a count", () => {
         expect(source).toMatch(/navCounts=\{/u);
         // The Inbox is a client component and derives the same predicate off the rows it renders;
         // every server page reads the one shared helper.
-        if (file.endsWith("coach-conversations.tsx")) {
+        if (file.endsWith("coach-inbox.tsx")) {
           expect(source).toMatch(/navCounts=\{\{\s*"\/coach\/conversations":\s*needsYou\s*\}\}/u);
           expect(source).toMatch(/row\.status === "needs_human"/u);
         } else {

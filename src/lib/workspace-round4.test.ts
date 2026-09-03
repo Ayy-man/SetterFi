@@ -10,14 +10,13 @@ import {
   selectPopupClassName,
 } from "@/components/ui/select";
 import { deriveCommissionCents } from "@/lib/affiliates/service";
+import { workspaceNavigation } from "@/lib/workspace-navigation";
 import {
   OFFER_CADENCE_CHANNEL_LABELS,
   OFFER_CADENCE_CHANNELS,
   OFFER_CADENCE_PURPOSE_LABELS,
   OFFER_CADENCE_PURPOSES,
 } from "@/lib/offer/types";
-
-const COACH_OFFER_TSX = "src/components/workspace/live/coach-offer.tsx";
 
 function source(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
@@ -46,7 +45,6 @@ describe("Round 4 decided live owners", () => {
   });
 });
 
-const OFFER_FILE = "src/components/workspace/live/coach-offer.tsx";
 const LIVE_ROOT = "src/components/workspace/live";
 
 function tsx(path: string) {
@@ -75,38 +73,8 @@ function liveComponentFiles(directory: string): string[] {
 // `form.proof.map(...)` rendered directly as a JSX child is the row list, one per proof editor.
 // The identical call text also appears inside `onChange`, where it rewrites a single row rather
 // than listing them, so a raw substring count counts handlers, not editors.
-/**
- * A `SettingsCard` element by its `title` attribute, as a whole JSX element rather than its opening
- * tag, so the assertions below can read its source span and its parent.
- */
-function settingsCardsTitled(file: ts.SourceFile, title: string) {
-  return collect(file, ts.isJsxElement).filter((node) => {
-    if (node.openingElement.tagName.getText() !== "SettingsCard") return false;
-    const attribute = node.openingElement.attributes.properties.find(
-      (property): property is ts.JsxAttribute =>
-        ts.isJsxAttribute(property) && property.name.getText() === "title",
-    );
-    const value = attribute?.initializer;
-    return Boolean(value && ts.isStringLiteral(value) && value.text === title);
-  });
-}
 
 /** The six subjects the page is about, read from `TAB_LABELS` rather than from a chip list. */
-function subjectLabels(file: ts.SourceFile) {
-  const declaration = collect(file, ts.isVariableDeclaration).find(
-    (node) => node.name.getText() === "TAB_LABELS",
-  );
-  const initializer = declaration?.initializer;
-  if (!initializer || !ts.isObjectLiteralExpression(initializer)) return null;
-  return initializer.properties.flatMap((property) => {
-    if (!ts.isPropertyAssignment(property)) return [];
-    const value = property.initializer;
-    return [{
-      key: property.name.getText(),
-      label: ts.isStringLiteral(value) ? value.text : value.getText(),
-    }];
-  });
-}
 
 function proofRowIterations(file: ts.SourceFile) {
   return collect(file, ts.isCallExpression).filter(
@@ -114,101 +82,44 @@ function proofRowIterations(file: ts.SourceFile) {
   );
 }
 
-describe("R4-20: Proof and case studies live inside the Marketing assets tab", () => {
-  it("names six offer tabs, none of them proof", () => {
-    const alias = collect(tsx(OFFER_FILE), ts.isTypeAliasDeclaration).find((node) => node.name.text === "OfferTab");
-    expect(alias, `${OFFER_FILE} must still declare the OfferTab union`).toBeDefined();
-    const members = ts.isUnionTypeNode(alias!.type)
-      ? alias!.type.types.map((member) =>
-          ts.isLiteralTypeNode(member) && ts.isStringLiteral(member.literal) ? member.literal.text : member.getText(),
-        )
-      : [alias!.type.getText()];
-    expect(
-      members,
-      'OfferTab must name six tabs: proof is no longer a tab of its own, it renders inside "assets"',
-    ).toEqual(["business", "qualification", "voice", "prices", "assets", "cadence"]);
-  });
-
+describe("R4-20: Proof and case studies is not a destination of its own", () => {
   /*
-   * Rewritten for the four-card page, and deliberately not deleted.
+   * What is left of R4-20 once the surface it was written against is gone.
    *
-   * The ruling this guards: proof stops being a destination of its own and renders inside
-   * Marketing assets, with nothing about it deleted in the move. The
-   * old assertions read a `ChipTabs` options array and a `tab === "assets"` conditional, which is
-   * the mechanism that carried the ruling and not the ruling itself; the canvas pass replaced the
-   * six chips with four open cards and demoted "Your program" and "Marketing assets" into a shut
-   * drawer, so both anchors are gone while every fact the ledger recorded still has to hold. What
-   * the ruling actually names is what is asserted here: six subjects and none of them proof, one
-   * destination carrying the owner's word "Marketing assets", the proof editor sitting inside that
-   * destination's group rather than beside it, every proof control moved across intact, and
-   * exactly one proof editor in the tree.
+   * The ruling: proof stops being a destination of its own and renders inside Marketing assets,
+   * with nothing about it deleted in the move. Four assertions carried it -- a six-member
+   * `OfferTab` union, a `TAB_LABELS` object, the two `SettingsCard` titles and their shared parent
+   * -- and all four read `coach-offer.tsx`, which the rehaul replaced with `coach-agent.tsx`
+   * before the file was deleted. The rehaul surface has no tabs at all: the agent reads as one
+   * ladder of panels, so "proof is not a seventh tab" is a sentence about a control that does not
+   * exist, and there is nothing to point those four at.
+   *
+   * The half still checkable is the half that was the ruling rather than its mechanism, so it is
+   * asserted against the whole tree instead of one file: proof renders in exactly one place, and
+   * no navigation destination is named for it. The tab assertions went with the tabs; that is
+   * recorded here rather than quietly dropped, because a ledger entry that vanishes with its
+   * mechanism is how a ruling gets re-litigated.
    */
-  it("gives Marketing assets a destination and Proof none of its own", () => {
-    const file = tsx(OFFER_FILE);
-    const subjects = subjectLabels(file);
-    expect(subjects, `${OFFER_FILE} must still declare TAB_LABELS as an object literal`).not.toBeNull();
-    expect(
-      subjects!.map((subject) => subject.key),
-      "proof is not one of the six subjects; it renders inside assets",
-    ).toEqual(["business", "qualification", "voice", "prices", "assets", "cadence"]);
-    expect(
-      subjects!.find((subject) => subject.key === "assets")?.label,
-      'the assets subject must carry the destination name Alec used: "Marketing assets"',
-    ).toBe("Marketing assets");
+  const PROOF_SURFACE = "src/components/workspace/rehaul/coach-agent.tsx";
+  const REHAUL_ROOT = "src/components/workspace/rehaul";
 
-    const assets = settingsCardsTitled(file, "Marketing assets");
-    const proof = settingsCardsTitled(file, "Proof and case studies");
-    expect(assets, `${OFFER_FILE} must render exactly one Marketing assets card`).toHaveLength(1);
-    expect(proof, `${OFFER_FILE} must render exactly one Proof and case studies card`).toHaveLength(1);
-    // The containment the ledger records: the proof body renders beneath the assets body inside one
-    // group, so Proof is reached by opening Marketing assets and never as a peer of the six
-    // subjects. A shared immediate parent is what "inside" means once the tab branch is gone.
-    expect(
-      proof[0].parent === assets[0].parent,
-      "the proof card must sit in the same group as Marketing assets, not beside the subject cards",
-    ).toBe(true);
-    expect(
-      subjects!.map((subject) => subject.label),
-      "Proof must not become a seventh subject under any name",
-    ).not.toContain("Proof and case studies");
+  it("renders proof in exactly one place, so the move copied nothing", () => {
+    const files = [...liveComponentFiles(LIVE_ROOT), ...liveComponentFiles(REHAUL_ROOT)];
+    // The positive control: an empty walk would leave the assertion below reading no code.
+    expect(files.length, "the component walk read nothing").toBeGreaterThan(20);
+
+    const editors = files.flatMap((file) => proofRowIterations(tsx(file)).map(() => file));
+    expect(editors, "the proof editor is relocated, never copied, exactly one may exist")
+      .toEqual([PROOF_SURFACE]);
   });
 
-  it("keeps every proof control inside the Marketing assets group", () => {
-    const file = tsx(OFFER_FILE);
-    const assets = settingsCardsTitled(file, "Marketing assets");
-    expect(assets, `${OFFER_FILE} must render exactly one Marketing assets card`).toHaveLength(1);
-    const group = assets[0].parent;
-    const span = group.getText();
-    const controls = [
-      ">Add proof</ActionButton>",
-      "form.proof.map(",
-      'update("proof", form.proof.filter(',
-      'resource="offer-proof"',
-    ];
-    for (const control of controls) {
-      expect(
-        span,
-        `the Marketing assets group must hold the proof control \`${control}\`, the move deletes nothing`,
-      ).toContain(control);
-      // And nowhere else in the file. Containment alone is satisfiable by a second copy sitting
-      // outside the group, so every occurrence in the file has to be one of the occurrences in the
-      // span -- counted rather than matched once, because the row iteration and its two field
-      // updaters all read `form.proof.map(` and all three belong to this editor.
-      expect(
-        span.split(control).length,
-        `every \`${control}\` in ${OFFER_FILE} must be inside the Marketing assets group`,
-      ).toBe(source(OFFER_FILE).split(control).length);
-    }
-  });
-
-  it("holds exactly one proof editor across the live workspace components", () => {
-    const editors = liveComponentFiles(LIVE_ROOT).flatMap((file) => proofRowIterations(tsx(file)).map(() => file));
-    expect(editors, "the proof editor is relocated, never copied, exactly one may exist").toEqual([OFFER_FILE]);
-    const file = tsx(OFFER_FILE);
+  it("gives proof no destination of its own", () => {
+    const items = Object.values(workspaceNavigation).flat().flatMap((group) => group.items);
+    expect(items.length, "the nav config resolved no items").toBeGreaterThan(5);
     expect(
-      settingsCardsTitled(file, "Proof and case studies"),
-      "exactly one proof editor may exist, and it renders inside the Marketing assets group",
-    ).toHaveLength(1);
+      items.filter((item) => /proof/iu.test(`${item.href} ${item.label}`)),
+      "Proof must not become a rail destination under any name",
+    ).toEqual([]);
   });
 });
 
@@ -222,17 +133,10 @@ const COMPONENT_ROOT = "src/components";
 // an open instance of R4-14. Delete this entry once 10-03 merges.
 // The brain import review was the last holdout; nothing on a live surface may hand-roll a select.
 //
-// The two legacy files are the pre-rehaul `/onboarding/business-profile` and `/onboarding/calendar`
-// client pages, moved out of `src/app` byte for byte so the flag-off arm of `uiRehaulLive()` keeps
-// rendering exactly what it rendered before. They were never in scope for R4-14 -- they sat under
-// `src/app` and this walk only reads `src/components` -- and they entered it by being moved, not by
-// being written. Migrating them would change the arm whose whole purpose is to be unchanged, so
-// they are allowed here until the flag comes out and both files are deleted with it. The rehaul
-// screens that replace them use the shared Select.
-const NATIVE_SELECT_ALLOWLIST: string[] = [
-  "src/components/onboarding/legacy-business-profile.tsx",
-  "src/components/onboarding/legacy-calendar.tsx",
-];
+// Empty since both legacy onboarding screens were deleted with the flag: the two holdouts went
+// with the files, and no component in the tree renders a native `<select>` any more. The list
+// stays rather than being inlined as `[]`, because the next holdout is added here.
+const NATIVE_SELECT_ALLOWLIST: string[] = [];
 
 function jsxElementsNamed(file: ts.SourceFile, tagName: string) {
   return collect(
@@ -288,33 +192,31 @@ describe("R4-14: dropdown option labels fill the row on one line", () => {
 });
 
 describe("R4-24: the cadence editor uses the same primitive", () => {
-  it("builds the cadence row from the shared select", () => {
-    const file = tsx(OFFER_FILE);
-    const importsPrimitive = collect(file, ts.isImportDeclaration).some(
-      (node) => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "@/components/ui/select",
-    );
-    expect(importsPrimitive, `${OFFER_FILE} must import the shared select`).toBe(true);
-    // The redesign made the cadence schedule platform-driven: the coach edits only the
-    // Purpose of each fixed touch, so the Channel class dropdown no longer exists at all.
-    // R4-24's substance survives: the remaining cadence control is the shared Select.
-    const labels = jsxElementsNamed(file, "Select").flatMap((element) =>
-      element.attributes.properties.flatMap((property) =>
-        ts.isJsxAttribute(property) && property.name.getText() === "label" && property.initializer
-          ? [property.initializer.getText()]
-          : [],
-      ),
-    );
-    expect(
-      labels.some((label) => /purpose/iu.test(label)),
-      "the cadence purpose control Alec reported must be the shared Select, not a native select",
-    ).toBe(true);
-    expect(
-      labels.some((label) => label.includes("Channel class")),
-      "the channel-class dropdown is platform-scheduled now and must not come back as a control",
-    ).toBe(false);
+  /*
+   * R4-24 asked that the cadence editor stop being a native select and use the shared primitive,
+   * and it checked that by reading `coach-offer.tsx` for a `<Select>` whose label named the
+   * purpose.
+   *
+   * The rehaul replaced that page with `coach-agent.tsx`, which carries `cadencePurposes` as saved
+   * state and draws no control for it: the coach cannot edit a cadence purpose on the shipped
+   * surface at all. That is a gap in the rehaul rather than something this file can assert, so
+   * what is kept is the guard that does not depend on where the control lives -- wherever a
+   * cadence purpose is edited, it is not edited through a native select.
+   */
+  const REHAUL_ROOT = "src/components/workspace/rehaul";
+
+  it("puts no native select on any surface that edits a cadence purpose", () => {
+    const files = [...liveComponentFiles(LIVE_ROOT), ...liveComponentFiles(REHAUL_ROOT)];
+    expect(files.length, "the component walk read nothing").toBeGreaterThan(20);
+
+    for (const file of files.filter((path) => /OFFER_CADENCE_PURPOSE/u.test(source(path)))) {
+      expect(
+        jsxElementsNamed(tsx(file), "select"),
+        `${file} edits a cadence purpose through a native select, the R4-24 regression`,
+      ).toHaveLength(0);
+    }
   });
 });
-
 describe("Native selects are gone from every live surface", () => {
   it("leaves no native select on any live surface", () => {
     // An AST walk, not a grep: `grep -c "select"` counts comments and CSS-in-JS
@@ -384,15 +286,24 @@ describe("cadence dropdowns speak to a coach, not to the database", () => {
     }
   });
 
-  it("builds both cadence option lists from the label maps", () => {
-    const source = readFileSync(resolve(process.cwd(), COACH_OFFER_TSX), "utf8");
+  /*
+   * Read across the tree rather than out of one file.
+   *
+   * This named `coach-offer.tsx` and asserted its purpose dropdown mapped through the label map.
+   * That file is gone and `coach-agent.tsx` draws no cadence dropdown, so the positive half has no
+   * subject; the regression half never needed one. `({ value, label: value })` is the raw-enum
+   * options array this exists to catch, and it is wrong on any surface, so every component is read
+   * for it rather than the one that happened to hold the control.
+   */
+  it("builds no option list out of raw enum values", () => {
+    const files = [
+      ...liveComponentFiles(LIVE_ROOT),
+      ...liveComponentFiles("src/components/workspace/rehaul"),
+    ];
+    expect(files.length, "the component walk read nothing").toBeGreaterThan(20);
     expect(
-      source,
-      "the purpose dropdown must map through OFFER_CADENCE_PURPOSE_LABELS, not `label: value`",
-    ).toContain("label: OFFER_CADENCE_PURPOSE_LABELS[value]");
-    expect(
-      source,
-      "`label: value` in an options array is the raw-enum regression this test exists to catch",
-    ).not.toContain("({ value, label: value })");
+      files.filter((file) => source(file).includes("({ value, label: value })")),
+      "`label: value` in an options array renders a database identifier to a coach",
+    ).toEqual([]);
   });
 });

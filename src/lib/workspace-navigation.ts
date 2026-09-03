@@ -1,5 +1,5 @@
 import type { UserRole } from "@/lib/auth/claims";
-import { navFoldLive, phase5Live, phase6Live, type EnvironmentSource } from "@/lib/env-contract";
+import { phase5Live, phase6Live, type EnvironmentSource } from "@/lib/env-contract";
 
 export type WorkspaceRole = "admin" | "coach" | "affiliate";
 
@@ -131,9 +131,6 @@ export function demoViewTargetsFor(environment: EnvironmentSource = process.env)
  * open Corrections, and nothing else under Money.
  */
 const MONEY_ROLES: readonly UserRole[] = ["owner", "admin", "build"];
-const BRAIN_MUTATION_ROLES: readonly UserRole[] = ["owner", "admin"];
-/** Publishing account terms is the same authority the API and the RPC both check. */
-const ACCOUNT_TERMS_ROLES: readonly UserRole[] = ["owner", "admin"];
 
 /**
  * The one spelling of the Inbox route, shared by the nav item and by `coachNavCounts`. The count
@@ -144,96 +141,42 @@ export const COACH_INBOX_HREF = "/coach/conversations";
 export const workspaceNavigation: Record<WorkspaceRole, readonly WorkspaceNavGroup[]> = {
   admin: [
     /*
-     * Five groups, every one of them labelled, and the label says what the reader came to do:
-     * Run the platform today, look after Clients, deal with Money, tend the Brain, administer the
-     * Platform itself. Overview leads Run rather than floating alone above the rail -- it is the
-     * first stop of the day-to-day loop, not a category of its own.
+     * Two groups, both labelled, and the label says what the reader came to do: Run the platform
+     * today, administer the Platform itself. Eight destinations, every one a real admin route.
+     * The routes that are not on the rail are still reachable and still resolve --
+     * `FOLDED_NAV_TARGETS` below is what keeps a bookmark to /admin/support landing somewhere
+     * real.
      */
     {
       label: "Run",
       items: [
         { label: "Overview", href: "/admin/overview", glyph: "square" },
-        /*
-         * Inbox is the merged destination from screen 5a: system problems and lead handoffs in one
-         * queue. It lives at /admin/alerts because that is where the attention queue has always
-         * been rendered; only the label was wrong. Client requests is the coach-to-platform support
-         * thread queue at /admin/support, which used to be labelled "Attention" while pointing at
-         * something else entirely. Renaming one without the other would have left the crossed pair
-         * that made the merge necessary.
-         */
         { label: "Inbox", href: "/admin/alerts", queue: true, attention: true, glyph: "diamond" },
-        { label: "Client requests", href: "/admin/support", short: "CQ", queue: true, glyph: "circle" },
-        { label: "Channel health", href: "/admin/channel-health", queue: true, glyph: "bar" },
-        { label: "Provisioning", href: "/admin/provisioning", liveWhen: phase5Live, queue: true, glyph: "circle" },
-        { label: "System", href: "/admin/system", queue: true, glyph: "diamond" },
-      ],
-    },
-    {
-      label: "Clients",
-      items: [
-        { label: "Client book", href: "/admin/platform-clients", queue: true, glyph: "circle" },
-        /*
-         * One setter per client, so the roster is a client dimension rather than a category of its
-         * own. It takes a count because unpublished agents are a queue somebody works down.
-         */
-        { label: "Agents", href: "/admin/agents", queue: true, glyph: "diamond" },
-        { label: "Agent performance", href: "/admin/agent-performance", glyph: "bar" },
-      ],
-    },
-    {
-      label: "Money",
-      items: [
+        { label: "Clients", href: "/admin/platform-clients", queue: true, glyph: "circle" },
         {
-          label: "Revenue and subscriptions",
+          label: "Money",
           href: "/admin/billing",
           liveWhen: phase6Live,
           roles: MONEY_ROLES,
           queue: true,
           glyph: "bar",
         },
-        {
-          label: "Plans and pricing",
-          href: "/admin/tiers",
-          matchPaths: ["/admin/tiers-billing"],
-          roles: MONEY_ROLES,
-          glyph: "square",
-        },
-        { label: "Affiliates and payouts", href: "/admin/affiliates", roles: MONEY_ROLES, queue: true, glyph: "circle" },
-        {
-          label: "Corrections",
-          href: "/admin/corrections",
-          liveWhen: phase6Live,
-          short: "CR",
-          queue: true,
-          glyph: "diamond",
-        },
-      ],
-    },
-    {
-      label: "Brain",
-      items: [
-        { label: "The Brain", href: "/admin/brain", queue: true, glyph: "diamond" },
-        { label: "Evals", href: "/admin/brain/testing", roles: BRAIN_MUTATION_ROLES, glyph: "square" },
-        { label: "Compliance", href: "/admin/compliance", short: "CP", queue: true, glyph: "bar" },
       ],
     },
     {
       label: "Platform",
       items: [
-        { label: "Audit", href: "/admin/audit", glyph: "bar" },
-        /*
-         * The publisher for the contract a coach accepts at signup. It carries no flag: a version
-         * has to be published before `SETTERFI_ACCOUNT_TERMS_LIVE` can be switched on, so gating
-         * the door on that flag would lock the room from the inside.
-         */
+        { label: "The Brain", href: "/admin/brain", queue: true, glyph: "diamond" },
         {
-          label: "Account terms",
-          href: "/admin/account-terms",
-          roles: ACCOUNT_TERMS_ROLES,
-          short: "AT",
+          label: "Compliance",
+          href: "/admin/compliance",
+          short: "CP",
+          queue: true,
+          attention: true,
           glyph: "bar",
         },
-        { label: "Help", href: "/admin/help", glyph: "square" },
+        { label: "System", href: "/admin/system", queue: true, glyph: "diamond" },
+        { label: "Audit", href: "/admin/audit", glyph: "bar" },
       ],
     },
   ],
@@ -254,7 +197,7 @@ export const workspaceNavigation: Record<WorkspaceRole, readonly WorkspaceNavGro
          * Three things make the old labels an oversight rather than a decision. The product's own
          * voice already called it Overview -- `CoachSetup.dc.html:100` and `CoachTips.dc.html:100`
          * both draw a body-copy back-link reading "Back to overview" on screens that render no nav
-         * at all. Every one of the twenty admin labels above is canvas-exact, including "Overview"
+         * at all. Every admin label above is canvas-exact, including "Overview"
          * for the admin landing page, so this file follows canvas nav labels everywhere else. And
          * the demotion from nine destinations to five is argued at length below, naming each cut
          * route and its replacement entry point, while the renames are argued nowhere.
@@ -325,47 +268,6 @@ export const workspaceNavigation: Record<WorkspaceRole, readonly WorkspaceNavGro
   ],
 };
 
-/**
- * The admin nav behind `SETTERFI_NAV_FOLD`: 19 items in 5 groups folded down to 8 items in 2
- * groups. Every destination here is a real admin route, not a new page -- the fold is a rail
- * change, not a product change, so `workspaceNavigationFor` swaps this in wholesale for `admin`
- * rather than filtering the full config down. `FOLDED_NAV_TARGETS` below is what keeps the
- * demoted routes themselves resolving: a bookmark to /admin/support still lands somewhere real.
- */
-const foldedAdminNavigation: readonly WorkspaceNavGroup[] = [
-  {
-    label: "Run",
-    items: [
-      { label: "Overview", href: "/admin/overview", glyph: "square" },
-      { label: "Inbox", href: "/admin/alerts", queue: true, attention: true, glyph: "diamond" },
-      { label: "Clients", href: "/admin/platform-clients", queue: true, glyph: "circle" },
-      {
-        label: "Money",
-        href: "/admin/billing",
-        liveWhen: phase6Live,
-        roles: MONEY_ROLES,
-        queue: true,
-        glyph: "bar",
-      },
-    ],
-  },
-  {
-    label: "Platform",
-    items: [
-      { label: "The Brain", href: "/admin/brain", queue: true, glyph: "diamond" },
-      {
-        label: "Compliance",
-        href: "/admin/compliance",
-        short: "CP",
-        queue: true,
-        attention: true,
-        glyph: "bar",
-      },
-      { label: "System", href: "/admin/system", queue: true, glyph: "diamond" },
-      { label: "Audit", href: "/admin/audit", glyph: "bar" },
-    ],
-  },
-];
 
 /**
  * Where a route folded off the rail still lives. Keyed by the demoted href, valued by the folded
@@ -408,28 +310,24 @@ export type WorkspaceNavCounts = Readonly<Record<string, number>>;
  * as unread mail rather than as work. And a zero is dropped rather than rendered: an empty queue
  * is said by the page being empty when you open it, not by a grey 0 sitting in the rail all day.
  *
- * While `SETTERFI_NAV_FOLD` is on, a queue item's count is the sum of every href that folds onto
- * it (`foldedNavTarget(href) === item.href`), itself included -- so `{ "/admin/support": 4,
+ * A queue item's count is the sum of every href that folds onto it
+ * (`foldedNavTarget(href) === item.href`), itself included -- so `{ "/admin/support": 4,
  * "/admin/alerts": 2 }` lands on Inbox as 6, because both hrefs fold onto /admin/alerts.
  */
 export function withWorkspaceNavCounts(
   groups: readonly WorkspaceNavGroup[],
   counts: WorkspaceNavCounts,
-  environment: EnvironmentSource = process.env,
 ): readonly WorkspaceNavGroup[] {
-  const folded = navFoldLive(environment);
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) => {
       if (!item.queue) return item;
-      const count = folded
-        ? Object.entries(counts).reduce(
-            (total, [href, value]) =>
-              foldedNavTarget(href) === item.href ? total + (value ?? 0) : total,
-            0,
-          )
-        : counts[item.href];
-      return typeof count === "number" && count > 0 ? { ...item, count } : item;
+      const count = Object.entries(counts).reduce(
+        (total, [href, value]) =>
+          foldedNavTarget(href) === item.href ? total + (value ?? 0) : total,
+        0,
+      );
+      return count > 0 ? { ...item, count } : item;
     }),
   }));
 }
@@ -449,7 +347,6 @@ const NAV_ENVIRONMENT_NAMES = [
   "SETTERFI_PHASE5_LIVE",
   "SETTERFI_PHASE6_LIVE",
   "SETTERFI_PHASE6_AFFILIATES_LIVE",
-  "SETTERFI_NAV_FOLD",
 ] as const;
 
 /** Server-only: the nav flags, picked out for handing to the browser. */
@@ -489,10 +386,7 @@ export function workspaceNavigationFor(
   environment: EnvironmentSource = defaultNavigationEnvironment(),
   platformRole?: UserRole,
 ): readonly WorkspaceNavGroup[] {
-  const groups = role === "admin" && navFoldLive(environment)
-    ? foldedAdminNavigation
-    : workspaceNavigation[role];
-  return groups
+  return workspaceNavigation[role]
     .map((group) => ({
       ...group,
       items: group.items.filter(

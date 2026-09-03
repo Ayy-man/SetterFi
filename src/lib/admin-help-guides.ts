@@ -51,7 +51,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
           "The button surfaces the latest suite result. A failing safety suite soft-warns instead of hard-blocking, which means the decision to continue is yours and it is attributed to you.",
       },
       {
-        heading: "Try the change on the Evals page",
+        heading: "Try the change on the Evals tab",
         caption:
           "Ask the lead question the edit was meant to fix and compare the draft against the published version. The grounding receipt shows the retrieval behind the answer before any coach sees it.",
       },
@@ -85,7 +85,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Pick the configuration under test",
         caption:
-          "The Evals page runs against draft, published, or a candidate configuration, with a client-overlay picker and channel simulation. Choose the one you intend to publish, not the one already live.",
+          "The Brain's Evals tab runs against draft, published, or a candidate configuration, with a client-overlay picker and channel simulation. Choose the one you intend to publish, not the one already live.",
       },
       {
         heading: "Run the safety suite first",
@@ -211,7 +211,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Reconcile before you adjust",
         caption:
-          "Open the per-client metering table on Tiers and billing and compare booked calls against the conversations behind them. Only confirmed bookings count; a proposed slot the lead never accepted does not.",
+          "Open the per-client metering table on Money's Tiers tab and compare booked calls against the conversations behind them. Only confirmed bookings count; a proposed slot the lead never accepted does not.",
       },
       {
         heading: "Export the cycle the client is disputing",
@@ -258,7 +258,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Work the system lane first, because those rows block replies",
         caption:
-          "A disconnected channel or a blocked provisioning step stops an agent from answering. Open the row, read the blast radius, and follow the account to Channel health, which carries the provider's own error text. Read the receipt checklist there with care: the signed round-trip receipt has no write path yet, so an empty one means nothing was recorded rather than that the test failed.",
+          "A disconnected channel or a blocked provisioning step stops an agent from answering. Open the row, read the blast radius, and follow the account to the Health tab on Clients, which carries the provider's own error text. Read the receipt checklist there with care: the signed round-trip receipt has no write path yet, so an empty one means nothing was recorded rather than that the test failed.",
       },
       {
         heading: "Read the handoff lane as accounts, not as leads",
@@ -290,7 +290,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Choose My clients or All clients",
         caption:
-          "My clients narrows the queue to your assigned book; All clients is an operating view, not a wider permission. Open the thread in Client requests and keep internal notes separate from the reply the coach will read.",
+          "My clients narrows the queue to your assigned book; All clients is an operating view, not a wider permission. Open the coach request from the Inbox and keep internal notes separate from the reply the coach will read.",
       },
       {
         heading: "Reply from the support thread",
@@ -351,7 +351,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
     outcome: "You can name every client whose setter is not answering leads on its newest configuration, and say why.",
     steps: [
       {
-        heading: "Open Agents and read the three states apart",
+        heading: "Open the Agent tab on Clients and read the three states apart",
         caption:
           "There is one setter per client. Live means it is answering leads on a published version. Draft means edits are saved but nothing has ever been published, so it is answering nothing. Never published means the client has no offer layer at all. They are three different pieces of work, so they are three different sentences rather than one word in three colours.",
       },
@@ -634,7 +634,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Start from the metric definition",
         caption:
-          "Overview and Agent performance use the committed metric registry. The definition and the query must agree on population, attribution window, and exclusion of Demo and Test rows.",
+          "Overview and the Performance tab on Clients use the committed metric registry. The definition and the query must agree on population, attribution window, and exclusion of Demo and Test rows.",
       },
       {
         heading: "Treat absent evidence as absent",
@@ -694,7 +694,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
     outcome: "The request is approved or rejected with a reason and an immutable read-back.",
     steps: [
       {
-        heading: "Open Corrections and read the source event",
+        heading: "Open the Corrections tab on Money and read the source event",
         caption:
           "Compare the request with the billable event and supporting appointment evidence. Do not change the original ledger row.",
       },
@@ -756,7 +756,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
     outcome: "You are using the committed package whose file hashes match its manifest.",
     steps: [
       {
-        heading: "Open Help for the task you are performing",
+        heading: "Open the Help section of your account sheet for the task you are performing",
         caption:
           "The in-product guide is the operating source for screen procedures. The generated operator guide contains the same guide text for offline use.",
       },
@@ -795,12 +795,12 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Publish the draft you checked",
         caption:
-          "Publishing stamps the version with your identity and the time, and both the draft and the publication are recorded in the audit log. A published version cannot be edited, replaced, or withdrawn from this screen.",
+          "Publishing stamps the version with your identity and the time, and both the draft and the publication are recorded in the audit log. A published version cannot be edited, replaced, or withdrawn from the Terms section of your account sheet, where the registry now lives.",
       },
       {
         heading: "Switch acceptance on separately",
         caption:
-          "Publishing alone changes nothing a coach sees. Signup only asks for acceptance once SETTERFI_ACCOUNT_TERMS_LIVE is on, which is why the publisher stays reachable while that flag is off.",
+          "Publishing alone changes nothing a coach sees. Signup only asks for acceptance once SETTERFI_ACCOUNT_TERMS_LIVE is on, which is why the Terms section stays reachable while that flag is off.",
       },
     ],
     verify: [
@@ -832,56 +832,62 @@ export const ADMIN_GUIDES: AdminGuide[] = [
  * rather than at the moment a client follows it.
  *
  * Several guides name more than one route because the work genuinely spans them, and
- * `export-table` names four because it is about an affordance every table carries rather than
- * about a page. That is not a weaker claim: each of the four is checked to exist.
+ * `export-table` names three because it is about an affordance every table carries rather than
+ * about a page. That is not a weaker claim: each of the three is checked to exist.
+ *
+ * The routes checked against are the rail's eight destinations plus the pages the folded routes
+ * land on (`adminGuideSurfaceRoutes` in `handover/generator.ts`), which is how `use-handover` and
+ * `publish-account-terms` can honestly name `/account`: the account sheet is where Help and the
+ * terms registry moved, and it is reachable from every admin page. A folded route itself is not in
+ * that set, so a guide cannot keep pointing at `/admin/account-terms` or `/admin/brain/testing`.
  */
 export const ADMIN_GUIDE_SURFACES: Record<string, readonly string[]> = {
   "publish-brain": ["/admin/brain"],
-  "run-evals": ["/admin/brain/testing"],
-  "channel-health": ["/admin/channel-health", "/admin/system"],
-  "rescue-signup": ["/admin/overview", "/admin/provisioning"],
-  "adjust-meter": ["/admin/tiers", "/admin/corrections"],
+  "run-evals": ["/admin/brain"],
+  "channel-health": ["/admin/platform-clients", "/admin/system"],
+  "rescue-signup": ["/admin/overview", "/admin/platform-clients"],
+  "adjust-meter": ["/admin/billing"],
   "platform-inbox": ["/admin/alerts"],
-  "support-inbox": ["/admin/support"],
+  "support-inbox": ["/admin/alerts"],
   "client-book": ["/admin/platform-clients"],
-  "agent-roster": ["/admin/agents"],
+  "agent-roster": ["/admin/platform-clients"],
   "alert-preferences": ["/admin/alerts"],
   "alert-registry": ["/admin/alerts"],
   "delivery-queue": ["/admin/system", "/admin/alerts"],
   "system-health": ["/admin/system"],
   "audit-log": ["/admin/audit"],
-  "export-table": ["/admin/platform-clients", "/admin/audit", "/admin/agents", "/admin/affiliates"],
+  "export-table": ["/admin/platform-clients", "/admin/audit", "/admin/billing"],
   "compliance-dnc": ["/admin/compliance"],
-  "provisioning-tracker": ["/admin/provisioning"],
-  "measurement-evidence": ["/admin/agent-performance", "/admin/overview"],
-  "billing-operations": ["/admin/billing", "/admin/tiers"],
-  "billing-corrections": ["/admin/corrections"],
-  "affiliate-operations": ["/admin/affiliates"],
-  "use-handover": ["/admin/help"],
-  "publish-account-terms": ["/admin/account-terms"],
+  "provisioning-tracker": ["/admin/platform-clients"],
+  "measurement-evidence": ["/admin/platform-clients", "/admin/overview"],
+  "billing-operations": ["/admin/billing"],
+  "billing-corrections": ["/admin/billing"],
+  "affiliate-operations": ["/admin/billing"],
+  "use-handover": ["/account"],
+  "publish-account-terms": ["/account"],
 };
 
+/**
+ * Route -> guide for the eight destinations the admin rail still carries.
+ *
+ * The rail folded on 2026-09-02 and the routes that left it are tabs and sheet sections now, not
+ * pages: Evals is `/admin/brain?tab=evals`, the agent roster and channel health are tabs on
+ * `/admin/platform-clients`, tiers, affiliates and corrections are tabs on `/admin/billing`, and
+ * the account terms registry is the Terms section of `/account`. A key here has to be a canonical
+ * rail destination -- `assertAdminGuideCoverage` compares this map's keys against the rail exactly
+ * -- so a folded route cannot sit in this map even though its guide still exists. The guides that
+ * lost their own rail row stay reachable through `ADMIN_GUIDE_SURFACES` below and through the
+ * `next:` chain, and each one names the tab or section it now lives on in its step copy.
+ */
 export const ADMIN_GUIDE_NAV_MAP = {
-  "/admin/agent-performance": "measurement-evidence",
-  "/admin/account-terms": "publish-account-terms",
-  "/admin/agents": "agent-roster",
-  "/admin/affiliates": "affiliate-operations",
-
   "/admin/alerts": "platform-inbox",
   "/admin/audit": "audit-log",
   "/admin/billing": "billing-operations",
   "/admin/brain": "publish-brain",
-  "/admin/brain/testing": "run-evals",
-  "/admin/channel-health": "channel-health",
   "/admin/compliance": "compliance-dnc",
-  "/admin/corrections": "billing-corrections",
-  "/admin/help": "use-handover",
   "/admin/overview": "measurement-evidence",
   "/admin/platform-clients": "client-book",
-  "/admin/provisioning": "provisioning-tracker",
-  "/admin/support": "support-inbox",
   "/admin/system": "system-health",
-  "/admin/tiers": "billing-operations",
 } as const;
 
 export function findAdminGuide(id: string) {

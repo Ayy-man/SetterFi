@@ -371,8 +371,6 @@ describe("container queries in the tree", () => {
     "components/workspace/live/account-security-settings.tsx @min-[440px]:",
     // panel toggle <button>, no className prop; its parent panel div already declares a container
     "components/workspace/live/account-security-settings.tsx @min-[520px]:",
-    // one div holds @container/agents and @3xl/agents:, no className prop -- move the declaration up one
-    "components/workspace/live/admin-agents.tsx @3xl/agents:",
     // the job <article> (its <li> parent is free) and the provider <li> (its <ul> parent is free); neither takes a className prop
     "components/workspace/live/admin-system-health.tsx @min-[520px]:",
   ];
@@ -386,16 +384,8 @@ describe("container queries in the tree", () => {
     "components/onboarding/coach-onboarding.tsx @min-[1000px]:",
     // plain grid div inside a DeckPanel, which declares no container
     "components/onboarding/coach-onboarding.tsx @min-[520px]:",
-    // surface-strip div -- the class is CSS-only and sets no container-type
-    "components/onboarding/connect-channels.tsx @min-[720px]:",
-    // surface-strip div, same shape as connect-channels
-    "components/onboarding/offer-review.tsx @min-[720px]:",
-    // plain grid div wrapping DeckPanels
-    "components/onboarding/offer-review.tsx @min-[860px]:",
     // NOT what it looks like: the query is passed as className into <Surface>, which declares @container on that same element -- a collision across a file boundary, which the per-file scan cannot see
     "components/workspace/live/admin-money-affiliates.tsx @min-[300px]:",
-    // plain row div, no className prop
-    "components/workspace/live/offer-editor-chrome.tsx @min-[440px]:",
   ];
 
   it("grows no new collision between a query and its own container", () => {

@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 
 import type { AdminGuide } from "@/lib/admin-help-guides";
+import { foldedRouteFor } from "@/lib/admin-route-fold";
 
 export const HANDOVER_CONTENT_FILES = [
   "operator-guide.md",
@@ -207,6 +208,21 @@ export function assertAdminGuideCoverage(
  * without instructions; a guide for a missing surface sends them looking for a control that is not
  * there, and in the handover package it is a claim about what was delivered.
  */
+/**
+ * Every route a guide is allowed to name: the admin rail, plus the pages the folded routes land
+ * on.
+ *
+ * The rail fold turned pages into tabs and sheet sections, so a guide about Evals is now about a
+ * tab of `/admin/brain` and the account-terms guide is about a section of `/account`. Deriving the
+ * set from `foldedRouteFor` keeps the guard as strict as it was -- a folded source route such as
+ * `/admin/brain/testing` is a key there, never a destination, so naming one still fails -- while
+ * letting a guide name the destination it actually moved to.
+ */
+export function adminGuideSurfaceRoutes(adminNavPaths: readonly string[]): readonly string[] {
+  const folded = Object.values(foldedRouteFor).map((route) => route.pathname);
+  return [...new Set([...adminNavPaths, ...folded])];
+}
+
 export function assertAdminGuideSurfaces(
   adminNavPaths: readonly string[],
   guides: readonly AdminGuide[],

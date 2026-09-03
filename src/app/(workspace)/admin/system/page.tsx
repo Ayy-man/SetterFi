@@ -7,7 +7,7 @@ import {
   OwnerSystem,
   type SystemPlatformSnapshot,
 } from "@/components/workspace/rehaul/owner-system";
-import { phase7AnalyticsLive, phase8Live, uiRehaulLive } from "@/lib/env-contract";
+import { phase7AnalyticsLive, phase8Live } from "@/lib/env-contract";
 import { loadSystemHealth } from "@/lib/operations/system-health";
 import { loadSupportSession } from "@/lib/support/service";
 import { withWorkspaceNavCounts, workspaceNavigationFor } from "@/lib/workspace-navigation";
@@ -45,14 +45,11 @@ export default async function AdminSystemPage() {
   if (!session) redirect("/login?next=%2Fadmin%2Fsystem");
   if (session.impersonatingTenant || !["owner", "admin", "success"].includes(session.role)) forbidden();
   const health = await loadSystemHealth();
-  if (!uiRehaulLive()) {
-    return <AdminSystemHealth health={health} />;
-  }
   const platform = await readPlatformSnapshot(session.userId);
   /*
-   * The rehaul body is the page, not the shell, so the route owns the shell the folded surface
-   * used to own -- including the rail count, which stays the failed-attempt figure an operator
-   * would come here to chase rather than the queue depth, most of which is healthy traffic.
+   * The body is the page, not the shell, so the route owns the shell the folded surface used to
+   * own -- including the rail count, which stays the failed-attempt figure an operator would come
+   * here to chase rather than the queue depth, most of which is healthy traffic.
    */
   return (
     <AppShell

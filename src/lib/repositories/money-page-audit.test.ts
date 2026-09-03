@@ -120,18 +120,18 @@ describe("logMoneyPageRefusal", () => {
   /**
    * The outcome has to reach the panel or the sentence is asserting on nothing.
    *
-   * This is the assertion that would have caught the original defect. Every route that logs must
-   * bind the return value and hand it to the surface it renders; a route that calls the function
-   * and discards the answer puts the panel back to claiming a receipt it cannot see. The one
-   * exception is `corrections`, which calls `forbidden()` on its refusal branch and draws no panel
-   * at all -- it is named here so that dropping it from the list is a deliberate act.
+   * This is the assertion that would have caught the original defect. Every place that logs must
+   * bind the return value and hand it to the surface it renders; a call that discards the answer
+   * puts the panel back to claiming a receipt it cannot see. The four Money routes are one page
+   * with five tabs now, so the two files below are the whole population.
+   *
+   * The one exception is the Corrections tab, which calls `forbidden()` on its refusal branch and
+   * draws no panel at all -- it is named here so that dropping it is a deliberate act.
    */
   it("hands the outcome to the surface on every route that draws the refusal panel", () => {
     const panelRoutes = [
       "src/app/(workspace)/admin/tiers/render-tiers-page.tsx",
       "src/app/(workspace)/admin/billing/page.tsx",
-      "src/app/(workspace)/admin/billing/costs/page.tsx",
-      "src/app/(workspace)/admin/affiliates/page.tsx",
     ];
 
     for (const file of panelRoutes) {
@@ -140,12 +140,12 @@ describe("logMoneyPageRefusal", () => {
       expect(source).toContain("refusalRecord={refusalRecord}");
     }
 
-    const corrections = readFileSync(
-      resolve(process.cwd(), "src/app/(workspace)/admin/corrections/page.tsx"),
+    const billing = readFileSync(
+      resolve(process.cwd(), "src/app/(workspace)/admin/billing/page.tsx"),
       "utf8",
     );
-    expect(corrections).toContain("forbidden()");
-    expect(corrections).not.toContain("refusalRecord={");
+    expect(billing).toContain('surface === "corrections"');
+    expect(billing).toContain("forbidden()");
   });
 
   /**
@@ -162,9 +162,6 @@ describe("logMoneyPageRefusal", () => {
     const gateFiles = [
       "src/app/(workspace)/admin/tiers/render-tiers-page.tsx",
       "src/app/(workspace)/admin/billing/page.tsx",
-      "src/app/(workspace)/admin/billing/costs/page.tsx",
-      "src/app/(workspace)/admin/corrections/page.tsx",
-      "src/app/(workspace)/admin/affiliates/page.tsx",
     ];
 
     for (const file of gateFiles) {

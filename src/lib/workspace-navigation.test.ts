@@ -29,24 +29,14 @@ const pathCases: ReadonlyArray<{
   path: string;
   label: string;
 }> = [
-  { role: "admin", path: "/admin/support", label: "Client requests" },
-  { role: "admin", path: "/admin/channel-health", label: "Channel health" },
-  { role: "admin", path: "/admin/provisioning", label: "Provisioning" },
-  { role: "admin", path: "/admin/system", label: "System" },
-  { role: "admin", path: "/admin/platform-clients", label: "Client book" },
-  { role: "admin", path: "/admin/agents", label: "Agents" },
-  { role: "admin", path: "/admin/agent-performance", label: "Agent performance" },
-  { role: "admin", path: "/admin/billing", label: "Revenue and subscriptions" },
-  { role: "admin", path: "/admin/corrections", label: "Corrections" },
-  { role: "admin", path: "/admin/tiers", label: "Plans and pricing" },
-  { role: "admin", path: "/admin/affiliates", label: "Affiliates and payouts" },
-  { role: "admin", path: "/admin/brain", label: "The Brain" },
-  { role: "admin", path: "/admin/brain/testing", label: "Evals" },
-  { role: "admin", path: "/admin/compliance", label: "Compliance" },
   { role: "admin", path: "/admin/overview", label: "Overview" },
-  { role: "admin", path: "/admin/audit", label: "Audit" },
   { role: "admin", path: "/admin/alerts", label: "Inbox" },
-  { role: "admin", path: "/admin/help", label: "Help" },
+  { role: "admin", path: "/admin/platform-clients", label: "Clients" },
+  { role: "admin", path: "/admin/billing", label: "Money" },
+  { role: "admin", path: "/admin/brain", label: "The Brain" },
+  { role: "admin", path: "/admin/compliance", label: "Compliance" },
+  { role: "admin", path: "/admin/system", label: "System" },
+  { role: "admin", path: "/admin/audit", label: "Audit" },
   { role: "coach", path: "/coach/home", label: "Overview" },
   { role: "coach", path: "/coach/conversations", label: "Inbox" },
   { role: "coach", path: "/coach/contacts", label: "Leads" },
@@ -69,58 +59,31 @@ describe("workspace navigation information architecture", () => {
       ["Run", [
         ["Overview", "/admin/overview"],
         // Screen 5a merged Attention and Escalations into one destination. Inbox is that queue and
-        // it sits at /admin/alerts, where the attention surface has always rendered; only the label
-        // was wrong. Client requests is the coach-to-platform support queue that used to wear the
-        // "Attention" label while pointing somewhere else.
+        // it sits at /admin/alerts, where the attention surface has always rendered. Client
+        // requests folds onto it rather than keeping a rail row of its own.
         ["Inbox", "/admin/alerts"],
-        ["Client requests", "/admin/support"],
-        ["Channel health", "/admin/channel-health"],
-        ["Provisioning", "/admin/provisioning"],
-        ["System", "/admin/system"],
+        ["Clients", "/admin/platform-clients"],
+        ["Money", "/admin/billing"],
       ]],
-      ["Clients", [
-        ["Client book", "/admin/platform-clients"],
-        ["Agents", "/admin/agents"],
-        ["Agent performance", "/admin/agent-performance"],
-      ]],
-      ["Money", [
-        ["Revenue and subscriptions", "/admin/billing"],
-        ["Plans and pricing", "/admin/tiers"],
-        ["Affiliates and payouts", "/admin/affiliates"],
-        ["Corrections", "/admin/corrections"],
-      ]],
-      ["Brain", [
-        ["The Brain", "/admin/brain"],
-        ["Evals", "/admin/brain/testing"],
-        ["Compliance", "/admin/compliance"],
-      ]],
-      // Notifications is gone rather than renamed: it pointed at /admin/alerts, which renders the
-      // Inbox whenever phase-8 alerts are live, so it was a second door onto the same queue.
       ["Platform", [
+        ["The Brain", "/admin/brain"],
+        ["Compliance", "/admin/compliance"],
+        ["System", "/admin/system"],
         ["Audit", "/admin/audit"],
-        // The account-terms publisher: owner/admin only, and carrying no flag on purpose, because
-        // a version has to be published before SETTERFI_ACCOUNT_TERMS_LIVE can be switched on.
-        ["Account terms", "/admin/account-terms"],
-        ["Help", "/admin/help"],
       ]],
     ]);
   });
 
-  it("names all five groups and opens Run with Overview", () => {
-    expect(workspaceNavigation.admin.map((group) => group.label))
-      .toEqual(["Run", "Clients", "Money", "Brain", "Platform"]);
+  it("names both groups and opens Run with Overview", () => {
+    expect(workspaceNavigation.admin.map((group) => group.label)).toEqual(["Run", "Platform"]);
     expect(workspaceNavigation.admin[0].items[0].label).toBe("Overview");
     expect(workspaceNavigation.admin.every((group) => group.label.length > 0)).toBe(true);
   });
 
-  it("collapses the Brain group to three destinations with no child items", () => {
-    const brain = workspaceNavigation.admin.find((group) => group.label === "Brain");
-    expect(brain?.items.some((item) => item.children)).toBe(false);
-    expect(workspaceNavItemsWithChildren(brain?.items ?? []).map((item) => item.label)).toEqual([
-      "The Brain",
-      "Evals",
-      "Compliance",
-    ]);
+  it("carries no child items, because the rail draws one level", () => {
+    for (const group of workspaceNavigation.admin) {
+      expect(group.items.some((item) => item.children)).toBe(false);
+    }
   });
 
   it("keeps every top-level admin href unique across all groups", () => {
@@ -153,35 +116,22 @@ describe("workspace navigation information architecture", () => {
     }
   });
 
-  it("keeps Plans and pricing stable while Phase 6 gates its other live pages", () => {
-    const live = workspaceNavigationFor("admin", { SETTERFI_PHASE6_LIVE: "true" });
-    const off = workspaceNavigationFor("admin", { SETTERFI_PHASE6_LIVE: "false" });
-    const labels = (groups: typeof live) => groups.flatMap((group) => group.items.map((item) => item.label));
+  it("keeps Money behind Phase 6", () => {
+    const labels = (environment: Record<string, string>) =>
+      workspaceNavigationFor("admin", environment).flatMap((group) =>
+        group.items.map((item) => item.label));
 
-    expect(labels(live)).toContain("Revenue and subscriptions");
-    expect(labels(live)).toContain("Corrections");
-    expect(labels(off)).not.toContain("Revenue and subscriptions");
-    expect(labels(off)).not.toContain("Corrections");
-    expect(labels(live).filter((label) => label === "Plans and pricing")).toHaveLength(1);
-    expect(labels(off).filter((label) => label === "Plans and pricing")).toHaveLength(1);
-    expect(getWorkspaceActiveItem("admin", "/admin/tiers-billing", { SETTERFI_PHASE6_LIVE: "true" })?.label)
-      .toBe("Plans and pricing");
-    expect(getWorkspaceActiveItem("admin", "/admin/tiers-billing", { SETTERFI_PHASE6_LIVE: "false" })?.label)
-      .toBe("Plans and pricing");
+    expect(labels({ SETTERFI_PHASE6_LIVE: "true" })).toContain("Money");
+    expect(labels({ SETTERFI_PHASE6_LIVE: "false" })).not.toContain("Money");
   });
 
-  it("keeps Provisioning behind Phase 5 without gating coach nav on it", () => {
-    const live = { SETTERFI_PHASE5_LIVE: "true" };
-    const off = { SETTERFI_PHASE5_LIVE: "false" };
-    const paths = (role: WorkspaceRole, environment: typeof live) => workspaceNavigationFor(role, environment)
-      .flatMap((group) => group.items.map((item) => item.href));
+  it("leaves the coach rail untouched by the admin phase flags", () => {
+    const paths = (environment: Record<string, string>) =>
+      workspaceNavigationFor("coach", environment).flatMap((group) =>
+        group.items.map((item) => item.href));
 
-    expect(paths("admin", live)).toContain("/admin/provisioning");
-    expect(paths("admin", off)).not.toContain("/admin/provisioning");
-    // Get started left the coach rail in the nine-to-five cut below; it is no longer a nav item
-    // to gate on Phase 5 at all, so the coach half of this test now only proves the rail is
-    // unaffected by the admin-only flag.
-    expect(paths("coach", live)).toEqual(paths("coach", off));
+    expect(paths({ SETTERFI_PHASE5_LIVE: "true", SETTERFI_PHASE6_LIVE: "true" }))
+      .toEqual(paths({ SETTERFI_PHASE5_LIVE: "false", SETTERFI_PHASE6_LIVE: "false" }));
   });
 
   it("flattens coach navigation to one ordered five-item list", () => {
@@ -220,20 +170,21 @@ describe("workspace navigation information architecture", () => {
       expect(coachHrefs, href).not.toContain(href);
     }
 
+    // Coach Home's own surface, which is `coach-dashboard.tsx` since the rehaul took the route.
+    // The rows it draws are the same two entry points; both are plain JSX now rather than the
+    // attention card's row objects, so the strings read for changed with the spelling. What this
+    // asserts has not: each demoted route is reachable from a labelled control on Home.
     const measurement = readFileSync(
-      resolve(process.cwd(), "src/components/workspace/live/coach-measurement.tsx"),
+      resolve(process.cwd(), "src/components/workspace/rehaul/coach-dashboard.tsx"),
       "utf8",
     );
-    // Get started: the "Blocked setup steps" attention-card entry, "Open setup".
-    expect(measurement).toContain('href: "/coach/get-started"');
-    expect(measurement).toContain('note: "Open setup"');
-    // Connections: AttentionQueue's blocked-channel row, which takes the card's one accent fill.
-    // The label moved from a template literal in the `Link`'s children to plain JSX children when
-    // the card was rebuilt on 2026-09-02 -- same link, same href, same words, different spelling --
-    // so the string this reads for changed with it. What it asserts has not: that the route is
-    // reachable from a control whose label names the channel it reconnects.
+    // Get started: the blocked-steps row on the setup rail, "See setup".
+    expect(measurement).toContain('href="/coach/get-started"');
+    expect(measurement).toContain("See setup");
+    // Connections: the setup rail's first step, which takes the rail's one accent fill and names
+    // the channels it connects.
     expect(measurement).toContain('href="/coach/integrations"');
-    expect(measurement).toContain("Reconnect {blockedChannel.channelLabel}");
+    expect(measurement).toContain("Connect Instagram and Messenger");
     // ...and, because that row only exists while something is broken, the unconditional one on
     // Setup's channel strip. Setup is itself reachable from every coach page via the support
     // bubble, so this is the route that survives every channel being healthy.
@@ -299,18 +250,18 @@ describe("queue counts", () => {
 
   it("stamps a depth on a queue destination", () => {
     const counted = withWorkspaceNavCounts(workspaceNavigationFor("admin", allLive), {
-      "/admin/support": 4,
-      "/admin/channel-health": 2,
+      "/admin/alerts": 4,
+      "/admin/system": 2,
     });
-    expect(item(counted, "/admin/support")?.count).toBe(4);
-    expect(item(counted, "/admin/channel-health")?.count).toBe(2);
+    expect(item(counted, "/admin/alerts")?.count).toBe(4);
+    expect(item(counted, "/admin/system")?.count).toBe(2);
   });
 
   it("drops a zero rather than parking a grey 0 in the rail", () => {
     const counted = withWorkspaceNavCounts(workspaceNavigationFor("admin", allLive), {
-      "/admin/support": 0,
+      "/admin/alerts": 0,
     });
-    expect(item(counted, "/admin/support")?.count).toBeUndefined();
+    expect(item(counted, "/admin/alerts")?.count).toBeUndefined();
   });
 
   /*
@@ -341,31 +292,23 @@ describe("queue counts", () => {
       .map((item) => item.href);
     expect(queues).toEqual([
       "/admin/alerts",
-      "/admin/support",
-      "/admin/channel-health",
-      "/admin/provisioning",
-      "/admin/system",
       "/admin/platform-clients",
-      "/admin/agents",
       "/admin/billing",
-      "/admin/affiliates",
-      "/admin/corrections",
       "/admin/brain",
       "/admin/compliance",
+      "/admin/system",
     ]);
-    // Reference and settings pages are not queues: a number beside them reads as unread mail.
-    expect(queues).not.toContain("/admin/help");
+    // Reference pages are not queues: a number beside them reads as unread mail.
+    expect(queues).not.toContain("/admin/overview");
     expect(queues).not.toContain("/admin/audit");
-    expect(queues).not.toContain("/admin/tiers");
-    expect(queues).not.toContain("/admin/brain/testing");
   });
 
   it("refuses a count on a destination that is not a queue", () => {
     const counted = withWorkspaceNavCounts(workspaceNavigationFor("admin", allLive), {
-      "/admin/help": 9,
+      "/admin/overview": 9,
       "/admin/audit": 12,
     });
-    expect(item(counted, "/admin/help")?.count).toBeUndefined();
+    expect(item(counted, "/admin/overview")?.count).toBeUndefined();
     expect(item(counted, "/admin/audit")?.count).toBeUndefined();
   });
 
@@ -379,8 +322,8 @@ describe("queue counts", () => {
 });
 
 describe("workspace navigation path resolution", () => {
-  it("covers the required 25 canonical and merged-view paths", () => {
-    expect(pathCases).toHaveLength(25);
+  it("covers the required 15 canonical and merged-view paths", () => {
+    expect(pathCases).toHaveLength(15);
   });
 
   it.each(pathCases)("resolves $path to $label", ({ role, path, label }) => {
@@ -391,13 +334,6 @@ describe("workspace navigation path resolution", () => {
     const item = getWorkspaceActiveItem(role, path, allLive);
     expect(item).toBeDefined();
     expect(isWorkspaceNavItemActive(item!, `${path}-extra`)).toBe(false);
-  });
-
-  it("marks exactly Evals current on its nested Brain route", () => {
-    const active = workspaceNavigationFor("admin", allLive)
-      .flatMap((group) => workspaceNavItemsWithChildren(group.items))
-      .filter((item) => isWorkspaceNavItemActive(item, "/admin/brain/testing"));
-    expect(active.map((item) => item.label)).toEqual(["Evals"]);
   });
 
   /**
@@ -460,7 +396,7 @@ describe("navigation environment publishing", () => {
     const clientPass = workspaceNavigationFor("admin", navigationEnvironment(environment));
 
     expect(hrefs(clientPass)).toEqual(hrefs(serverPass));
-    expect(hrefs(clientPass)).toContain("/admin/provisioning");
+    expect(hrefs(clientPass)).toContain("/admin/overview");
     expect(hrefs(clientPass)).toContain("/admin/billing");
   });
 });
@@ -471,30 +407,17 @@ describe("role-scoped admin navigation", () => {
       group.items.map((item) => item.href),
     );
 
-  const moneyHrefs = ["/admin/billing", "/admin/tiers", "/admin/affiliates"];
+  const moneyHrefs = ["/admin/billing"];
 
-  it("offers eval controls only to the owner/admin mutation set", () => {
-    expect(hrefs("owner")).toContain("/admin/brain/testing");
-    expect(hrefs("admin")).toContain("/admin/brain/testing");
-    expect(hrefs("success")).not.toContain("/admin/brain/testing");
-    expect(hrefs("build")).not.toContain("/admin/brain/testing");
-  });
-
-  it("hides the three money surfaces a success reviewer is refused on", () => {
+  it("hides the Money rail item from a success reviewer", () => {
     const success = hrefs("success");
     for (const href of moneyHrefs) expect(success).not.toContain(href);
-    // Corrections is the one Money surface success may open, so it stays.
-    expect(success).toContain("/admin/corrections");
   });
 
   it("leaves every other admin destination in place for success", () => {
     const success = hrefs("success");
     const owner = hrefs("owner");
-    expect(success).toEqual(owner.filter((href) =>
-      !moneyHrefs.includes(href)
-      && href !== "/admin/brain/testing"
-      && href !== "/admin/account-terms",
-    ));
+    expect(success).toEqual(owner.filter((href) => !moneyHrefs.includes(href)));
   });
 
   it("shows the full nav to owner, admin, and to a caller that names no role", () => {
@@ -504,34 +427,18 @@ describe("role-scoped admin navigation", () => {
   });
 
   it("treats an item with no roles as open to everyone", () => {
-    expect(navItemAllowsRole({ label: "Help", href: "/admin/help" }, "success")).toBe(true);
+    expect(navItemAllowsRole({ label: "Audit", href: "/admin/audit" }, "success")).toBe(true);
   });
 
-  it("gives Compliance and Corrections distinct collapsed-rail monograms", () => {
+  it("gives Compliance a collapsed-rail monogram of its own", () => {
     const items = workspaceNavigation.admin.flatMap((group) => group.items);
-    const compliance = items.find((item) => item.href === "/admin/compliance");
-    const corrections = items.find((item) => item.href === "/admin/corrections");
-    expect(compliance?.short).toBe("CP");
-    expect(corrections?.short).toBe("CR");
+    expect(items.find((item) => item.href === "/admin/compliance")?.short).toBe("CP");
   });
 });
 
-describe("admin nav fold", () => {
-  const foldOn = { ...allLive, SETTERFI_NAV_FOLD: "true" };
-  const foldOff = { ...allLive, SETTERFI_NAV_FOLD: "false" };
-
-  it("returns the original 19-item, 5-group config when the flag is unset or false", () => {
-    for (const environment of [allLive, foldOff]) {
-      const groups = workspaceNavigationFor("admin", environment);
-      expect(groups.map((group) => group.label)).toEqual(["Run", "Clients", "Money", "Brain", "Platform"]);
-      expect(groups.flatMap((group) => group.items).map((item) => item.href)).toEqual(
-        workspaceNavigation.admin.flatMap((group) => group.items.map((item) => item.href)),
-      );
-    }
-  });
-
-  it("folds to exactly 8 items in 2 groups, in order, with the queue and attention flags carried", () => {
-    const groups = workspaceNavigationFor("admin", foldOn);
+describe("the folded admin rail", () => {
+  it("is exactly 8 items in 2 groups, in order, with the queue and attention flags carried", () => {
+    const groups = workspaceNavigationFor("admin", allLive);
     expect(groups.map((group) => group.label)).toEqual(["Run", "Platform"]);
 
     const items = groups.flatMap((group) => group.items);
@@ -548,44 +455,34 @@ describe("admin nav fold", () => {
     ]);
   });
 
-  it("leaves coach and affiliate navigation untouched by the flag", () => {
-    const coachOn = workspaceNavigationFor("coach", foldOn);
-    const coachOff = workspaceNavigationFor("coach", foldOff);
-    expect(coachOn).toEqual(coachOff);
-
-    const affiliateOn = workspaceNavigationFor("affiliate", foldOn);
-    const affiliateOff = workspaceNavigationFor("affiliate", foldOff);
-    expect(affiliateOn).toEqual(affiliateOff);
-  });
-
-  it("still gates the folded Money item behind Phase 6 and the money roles", () => {
-    const live = workspaceNavigationFor("admin", foldOn).flatMap((group) => group.items);
+  it("still gates Money behind Phase 6 and the money roles", () => {
+    const live = workspaceNavigationFor("admin", allLive).flatMap((group) => group.items);
     expect(live.map((item) => item.href)).toContain("/admin/billing");
 
-    const phase6Off = workspaceNavigationFor("admin", { ...foldOn, SETTERFI_PHASE6_LIVE: "false" })
+    const phase6Off = workspaceNavigationFor("admin", { ...allLive, SETTERFI_PHASE6_LIVE: "false" })
       .flatMap((group) => group.items);
     expect(phase6Off.map((item) => item.href)).not.toContain("/admin/billing");
 
-    const success = workspaceNavigationFor("admin", foldOn, "success").flatMap((group) => group.items);
+    const success = workspaceNavigationFor("admin", allLive, "success").flatMap((group) => group.items);
     expect(success.map((item) => item.href)).not.toContain("/admin/billing");
   });
 
   it("sums a folded href's count into the item that absorbed it", () => {
-    const groups = workspaceNavigationFor("admin", foldOn);
-    const counted = withWorkspaceNavCounts(groups, { "/admin/support": 4, "/admin/alerts": 2 }, foldOn);
+    const groups = workspaceNavigationFor("admin", allLive);
+    const counted = withWorkspaceNavCounts(groups, { "/admin/support": 4, "/admin/alerts": 2 });
     const inbox = counted.flatMap((group) => group.items).find((item) => item.href === "/admin/alerts");
     expect(inbox?.count).toBe(6);
   });
 
   it("sums every route folded onto Clients and onto Money", () => {
-    const groups = workspaceNavigationFor("admin", foldOn);
+    const groups = workspaceNavigationFor("admin", allLive);
     const clientsCounted = withWorkspaceNavCounts(groups, {
       "/admin/channel-health": 1,
       "/admin/provisioning": 2,
       "/admin/agents": 3,
       "/admin/agent-performance": 4,
       "/admin/platform-clients": 5,
-    }, foldOn);
+    });
     const clients = clientsCounted.flatMap((group) => group.items).find((item) => item.href === "/admin/platform-clients");
     expect(clients?.count).toBe(15);
 
@@ -594,16 +491,9 @@ describe("admin nav fold", () => {
       "/admin/affiliates": 2,
       "/admin/corrections": 3,
       "/admin/billing": 4,
-    }, foldOn);
+    });
     const money = moneyCounted.flatMap((group) => group.items).find((item) => item.href === "/admin/billing");
     expect(money?.count).toBe(10);
-  });
-
-  it("does not fold counts when the flag is off, keeping the per-href behaviour", () => {
-    const groups = workspaceNavigationFor("admin", foldOff);
-    const counted = withWorkspaceNavCounts(groups, { "/admin/support": 4 }, foldOff);
-    const support = counted.flatMap((group) => group.items).find((item) => item.href === "/admin/support");
-    expect(support?.count).toBe(4);
   });
 
   it("maps every folded href to its target and leaves unmapped hrefs as identity", () => {

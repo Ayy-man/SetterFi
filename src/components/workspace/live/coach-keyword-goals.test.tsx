@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +21,17 @@ const resourceGoal = {
 };
 
 afterEach(() => vi.unstubAllGlobals());
+
+/** Every non-test component under a directory, recursively. */
+function componentFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const target = join(directory, entry.name);
+    if (entry.isDirectory()) return componentFiles(target);
+    return entry.isFile() && /\.tsx$/u.test(entry.name) && !entry.name.includes(".test.")
+      ? [target]
+      : [];
+  });
+}
 
 describe("CoachKeywordGoals", () => {
   it("switches between resource and direct-book goals with large conditional controls", () => {
@@ -107,9 +119,25 @@ describe("CoachKeywordGoals", () => {
     expect(screen.getByRole("button", { name: "Export keyword goals" })).toBeVisible();
   });
 
-  it("stays isolated until the Agent placement ruling is made", () => {
-    const page = readFileSync("src/components/workspace/live/coach-offer.tsx", "utf8");
-    expect(page).not.toContain("CoachKeywordGoals");
-    expect(page).not.toContain("coach-keyword-goals");
+  /*
+   * The placement ruling, and what happened to it.
+   *
+   * This read `coach-offer.tsx` and asserted the goals editor was not mounted there while the
+   * question of where keywords belong was open. The rehaul answered it the other way and in a way
+   * this test could not see: `coach-agent.tsx` reads `/api/coach/keyword-goals` and draws its own
+   * "Keywords" panel, so the editor is on the Agent surface, and this component is mounted by
+   * nothing. Two editors of one dataset is the state the original ruling existed to avoid, so what
+   * is asserted now is the mounting rather than the file: this component has no caller, which is
+   * the fact somebody has to act on.
+   */
+  it("is mounted by nothing, the Agent surface having taken the editor", () => {
+    const callers = componentFiles("src/components")
+      .filter((file) => !file.endsWith("coach-keyword-goals.tsx"))
+      .filter((file) => /<CoachKeywordGoals[\s/>]/u.test(readFileSync(file, "utf8")));
+    expect(callers.length, "the component walk read nothing").toBeGreaterThanOrEqual(0);
+    expect(
+      callers,
+      "the keyword goals editor is relocated, never copied -- the Agent surface owns it now",
+    ).toEqual([]);
   });
 });

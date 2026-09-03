@@ -181,7 +181,7 @@ describe("the coach surface is the whole coach surface, not the coach directory"
     expect(shared).toContain("src/components/kit/atomics/type.tsx");
     // And the coach-only half is still the thing the sibling guard reads, so the two partition
     // the surface between them rather than overlapping or leaving a gap.
-    expect(coachOnlyModules()).toContain("src/components/workspace/live/coach-measurement.tsx");
+    expect(coachOnlyModules()).toContain("src/components/workspace/rehaul/coach-dashboard.tsx");
     expect(shared.length + coachOnlyModules().length).toBe(surface.length);
   });
 });
@@ -194,16 +194,17 @@ describe("the coach surface is the whole coach surface, not the coach directory"
  * survived three rounds.
  */
 const SHARED_MOUNT_DEBT: Record<string, string> = {
+  // `Chip` (12px label) and `NoteStrip` (12.5px) had rows here until the rehaul took the live
+  // offer, conversations and measurement surfaces, which were the coach's only mounts of them.
+  // Neither atomic changed; no coach page reaches them any more, so the rule has nothing to say.
   // Ten of them, found the moment the walk stopped subtracting admin. None is the defect this
   // file was opened for and none is this lane's to fix, but they are the same defect: a console
   // atomic rendering console sizes on a page whose floor is 14px. Each is a coach screen reading
   // 11-13.5px somewhere today.
   Callout: "12.5px note line",
-  Chip: "12px label",
   DataTable: "12.5px header and cells",
   KeyValueList: "12px keys",
   MonoMeta: "12px",
-  NoteStrip: "12.5px",
   QueueItem: "11.5 / 12 / 13.5px",
   SettingRow: "12 / 13.5px",
   Status: "11 / 11.5 / 12.5px",
@@ -224,7 +225,11 @@ describe("no shared component reaches a coach page with only a sub-floor renderi
     // no component -- which is the failure mode every guard in this repo has had at least once.
     const anyMounted = sharedModules().flatMap(recipes).filter((recipe) => mounted.has(recipe.component));
     expect(anyMounted.length).toBeGreaterThan(5);
-    expect(anyMounted.some((recipe) => recipe.component === "Segmented")).toBe(true);
+    // A named atomic, so the count above cannot be met by five things nobody recognises. This read
+    // `Segmented` until the rehaul replaced the live measurement surface, whose window picker was
+    // the coach's only mount of it; `DataTable` is mounted by the coach's own tables and carries a
+    // debt row below, so it is a component this file already knows it reaches.
+    expect(anyMounted.some((recipe) => recipe.component === "DataTable")).toBe(true);
   });
 
   it("mounts nothing whose every size is under the floor", () => {

@@ -2,15 +2,12 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { DataState } from "@/components/kit/data-state";
-import { OfferReviewPanels } from "@/components/onboarding/offer-review";
 import { offerReview } from "@/components/onboarding/offer-view-models";
 import { OnboardingStage } from "@/components/onboarding/onboarding-stage";
 import { SetupSteps } from "@/components/onboarding/setup-steps";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { OnboardingOfferRehaul } from "@/components/workspace/rehaul/onboarding-offer";
-import { phase2Live, phase5Live, uiRehaulLive } from "@/lib/env-contract";
-import { connectStepComplete } from "@/components/onboarding/connect-view-models";
-import { listChannelConnections } from "@/lib/repositories/channel-connections";
+import { phase2Live, phase5Live } from "@/lib/env-contract";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -55,7 +52,6 @@ export default async function OnboardingOfferPage() {
   const repository = createOfferLayerRepository();
 
   let review = null;
-  let connectDone = false;
   try {
     /*
      * The published offer first, and the draft only when nothing is published. That order is the
@@ -63,21 +59,13 @@ export default async function OnboardingOfferPage() {
      * that showed an unpublished draft as the current state would tell a coach their agent is
      * using words it has never seen. The read-back says which of the two it is looking at.
      */
-    /*
-     * The connections read is the four-step strip's, and the strip only exists on the pre-rehaul
-     * path -- the rehaul screen draws the step position in its own chrome. Under the flag it is a
-     * query whose answer nothing reads, so it is not made.
-     */
-    const rehaul = uiRehaulLive();
-    const [published, draft, connections] = await Promise.all([
+    const [published, draft] = await Promise.all([
       repository.loadOffer({ status: "published", tenantId }),
       repository.loadOffer({ status: "draft", tenantId }),
-      rehaul ? Promise.resolve([]) : listChannelConnections(tenantId).catch(() => []),
     ]);
     review = published
       ? offerReview(published, "published")
       : offerReview(draft, draft ? "draft" : "none");
-    connectDone = rehaul ? false : connectStepComplete(connections);
   } catch {
     review = null;
   }
@@ -99,26 +87,5 @@ export default async function OnboardingOfferPage() {
     );
   }
 
-  // The same review the pre-rehaul panels read; the rehaul screen only draws it differently.
-  if (uiRehaulLive()) {
-    return <OnboardingOfferRehaul review={review} />;
-  }
-
-  const completed = [
-    ...(connectDone ? (["connect"] as const) : []),
-    // Ticked on the published offer only. A draft is saved work, not a finished step: the agent
-    // is not using it, and a tick would say otherwise.
-    ...(review.source === "published" && review.ready ? (["offer"] as const) : []),
-  ];
-
-  return (
-    <OnboardingStage
-      lead={LEAD}
-      steps={<SetupSteps completed={completed} current="offer" />}
-      title={TITLE}
-      width="wide"
-    >
-      <OfferReviewPanels review={review} />
-    </OnboardingStage>
-  );
+  return <OnboardingOfferRehaul review={review} />;
 }

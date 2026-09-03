@@ -3,9 +3,8 @@ import { forbidden, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
-import { AdminAuditLog } from "@/components/workspace/live/admin-audit-log";
 import { OwnerAudit } from "@/components/workspace/rehaul/owner-audit";
-import { phase8Live, uiRehaulLive } from "@/lib/env-contract";
+import { phase8Live } from "@/lib/env-contract";
 import { loadSupportSession } from "@/lib/support/service";
 
 import { PAGE_SIZE, loadAuditRows, requestedQuery } from "./load";
@@ -47,9 +46,7 @@ export default async function AuditPage({ searchParams }: PageProps) {
     };
     return (
       <AuditShell>
-        {uiRehaulLive()
-          ? <OwnerAudit enabled={false} pagination={emptyPagination} rows={[]} />
-          : <AdminAuditLog enabled={false} rows={[]} pagination={emptyPagination} />}
+        <OwnerAudit enabled={false} pagination={emptyPagination} rows={[]} />
       </AuditShell>
     );
   }
@@ -61,32 +58,12 @@ export default async function AuditPage({ searchParams }: PageProps) {
 
   const query = requestedQuery(await searchParams);
   const result = await loadAuditRows(query);
-  if (uiRehaulLive()) {
-    return (
-      <AuditShell>
-        <OwnerAudit
-          enabled
-          liveWorkspaceCount={result.liveWorkspaceCount}
-          pagination={result.pagination}
-          rows={result.rows}
-          unavailableReason={result.unavailableReason}
-        />
-      </AuditShell>
-    );
-  }
-
   return (
     <AuditShell>
-      <AdminAuditLog
+      <OwnerAudit
         enabled
         liveWorkspaceCount={result.liveWorkspaceCount}
-        // The server's clock, so "Today" on a day divider means the server's today and not the
-        // browser's. Computed here rather than in the client component to keep the first render
-        // and the hydrated one saying the same word.
-        nowIso={new Date().toISOString()}
         pagination={result.pagination}
-        rangeStart={query.rangeStart}
-        viewCounts={result.viewCounts}
         rows={result.rows}
         unavailableReason={result.unavailableReason}
       />

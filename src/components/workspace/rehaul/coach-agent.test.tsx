@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,12 @@ import {
   type RehaulConnectionSurface,
 } from "@/components/workspace/rehaul/coach-agent";
 import { rehaulConnectionSurface } from "@/components/workspace/rehaul/coach-agent-connection-view";
+import {
+  coachCadenceExportRows,
+  coachCadenceSchedule,
+  type CoachCadenceChannel,
+} from "@/components/workspace/live/coach-agent";
+import { DURABLE_TOUCHES, WINDOW_BOUND_TOUCHES } from "@/lib/followups/touch-lists";
 import type { PersistedOfferLayer } from "@/lib/offer/types";
 import type { CoachQuestion } from "@/lib/repositories/coach-questions";
 import type { KeywordGoal } from "@/lib/repositories/keyword-goals";
@@ -270,6 +276,65 @@ describe("rehaul coach agent", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Not connected")).not.toBeInTheDocument();
   });
+
+  /*
+   * The four offer-layer exports `coach-offer.tsx` carried and the rehaul dropped.
+   *
+   * Each is asserted by opening its own menu, because the thing that regressed was a control
+   * going missing, and a test that only counted triggers would pass with four copies of one
+   * export. The distinct labels are load-bearing for the same reason: four controls all reading
+   * "Export" is the same as none of them being named.
+   */
+  function offerColumn() {
+    return (
+      <CoachAgent
+        connections={surface}
+        initialKeywordGoals={goals}
+        initialState={{
+          draft: null,
+          published: {
+            ...published,
+            assets: [{ id: "asset-1", slug: "guide", label: "Funding guide", url: "https://reidfunding.com/guide" }],
+            proof: [{ id: "proof-1", title: "42 clients funded", detail: "Since January" }],
+          },
+        }}
+        publishedDateLabel={null}
+        questions={questions}
+        tab="ladder"
+        testEnabled={false}
+      />
+    );
+  }
+
+  it.each([
+    ["Export prices", "Prices your agent can quote"],
+    ["Export proof", "Proof your agent can cite"],
+    ["Export links", "Links your agent can send"],
+    ["Export objections", "Objections, last 30 days"],
+  ])("carries %s as a server export beside %s", async (label, panel) => {
+    render(offerColumn());
+
+    expect(screen.getByRole("heading", { level: 2, name: panel })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: label }));
+
+    // Server mode: the whole set the route can see, and the download is recorded.
+    expect(screen.getByText("All matching rows")).toBeInTheDocument();
+    expect(screen.getAllByText("Export start logged")).toHaveLength(2);
+  });
+
+  it("draws the saved proof and links the exports beside them describe", () => {
+    render(offerColumn());
+
+    expect(screen.getByText("42 clients funded")).toBeInTheDocument();
+    expect(screen.getByText("Funding guide")).toBeInTheDocument();
+    expect(screen.getByText("https://reidfunding.com/guide")).toBeInTheDocument();
+  });
+
+  it("says what the objection file holds rather than drawing a rollup it never read", () => {
+    render(offerColumn());
+
+    expect(screen.getByText(/One row per objection a lead raised/u)).toBeInTheDocument();
+  });
 });
 
 describe("CoachAgent step 3", () => {
@@ -379,5 +444,202 @@ describe("CoachAgent step 3", () => {
       expect(screen.getByText("This question was not changed. Try again.")).toBeInTheDocument());
     expect(screen.getByRole("switch", { name: 'Ask "Roughly how much?"' }))
       .toHaveAttribute("aria-checked", "true");
+  });
+});
+
+/*
+ * Step 7 is the cadence editor `coach-offer.tsx` carried before the rehaul deleted that file.
+ * The claim it has to keep making is a split one: SetterFi owns when a touch fires, the coach owns
+ * what it is for, and a purpose the coach never chose is drawn as ours rather than as theirs.
+ */
+describe("CoachAgent step 7", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const channels: readonly CoachCadenceChannel[] = [
+    {
+      channel: "sms",
+      channelLabel: "SMS",
+      capability: { postWindow: "freeform", templateSend: false },
+    },
+    {
+      channel: "instagram",
+      channelLabel: "Instagram",
+      capability: { postWindow: "human_agent_only", templateSend: false },
+    },
+  ];
+
+  function ladder(
+    offer: PersistedOfferLayer,
+    cadence: { enabled: boolean; channels: readonly CoachCadenceChannel[] },
+  ) {
+    render(
+      <CoachAgent
+        cadence={cadence}
+        connections={surface}
+        initialKeywordGoals={goals}
+        initialState={{ draft: null, published: offer }}
+        publishedDateLabel={null}
+        questions={questions}
+        tab="ladder"
+        testEnabled={false}
+      />,
+    );
+    /*
+     * Step 4 prints "set by you" against its own saved facts, so every assertion about who chose a
+     * purpose is scoped to this panel. A page-wide count would pass on the wrong rows.
+     */
+    const panel = screen.getByRole("heading", { name: "If they go quiet" }).closest("section");
+    if (!panel) throw new Error("step 7 panel did not render");
+    return within(panel);
+  }
+
+  /**
+   * The shared `Select` opens a portalled listbox rather than answering `selectOptions`, and it
+   * mounts on an effect, so the option is awaited rather than read straight after the click.
+   */
+  async function choose(
+    user: ReturnType<typeof userEvent.setup>,
+    trigger: HTMLElement,
+    option: string,
+  ) {
+    await user.click(trigger);
+    await user.click(await screen.findByRole("option", { name: option }));
+  }
+
+  it("draws every platform touch with its timing and the purpose that owns it", () => {
+    const panel = ladder(published, { enabled: true, channels });
+
+    expect(panel.getAllByRole("combobox")).toHaveLength(
+      WINDOW_BOUND_TOUCHES.length + DURABLE_TOUCHES.length,
+    );
+
+    // Timing is the platform's, read off the touch lists rather than typed into the panel.
+    expect(panel.getByText("2 hours after the lead goes quiet")).toBeInTheDocument();
+    expect(panel.getByText("14 days after the lead goes quiet")).toBeInTheDocument();
+    expect(panel.getByText("22 hours before the reply window closes")).toBeInTheDocument();
+
+    // Nothing is saved on this offer, so every touch says the purpose is still ours.
+    expect(panel.getAllByText("our default")).toHaveLength(
+      WINDOW_BOUND_TOUCHES.length + DURABLE_TOUCHES.length,
+    );
+    expect(panel.queryByText("set by you")).not.toBeInTheDocument();
+
+    // A channel whose capability ends at the reply window says so rather than implying we go on.
+    expect(
+      panel.getByText("After the reply window, follow-up stays human-only."),
+    ).toBeInTheDocument();
+  });
+
+  it("marks only a saved purpose as the coach's and leaves the rest ours", () => {
+    const panel = ladder(
+      {
+        ...published,
+        cadencePurposes: [
+          { channelClass: "durable", touchNo: 2, purpose: "training", assetId: null },
+        ],
+      },
+      { enabled: true, channels },
+    );
+
+    expect(panel.getByLabelText("SMS touch 2 purpose")).toHaveTextContent("Free training");
+    expect(panel.getAllByText("set by you")).toHaveLength(1);
+  });
+
+  it("saves a purpose through the same draft write as the rest of the offer", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        saved: true,
+        draft: { ...published, id: "draft-1", status: "draft", contentHash: "hash-4" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const panel = ladder(published, { enabled: true, channels });
+
+    await choose(user, panel.getByRole("combobox", { name: "SMS touch 1 purpose" }), "Approved proof point");
+    expect(panel.getAllByText("set by you")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/coach/offer");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(String(init.body)).offer.cadencePurposes).toEqual([
+      { channelClass: "durable", touchNo: 1, purpose: "proof_point", assetId: null },
+    ]);
+  });
+
+  it("keeps one row per slot when the same touch is edited twice", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        saved: true,
+        draft: { ...published, id: "draft-1", status: "draft", contentHash: "hash-4" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const panel = ladder(published, { enabled: true, channels });
+
+    await choose(user, panel.getByRole("combobox", { name: "SMS touch 1 purpose" }), "Approved proof point");
+    await choose(user, panel.getByRole("combobox", { name: "SMS touch 1 purpose" }), "A new angle");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).offer.cadencePurposes).toEqual([
+      { channelClass: "durable", touchNo: 1, purpose: "new_angle", assetId: null },
+    ]);
+  });
+
+  it("says nothing is sending yet without dropping the editor", () => {
+    const panel = ladder(published, { enabled: false, channels });
+
+    expect(panel.getByText("Not sending yet")).toBeInTheDocument();
+    expect(panel.getByLabelText("SMS touch 1 purpose")).toBeInTheDocument();
+  });
+
+  it("lists a purpose saved outside the schedule and removes it on confirmation", async () => {
+    const panel = ladder(
+      {
+        ...published,
+        cadencePurposes: [
+          { channelClass: "none", touchNo: 9, purpose: "training", assetId: null },
+        ],
+      },
+      { enabled: true, channels },
+    );
+
+    expect(panel.getByText("Saved outside this schedule")).toBeInTheDocument();
+    expect(panel.getByText(/None, touch 9, Free training/)).toBeInTheDocument();
+
+    fireEvent.click(panel.getByRole("button", { name: "Remove None touch 9" }));
+    fireEvent.click(panel.getByRole("button", { name: "Keep" }));
+    expect(panel.getByText(/None, touch 9, Free training/)).toBeInTheDocument();
+
+    fireEvent.click(panel.getByRole("button", { name: "Remove None touch 9" }));
+    fireEvent.click(panel.getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(panel.queryByText(/None, touch 9, Free training/)).not.toBeInTheDocument());
+  });
+
+  it("carries an export of the rows it drew, naming who chose each purpose", () => {
+    const panel = ladder(
+      {
+        ...published,
+        cadencePurposes: [
+          { channelClass: "durable", touchNo: 2, purpose: "training", assetId: null },
+        ],
+      },
+      { enabled: true, channels },
+    );
+
+    expect(panel.getByRole("button", { name: /Export schedule/ })).toBeInTheDocument();
+
+    const rows = coachCadenceExportRows(coachCadenceSchedule(channels), [
+      { channelClass: "durable", touchNo: 2, purpose: "training" },
+    ]);
+    expect(rows).toHaveLength(WINDOW_BOUND_TOUCHES.length + DURABLE_TOUCHES.length);
+    expect(rows.filter((row) => row.purposeSource === "coach")).toHaveLength(1);
   });
 });

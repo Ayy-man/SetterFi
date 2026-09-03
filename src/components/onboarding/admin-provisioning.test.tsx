@@ -273,7 +273,9 @@ describe("AdminProvisioning nav count", () => {
     ]);
 
     const rail = screen.getByRole("navigation", { name: "Primary" });
-    const item = within(rail).getByRole("link", { name: /Provisioning/ });
+    // The rail folded to eight destinations: /admin/provisioning has no row of its own and its
+    // depth lands on Clients, the row `foldedNavTarget` maps it onto.
+    const item = within(rail).getByRole("link", { name: /Clients/ });
     expect(
       item.closest("li")?.querySelector('[data-slot="nav-count"]'),
     ).toHaveTextContent("1");

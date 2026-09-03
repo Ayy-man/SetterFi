@@ -145,9 +145,9 @@ describe("OwnerClients", () => {
     expect(document.body.textContent).not.toContain("Twilio");
   });
 
-  it("carries the five tabs and swaps the table columns with them", () => {
+  it("carries the six tabs and swaps the table columns with them", () => {
     const { unmount } = renderPage();
-    for (const label of ["Status", "Agent", "Performance", "Health", "Team"]) {
+    for (const label of ["Status", "Agent", "Performance", "Health", "Team", "Setup"]) {
       expect(screen.getByRole("navigation", { name: "Client sections" })).toHaveTextContent(label);
     }
     expect(screen.getByRole("columnheader", { name: "Success owner" })).toBeInTheDocument();
@@ -225,6 +225,20 @@ describe("OwnerClients", () => {
     expect(within(drawer).getByRole("button", { name: "Reassign a client" })).toBeInTheDocument();
     expect(within(drawer).getByRole("link", { name: "Open in Support" })).toBeInTheDocument();
     expect(within(drawer).getByText("Logged")).toBeInTheDocument();
+  });
+
+  it("draws the marketplace install surface on the Setup tab instead of the client table", () => {
+    renderPage({
+      setup: <div data-testid="install-surface">Marketplace install</div>,
+      tab: "setup",
+    });
+
+    expect(screen.getByTestId("install-surface")).toBeInTheDocument();
+    // The tab is a mounted surface, not a sixth column set, so no client table is drawn under it
+    // and no drawer opens beside it.
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("owner-clients-drawer")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 
   it("keeps a folded tab's own refusal rather than showing it as an empty table", () => {

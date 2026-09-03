@@ -22,24 +22,48 @@ import { describe, expect, it } from "vitest";
  * happen there and here together.
  */
 const SURFACES = [
-  "src/components/workspace/live/coach-offer.tsx",
+  // The rehaul took the agent, Home and Inbox routes; `coach-offer.tsx`, `coach-measurement.tsx`
+  // and `coach-conversations.tsx` were deleted with them, and their replacements are listed in
+  // their place so the rule keeps reaching every coach screen rather than shrinking to the ones
+  // that happened to survive.
+  "src/components/workspace/rehaul/coach-agent.tsx",
+  "src/components/workspace/rehaul/coach-dashboard.tsx",
+  "src/components/workspace/rehaul/coach-inbox.tsx",
   "src/components/workspace/live/coach-billing.tsx",
-  "src/components/workspace/live/coach-measurement.tsx",
-  "src/components/workspace/live/coach-conversations.tsx",
   "src/components/workspace/live/coach-contacts.tsx",
   "src/components/workspace/live/coach-pipeline.tsx",
   "src/components/workspace/live/coach-deck.tsx",
   "src/components/workspace/live/leads-surface.tsx",
 ];
 
-/** The accent fill's own highlight, allowed by name so nothing else can hide behind it. */
-const ACCENT_FILL_HIGHLIGHT = "shadow-[0_1px_0_rgba(255,255,255,0.25)_inset,0_8px_20px_-8px_var(--accent)]";
+/*
+ * White alpha that is correct where it is written, each allowed by its exact string.
+ *
+ * The rule is about a literal that composites to nothing on the light palette, and both shapes
+ * here are outside that: a raised panel's top-edge highlight is white-on-white by design and reads
+ * as a bevel, and a panel that brings its own dark ground paints its hairline and its meter track
+ * against that ground rather than the page's. `coach-dashboard.tsx` came under this guard when the
+ * rehaul replaced the live Home surface, which is when these three arrived.
+ *
+ * By exact string rather than by file, for the reason the accent highlight is: a file-level
+ * exemption hides the next literal somebody adds to it.
+ */
+const ALLOWED_WHITE_ALPHA = [
+  // `shadow-[0_1px_0_rgba(255,255,255,0.25)_inset,0_8px_20px_-8px_var(--accent)]`, the accent
+  // fill's own highlight, sat here until the rehaul deleted the two surfaces that retyped it. It
+  // is `ACCENT_FILL_SHADOW_CLASS` in the kit now and no coach surface spells it out.
+  "shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_1px_2px_rgba(28,42,82,0.04),0_8px_20px_-14px_rgba(28,42,82,0.16)]",
+  'dark ? "border-[rgba(255,255,255,0.12)]" : "border-[var(--line)]"',
+  'className="mt-2 h-1.5 rounded-full bg-[rgba(255,255,255,0.14)]"',
+];
 
 describe("the coach surfaces paint from tokens, not from white alpha", () => {
   it("carries no hard-coded white-alpha fill on any coach surface", () => {
     const offenders = SURFACES.flatMap((path) => {
-      const text = readFileSync(resolve(process.cwd(), path), "utf8")
-        .replaceAll(ACCENT_FILL_HIGHLIGHT, "");
+      const text = ALLOWED_WHITE_ALPHA.reduce(
+        (source, allowed) => source.replaceAll(allowed, ""),
+        readFileSync(resolve(process.cwd(), path), "utf8"),
+      );
       return text
         .split("\n")
         .flatMap((line, index) =>
@@ -53,22 +77,48 @@ describe("the coach surfaces paint from tokens, not from white alpha", () => {
     ).toEqual([]);
   });
 
+  it("keeps no allowance for a literal that has left the surfaces", () => {
+    // The exemption list may only shrink by the literal genuinely going, never by rotting into
+    // strings nobody writes any more -- which is how an allow-list stops meaning anything.
+    const sources = SURFACES.map((path) => readFileSync(resolve(process.cwd(), path), "utf8"));
+    for (const allowed of ALLOWED_WHITE_ALPHA) {
+      expect(
+        sources.some((text) => text.includes(allowed)),
+        `no coach surface writes \`${allowed}\` any more -- delete its row`,
+      ).toBe(true);
+    }
+  });
+
   /**
    * The transcript's own case, asserted separately because it is the one where the fill carries
    * meaning rather than depth: two speakers, two grounds, and if they resolve to the same paint a
    * reader cannot tell who said what.
    */
-  it("gives the test-agent transcript two distinguishable speaker grounds", () => {
-    const text = readFileSync(
-      resolve(process.cwd(), "src/components/workspace/live/coach-offer.tsx"),
-      "utf8",
-    );
-    const grounds = [...text.matchAll(/data-from="(agent|lead)"/gu)].map((match) => match[1]);
-    expect(grounds.sort(), "the transcript must mark both speakers").toEqual(["agent", "lead"]);
-    // The agent's bubble takes the tinted band, the lead's the sunk well with its own hairline.
-    // Both are tokens, so both survive a palette flip, and they are different tokens, which is the
-    // whole point of the assertion.
-    expect(text).toContain("rounded-[13px_13px_13px_4px] bg-[var(--band)]");
-    expect(text).toContain("rounded-[13px_13px_4px_13px] border border-[var(--line-input)] bg-[var(--well)]");
+  it("gives a speaker-marked transcript two distinguishable grounds", () => {
+    /*
+     * Written against `coach-offer.tsx`'s test-agent transcript, and kept as a rule about any
+     * transcript rather than that one.
+     *
+     * The rehaul dropped the transcript when it dropped that file: no coach surface marks a
+     * speaker today, so this finds nothing and the assertions below run over an empty set. That is
+     * the honest state -- pinning the two class strings to a file that no longer renders them
+     * would be a guard about nothing wearing the name of one that worked. Written this way it arms
+     * itself again the moment a transcript comes back, on whichever surface draws it.
+     */
+    const transcripts = SURFACES
+      .map((path) => [path, readFileSync(resolve(process.cwd(), path), "utf8")] as const)
+      .filter(([, text]) => /data-from="(?:agent|lead)"/u.test(text));
+
+    for (const [path, text] of transcripts) {
+      const grounds = [...text.matchAll(/data-from="(agent|lead)"/gu)].map((match) => match[1]);
+      expect([...new Set(grounds)].sort(), `${path} must mark both speakers`)
+        .toEqual(["agent", "lead"]);
+      // Both grounds are tokens, so both survive a palette flip, and they are different tokens,
+      // which is the whole point: a reader has to be able to tell who said what.
+      const fills = [...text.matchAll(/data-from="(?:agent|lead)"[^>]*?bg-\[(var\(--[a-z-]+\))\]/gu)]
+        .map((match) => match[1]);
+      expect(new Set(fills).size, `${path} paints both speakers from one token`)
+        .toBeGreaterThan(1);
+    }
   });
 });

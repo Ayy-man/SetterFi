@@ -237,11 +237,12 @@ describe("the coach page title on a phone", () => {
  * down without editing the row fails -- a stale allow-list is how the 12px eyebrow survived.
  */
 const COACH_ONLY_TYPE_DEBT: Record<string, number> = {
-  "src/components/workspace/live/coach-offer.tsx": 18,
-  "src/components/workspace/live/offer-editor-availability.tsx": 18,
-  "src/components/workspace/live/coach-measurement.tsx": 8,
+  // `coach-offer.tsx` (18), `coach-measurement.tsx` (8) and `coach-conversations.tsx` (1) held
+  // rows here until the rehaul took their routes and they were deleted. The debt did not get paid
+  // down; the files that owed it are gone, and a row naming a file that no longer exists reads as
+  // an outstanding violation nobody can find. The `offer-editor-*.tsx` shells went the same way
+  // once the rehaul's own agent screen took over what they edited.
   "src/components/workspace/live/coach-contacts.tsx": 2,
-  "src/components/workspace/live/coach-conversations.tsx": 1,
   "src/components/workspace/live/leads-surface.tsx": 1,
 };
 
@@ -253,7 +254,7 @@ describe("the coach's components hold the same floor as the coach's stylesheet",
     // reading no code at all -- which is exactly how the contrast suite went blind.
     const modules = coachOnlyModules();
     expect(modules.length).toBeGreaterThan(40);
-    expect(modules).toContain("src/components/workspace/live/coach-offer.tsx");
+    expect(modules).toContain("src/components/workspace/rehaul/coach-agent.tsx");
     // The subtraction has to actually subtract, or this is the naive walk wearing a docstring.
     expect(modules).not.toContain("src/components/kit/atomics/grid-table.tsx");
   });
@@ -436,13 +437,15 @@ describe("the coach's components hold the same floor as the coach's stylesheet",
    * eyebrow or the 78px header floor that make a banded card. This register held the opposite
    * verdict for one commit, which is what reading the code without the artboard costs.
    *
+   * `Agent.dc.html:211` had a third caller, `coach-offer.tsx`, until the rehaul took the agent
+   * route: `coach-agent.tsx` draws that surface now and spells its own heading, so the row came
+   * out with the file rather than being retargeted at a surface that does not read the constant.
+   *
    * The rows are callers now rather than literal sites, because the recipe itself has moved to
    * `COACH_SURFACE_TITLE_CLASS`. Each must still read it: a surface that stops is either dropping
    * the role or respelling it, and both are worth a failure.
    */
   const ATTESTED_SURFACE_TITLES: Record<string, string> = {
-    "src/components/workspace/live/coach-offer.tsx":
-      "Agent.dc.html:211 -- the well's first line, 20px/600 over a 16px paragraph, no band",
     "src/components/workspace/live/coach-support-bubble.tsx":
       "CoachSupportBubble.dc.html:203 -- the popover's header line, 20px/600 with -0.015em",
     "src/components/workspace/live/escalation-panel.tsx":
@@ -673,12 +676,14 @@ describe("the coach target floor", () => {
     FieldShell: "src/components/kit/atomics/field.tsx",
   };
 
-  /** Mounts that hold no control, so nothing raises them and there is no box to overflow. */
-  const HOLDS_NO_CONTROL: Record<string, string> = {
-    "src/components/workspace/live/offer-editor-availability.tsx":
-      "FooterFact puts a plain string in the shell -- no button, input, select or link, so "
-        + "coach.css raises nothing and the 34px frame is the whole control",
-  };
+  /*
+   * Mounts that hold no control, so nothing raises them and there is no box to overflow.
+   *
+   * `offer-editor-availability.tsx` was the only entry, and it was deleted with the rest of the
+   * offer-editor shells. The map stays because the exemption it records is a real category and the
+   * `it.each` below is what forces any future row to still be true; an empty map exempts nothing.
+   */
+  const HOLDS_NO_CONTROL: Record<string, string> = {};
 
   const TARGET = Number(/--coach-target:\s*(\d+)px/u.exec(COACH_CSS)![1]);
 
@@ -723,7 +728,6 @@ describe("the coach target floor", () => {
 
   it("makes every coach-side mount of a console-height shell override the height", () => {
     const offenders: string[] = [];
-    let mounts = 0;
 
     for (const file of coachOnlyModules()) {
       const source = readFileSync(resolve(ROOT, file), "utf8")
@@ -732,7 +736,6 @@ describe("the coach target floor", () => {
 
       for (const shell of Object.keys(CONSOLE_HEIGHT_SHELLS)) {
         for (const match of source.matchAll(new RegExp(`<${shell}(\\s[^>]*)?>`, "gu"))) {
-          mounts += 1;
           if (file in HOLDS_NO_CONTROL) continue;
           if (!/\bh-\[/u.test(match[1] ?? "")) offenders.push(
               `${file}: <${shell}> takes a height from ${CONSOLE_HEIGHT_SHELLS[shell]}, which pins ${pinnedHeights(shell).join("/")}px`,
@@ -741,17 +744,27 @@ describe("the coach target floor", () => {
       }
     }
 
-    // Positive control. No mounts means the scan read nothing and every check above was vacuous.
-    expect(mounts, "no mount of a console-height shell was found on any coach surface")
-      .toBeGreaterThan(0);
+    /*
+     * Positive control, on the walk rather than on the mount count.
+     *
+     * It read `mounts > 0` while the two offer editors were the coach's only `FieldShell` callers,
+     * and it was the right control then: zero mounts could only mean the resolver had gone blind.
+     * The rehaul took the agent route and `coach-offer.tsx` went with it, so no coach-reachable
+     * module mounts the shell today and zero is the true answer rather than a broken scan. What
+     * the control was actually protecting is that the walk still resolves modules at all, so it
+     * asserts that directly; the offenders list below is the rule, and it still fails the moment
+     * a coach surface mounts the shell without overriding its height.
+     */
+    expect(coachOnlyModules().length, "the coach-only walk resolved nothing, so this read no code")
+      .toBeGreaterThan(40);
 
     expect(
       offenders,
       `SIMPLIFICATION-SPEC §5: ${TARGET}px minimum target on the coach side, no exceptions. This `
         + "shell pins a console height while coach.css raises the control inside it to "
         + "--coach-target, so the control renders taller than its own frame. Pass "
-        + "h-[var(--coach-target)] at the callsite, the way offer-editor-disqualifiers.tsx does -- "
-        + "not in the atomic, which admin mounts correctly.",
+        + "h-[var(--coach-target)] at the callsite, not in the atomic, which admin mounts "
+        + "correctly.",
     ).toEqual([]);
   });
 

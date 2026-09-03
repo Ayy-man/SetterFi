@@ -59,6 +59,26 @@ function renderShell() {
   );
 }
 
+/**
+ * The affiliate portal is the one role whose account chip still opens the dropdown: the coach and
+ * the owner get the account sheet instead, and the owner panel carries the terms registry and the
+ * operator runbooks an affiliate must not be handed. So every assertion about the dropdown itself
+ * -- the theme radios, the sign-out form, the demo modes' way out -- is made here.
+ */
+function renderAffiliateShell(mode: "open" | "supabase" = "open") {
+  return render(
+    <WorkspaceEnvProvider
+      demoAccountSwitching={false}
+      demoViews={demoViewTargets}
+      mode={mode}
+    >
+      <AppShell activePath="/affiliate" crumbs={[{ label: "Partner earnings" }]} role="affiliate">
+        <h1>Partner earnings</h1>
+      </AppShell>
+    </WorkspaceEnvProvider>,
+  );
+}
+
 describe("AppShell elevation", () => {
   it("draws the sidebar scroll boundary as a rule, not a borrowed overlay shadow", () => {
     // The two shims were using --shadow-raised for its 24px blur alone, on a 1px line that
@@ -284,16 +304,11 @@ describe("AppShell", () => {
   });
 
   it("offers light, dark and system inside the account menu and no header toggle", () => {
-    renderShell();
+    renderAffiliateShell();
 
     expect(screen.queryByRole("button", { name: "Switch to dark" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Admin account" }));
-
-    expect(screen.getByRole("menuitem", { name: "Notification settings" })).toHaveAttribute(
-      "href",
-      "/admin/alerts",
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Affiliate account" }));
 
     const dark = screen.getByRole("menuitemradio", { name: "Dark" });
     expect(screen.getByRole("menuitemradio", { name: "Light" })).toBeInTheDocument();
@@ -306,24 +321,9 @@ describe("AppShell", () => {
   });
 
   it("mounts account security and POST-only sign-out only for a real signed-in session", () => {
-    render(
-      <WorkspaceEnvProvider
-        demoAccountSwitching={false}
-        demoViews={demoViewTargets}
-        mode="supabase"
-      >
-        <AppShell
-          activePath="/admin/overview"
-          crumbs={[{ label: "Overview" }]}
-          nav={nav}
-          role="admin"
-        >
-          <h1>Overview</h1>
-        </AppShell>
-      </WorkspaceEnvProvider>,
-    );
+    renderAffiliateShell("supabase");
 
-    fireEvent.click(screen.getByRole("button", { name: "Admin account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Affiliate account" }));
 
     expect(screen.getByRole("menuitem", { name: "Account security" })).toHaveAttribute(
       "href",
@@ -339,9 +339,9 @@ describe("AppShell", () => {
   });
 
   it("gives the demo modes a way back to the view picker instead of a sign-out with nothing to revoke", () => {
-    renderShell();
+    renderAffiliateShell();
 
-    fireEvent.click(screen.getByRole("button", { name: "Admin account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Affiliate account" }));
 
     expect(screen.getByRole("menuitem", { name: "Switch view" })).toHaveAttribute("href", "/");
     expect(screen.queryByRole("menuitem", { name: "Sign out" })).toBeNull();
@@ -880,16 +880,27 @@ describe("AppShell account identity", () => {
     expect(within(trigger).queryByText("CO")).toBeNull();
   });
 
-  it("heads the menu with the person and their business", () => {
-    renderWithAccount(marcus);
-    fireEvent.click(screen.getByRole("button", { name: "Coach account" }));
+  it("heads the affiliate menu with the person and their business", () => {
+    render(
+      <WorkspaceEnvProvider
+        account={marcus}
+        demoAccountSwitching={false}
+        demoViews={demoViewTargets}
+        mode="supabase"
+      >
+        <AppShell activePath="/affiliate" crumbs={[{ label: "Partner earnings" }]} role="affiliate">
+          <h1>Partner earnings</h1>
+        </AppShell>
+      </WorkspaceEnvProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Affiliate account" }));
 
     // `toBeInTheDocument` rather than `toBeVisible`: the menu content is portalled and Base UI
     // mounts it before the open transition has settled, so visibility here would be asserting
     // the animation rather than the header.
     expect(screen.getByText("Marcus Reid")).toBeInTheDocument();
     expect(screen.getByText("Reid Funding Group")).toBeInTheDocument();
-    expect(screen.queryByText("Coach account")).toBeNull();
+    expect(screen.queryByText("Affiliate account")).toBeNull();
   });
 
   it("keeps the role's accessible name on the button whatever the header shows", () => {

@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { WorkspaceEnvProvider } from "@/components/workspace/workspace-env";
 import { loadCapabilityActor, loadPlatformActor } from "@/lib/auth/actors";
 import { authMode } from "@/lib/auth/mode";
-import { demoLoginsEnabled, uiRehaulLive } from "@/lib/env-contract";
+import { demoLoginsEnabled } from "@/lib/env-contract";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { loadImpersonationSessionBanner } from "@/lib/impersonation-session";
 import { demoViewTargetsFor, navigationEnvironment } from "@/lib/workspace-navigation";
@@ -106,7 +106,6 @@ export default async function WorkspaceLayout({ children }: { children: ReactNod
       mode={authMode()}
       navEnvironment={navigationEnvironment()}
       platformRole={platformRole}
-      rehaulLive={uiRehaulLive()}
     >
       {/*
         The impersonation band, resolved once here rather than per page.

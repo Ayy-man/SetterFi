@@ -6,33 +6,24 @@ import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
 import type { CoachCadenceChannel } from "@/components/workspace/live/coach-agent";
 import { CoachPageHead } from "@/components/workspace/live/coach-page-head";
-import {
-  CoachOffer,
-  type CoachEscalationSummary,
-  type CoachObjectionPushback,
-} from "@/components/workspace/live/coach-offer";
 import { CoachAgent } from "@/components/workspace/rehaul/coach-agent";
 import {
   rehaulConnectionSurface,
   type RehaulCalendarSnapshot,
 } from "@/components/workspace/rehaul/coach-agent-connection-view";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
+import type { MessagingChannel } from "@/lib/booking/types";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
-import type { MessagingChannel } from "@/lib/booking/types";
 import {
-  brainObjectionsLive,
   capiLive,
-  inboxVerbsLive,
   phase1Live,
   phase2Live,
   phase3Live,
   phase4Live,
   phase7MeetAgentLive,
-  uiRehaulLive,
 } from "@/lib/env-contract";
 import { workspaceDateFormat } from "@/lib/format/datetime";
-import { loadCoachTopObjections } from "@/lib/repositories/analytics";
 import {
   listChannelConnections,
   type ChannelConnectionView,
@@ -62,6 +53,11 @@ function isCadenceChannel(channel: string): channel is MessagingChannel {
   return CADENCE_CHANNELS.has(channel as MessagingChannel);
 }
 
+/**
+ * A channel only joins the follow-up schedule once its own receipts say it can send. The state
+ * column alone is a claim nobody signed for, which is why "live" still has to carry a signed
+ * round trip and "ready" has to carry the four receipts that made it ready.
+ */
 function hasReceiptBackedReadiness(connection: ChannelConnectionView) {
   if (connection.state === "live") {
     return Boolean(connection.receipts.signedRoundTripAt);
@@ -75,6 +71,23 @@ function hasReceiptBackedReadiness(connection: ChannelConnectionView) {
   );
 }
 
+/** The connected channels step 7 groups its schedule by, in the shape the schedule reads. */
+function cadenceChannels(
+  connections: readonly ChannelConnectionView[] | null,
+): CoachCadenceChannel[] {
+  return (connections ?? [])
+    .filter(
+      (connection) =>
+        isCadenceChannel(connection.channel) && hasReceiptBackedReadiness(connection),
+    )
+    .map((connection) => ({
+      channel: connection.channel as MessagingChannel,
+      channelLabel: connection.channelLabel,
+      capability: resolveChannelCapability(connection.channel, {
+        [connection.channel]: connection.capabilities,
+      }),
+    }));
+}
 async function loadPublishedOfferReceipt(tenantId: string) {
   const client = createSupabaseServiceClient();
   const { data, error } = await client
@@ -89,86 +102,6 @@ async function loadPublishedOfferReceipt(tenantId: string) {
     offerId: String(data.id),
     publishedAt:
       typeof data.published_at === "string" ? data.published_at : null,
-  };
-}
-
-/**
- * How long the oldest escalated thread has waited. Derived from the real `needs_human_at` the
- * escalation path writes, and null whenever that column is unset, so the card omits the line
- * rather than estimating one.
- */
-function waitingLabel(since: string | null, asOf: Date) {
-  if (!since) return null;
-  const started = new Date(since);
-  if (Number.isNaN(started.valueOf())) return null;
-  const minutes = Math.floor((asOf.getTime() - started.getTime()) / 60_000);
-  if (minutes < 0) return null;
-  if (minutes < 1) return "less than a minute";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"}`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"}`;
-}
-
-/**
- * The escalation source for the attention queue. Test rows are excluded so a seeded demo tenant
- * cannot inflate a real coach's count. Returns null on an empty queue rather than a zero, because
- * the card renders on presence, not on a number.
- */
-async function loadCoachEscalations(
-  tenantId: string,
-  asOf: Date,
-): Promise<CoachEscalationSummary | null> {
-  const client = createSupabaseServiceClient();
-  const [countResult, oldestResult] = await Promise.all([
-    client
-      .from("conversations")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("status", "needs_human")
-      .eq("is_test", false),
-    client
-      .from("conversations")
-      .select("id,contact_id,needs_human_at")
-      .eq("tenant_id", tenantId)
-      .eq("status", "needs_human")
-      .eq("is_test", false)
-      .not("needs_human_at", "is", null)
-      .order("needs_human_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-  if (countResult.error || oldestResult.error) {
-    throw new Error("COACH_ESCALATION_READ_FAILED");
-  }
-  const count = countResult.count ?? 0;
-  if (count < 1) return null;
-
-  let leadHandle: string | null = null;
-  const contactId =
-    typeof oldestResult.data?.contact_id === "string" ? oldestResult.data.contact_id : null;
-  if (contactId) {
-    const { data: contact, error: contactError } = await client
-      .from("contacts")
-      .select("name")
-      .eq("tenant_id", tenantId)
-      .eq("id", contactId)
-      .maybeSingle();
-    if (contactError) throw new Error("COACH_ESCALATION_READ_FAILED");
-    const name = typeof contact?.name === "string" ? contact.name.trim() : "";
-    leadHandle = name || null;
-  }
-
-  return {
-    count,
-    leadHandle,
-    waitingLabel: waitingLabel(
-      typeof oldestResult.data?.needs_human_at === "string"
-        ? oldestResult.data.needs_human_at
-        : null,
-      asOf,
-    ),
   };
 }
 
@@ -275,129 +208,70 @@ export default async function CoachAgentPage({ searchParams }: CoachAgentPagePro
 
   const { actorId, tenantId } = await liveCoachContext();
   const repository = createOfferLayerRepository();
-  const cadenceEnabled = phase1Live() && phase3Live();
-  const objectionsEnabled = brainObjectionsLive() && actorId !== null;
-  // The same pair `POST /api/conversations/[id]/claim` is gated on. With either flag off the coach
-  // cannot claim a thread, so a count would advertise a control that does nothing.
-  const escalationsEnabled = phase3Live() && inboxVerbsLive();
-  const asOf = new Date();
-  const [draft, published, publicationReceipt, connections, objections, escalation] =
-    await Promise.all([
-      repository.loadOffer({ tenantId, status: "draft" }),
-      repository.loadOffer({ tenantId, status: "published" }),
-      loadPublishedOfferReceipt(tenantId),
-      cadenceEnabled ? listChannelConnections(tenantId) : Promise.resolve([]),
-      objectionsEnabled
-        ? loadCoachTopObjections(actorId, tenantId, asOf.toISOString())
-        : Promise.resolve(null),
-      escalationsEnabled
-        ? loadCoachEscalations(tenantId, asOf)
-        : Promise.resolve(null),
-    ]);
+  const [draft, published, publicationReceipt] = await Promise.all([
+    repository.loadOffer({ tenantId, status: "draft" }),
+    repository.loadOffer({ tenantId, status: "published" }),
+    loadPublishedOfferReceipt(tenantId),
+  ]);
 
-  if (uiRehaulLive()) {
-    /*
-     * The rehaul body. Same offer layer the old component gets, plus the connection surface the
-     * ladder's booking rung and the Connections tab read. Every extra read is an existing
-     * repository call behind the flag `/coach/integrations` already gates it with, and a read
-     * that refuses stays null so the screen says it could not read rather than "not connected".
-     */
-    const params = await searchParams;
-    const tabParam = params.tab;
-    const tab = (Array.isArray(tabParam) ? tabParam[0] : tabParam) === "connections"
-      ? ("connections" as const)
-      : ("ladder" as const);
-    const connectionsEnabled = phase1Live() && phase4Live();
-    const [channelRows, registration, calendar, datasets, questions] = await Promise.all([
-      connectionsEnabled
-        ? listChannelConnections(tenantId).catch(() => null)
-        : Promise.resolve(null),
-      loadCoachA2pRegistration(tenantId).catch(() => null),
-      rehaulCalendar(tenantId).catch(() => null),
-      capiLive() ? listCapiDatasets(tenantId).catch(() => null) : Promise.resolve(null),
-      /*
-       * Step 3's rows. Read here rather than fetched by the component because the merged list is
-       * tenant-scoped and the browser has no business naming a tenant for it. A refusal stays null
-       * so the panel says it could not read, which is not the same claim as an empty library. The
-       * writes go back through `/api/coach/questions`, which re-derives the actor from the session.
-       */
-      actorId
-        ? readCoachQuestions({ tenantId, userId: actorId }).catch(() => null)
-        : Promise.resolve(null),
-    ]);
-
-    return (
-      <CoachAgentShell navCounts={await coachNavCounts(tenantId)}>
-        <CoachAgent
-          connections={rehaulConnectionSurface({
-            calendar,
-            connections: channelRows,
-            datasets,
-            registration,
-          })}
-          initialState={{ draft, published }}
-          key={`${draft?.id ?? "no-draft"}:${published?.id ?? "no-published"}`}
-          publishedDateLabel={
-            published && publicationReceipt?.offerId === published.id
-              ? publicationDateLabel(publicationReceipt.publishedAt)
-              : null
-          }
-          questions={questions}
-          tab={tab}
-          testEnabled={phase7MeetAgentLive()}
-        />
-      </CoachAgentShell>
-    );
-  }
-
-  const channels: CoachCadenceChannel[] = connections
-    .filter(
-      (connection) =>
-        isCadenceChannel(connection.channel) &&
-        hasReceiptBackedReadiness(connection),
-    )
-    .map((connection) => ({
-      channel: connection.channel as MessagingChannel,
-      channelLabel: connection.channelLabel,
-      capability: resolveChannelCapability(connection.channel, {
-        [connection.channel]: connection.capabilities,
-      }),
-    }));
   /*
-   * `Agent.dc.html` draws a percentage and a 190px meter on every objection row. The rollup
-   * returns a rate only while its own attribution state reads `available`, and today every row
-   * reads `awaiting_definition`, so the rate arrives null and the row says why instead of drawing
-   * a bar at zero. The two branches are written here rather than in the panel because the reason
-   * an absent rate is absent is a property of the rollup, not of the drawing.
+   * The offer layer, plus the connection surface the ladder's booking rung and the Connections tab
+   * read. Every connection read is an existing repository call behind the same flags
+   * `/coach/integrations` gates it with, and a read that refuses stays null so the screen says it
+   * could not read rather than "not connected".
    */
-  const pushback: readonly CoachObjectionPushback[] | null = objections
-    ? objections.rows.map((row) => ({
-        objectionId: row.objectionId,
-        label: row.label,
-        conversationCount: row.conversationCount,
-        bookedRate: row.state === "available" ? row.bookedRate : null,
-        absence:
-          row.state === "available" && row.bookedRate !== null
-            ? null
-            : row.state === "held_safely"
-              ? "Held safely, never counted as a booking"
-              : "Booked rate awaiting definition",
-        conversationHref: `/coach/conversations?objection=${encodeURIComponent(row.objectionId)}`,
-      }))
-    : null;
+  const params = await searchParams;
+  const tabParam = params.tab;
+  const tab = (Array.isArray(tabParam) ? tabParam[0] : tabParam) === "connections"
+    ? ("connections" as const)
+    : ("ladder" as const);
+  const connectionsEnabled = phase1Live() && phase4Live();
+  const cadenceEnabled = phase1Live() && phase3Live();
+  const [channelRows, registration, calendar, datasets, questions] = await Promise.all([
+    /*
+     * One read for two consumers: the Connections tab and step 7's follow-up schedule sit behind
+     * different flags, so the read runs when either is on and each consumer is handed null when
+     * its own flag is down rather than borrowing the other's rows.
+     */
+    connectionsEnabled || cadenceEnabled
+      ? listChannelConnections(tenantId).catch(() => null)
+      : Promise.resolve(null),
+    loadCoachA2pRegistration(tenantId).catch(() => null),
+    rehaulCalendar(tenantId).catch(() => null),
+    capiLive() ? listCapiDatasets(tenantId).catch(() => null) : Promise.resolve(null),
+    /*
+     * Step 3's rows. Read here rather than fetched by the component because the merged list is
+     * tenant-scoped and the browser has no business naming a tenant for it. A refusal stays null
+     * so the panel says it could not read, which is not the same claim as an empty library. The
+     * writes go back through `/api/coach/questions`, which re-derives the actor from the session.
+     */
+    actorId
+      ? readCoachQuestions({ tenantId, userId: actorId }).catch(() => null)
+      : Promise.resolve(null),
+  ]);
 
   return (
     <CoachAgentShell navCounts={await coachNavCounts(tenantId)}>
-      <CoachOffer
-        cadence={{ enabled: cadenceEnabled, channels }}
+      <CoachAgent
+        cadence={{
+          enabled: cadenceEnabled,
+          channels: cadenceEnabled ? cadenceChannels(channelRows) : [],
+        }}
+        connections={rehaulConnectionSurface({
+          calendar,
+          connections: connectionsEnabled ? channelRows : null,
+          datasets,
+          registration,
+        })}
         initialState={{ draft, published }}
-        key={`${draft?.id ?? "no-draft"}:${published?.id ?? "no-published"}:${publicationReceipt?.publishedAt ?? "no-publication-date"}`}
+        key={`${draft?.id ?? "no-draft"}:${published?.id ?? "no-published"}`}
         publishedDateLabel={
           published && publicationReceipt?.offerId === published.id
             ? publicationDateLabel(publicationReceipt.publishedAt)
             : null
         }
-        objections={pushback}
+        questions={questions}
+        tab={tab}
         testEnabled={phase7MeetAgentLive()}
       />
     </CoachAgentShell>

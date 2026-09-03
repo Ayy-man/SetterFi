@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { AdminBrain } from "@/components/workspace/live/admin-brain";
 import { AdminBrainTesting } from "@/components/workspace/live/admin-testing";
 import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
@@ -30,7 +29,6 @@ import {
   phase1Live,
   phase2Live,
   phase7EvalsLive,
-  uiRehaulLive,
 } from "@/lib/env-contract";
 import { loadSafetyCorpus } from "@/lib/evals/corpus";
 import { evaluatePublishGate } from "@/lib/evals/publish-gate";
@@ -40,20 +38,14 @@ import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/s
 export const metadata: Metadata = { title: "The Brain" };
 export const dynamic = "force-dynamic";
 
-const CRUMBS = [{ label: "Brain" }, { label: "The Brain" }] as const;
-
-/*
- * The rehaul rail files The Brain under a "Platform" group, so the crumb says Platform too. The
- * old crumb stays on the flag-off arm untouched: this is chrome the rehaul changed, not a fix to
- * the page that shipped.
- */
-const REHAUL_CRUMBS = [{ label: "Platform" }, { label: "The Brain" }] as const;
+// The rail files The Brain under the Platform group, so the crumb names that group too.
+const CRUMBS = [{ label: "Platform" }, { label: "The Brain" }] as const;
 
 function BrainShell({ children }: { children: React.ReactNode }) {
   return (
     <AppShell
       activePath="/admin/brain"
-      crumbs={uiRehaulLive() ? REHAUL_CRUMBS : CRUMBS}
+      crumbs={CRUMBS}
       role="admin"
     >
       {children}
@@ -413,10 +405,6 @@ export default async function AdminBrainPage({ searchParams }: PageProps) {
       </BrainShell>
     );
   }
-  if (!uiRehaulLive()) {
-    return <BrainShell><AdminBrain initialState={initialStateResult.value} /></BrainShell>;
-  }
-
   const params = (await searchParams) ?? {};
   const requested = params.tab;
   const tab = ownerBrainTab(Array.isArray(requested) ? requested[0] : requested);

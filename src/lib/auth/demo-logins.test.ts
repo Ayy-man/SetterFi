@@ -14,6 +14,15 @@ const seederSource = readFileSync(resolve(process.cwd(), SEEDER_PATH), "utf8");
 const LOGIN_PAGE_PATH = "src/app/login/page.tsx";
 const loginPageSource = readFileSync(resolve(process.cwd(), LOGIN_PAGE_PATH), "utf8");
 
+/*
+ * The page decides and the form draws, so the two halves of the `next` round-trip are read from
+ * two files. `page.tsx` validates the query parameter once and hands the result down; the form
+ * renders it, and has no other source for the value, so a hidden field there cannot carry anything
+ * the validator did not pass.
+ */
+const LOGIN_FORM_PATH = "src/components/workspace/rehaul/login-form.tsx";
+const loginFormSource = readFileSync(resolve(process.cwd(), LOGIN_FORM_PATH), "utf8");
+
 const DEMO_LOGINS_PATH = "src/lib/auth/demo-logins.ts";
 const demoLoginsSource = readFileSync(resolve(process.cwd(), DEMO_LOGINS_PATH), "utf8");
 const testDemoPassword = "<test-demo-password>";
@@ -196,13 +205,16 @@ describe("the login page's use of the gate", () => {
  */
 describe("the login page returns a visitor to where they were sent", () => {
   it("renders the requested path as a hidden field on the password form and every demo form", () => {
-    // Two in the source - one on the email/password form, one inside the demo-account map that
+    // Two in the form - one on the email/password form, one inside the demo-account map that
     // emits a form per account - which is 1 + the four configured accounts rendered fields when the
     // gate is on. Measured on the live deployment 2026-08-20: five hidden fields in the HTML.
-    expect(occurrences(loginPageSource, '<input name="next" type="hidden"')).toBe(2);
-    // Rendered through the validator, not straight from the query string, on both.
-    expect(occurrences(loginPageSource, 'internalRedirectPath(next, null) ? <input name="next"')).toBe(2);
-    expect(loginPageSource).toMatch(/demoAccounts\.map\(\(account\) => \(/);
+    expect(occurrences(loginFormSource, '<input name="next" type="hidden"')).toBe(2);
+    // Both read the one prop, and the page fills that prop from the validator rather than from the
+    // query string. The form never touches `searchParams`, so there is no second source.
+    expect(occurrences(loginFormSource, '{next ? <input name="next" type="hidden" value={next} /> : null}')).toBe(2);
+    expect(loginPageSource).toContain("next={internalRedirectPath(next, null)}");
+    expect(loginFormSource).not.toContain("searchParams");
+    expect(loginFormSource).toMatch(/demoAccounts\.map\(\(account\) => \(/);
   });
 
   it("honours that path before it falls through to the role's home", () => {

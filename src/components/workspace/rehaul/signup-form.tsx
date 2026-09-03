@@ -32,13 +32,14 @@ import type { SignupOrchestrationResult } from "@/lib/onboarding/signup";
  *     conditional on a `commercialTerms` the catalogue usually does not carry -- so quoting one
  *     here would mean a chip that shows money for one tier and not the next. The tier id submitted
  *     is unchanged, and what a plan costs is settled where it is charged.
- *   - **No help text.** The hints under the slug, the password, the timezone and the referral code
- *     are gone, along with the carrier-review paragraph. That paragraph is a true and important
+ *   - **No help text.** The hints under the slug, the password and the timezone are gone, along
+ *     with the carrier-review paragraph. That paragraph is a true and important
  *     thing, and it belongs on the first screen inside the product where the day counter that
  *     proves it also lives, not on a form that has not created an account yet.
  *
  * The referral field stays, below the plan with the two consents, because a prospect who followed
- * an affiliate's link has to be able to see and correct what that link prefilled.
+ * an affiliate's link has to be able to see and correct what that link prefilled -- and it keeps
+ * its line, which states where the value came from rather than explaining the field.
  */
 export function RehaulSignupForm({
   enabled,
@@ -216,8 +217,15 @@ export function RehaulSignupForm({
           Prefilled and still editable: nothing here is trusted, the RPC resolves whatever is
           submitted against `affiliates.referral_code` either way, and a readonly box a prospect
           cannot correct is worse than a wrong code they can.
+
+          The line under it is the exception to this card's no-help-text rule, because it is not
+          help. It says where a value the prospect did not type came from, and whether the field is
+          optional -- both of which are the state of the field rather than an explanation of it.
         */}
-        <Field label="Referral code">
+        <Field
+          hint={referralCode ? "From the link you followed. You can change or clear it." : "Optional"}
+          label="Referral code"
+        >
           <KitInput defaultValue={referralCode ?? ""} name="referralCode" />
         </Field>
 

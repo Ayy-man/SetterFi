@@ -279,20 +279,25 @@ describe("the demo tenant's own dashboard says so on screen", () => {
 
   it("passes that flag to the page header provenance contract", () => {
     const surface = readFileSync(
-      resolve(process.cwd(), "src/components/workspace/live/coach-measurement.tsx"),
+      resolve(process.cwd(), "src/components/workspace/rehaul/coach-dashboard.tsx"),
       "utf8",
     );
     /*
-     * `CoachPageHead` rather than the console's `PageHeader` since the canvas pass: the coach
-     * surfaces take a 46px title with one sentence under it and no crumbs. What this line is
-     * guarding is unchanged and is the reason it reads the source rather than the render -- the
-     * demo flag has to reach a head that has a provenance contract, so that the label saying the
-     * numbers are demo data cannot be dropped by a lane that only looks at the render.
+     * `coach-dashboard.tsx` since the rehaul took Home from `coach-measurement.tsx`. What this
+     * line guards is unchanged, and it is still read off the source rather than the render: the
+     * demo flag has to reach the sentence that says so, or the label is dropped by a lane that
+     * only looks at the picture.
+     *
+     * The rehaul surface draws its own head instead of mounting `CoachPageHead`, so it prints
+     * `PROVENANCE_COPY` directly. That is why the import asserted here is the copy map rather than
+     * the head component -- the shared wording is the part that must not be re-invented, and a
+     * second spelling of "demo data" is exactly what importing it prevents.
      */
     expect(surface).toContain(
-      'import { CoachPageHead } from "@/components/workspace/live/coach-page-head";',
+      'import { PROVENANCE_COPY } from "@/components/workspace/live/coach-page-head";',
     );
-    expect(surface).toMatch(/provenance=\{measurement\.isDemo \? "demo" : "real"\}/);
+    expect(surface).toMatch(/PROVENANCE_COPY\[measurement\.isDemo \? "demo" : "real"\]/);
+    expect(surface).toMatch(/data-provenance=\{measurement\.isDemo \? "demo" : "real"\}/);
     expect(surface).not.toMatch(/DemoBadge/);
   });
 });

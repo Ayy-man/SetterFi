@@ -637,18 +637,22 @@ describe("Phase 6 money truth", () => {
     }
   });
 
-  it("keeps every dedicated page fixture-free and gates before actor or data access", () => {
-    // Plans and pricing is two sub-pages over one loader, so its gate lives in the shared loader
-    // both routes call; every other surface keeps the gate in its own page file.
-    const gateFiles: Record<string, string> = {
-      tiers: "src/app/(workspace)/admin/tiers/render-tiers-page.tsx",
-      billing: "src/app/(workspace)/admin/billing/page.tsx",
-      corrections: "src/app/(workspace)/admin/corrections/page.tsx",
-      affiliates: "src/app/(workspace)/admin/affiliates/page.tsx",
-    };
-    for (const surface of ["tiers", "billing", "corrections", "affiliates"]) {
-      expect(existsSync(resolve(process.cwd(), `src/app/(workspace)/admin/${surface}/page.tsx`))).toBe(true);
-      const path = resolve(process.cwd(), gateFiles[surface]);
+  it("keeps the Money page fixture-free and gates before actor or data access", () => {
+    /*
+     * The four Money surfaces are five tabs of `/admin/billing` now, and the tiers loader is still
+     * its own file because the page and the loader are read separately. The old routes are kept as
+     * redirects so a saved link still lands on its rows, which is asserted below rather than left
+     * to a 404 nobody notices.
+     */
+    for (const surface of ["tiers", "corrections", "affiliates"]) {
+      const redirect = resolve(process.cwd(), `src/app/(workspace)/admin/${surface}/page.tsx`);
+      expect(existsSync(redirect)).toBe(true);
+      expect(readFileSync(redirect, "utf8")).toContain("foldedRouteRedirect(");
+    }
+    for (const path of [
+      "src/app/(workspace)/admin/tiers/render-tiers-page.tsx",
+      "src/app/(workspace)/admin/billing/page.tsx",
+    ].map((file) => resolve(process.cwd(), file))) {
       expect(existsSync(path)).toBe(true);
       const source = readFileSync(path, "utf8");
       expect(source).not.toMatch(/workspace-fixtures|FixtureWorkspaceShell|WorkspaceScreen/);

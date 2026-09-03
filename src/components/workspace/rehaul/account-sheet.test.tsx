@@ -76,7 +76,6 @@ function mountSheet(
       demoAccountSwitching={false}
       demoViews={demoViewTargets}
       mode={mode}
-      rehaulLive
     >
       <AccountSheet onOpenChange={() => {}} open variant={variant} {...props} />
     </WorkspaceEnvProvider>,

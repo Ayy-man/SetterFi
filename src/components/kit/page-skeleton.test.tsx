@@ -107,15 +107,30 @@ describe("page skeletons", () => {
 describe("loadingCrumbs", () => {
   it("reads the trail off the same nav the shell builds", () => {
     expect(loadingCrumbs("admin", "/admin/platform-clients")).toEqual([
+      { label: "Run" },
       { label: "Clients" },
-      { label: "Client book" },
     ]);
   });
 
+  /*
+   * Read against the coach rail rather than the admin one.
+   *
+   * This used `/admin/brain/testing`, which had its own "Evals" row under a "Brain" group that
+   * also matched by prefix. The folded admin nav is eight single-segment destinations with no
+   * nested rows at all, so nothing there can be exact and prefix at once. The coach rail still
+   * can: "Leads" is `/coach/contacts` and carries `/coach/pipelines` as a `matchPaths` entry, so
+   * the exact pass has to find it before the prefix pass reaches anything else.
+   */
   it("prefers an exact href over a parent that only matches by prefix", () => {
+    expect(loadingCrumbs("coach", "/coach/pipelines")).toEqual([
+      { label: "Workspace" },
+      { label: "Leads" },
+    ]);
+    // And a child route with no row of its own still resolves to the parent rather than falling
+    // through to the neutral crumb, which is the other half of the two passes.
     expect(loadingCrumbs("admin", "/admin/brain/testing")).toEqual([
-      { label: "Brain" },
-      { label: "Evals" },
+      { label: "Platform" },
+      { label: "The Brain" },
     ]);
   });
 
@@ -153,8 +168,8 @@ describe("PageSkeletonShell", () => {
     // The nav, the topbar and the breadcrumb are all present during the gap, which is what stops
     // the page going blank between routes.
     expect(document.querySelector("[data-shell-root]")).not.toBeNull();
-    expect(screen.getAllByRole("link", { name: "Client book" })[0]).toBeVisible();
-    expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent("Client book");
+    expect(screen.getAllByRole("link", { name: "Clients" })[0]).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent("Clients");
     expect(root("list-page-skeleton")).not.toBeNull();
 
     resolve();

@@ -25,6 +25,7 @@ import type {
   CoachMeasurementWindow,
 } from "@/lib/repositories/analytics";
 import type { CoachChannelStatus } from "@/components/workspace/live/coach-channel-status";
+import { PROVENANCE_COPY } from "@/components/workspace/live/coach-page-head";
 import type { MessagingChannel } from "@/lib/integrations/types";
 
 /**
@@ -58,8 +59,16 @@ const WINDOW_PHRASE: Record<CoachMeasurementWindow, string> = {
   custom: "in the window you picked",
 };
 
-/** The five pills the artboard draws. `custom` has no pill; it stays a URL the page still reads. */
-const WINDOW_PILLS = [
+/**
+ * The five pills the artboard draws. `custom` has no pill; it stays a URL the page still reads.
+ *
+ * Exported because `coach/home/loading.tsx` reserves one bone per pill and imports nothing from
+ * this file otherwise: a sixth pill added here would land in the control and nowhere in the
+ * skeleton, and the picker would change width at the moment the page settles. The list used to
+ * live in `coach-measurement.tsx` under the name `WINDOW_OPTIONS`; that surface is gone, and this
+ * is the only window control the coach now sees.
+ */
+export const WINDOW_PILLS = [
   { value: "1d", label: "1D" },
   { value: "1w", label: "1W" },
   { value: "1m", label: "1M" },
@@ -808,6 +817,20 @@ export function CoachDashboard({
               : "Dashboard"}
           </h1>
           <StatusLine blockedSetupSteps={attention.blockedSetupSteps} now={now} status={channelStatus} />
+          {/*
+            The provenance line, which is a hard rule rather than a decoration: demo and test rows
+            are labelled on screen wherever they are shown. `coach-measurement.tsx` carried it
+            through `CoachPageHead`; this surface draws its own head, so it prints the same
+            sentence from the same map rather than inventing a second wording for the same claim.
+            `measurement.isDemo` is the flag the repository already resolves, so nothing new is
+            read to say it.
+          */}
+          <p
+            className="m-0 mt-[10px] text-[14px] text-[var(--muted)]"
+            data-provenance={measurement.isDemo ? "demo" : "real"}
+          >
+            {PROVENANCE_COPY[measurement.isDemo ? "demo" : "real"]}
+          </p>
         </div>
         {firstRun ? (
           <Link

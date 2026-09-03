@@ -27,6 +27,25 @@ const CONNECTED: Record<string, unknown> = {
   state: "ready",
 };
 
+/**
+ * The provider field is the shared `Select`, so it opens a portalled listbox rather than
+ * answering `selectOptions`. The listbox mounts on an effect after the click.
+ */
+async function pickProvider(user: ReturnType<typeof userEvent.setup>, label: string) {
+  await user.click(screen.getByRole("combobox", { name: "Calendar provider" }));
+  await user.click(await screen.findByRole("option", { name: label }));
+}
+
+/** The manual receipt panel, which is where every provider identifier lives. */
+function manualPanel() {
+  return document.querySelector("[data-slot='rehaul-calendar-manual']") as HTMLElement;
+}
+
+/** The provider read-back panel, which is the top of the screen rather than the fallback form. */
+function providerPanel() {
+  return document.querySelector("[data-slot='rehaul-calendar-provider']") as HTMLElement;
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -42,13 +61,13 @@ describe("CalendarOnboardingPage", () => {
     const user = userEvent.setup();
     render(<CalendarOnboardingPage />);
     await screen.findByText("Authorize a calendar with its provider before recording its receipt here.");
-    await user.selectOptions(screen.getByLabelText("Calendar provider"), "google");
+    await pickProvider(user, "Google Calendar");
     await user.type(screen.getByLabelText("Provider account reference"), "account-1");
     await user.type(screen.getByLabelText("Provider calendar reference"), "calendar-1");
-    await user.type(screen.getByRole("textbox", { name: /Provider-issued authorization receipt reference/ }), "receipt-1");
-    await user.click(screen.getByRole("button", { name: "Record authorization receipt" }));
+    await user.type(screen.getByLabelText("Authorization receipt reference"), "receipt-1");
+    await user.click(screen.getByRole("button", { name: "Record the receipt" }));
     await screen.findByText("Authorization receipt recorded and logged. Calendar availability has not been verified, so booking is not ready.");
-    expect(screen.getByText("External calendar availability has not been verified. Your agent cannot book appointments yet.")).toBeVisible();
+    expect(screen.getByText("Availability not verified, so your agent cannot book yet")).toBeVisible();
     expect(fetcher).toHaveBeenLastCalledWith("/api/onboarding/calendar", expect.objectContaining({ method: "POST" }));
   });
 
@@ -61,15 +80,37 @@ describe("CalendarOnboardingPage", () => {
    * coach reads carry no provider brand, and the value the form submits is unchanged.
    */
   it("names the workspace calendar without any provider branding, while still submitting ghl", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ connection: null })));
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ connection: null }))
+      .mockResolvedValueOnce(json({
+        connection: { provider: "ghl", calendarName: null, externalCalendarId: "calendar-1", externalAccountReference: "account-1", authorizationRecordedAt: "2026-09-07T00:00:00Z", state: "connecting" },
+        audit: { id: "22" },
+      }));
+    vi.stubGlobal("fetch", fetcher);
+    const user = userEvent.setup();
     render(<CalendarOnboardingPage />);
     await screen.findByText("Authorize a calendar with its provider before recording its receipt here.");
 
     expect(document.body.textContent ?? "").not.toMatch(/gohighlevel|high\s*level|\bGHL\b/i);
-    const provider = screen.getByLabelText("Calendar provider") as HTMLSelectElement;
-    expect(provider.value).toBe("ghl");
-    expect(Array.from(provider.options).map((option) => option.text))
+    const provider = screen.getByRole("combobox", { name: "Calendar provider" });
+    expect(provider).toHaveTextContent("SetterFi workspace calendar");
+
+    await user.click(provider);
+    const options = await screen.findAllByRole("option");
+    expect(options.map((option) => option.textContent))
       .toEqual(["SetterFi workspace calendar", "Google Calendar"]);
+    await user.click(options[0]!);
+
+    // The stored value is unchanged; only the words a coach reads carry no brand, so the check is
+    // what the form actually posts rather than what the option says.
+    await user.type(screen.getByLabelText("Provider account reference"), "account-1");
+    await user.type(screen.getByLabelText("Provider calendar reference"), "calendar-1");
+    await user.type(screen.getByLabelText("Authorization receipt reference"), "receipt-1");
+    await user.click(screen.getByRole("button", { name: "Record the receipt" }));
+
+    await screen.findByText(/Authorization receipt recorded and logged/);
+    const body = JSON.parse(String((fetcher.mock.calls[1]?.[1] as RequestInit).body));
+    expect(body.provider).toBe("ghl");
   });
 
   /**
@@ -84,35 +125,30 @@ describe("CalendarOnboardingPage", () => {
    *
    * The fields are not deleted -- `record_onboarding_calendar_authorization` has no other caller,
    * so this form is the only writer of `calendar_connections` in the product. The guard therefore
-   * asserts DEMOTION, not absence: every provider identifier sits inside a CLOSED disclosure, and
-   * what the coach reads first says SetterFi does this for them. Asserting absence would pass just
-   * as well against a page that had lost the ability to record a calendar at all.
+   * asserts DEMOTION, not absence: every provider identifier sits inside the side panel the screen
+   * labels as the fallback, and nothing a coach reads first asks for one. Asserting absence would
+   * pass just as well against a page that had lost the ability to record a calendar at all.
    */
-  it("states that SetterFi connects the calendar, and keeps every provider identifier inside a closed disclosure", async () => {
+  it("keeps every provider identifier inside the panel the screen labels as the fallback", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ connection: null })));
     render(<CalendarOnboardingPage />);
     await screen.findByText("Authorize a calendar with its provider before recording its receipt here.");
 
-    expect(screen.getByText(/SetterFi records your booking calendar for you/)).toBeVisible();
-
-    const disclosure = screen.getByText("Set up manually").closest("details");
-    expect(disclosure).not.toBeNull();
-    expect(disclosure!.open).toBe(false);
+    const manual = manualPanel();
+    expect(manual).not.toBeNull();
+    expect(manual).toHaveTextContent("Only if the press did not work");
+    expect(manual).toHaveTextContent("Record it by hand");
 
     for (const label of [
-      "Calendar provider",
       "Provider account reference",
       "Provider calendar reference",
       "Calendar timezone",
+      "Authorization receipt reference",
     ]) {
-      expect(disclosure!.contains(screen.getByLabelText(label))).toBe(true);
+      expect(manual.contains(screen.getByLabelText(label))).toBe(true);
     }
-    expect(disclosure!.contains(
-      screen.getByRole("textbox", { name: /Provider-issued authorization receipt reference/ }),
-    )).toBe(true);
-    expect(disclosure!.contains(
-      screen.getByRole("button", { name: "Record authorization receipt" }),
-    )).toBe(true);
+    expect(manual.contains(screen.getByRole("combobox", { name: "Calendar provider" }))).toBe(true);
+    expect(manual.contains(screen.getByRole("button", { name: "Record the receipt" }))).toBe(true);
   });
 
   /**
@@ -121,12 +157,12 @@ describe("CalendarOnboardingPage", () => {
    * and this is what lets the work ship to the single production project unswitched.
    */
   /**
-   * The flag-off payload is exact: `googleConnectAvailable: false`, no grant, an empty picker and
-   * an untouched `connection`. What the coach sees in that case is not merely "no button" but the
-   * page as it shipped, which is what lets this land on the single production project without
-   * changing anything for the client. So the guard reads the sentences too, not just the absences.
+   * The payload is exact: `googleConnectAvailable: false`, no grant, an empty picker and an
+   * untouched `connection`. The guard reads the manual fallback as well as the absences, because
+   * "no Connect button" on a page that had also lost the manual receipt would leave a coach with
+   * no way to record a calendar at all.
    */
-  it("renders the page exactly as it shipped while the payload says Google connect is unavailable", async () => {
+  it("offers no Connect button, and keeps the manual receipt, while Google connect is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({
       connection: null, googleConnectAvailable: false, googleGrant: null, pendingCalendars: [],
     })));
@@ -135,10 +171,9 @@ describe("CalendarOnboardingPage", () => {
 
     expect(screen.queryByRole("link", { name: /Connect Google Calendar/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Calendar connection recorded in the audit log")).not.toBeInTheDocument();
-    expect(screen.getByText(/SetterFi connects your booking calendar for you during onboarding/)).toBeVisible();
-    expect(screen.getByText(/SetterFi records your booking calendar for you/)).toBeVisible();
-    expect(screen.getByText(/your SetterFi contact will finish it with you/)).toBeVisible();
+    expect(screen.getByText("No provider connected yet")).toBeVisible();
+    expect(screen.getByText("No account recorded")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Record the receipt" })).toBeVisible();
   });
 
   /**
@@ -171,7 +206,7 @@ describe("CalendarOnboardingPage", () => {
     // The picker survives, because pressing the same button again is the whole recovery.
     expect(screen.getByRole("radio", { name: /Client consults/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this calendar" })).toBeEnabled();
-    expect(screen.queryByText("Availability verified")).not.toBeInTheDocument();
+    expect(screen.queryByText("Availability verified, so your agent can book")).not.toBeInTheDocument();
   });
 
   it("offers one Connect button above the manual disclosure when connect is available and no grant exists", async () => {
@@ -184,10 +219,12 @@ describe("CalendarOnboardingPage", () => {
     expect(connect).toHaveAttribute("href", "/api/calendars/google/connect");
     expect(screen.getAllByRole("link", { name: /Connect Google Calendar/ })).toHaveLength(1);
 
-    const disclosure = screen.getByText("Set up manually").closest("details");
-    expect(disclosure!.contains(connect)).toBe(false);
-    expect(connect.compareDocumentPosition(disclosure!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByLabelText("Calendar connection recorded in the audit log")).toBeVisible();
+    const manual = manualPanel();
+    expect(manual.contains(connect)).toBe(false);
+    expect(connect.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Every write path on the screen carries the same accountability line.
+    expect(screen.getAllByLabelText("Calendar connection recorded in the audit log").length)
+      .toBeGreaterThan(0);
   });
 
   /**
@@ -214,7 +251,9 @@ describe("CalendarOnboardingPage", () => {
     expect(within(picker).getByRole("radio", { name: /Client consults/ })).toBeInTheDocument();
     expect(within(picker).getAllByRole("radio")).toHaveLength(2);
 
-    const visible = document.body.textContent ?? "";
+    // Scoped to the picker: the account the grant was made through is named on the panel above,
+    // which is the coach's own address and not a calendar identifier.
+    const visible = picker.textContent ?? "";
     expect(visible).not.toContain("coach@livelegacystrong.com");
     expect(visible).not.toContain("consults@group.calendar.google.com");
   });
@@ -244,7 +283,7 @@ describe("CalendarOnboardingPage", () => {
     await user.click(await screen.findByRole("radio", { name: /Client consults/ }));
     await user.click(screen.getByRole("button", { name: "Use this calendar" }));
 
-    await screen.findByText("Availability verified");
+    await screen.findByText("Availability verified, so your agent can book");
     expect(fetcher.mock.calls[1]?.[0]).toBe("/api/calendars/google/select");
     const body = JSON.parse(String((fetcher.mock.calls[1]?.[1] as RequestInit).body));
     expect(body).toEqual({ externalCalendarId: "consults@group.calendar.google.com" });
@@ -274,10 +313,8 @@ describe("CalendarOnboardingPage", () => {
     await user.click(screen.getByRole("button", { name: "Use this calendar" }));
 
     await screen.findByText(/SetterFi could not read availability from Client consults yet/);
-    expect(screen.getByText("Availability not verified")).toBeVisible();
-    expect(screen.queryByText("Availability verified")).not.toBeInTheDocument();
-    expect(screen.getByText("External calendar availability has not been verified. Your agent cannot book appointments yet."))
-      .toBeVisible();
+    expect(screen.getByText("Availability not verified, so your agent cannot book yet")).toBeVisible();
+    expect(screen.queryByText("Availability verified, so your agent can book")).not.toBeInTheDocument();
   });
 
   /**
@@ -296,9 +333,14 @@ describe("CalendarOnboardingPage", () => {
 
     const reconnect = await screen.findByRole("link", { name: "Reconnect Google Calendar" });
     expect(reconnect).toHaveAttribute("href", "/api/calendars/google/connect");
-    expect(screen.getByText(/Google ends calendar permissions on a schedule/)).toBeVisible();
-    expect(screen.getByText(/Nothing you did caused it/)).toBeVisible();
-    expect(screen.getByText("Availability not verified")).toBeVisible();
+    expect(screen.getByText("Availability not verified, so your agent cannot book yet")).toBeVisible();
+
+    // The reassurance is the context eye's now, so it is read where the screen actually keeps it.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "About this screen" }));
+    const eye = await screen.findByRole("dialog", { name: "About this screen" });
+    expect(eye).toHaveTextContent(/Google ends calendar permissions on a schedule/);
+    expect(eye).toHaveTextContent(/nothing you did caused that/);
   });
 
   it("names the account the calendar was connected through once a connection exists", async () => {
@@ -310,8 +352,10 @@ describe("CalendarOnboardingPage", () => {
     })));
     render(<CalendarOnboardingPage />);
 
-    expect(await screen.findByText("Connected as coach@livelegacystrong.com")).toBeVisible();
-    expect(screen.getByText(/Connected on Sep 2, 2026/)).toBeVisible();
+    expect(await screen.findByText("coach@livelegacystrong.com")).toBeVisible();
+    const panel = providerPanel();
+    expect(panel).toHaveTextContent("Connected as");
+    expect(panel).toHaveTextContent("Google Calendar");
   });
 
   /**
@@ -349,17 +393,5 @@ describe("CalendarOnboardingPage", () => {
 
     expect(await screen.findByText(/authorization ran out before this calendar could be saved/)).toBeVisible();
     expect(screen.queryByText("Availability verified")).not.toBeInTheDocument();
-  });
-
-  /** Flag off, and the route hands back the pre-rehaul screen with its own disclosure intact. */
-  it("renders the pre-rehaul screen while the rehaul flag is off", async () => {
-    vi.stubEnv("SETTERFI_UI_REHAUL", "false");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ connection: null })));
-    render(<CalendarOnboardingPage />);
-
-    await screen.findByText("Authorize a calendar with its provider before recording its receipt here.");
-    expect(screen.getByText("Set up manually")).toBeVisible();
-    expect(screen.queryByText("Step 4 of 5")).toBeNull();
-    vi.unstubAllEnvs();
   });
 });

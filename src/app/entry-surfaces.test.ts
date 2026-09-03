@@ -38,6 +38,28 @@ const ENTRY_PAGES = {
 
 const ENTRY_FILES = Object.values(ENTRY_PAGES).flat();
 
+/**
+ * The two shared stages, either of which satisfies the rule. `AuthStage` is `auth-shell.tsx`'s;
+ * `AuthCard` is the rehaul's replacement for it, and it mounts `CoachScale` itself rather than
+ * stacking a column of its own. What the guard is against is a page drawing its own stage inline,
+ * which neither of these is.
+ */
+const STAGES = [
+  /["']@\/components\/auth\/auth-shell["']/u,
+  /["']@\/components\/workspace\/rehaul\/auth-card["']/u,
+] as const;
+
+/**
+ * Where a route's stage is actually reached from, when that is not its own `page.tsx`. `/login`
+ * and `/signup` are server components that read claims, terms and the signup catalogue and hand
+ * the result to one client component; the stage belongs to that component, and pointing the guard
+ * at it keeps the check on the file that would lose the stage.
+ */
+const STAGE_OWNER: Readonly<Record<string, string>> = {
+  "/login": "components/workspace/rehaul/login-form.tsx",
+  "/signup": "components/workspace/rehaul/signup-form.tsx",
+};
+
 function read(file: string) {
   return readFileSync(join(SRC, file), "utf8");
 }
@@ -82,10 +104,11 @@ describe("the entry surfaces", () => {
       // And the specifier is matched delimited, because a substring match accepts `auth-shellx`
       // -- the same "green while asserting nothing" shape the ledger records for the test-data
       // label guard. Both near-misses were confirmed red before this line was written this way.
-      .filter(([, files]) => {
+      .filter(([page, files]) => {
         const entry = files.find((file) => file.endsWith("/page.tsx"));
         expect(entry, `${files[0]} has no page.tsx`).toBeDefined();
-        return !/["']@\/components\/auth\/auth-shell["']/u.test(read(entry!));
+        const owner = STAGE_OWNER[page] ?? entry!;
+        return !STAGES.some((stage) => stage.test(read(owner)));
       })
       .map(([page]) => page);
 

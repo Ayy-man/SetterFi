@@ -32,18 +32,6 @@ type WorkspaceEnv = {
    * existed and what they still render outside `supabase` mode.
    */
   account?: WorkspaceAccount;
-  /**
-   * Whether `SETTERFI_UI_REHAUL` is on, resolved on the server and handed to the browser.
-   *
-   * The flag is not `NEXT_PUBLIC_`, so `uiRehaulLive()` in a client component reads a populated
-   * `process.env` during SSR and an empty one after hydration -- true on the server, false in the
-   * browser, which is a hydration mismatch rather than a feature flag. The topbar's account chip is
-   * the one piece of chrome the rehaul moves, and it renders on every page inside a client-only
-   * shell, so the value has to arrive the way `navEnvironment` does: resolved once by the server
-   * layout above every shell mount and read from context below it. Undefined means "not known",
-   * which renders exactly what every surface rendered before the rehaul existed.
-   */
-  rehaulLive?: boolean;
 };
 
 export type WorkspaceAccount = {
@@ -69,7 +57,6 @@ export function WorkspaceEnvProvider({
   demoViews,
   demoAccountSwitching,
   platformRole,
-  rehaulLive,
   navEnvironment,
   children,
 }: WorkspaceEnv & { navEnvironment?: EnvironmentSource; children: ReactNode }) {
@@ -80,7 +67,7 @@ export function WorkspaceEnvProvider({
 
   return (
     <WorkspaceEnvContext.Provider
-      value={{ account, mode, demoViews, demoAccountSwitching, platformRole, rehaulLive }}
+      value={{ account, mode, demoViews, demoAccountSwitching, platformRole }}
     >
       {children}
     </WorkspaceEnvContext.Provider>

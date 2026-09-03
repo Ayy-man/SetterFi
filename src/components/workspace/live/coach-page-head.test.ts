@@ -73,7 +73,7 @@ describe("the coach's page head", () => {
     // The detector, proved on a file that does import the console head. `page-header.tsx` is
     // reached by the admin routes, so it is not in the coach-only set and cannot be the control.
     const consoleSurface = readFileSync(
-      resolve(process.cwd(), "src/components/workspace/live/admin-agents.tsx"),
+      resolve(process.cwd(), "src/components/workspace/live/admin-compliance.tsx"),
       "utf8",
     );
     expect(consoleSurface, "the console surface no longer imports PageHeader by this specifier")

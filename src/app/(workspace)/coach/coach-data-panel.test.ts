@@ -35,8 +35,9 @@ const SHEET = "src/app/(workspace)/coach/coach.css"
  * that stays true.
  */
 const CALLERS: Record<string, string> = {
-  "src/components/workspace/live/coach-measurement.tsx":
-    "Main.dc.html:366-371 -- the keyword table, under AppShell role=coach",
+  // `coach-measurement.tsx` held the keyword table (Main.dc.html:366-371) until the rehaul took
+  // Home. `coach-dashboard.tsx` draws that table now and does not ask for the arm, so the row came
+  // out rather than being pointed at a file that does not mount it.
   "src/components/workspace/live/affiliate-money.tsx":
     "Affiliate.dc.html:163-168 -- the referrals table, under the CoachScale this file wraps its content in",
 }

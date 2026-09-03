@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 
 import { GET as loadSignupCatalog } from "@/app/api/onboarding/signup/route";
-import { SignupForm, type SignupAccountTerms } from "@/app/signup/signup-form";
-import { AuthHeader, AuthStage } from "@/components/auth/auth-shell";
+import type { SignupAccountTerms } from "@/app/signup/signup-form";
 import { referralCodeFromParam, type SignupTierChoice } from "@/components/onboarding/view-models";
 import { loadCurrentAccountTerms } from "@/lib/account/terms";
 import { REFERRAL_QUERY_PARAM } from "@/lib/affiliates/referral-attribution";
 import { RehaulSignupForm } from "@/components/workspace/rehaul/signup-form";
-import { accountTermsLive, phase5Live, uiRehaulLive } from "@/lib/env-contract";
+import { accountTermsLive, phase5Live } from "@/lib/env-contract";
 
 export const metadata: Metadata = {
   title: "Create your SetterFi account",
@@ -119,30 +118,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     }
   }
 
-  /*
-   * The rehaul seam. The catalogue read, the terms read and the referral prefill above are the same
-   * ones the old path gets; the flag only decides which form draws them. The rehaul card carries its
-   * own stage and its own `<h1>`, so it replaces the header too.
-   */
-  if (uiRehaulLive()) {
-    return (
-      <RehaulSignupForm enabled={enabled} referralCode={referralCode} terms={terms} tiers={tiers} />
-    );
-  }
-
   return (
-    <AuthStage width="wide">
-      {/*
-        Centred and without an eyebrow, which is the signup artboard's shape. The eyebrow said
-        "Create account" over a title that says the same thing, and a category line that only
-        repeats the heading is a line the reader pays for twice.
-      */}
-      <AuthHeader
-        align="center"
-        subline="Your agent is configured from the central brain, so this asks only for the things SetterFi cannot know."
-        title="Set up your agent"
-      />
-      <SignupForm enabled={enabled} referralCode={referralCode} terms={terms} tiers={tiers} />
-    </AuthStage>
+    <RehaulSignupForm enabled={enabled} referralCode={referralCode} terms={terms} tiers={tiers} />
   );
 }

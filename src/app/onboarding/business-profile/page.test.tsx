@@ -8,6 +8,16 @@ function json(value: unknown) { return new Response(JSON.stringify(value), { sta
 
 afterEach(() => vi.unstubAllGlobals());
 
+/**
+ * Entity type is the shared `Select`, so it opens a portalled listbox rather than answering
+ * `selectOptions`. The listbox mounts on an effect after the click, which is why the option is
+ * awaited rather than read synchronously.
+ */
+async function pickEntityType(user: ReturnType<typeof userEvent.setup>, label: string) {
+  await user.click(screen.getByRole("combobox", { name: "Entity type" }));
+  await user.click(await screen.findByRole("option", { name: label }));
+}
+
 describe("BusinessProfilePage", () => {
   it("saves through its API and only calls the profile complete after the audit-backed read-back", async () => {
     const fetcher = vi.fn()
@@ -16,17 +26,17 @@ describe("BusinessProfilePage", () => {
     vi.stubGlobal("fetch", fetcher);
     const user = userEvent.setup();
     render(<BusinessProfilePage />);
-    await screen.findByText("Enter the legal business details used for A2P filing.");
+    await screen.findByText("Nothing is filed with a carrier yet.");
     await user.type(screen.getByLabelText("Legal business name"), "Synthetic LLC");
-    await user.selectOptions(screen.getByLabelText("Entity type"), "llc");
-    expect(screen.getByRole("button", { name: "Save business profile" })).toBeDisabled();
+    await pickEntityType(user, "LLC");
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
     await user.click(screen.getByLabelText("This business has an EIN"));
     await user.type(screen.getByLabelText("Website URL"), "https://example.test");
     await user.type(screen.getByLabelText("Address line 1"), "1 Test");
     await user.type(screen.getByLabelText("City"), "Austin");
     await user.type(screen.getByLabelText("State / region"), "TX");
     await user.type(screen.getByLabelText("Postal code"), "78701");
-    await user.click(screen.getByRole("button", { name: "Save business profile" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("Business profile saved. Logged in your onboarding audit trail.");
     expect(fetcher).toHaveBeenLastCalledWith("/api/onboarding/business-profile", expect.objectContaining({ method: "POST" }));
   });
@@ -34,7 +44,7 @@ describe("BusinessProfilePage", () => {
   /**
    * The submit goes dead for one reason, and that reason has to reach a reader who cannot see it.
    *
-   * Picking `llc` disables "Save business profile" with the explanation rendered as ordinary prose
+   * Picking `llc` disables the submit with the explanation rendered as ordinary prose
    * several fields above the button, announced by nothing and named by nothing. A control that
    * stops working with no announced cause is a dead end: the reader tabs to a disabled button and
    * the page has told them nothing about how to get past it. The message is an alert so it is read
@@ -44,14 +54,14 @@ describe("BusinessProfilePage", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ profile: null })));
     const user = userEvent.setup();
     render(<BusinessProfilePage />);
-    await screen.findByText("Enter the legal business details used for A2P filing.");
+    await screen.findByText("Nothing is filed with a carrier yet.");
 
     expect(screen.queryByRole("alert")).toBeNull();
-    await user.selectOptions(screen.getByLabelText("Entity type"), "llc");
+    await pickEntityType(user, "LLC");
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("LLCs and corporations must have an EIN before this profile can be saved.");
-    const submit = screen.getByRole("button", { name: "Save business profile" });
+    const submit = screen.getByRole("button", { name: "Continue" });
     expect(submit).toBeDisabled();
     expect(submit.getAttribute("aria-describedby")).toBe(alert.id);
     expect(screen.getByLabelText("This business has an EIN").getAttribute("aria-describedby")).toBe(alert.id);
@@ -60,21 +70,6 @@ describe("BusinessProfilePage", () => {
     // Ticking the box is the way out, and the description goes with the reason.
     await user.click(screen.getByLabelText("This business has an EIN"));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("button", { name: "Save business profile" }).getAttribute("aria-describedby")).toBeNull();
-  });
-
-  /**
-   * The route is a server component now, and the flag decides which screen it hands back. With the
-   * flag off it must be the pre-rehaul form, unchanged, including the submit's own words.
-   */
-  it("renders the pre-rehaul form while the rehaul flag is off", async () => {
-    vi.stubEnv("SETTERFI_UI_REHAUL", "false");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ profile: null })));
-    render(<BusinessProfilePage />);
-
-    await screen.findByText("Enter the legal business details used for A2P filing.");
-    expect(screen.getByRole("button", { name: "Save business profile" })).toBeVisible();
-    expect(screen.queryByText("Step 1 of 5")).toBeNull();
-    vi.unstubAllEnvs();
+    expect(screen.getByRole("button", { name: "Continue" }).getAttribute("aria-describedby")).toBeNull();
   });
 });

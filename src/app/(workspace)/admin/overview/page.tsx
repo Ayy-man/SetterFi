@@ -3,7 +3,7 @@ import { forbidden, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
-import { phase7AnalyticsLive, uiRehaulLive } from "@/lib/env-contract";
+import { phase7AnalyticsLive } from "@/lib/env-contract";
 import type { PlatformMeasurement } from "@/lib/repositories/platform-analytics";
 
 export const metadata: Metadata = { title: "Overview" };
@@ -48,13 +48,8 @@ export default async function AdminOverviewPage({ searchParams }: PageProps) {
   const actor = await loadPlatformActor();
   if (!actor) redirect("/login?next=%2Fadmin%2Foverview");
   if (actor.role !== "owner" && actor.role !== "admin" && actor.role !== "success") forbidden();
-  // The rehaul draw is the same data through a different body: one loader, one projection, and the
-  // old surface left untouched behind the flag.
-  const rehaul = uiRehaulLive();
-  const [surface, measurementResult, params] = await Promise.all([
-    rehaul
-      ? import("@/components/workspace/rehaul/owner-overview")
-      : import("@/components/workspace/live/admin-overview"),
+  const [{ OwnerOverview }, measurementResult, params] = await Promise.all([
+    import("@/components/workspace/rehaul/owner-overview"),
     readPlatformMeasurementResult(actor.userId),
     searchParams,
   ]);
@@ -77,21 +72,13 @@ export default async function AdminOverviewPage({ searchParams }: PageProps) {
       </OverviewShell>
     );
   }
-  if (rehaul && "OwnerOverview" in surface) {
-    return (
-      <OverviewShell>
-        <surface.OwnerOverview
-          historyWindow={firstParam(params.window)}
-          measurement={measurementResult.value}
-          role={actor.role}
-        />
-      </OverviewShell>
-    );
-  }
-  if (!("AdminOverviewSurface" in surface)) return null;
   return (
     <OverviewShell>
-      <surface.AdminOverviewSurface measurement={measurementResult.value} role={actor.role} />
+      <OwnerOverview
+        historyWindow={firstParam(params.window)}
+        measurement={measurementResult.value}
+        role={actor.role}
+      />
     </OverviewShell>
   );
 }

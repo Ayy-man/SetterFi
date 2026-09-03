@@ -48,8 +48,8 @@ describe("the sign-up invitation on /login", () => {
     try {
       render(await LoginPage({ searchParams: search() }));
       // The positive control: the page has to have rendered before an absence means anything.
-      expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "Set up your agent" })).toBeNull();
+      expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Start with SetterFi" })).toBeNull();
       expect(document.querySelector('a[href="/signup"]')).toBeNull();
     } finally {
       restore();
@@ -60,7 +60,7 @@ describe("the sign-up invitation on /login", () => {
     const restore = withFlag("true");
     try {
       render(await LoginPage({ searchParams: search() }));
-      const link = screen.getByRole("link", { name: "Set up your agent" });
+      const link = screen.getByRole("link", { name: "Start with SetterFi" });
       expect(link).toHaveAttribute("href", "/signup");
     } finally {
       restore();
@@ -68,46 +68,14 @@ describe("the sign-up invitation on /login", () => {
   });
 });
 
-/**
- * The rehaul seam.
- *
- * The flag decides which component draws the page and nothing else: the same server action, the
- * same `next`, the same error branches. So the check is a pair -- on, the artboard's card; off, the
- * page exactly as it shipped -- because a seam that only proves the new side is a seam that can
- * have deleted the old one.
- */
-describe("/login behind SETTERFI_UI_REHAUL", () => {
-  function withRehaul(value: string | undefined) {
-    const restoreFlag = withFlag("true");
-    const previous = process.env.SETTERFI_UI_REHAUL;
-    if (value === undefined) delete process.env.SETTERFI_UI_REHAUL;
-    else process.env.SETTERFI_UI_REHAUL = value;
-    return () => {
-      if (previous === undefined) delete process.env.SETTERFI_UI_REHAUL;
-      else process.env.SETTERFI_UI_REHAUL = previous;
-      restoreFlag();
-    };
-  }
-
-  it("draws the rehaul card with the flag on", async () => {
-    const restore = withRehaul("true");
+describe("the sign-in card", () => {
+  it("draws the artboard's card", async () => {
+    const restore = withFlag("true");
     try {
       render(await LoginPage({ searchParams: search() }));
       expect(screen.getByRole("heading", { level: 1, name: "Welcome back" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Start with SetterFi" })).toHaveAttribute("href", "/signup");
       expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
-    } finally {
-      restore();
-    }
-  });
-
-  it("leaves the shipped page alone with the flag off", async () => {
-    const restore = withRehaul(undefined);
-    try {
-      render(await LoginPage({ searchParams: search() }));
-      expect(screen.getByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Set up your agent" })).toHaveAttribute("href", "/signup");
-      expect(screen.queryByRole("heading", { name: "Welcome back" })).toBeNull();
     } finally {
       restore();
     }

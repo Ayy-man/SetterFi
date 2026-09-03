@@ -7,9 +7,16 @@ function source(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
+/*
+ * The marketplace install arm, folded out of `/admin/provisioning` and into the Clients screen's
+ * Setup tab. The route survives only as a redirect, so every assertion that used to read the page
+ * reads the module that now holds the same code -- unchanged assertions, moved target.
+ */
+const INSTALL_SECTION = "src/app/(workspace)/admin/platform-clients/install-section.tsx";
+
 describe("Marketplace install reachability", () => {
-  it("wires the provisioning page to the flag, the query string, and the agency row", () => {
-    const page = source("src/app/(workspace)/admin/provisioning/page.tsx");
+  it("wires the setup section to the flag, the query string, and the agency row", () => {
+    const page = source(INSTALL_SECTION);
     expect(page).toContain("phase9GhlOAuthLive");
     expect(page).toContain("searchParams");
     expect(page).toContain("messagingInstallOutcome");
@@ -17,8 +24,8 @@ describe("Marketplace install reachability", () => {
     expect(page).toContain("createGhlAgencyInstallCustody");
   });
 
-  it("keeps every credential envelope out of the props the page hands the client", () => {
-    const page = source("src/app/(workspace)/admin/provisioning/page.tsx");
+  it("keeps every credential envelope out of the props the section hands the client", () => {
+    const page = source(INSTALL_SECTION);
     expect(page).not.toContain("accessCredentialEnvelope");
     expect(page).not.toContain("refreshCredentialEnvelope");
   });
@@ -36,8 +43,22 @@ describe("Marketplace install reachability", () => {
   });
 });
 
-describe("the provisioning page authorizes before it reads", () => {
-  const page = source("src/app/(workspace)/admin/provisioning/page.tsx");
+describe("the folded route still reaches the install surface", () => {
+  it("redirects /admin/provisioning onto the tab that mounts the section", () => {
+    const fold = source("src/lib/admin-route-fold.ts");
+    expect(fold).toMatch(/"\/admin\/provisioning": \{ pathname: "\/admin\/platform-clients", param: "tab", value: "setup" \}/);
+  });
+
+  it("mounts the section from the Clients page on that tab, with no second page heading", () => {
+    const clients = source("src/app/(workspace)/admin/platform-clients/page.tsx");
+    expect(clients).toContain("ClientsSetupSection");
+    expect(clients).toMatch(/tab === "setup" \? <ClientsSetupSection/);
+    expect(source(INSTALL_SECTION)).toContain('chrome="embedded"');
+  });
+});
+
+describe("the setup section authorizes before it reads", () => {
+  const page = source(INSTALL_SECTION);
 
   it("holds the cross-tenant audit read inside the allowed branch, not merely after the decision", () => {
     expect(page).toMatch(/if \(access !== "allowed"\)[\s\S]*installEventRows\(/);

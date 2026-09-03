@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 import { AppShell } from "@/components/kit/app-shell";
-import { CoachAgentPreview, type CoachAgentPreviewRules } from "@/components/workspace/live/coach-agent-preview";
+import type { CoachAgentPreviewRules } from "@/components/workspace/live/coach-agent-preview";
 import { MeetYourAgent } from "@/components/meet-your-agent";
 import { loadPlatformActor, loadRouteActor } from "@/lib/auth/actors";
 import { RehaulMeetAgent } from "@/components/workspace/rehaul/meet-agent";
-import { phase7MeetAgentLive, uiRehaulLive } from "@/lib/env-contract";
+import { phase7MeetAgentLive } from "@/lib/env-contract";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -54,7 +54,7 @@ async function coachFirstName(userId: string) {
 /**
  * Two different screens behind one route, and the split is deliberate.
  *
- * A coach gets `CoachAgentPreview`: the scripted playback `MeetYourAgent.dc.html` draws, in the
+ * A coach gets `RehaulMeetAgent`: the phone-and-ledger body of `MeetAgent.body.html`, in the
  * coach chrome, with an explanation panel written in their words. A platform actor gets
  * `MeetYourAgent`, the live sandbox, unchanged -- it carries the composer, the adversarial
  * suggestion chips, the trace legend and the eval-promotion form the admin eval work depends on,
@@ -98,14 +98,7 @@ export default async function MeetAgentPage() {
       crumbs={[{ label: "Coach" }, { label: "Meet your agent" }]}
       role="coach"
     >
-      {/* One screen, two drawings. The rehaul body is the phone-and-ledger of
-          `MeetAgent.body.html`; with the flag off the shipped preview is untouched. Both take the
-          same `firstName` and the same published rules, so nothing new is read for either. */}
-      {uiRehaulLive() ? (
-        <RehaulMeetAgent coachName={firstName} rules={rules} />
-      ) : (
-        <CoachAgentPreview coachName={firstName} rules={rules} />
-      )}
+      <RehaulMeetAgent coachName={firstName} rules={rules} />
     </AppShell>
   );
 }

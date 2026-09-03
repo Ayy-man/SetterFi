@@ -29,6 +29,7 @@ import {
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { DayCounter } from "@/components/kit/day-counter";
 import { ArrowDown, ArrowUp, ShieldCheck } from "@/components/kit/icons";
+import { ExportMenu } from "@/components/kit/export-menu";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { LoggedButton } from "@/components/kit/logged-button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { COACH_EYEBROW_CLASS } from "@/components/workspace/live/coach-type";
 import {
+  coachCadenceExportRows,
+  coachCadenceSchedule,
+  type CoachCadenceChannel,
+  type CoachCadenceScheduleClass,
+} from "@/components/workspace/live/coach-agent";
+import {
   savedDraftView,
   type CoachOfferInitialState,
 } from "@/components/workspace/live/offer-view-models";
@@ -49,7 +56,15 @@ import { humanError } from "@/lib/copy/errors";
 import { money } from "@/lib/format/metric";
 import { DURABLE_TOUCHES } from "@/lib/followups/touch-lists";
 import { CARRIER_TYPICAL_DAYS } from "@/lib/onboarding/contracts";
-import type { CoachOfferDraftInput, PersistedOfferLayer } from "@/lib/offer/types";
+import {
+  OFFER_CADENCE_CHANNEL_LABELS,
+  OFFER_CADENCE_PURPOSE_LABELS,
+  OFFER_CADENCE_PURPOSES,
+  type CoachCadencePurposeInput,
+  type CoachOfferDraftInput,
+  type OfferCadencePurpose,
+  type PersistedOfferLayer,
+} from "@/lib/offer/types";
 import type { CoachQuestion } from "@/lib/repositories/coach-questions";
 import type { KeywordGoal, KeywordGoalMode } from "@/lib/repositories/keyword-goals";
 
@@ -107,6 +122,13 @@ export type RehaulCoachAgentProps = {
    * Null is not an empty library: the panel says it could not read rather than drawing no rows.
    */
   questions: readonly CoachQuestion[] | null;
+  /**
+   * The follow-up surface behind step 7: whether live follow-up is switched on, and the connected
+   * channels the schedule groups are built from. Timing and touch count are the platform's, so
+   * only the purpose of each touch is editable, and an absent read draws no channel rather than
+   * claiming none is connected.
+   */
+  cadence?: { enabled: boolean; channels: readonly CoachCadenceChannel[] };
   /** Test seam. Omit and the component loads goals from the tenant-scoped route. */
   initialKeywordGoals?: readonly KeywordGoal[];
 };
@@ -552,6 +574,34 @@ const BILLING_LABELS: Record<string, string> = {
 };
 
 /* ------------------------------------------------------------------ *
+ * Follow-up cadence
+ * ------------------------------------------------------------------ */
+
+/**
+ * The purpose a coach actually saved for a fixed platform touch, or null when none is saved.
+ *
+ * A saved row is keyed by class and touch number, never by channel, because two channels that
+ * resolve to the same cadence class share one schedule. Absence is a real answer here: it means
+ * the touch still runs on the platform default, which the row says out loud rather than drawing
+ * the default as if the coach had chosen it.
+ */
+function savedPurposeFor(
+  rows: readonly CoachCadencePurposeInput[],
+  channelClass: CoachCadenceScheduleClass,
+  touchNo: number,
+): OfferCadencePurpose | null {
+  return (
+    rows.find((row) => row.channelClass === channelClass && row.touchNo === touchNo)?.purpose ??
+    null
+  );
+}
+
+const PURPOSE_OPTIONS = OFFER_CADENCE_PURPOSES.map((value) => ({
+  value,
+  label: OFFER_CADENCE_PURPOSE_LABELS[value],
+}));
+
+/* ------------------------------------------------------------------ *
  * Keyword goals
  * ------------------------------------------------------------------ */
 
@@ -582,6 +632,7 @@ function toGoalDraft(goal: KeywordGoal): GoalDraft {
  * ------------------------------------------------------------------ */
 
 export function CoachAgent({
+  cadence = { enabled: false, channels: [] },
   connections,
   initialKeywordGoals,
   initialState,
@@ -604,6 +655,9 @@ export function CoachAgent({
   const [goalNotice, setGoalNotice] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [newKeyword, setNewKeyword] = useState("");
+
+  /** The orphan row a coach has pressed Remove on, held until they confirm it. */
+  const [cadenceRemoval, setCadenceRemoval] = useState<number | null>(null);
 
   const [questionRows, setQuestionRows] = useState<readonly CoachQuestion[] | null>(questions);
   const [questionNotice, setQuestionNotice] = useState<string | null>(null);
@@ -643,6 +697,69 @@ export function CoachAgent({
     setForm((current) => ({ ...current, [key]: value }));
     setDirty(true);
     setNotice(null);
+  }
+
+  /*
+   * The schedule the coach edits against, and the export built from the same rows the panel draws.
+   * `coachCadenceSchedule` owns the touch list and its timing, so a purpose can only ever be saved
+   * against a slot the platform actually schedules; anything already stored outside it is listed
+   * separately rather than silently dropped, because the draft still carries it.
+   */
+  const cadenceSchedule = useMemo(
+    () => coachCadenceSchedule(cadence.channels),
+    [cadence.channels],
+  );
+  const cadenceExportRows = useMemo(
+    () => coachCadenceExportRows(cadenceSchedule, form.cadencePurposes),
+    [cadenceSchedule, form.cadencePurposes],
+  );
+  const scheduledSlots = useMemo(
+    () =>
+      new Set(
+        cadenceSchedule.flatMap((group) =>
+          group.touches.map((touch) => `${group.channelClass}:${touch.touchNo}`),
+        ),
+      ),
+    [cadenceSchedule],
+  );
+  const orphanCadencePurposes = form.cadencePurposes
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => !scheduledSlots.has(`${row.channelClass}:${row.touchNo}`));
+
+  /**
+   * Save one touch's purpose into the draft, replacing the row for that slot rather than adding a
+   * second one: the storage keeps at most one purpose per class and touch number, and two rows for
+   * the same slot would make the agent's next read arbitrary.
+   */
+  function setCadencePurpose(
+    channelClass: CoachCadenceScheduleClass,
+    touchNo: number,
+    purpose: OfferCadencePurpose,
+  ) {
+    const index = form.cadencePurposes.findIndex(
+      (row) => row.channelClass === channelClass && row.touchNo === touchNo,
+    );
+    if (index < 0) {
+      updateForm("cadencePurposes", [
+        ...form.cadencePurposes,
+        { channelClass, touchNo, purpose, assetId: null },
+      ]);
+      return;
+    }
+    updateForm(
+      "cadencePurposes",
+      form.cadencePurposes.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, purpose } : row,
+      ),
+    );
+  }
+
+  function removeCadencePurpose(index: number) {
+    updateForm(
+      "cadencePurposes",
+      form.cadencePurposes.filter((_, rowIndex) => rowIndex !== index),
+    );
+    setCadenceRemoval(null);
   }
 
   async function saveOffer() {
@@ -1447,6 +1564,172 @@ export function CoachAgent({
                 </div>
               </Panel>
             </Step>
+
+            {/*
+              Step 7, the rung the rehaul dropped when it dropped `coach-offer.tsx`.
+
+              Timing is platform-owned: `DURABLE_TOUCHES` and `WINDOW_BOUND_TOUCHES` fix how many
+              touches a class gets and when each fires, and there is no per-tenant column for
+              either. What each touch is FOR is the coach's, stored in `offer_cadence_purposes`,
+              and it saves and publishes through the same draft lifecycle as every other offer
+              field on this screen -- there is no second write path here.
+            */}
+            <Step
+              icon={<Glyph d="M12 7v5l3 2M3 12a9 9 0 1 0 9-9 9 9 0 0 0-9 9Z" />}
+              tone="violet"
+            >
+              <Panel
+                action={
+                  <ExportMenu
+                    filename="setterfi-followup-schedule"
+                    label="Export schedule"
+                    mode="local"
+                    rows={cadenceExportRows}
+                  />
+                }
+                eyebrow="Step 7 · timing is ours, purpose is yours"
+                name="If they go quiet"
+              >
+                {cadence.enabled ? null : (
+                  <div
+                    className="flex flex-col gap-[8px] border-b border-[var(--line-soft)] px-[20px] py-[16px]"
+                    role="status"
+                  >
+                    <span className="inline-flex h-[30px] w-fit items-center gap-[8px] rounded-full border border-[var(--warning-line)] bg-[var(--warning-wash)] px-[12px] text-[14px] text-[color:var(--warning-text)]">
+                      <Dot tone="amber" />
+                      Not sending yet
+                    </span>
+                    <p className="m-0 max-w-[var(--measure-deck)] text-[length:var(--coach-body)] text-[color:var(--muted)]">
+                      Live follow-up is not switched on, so nothing below claims a message was
+                      sent. A purpose you save now is kept and used once it is.
+                    </p>
+                  </div>
+                )}
+
+                {cadenceSchedule.map((group) => (
+                  <div key={group.channelClass}>
+                    <div className="border-b border-[var(--line-soft)] px-[20px] py-[14px]">
+                      <span className={`block ${COACH_EYEBROW_CLASS}`}>{group.channelNote}</span>
+                      <h3 className="m-0 mt-[4px] text-[length:var(--coach-body)] font-semibold text-[color:var(--ink)]">
+                        {group.channelLabel}
+                      </h3>
+                      {group.humanOnlyAfterWindow ? (
+                        <p className="m-0 mt-[6px] flex items-center gap-[8px] text-[15px] text-[color:var(--muted)]">
+                          <ShieldCheck aria-hidden className="size-[16px] shrink-0" />
+                          After the reply window, follow-up stays human-only.
+                        </p>
+                      ) : null}
+                    </div>
+                    {group.touches.map((touch) => {
+                      const saved = savedPurposeFor(
+                        form.cadencePurposes,
+                        group.channelClass,
+                        touch.touchNo,
+                      );
+                      return (
+                        <div
+                          className={ROW_CLASS}
+                          data-purpose-set={saved ? "true" : "false"}
+                          key={`${group.channelClass}:${touch.touchNo}`}
+                        >
+                          <span className="min-w-[220px] flex-1 text-[length:var(--coach-body)] text-[color:var(--ink)]">
+                            Touch {touch.touchNo}
+                            <span className="ml-[10px] text-[color:var(--muted)]">{touch.when}</span>
+                          </span>
+                          <div className="w-[200px] shrink-0">
+                            <Select
+                              onValueChange={(next) =>
+                                setCadencePurpose(
+                                  group.channelClass,
+                                  touch.touchNo,
+                                  (next || touch.defaultPurpose) as OfferCadencePurpose,
+                                )
+                              }
+                              value={saved ?? touch.defaultPurpose}
+                            >
+                              <SelectTrigger
+                                aria-label={`${group.channelLabel} touch ${touch.touchNo} purpose`}
+                                className={SELECT_TRIGGER_CLASS}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent align="start" alignItemWithTrigger={false}>
+                                {PURPOSE_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <span
+                            className={`${MONO_CLASS} w-[86px] shrink-0 text-right text-[14px] ${
+                              saved ? "text-[color:var(--accent-text)]" : "text-[color:var(--muted)]"
+                            }`}
+                          >
+                            {saved ? "set by you" : "our default"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {/*
+                  A purpose stored against a slot the platform no longer schedules. The agent
+                  cannot reach it, so it is drawn as something to remove rather than as a row the
+                  coach can still edit, and the removal goes into the same draft as everything
+                  above it.
+                */}
+                {orphanCadencePurposes.length ? (
+                  <div className="border-t border-[var(--line)]">
+                    <div className="px-[20px] py-[14px]">
+                      <h3 className="m-0 text-[length:var(--coach-body)] font-semibold text-[color:var(--ink)]">
+                        Saved outside this schedule
+                      </h3>
+                    </div>
+                    {orphanCadencePurposes.map(({ row, index }) => (
+                      <div className={ROW_CLASS} key={`${row.channelClass}:${row.touchNo}:${index}`}>
+                        <span className="min-w-[220px] flex-1 text-[length:var(--coach-body)] text-[color:var(--muted)]">
+                          {OFFER_CADENCE_CHANNEL_LABELS[row.channelClass]}, touch {row.touchNo},{" "}
+                          {OFFER_CADENCE_PURPOSE_LABELS[row.purpose]}
+                        </span>
+                        {cadenceRemoval === index ? (
+                          <span className="flex shrink-0 items-center gap-[10px]">
+                            <span className="text-[15px] text-[color:var(--body)]">
+                              Remove it?
+                            </span>
+                            <button
+                              className={QUIET_BUTTON_CLASS}
+                              onClick={() => removeCadencePurpose(index)}
+                              type="button"
+                            >
+                              Remove
+                            </button>
+                            <button
+                              className={QUIET_BUTTON_CLASS}
+                              onClick={() => setCadenceRemoval(null)}
+                              type="button"
+                            >
+                              Keep
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            aria-label={`Remove ${OFFER_CADENCE_CHANNEL_LABELS[row.channelClass]} touch ${row.touchNo}`}
+                            className={QUIET_BUTTON_CLASS}
+                            onClick={() => setCadenceRemoval(index)}
+                            type="button"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </Panel>
+            </Step>
           </div>
 
           <div className="flex min-w-0 flex-col gap-[20px]">
@@ -1500,7 +1783,33 @@ export function CoachAgent({
               </div>
             </Panel>
 
-            <Panel eyebrow="What you charge" name="Prices your agent can quote">
+            {/*
+              The offer layer's four exports, back on the surface that replaced the offer page.
+
+              `coach-offer.tsx` carried one on each of prices, proof and assets, and one on the
+              objection rollup, and the rehaul dropped all four when it dropped that file --
+              leaving four server routes a tenant is entitled to with no control that calls them.
+              Every one of them is `mode="server"`, so the file is what the route can see rather
+              than the rows this column happens to draw, and the "Logged" microcopy under each
+              format comes from the shared menu because a server export writes an audit row.
+
+              Proof and assets are drawn here as read-only wells for the same reason prices are:
+              the ladder to the left is where a coach edits their agent, and this column is the
+              statement of what it is allowed to say.
+            */}
+            <Panel
+              action={
+                <ExportMenu
+                  filename="setterfi-offer-prices"
+                  label="Export prices"
+                  mode="server"
+                  query={{ order: "created_desc" }}
+                  resource="offer-prices"
+                />
+              }
+              eyebrow="What you charge"
+              name="Prices your agent can quote"
+            >
               {form.prices.length ? (
                 <dl className="m-0 flex flex-col text-[length:var(--coach-body)]">
                   {form.prices.map((price, index) => (
@@ -1526,6 +1835,101 @@ export function CoachAgent({
                 </p>
               )}
             </Panel>
+
+            <Panel
+              action={
+                <ExportMenu
+                  filename="setterfi-offer-proof"
+                  label="Export proof"
+                  mode="server"
+                  query={{ order: "created_desc" }}
+                  resource="offer-proof"
+                />
+              }
+              eyebrow="What you can claim"
+              name="Proof your agent can cite"
+            >
+              {form.proof.length ? (
+                <ul className="m-0 flex list-none flex-col p-0">
+                  {form.proof.map((entry, index) => (
+                    <li className={ROW_CLASS} key={`${entry.title}:${index}`}>
+                      <span className="min-w-0 flex-1 text-[length:var(--coach-body)] text-[color:var(--ink)]">
+                        {entry.title}
+                      </span>
+                      <span className="min-w-0 flex-1 text-[length:var(--coach-body)] text-[color:var(--muted)]">
+                        {entry.detail}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="m-0 px-[20px] py-[16px] text-[length:var(--coach-body)] text-[color:var(--muted)]">
+                  No proof is saved, so your agent cites none.
+                </p>
+              )}
+            </Panel>
+
+            <Panel
+              action={
+                <ExportMenu
+                  filename="setterfi-offer-assets"
+                  label="Export links"
+                  mode="server"
+                  query={{ order: "created_desc" }}
+                  resource="offer-assets"
+                />
+              }
+              eyebrow="What it sends"
+              name="Links your agent can send"
+            >
+              {form.assets.length ? (
+                <ul className="m-0 flex list-none flex-col p-0">
+                  {form.assets.map((asset, index) => (
+                    <li className={ROW_CLASS} key={`${asset.slug}:${index}`}>
+                      <span className="min-w-0 flex-1 text-[length:var(--coach-body)] text-[color:var(--ink)]">
+                        {asset.label}
+                      </span>
+                      <span className={`${MONO_CLASS} min-w-0 flex-1 truncate text-right text-[length:var(--coach-body)] text-[color:var(--muted)]`}>
+                        {asset.url}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="m-0 px-[20px] py-[16px] text-[length:var(--coach-body)] text-[color:var(--muted)]">
+                  No link is saved, so your agent sends none.
+                </p>
+              )}
+            </Panel>
+
+            {/*
+              The objection rollup is a download and not a table, and the panel says so.
+
+              `coach-offer.tsx` drew the last thirty days of objections as a list beside its
+              export. Nothing on this route reads that rollup -- the page passes the offer layer,
+              the connection surface and the question library, and adding a fifth query to a
+              screen whose whole argument is that it does not query is not a trade worth making.
+              So the control stays and the list does not, and the panel states what the file
+              holds rather than drawing an empty table where a rollup would go.
+            */}
+            <Panel
+              action={
+                <ExportMenu
+                  filename="setterfi-top-objections"
+                  label="Export objections"
+                  mode="server"
+                  query={{ order: "created_desc" }}
+                  resource="coach-top-objections"
+                />
+              }
+              eyebrow="What they push back on"
+              name="Objections, last 30 days"
+            >
+              <p className="m-0 px-[20px] py-[16px] text-[length:var(--coach-body)] text-[color:var(--muted)]">
+                One row per objection a lead raised in the last thirty days, with how many
+                conversations it appeared in and how often a call was still booked after it.
+              </p>
+            </Panel>
           </div>
         </div>
       )}
@@ -1535,7 +1939,7 @@ export function CoachAgent({
         page states facts and controls; the eye carries the words about them.
       */}
       <ContextEye
-        copy="This is your setter read top to bottom, in the order a lead meets it. You set the keywords, the resource it sends, which questions it asks and the order they come in, the facts an answer is judged against, your voice and your prices. SetterFi writes the questions themselves, checks in if a lead goes quiet on our own schedule, decides when it stops, and checks every reply against what you are allowed to claim. A qualified lead and a booked call are sent to Meta when they happen, never twice. Texting registration sits with the carrier, who owns that review, so there is nothing on this page to test or press while it runs. Saving keeps a draft; publishing is what your leads meet, and it is logged."
+        copy="This is your setter read top to bottom, in the order a lead meets it. You set the keywords, the resource it sends, which questions it asks and the order they come in, the facts an answer is judged against, your voice, your prices, and what each follow-up is for. SetterFi writes the questions themselves, checks in if a lead goes quiet on our own schedule, decides when it stops, and checks every reply against what you are allowed to claim. A qualified lead and a booked call are sent to Meta when they happen, never twice. Texting registration sits with the carrier, who owns that review, so there is nothing on this page to test or press while it runs. Saving keeps a draft; publishing is what your leads meet, and it is logged."
         screen="coach-agent"
       />
     </div>

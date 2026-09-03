@@ -43,7 +43,7 @@ import type { SuccessClientBookRead, SupportBook } from "@/lib/repositories/supp
  * Contract
  * ------------------------------------------------------------------------------------------ */
 
-export const OWNER_CLIENT_TABS = ["status", "agent", "performance", "health", "team"] as const;
+export const OWNER_CLIENT_TABS = ["status", "agent", "performance", "health", "team", "setup"] as const;
 export type OwnerClientsTab = (typeof OWNER_CLIENT_TABS)[number];
 
 /**
@@ -81,6 +81,15 @@ export type OwnerClientsProps = {
   agents: OwnerClientsFold<AgentRoster>;
   performance: OwnerClientsFold<OwnerClientsPerformance>;
   health: OwnerClientsFold<OwnerClientsHealth>;
+  /**
+   * The marketplace install surface, rendered on the server and handed down as a node.
+   *
+   * It is the install panel, the attempts table and the agency grant cards -- the arm
+   * `/admin/provisioning` used to own -- and it stays a server render because every read behind it
+   * runs with the service role. Absent when the tab is not the one being drawn, so its four reads
+   * never run for a reader who opened Status.
+   */
+  setup?: ReactNode;
   nowIso: string;
 };
 
@@ -95,7 +104,9 @@ const EYE_COPY = "The client book is every coach on the platform, ordered so tha
   + "Health dots are the provisioning stages a client has cleared, and texting registration is "
   + "counted in days with the carrier because nobody can predict the date it clears. Booked calls "
   + "come from the measurement snapshot; leads, conversion and time to book are not measured per "
-  + "client yet, so they are absent rather than estimated.";
+  + "client yet, so they are absent rather than estimated. Setup is the marketplace install: the "
+  + "agency grant this workspace holds, the attempts behind it, and the provisioning queue those "
+  + "installs feed.";
 
 /* --------------------------------------------------------------------------------------------
  * Reading the rows
@@ -305,6 +316,7 @@ export function OwnerClients({
   rowsError,
   selectedClientId,
   selectedOwnerId,
+  setup = null,
   tab,
 }: OwnerClientsProps) {
   const router = useRouter();
@@ -377,7 +389,7 @@ export function OwnerClients({
    * The table, one head and one row shape per tab
    * ---------------------------------------------------------------------------------------- */
 
-  const HEADS: Record<Exclude<OwnerClientsTab, "team">, readonly { label: string; num?: boolean }[]> = {
+  const HEADS: Record<Exclude<OwnerClientsTab, "team" | "setup">, readonly { label: string; num?: boolean }[]> = {
     agent: [
       { label: "Client" }, { label: "Agent" }, { label: "Live version", num: true },
       { label: "Unpublished edits", num: true }, { label: "From the brain" }, { label: "Open threads", num: true },
@@ -518,8 +530,9 @@ export function OwnerClients({
     );
   }
 
-  const heads = tab === "team" ? [] : HEADS[tab];
-  const tableRows = tab === "team" ? [] : ordered.map((row) => (
+  const tabular = tab !== "team" && tab !== "setup";
+  const heads = tabular ? HEADS[tab] : [];
+  const tableRows = !tabular ? [] : ordered.map((row) => (
       <tr key={row.client.id} className={row.client.id === selectedClientId ? "bg-[var(--accent-wash)]" : undefined}>
         {clientCell(row)}
         {tab === "status" ? statusRow(row) : null}
@@ -645,7 +658,7 @@ export function OwnerClients({
         </div>
 
         <Seg
-          items={OWNER_CLIENT_TABS.filter((key) => key !== "team").map((key) => ({
+          items={OWNER_CLIENT_TABS.filter((key) => key !== "team" && key !== "setup").map((key) => ({
             active: key === tab,
             href: href({ tab: key, book, client: row.client.id }),
             label: key === "status" ? "Status" : key === "agent" ? "Agent"
@@ -831,9 +844,11 @@ export function OwnerClients({
     );
   }
 
-  const drawer = tab === "team"
-    ? (openBook ? ownerDrawer(openBook) : null)
-    : (open ? clientDrawer(open) : null);
+  const drawer = tab === "setup"
+    ? null
+    : tab === "team"
+      ? (openBook ? ownerDrawer(openBook) : null)
+      : (open ? clientDrawer(open) : null);
 
   /* ------------------------------------------------------------------------------------------
    * Render
@@ -880,7 +895,8 @@ export function OwnerClients({
             active: key === tab,
             href: href({ tab: key, book }),
             label: key === "status" ? "Status" : key === "agent" ? "Agent"
-              : key === "performance" ? "Performance" : key === "health" ? "Health" : "Team",
+              : key === "performance" ? "Performance" : key === "health" ? "Health"
+                : key === "team" ? "Team" : "Setup",
           }))}
           label="Client sections"
         />
@@ -904,7 +920,7 @@ export function OwnerClients({
                 </div>
               ) : null}
 
-              {tab === "team" ? teamBoard() : (
+              {tab === "setup" ? setup : tab === "team" ? teamBoard() : (
               <CardTable>
                 <table className={CARD_TABLE.table}>
                   <thead>

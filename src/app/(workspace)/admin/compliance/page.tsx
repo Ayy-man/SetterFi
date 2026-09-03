@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
 import {
-  AdminCompliance,
   type AdminDeletionActions,
   ComplianceHeader,
   type ComplianceContact,
@@ -15,7 +14,7 @@ import {
 import { hasImpersonationMarker, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { previewLeadDeletion } from "@/lib/deletion/preview";
 import { deleteLead } from "@/lib/deletion/service";
-import { contactDeleteLive, phase1Live, phase3Live, uiRehaulLive } from "@/lib/env-contract";
+import { contactDeleteLive, phase1Live, phase3Live } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import {
   contactDeletedEvent,
@@ -29,13 +28,8 @@ export const metadata: Metadata = { title: "Compliance" };
 export const dynamic = "force-dynamic";
 
 const ADMIN_COMPLIANCE_ROLES = new Set(["owner", "admin", "success"]);
-const COMPLIANCE_CRUMBS = [
-  { label: "Brain", href: "/admin/brain" },
-  { label: "Compliance" },
-] as const;
-
-/* The rehaul rail's group for this route. The flag-off arm keeps the crumb it shipped with. */
-const REHAUL_COMPLIANCE_CRUMBS = [{ label: "Platform" }, { label: "Compliance" }] as const;
+/* The rail's group for this route. */
+const COMPLIANCE_CRUMBS = [{ label: "Platform" }, { label: "Compliance" }] as const;
 
 /**
  * `failedConfirmations` is the rail's number, and it is deliberately narrower than "blocks on the
@@ -54,7 +48,7 @@ function ComplianceShell({
   return (
     <AppShell
       activePath="/admin/compliance"
-      crumbs={uiRehaulLive() ? REHAUL_COMPLIANCE_CRUMBS : COMPLIANCE_CRUMBS}
+      crumbs={COMPLIANCE_CRUMBS}
       navCounts={{ "/admin/compliance": failedConfirmations }}
       role="admin"
     >
@@ -309,23 +303,13 @@ export default async function AdminCompliancePage() {
     <ComplianceShell
       failedConfirmations={suppressions.filter((row) => row.providerSyncState === "failed").length}
     >
-      {uiRehaulLive() ? (
-        <OwnerCompliance
-          actions={{ preview: previewAdminDeletion, remove: executeAdminDeletion }}
-          impersonation={context.impersonation}
-          initialContacts={contacts}
-          suppressions={suppressions}
-          tombstones={tombstones}
-        />
-      ) : (
-        <AdminCompliance
-          actions={{ preview: previewAdminDeletion, remove: executeAdminDeletion }}
-          impersonation={context.impersonation}
-          initialContacts={contacts}
-          suppressions={suppressions}
-          tombstones={tombstones}
-        />
-      )}
+      <OwnerCompliance
+        actions={{ preview: previewAdminDeletion, remove: executeAdminDeletion }}
+        impersonation={context.impersonation}
+        initialContacts={contacts}
+        suppressions={suppressions}
+        tombstones={tombstones}
+      />
     </ComplianceShell>
   );
 }

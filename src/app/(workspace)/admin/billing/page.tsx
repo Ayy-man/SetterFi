@@ -9,7 +9,6 @@ import {
   loadStripeReadinessReceipt,
   loadTierImpactById,
 } from "@/app/(workspace)/admin/tiers/render-tiers-page";
-import { AdminMoneyBilling } from "@/components/workspace/live/admin-money-billing";
 import {
   moneyPageAccessStatus,
   type CorrectionEvidence,
@@ -22,7 +21,7 @@ import {
 } from "@/components/workspace/rehaul/owner-money";
 import type { PageSearchParams } from "@/lib/admin-route-fold";
 import { loadPlatformActor } from "@/lib/auth/actors";
-import { phase6AffiliatesLive, phase6Live, uiRehaulLive } from "@/lib/env-contract";
+import { phase6AffiliatesLive, phase6Live } from "@/lib/env-contract";
 import {
   createBillingRepository,
   type MoneyBillingRead,
@@ -108,72 +107,19 @@ async function loadTiersData(): Promise<OwnerMoneyTiersData> {
 }
 
 export default async function AdminBillingPage({ searchParams }: PageProps) {
-  const rehaul = uiRehaulLive();
-
   if (!phase6Live()) {
-    return rehaul
-      ? (
-        <OwnerMoney
-          actorRole="admin"
-          authorized
-          enabled={false}
-          tab={tabOf(first((await searchParams).tab))}
-        />
-      )
-      : (
-        <AdminMoneyBilling
-          actorRole="admin"
-          authorized
-          enabled={false}
-          surface="billing"
-        />
-      );
+    return (
+      <OwnerMoney
+        actorRole="admin"
+        authorized
+        enabled={false}
+        tab={tabOf(first((await searchParams).tab))}
+      />
+    );
   }
 
   const actor = await loadPlatformActor();
   if (!actor) redirect("/login?next=%2Fadmin%2Fbilling");
-
-  if (!rehaul) {
-    const authorized = moneyPageAccessStatus(actor.role, "billing") === 200;
-    if (!authorized) {
-      const refusalRecord = await logMoneyPageRefusal(actor.userId, "billing");
-      /*
-       * One refusal for the Money group, drawn inside the console rather than four different
-       * ones. A success reviewer following a link from a client thread is a reader of this
-       * console who took a wrong turn inside it; a coach or an affiliate has no business anywhere
-       * under /admin, so their refusal stays the bare page. The audit row is written for both,
-       * because the boundary was hit either way.
-       */
-      if (actor.role !== "success") forbidden();
-      return (
-        <AdminMoneyBilling
-          actorRole="success"
-          authorized={false}
-          enabled
-          refusalRecord={refusalRecord}
-          surface="billing"
-        />
-      );
-    }
-
-    const actorRole = actor.role === "owner" || actor.role === "admin" ? actor.role : "success";
-    let movement: MrrMovementRead | null = null;
-    try {
-      movement = await createBillingRepository().loadMrrMovement(new Date().toISOString());
-    } catch {
-      movement = null;
-    }
-
-    return (
-      <AdminMoneyBilling
-        actorRole={actorRole}
-        authorized={authorized}
-        enabled
-        movement={movement}
-        surface="billing"
-      />
-    );
-  }
 
   const tab = tabOf(first((await searchParams).tab));
   const surface = TAB_SURFACE[tab];

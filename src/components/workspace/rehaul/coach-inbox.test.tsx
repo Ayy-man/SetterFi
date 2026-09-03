@@ -138,6 +138,18 @@ describe("CoachInbox", () => {
     expect(screen.getAllByText("Logged")).toHaveLength(2);
   });
 
+  it("carries the conversations export the old console had, as the server export", async () => {
+    const user = userEvent.setup();
+    renderInbox();
+
+    await user.click(screen.getByRole("button", { name: "Export table" }));
+
+    // Server mode, so the file is the whole set the route can see rather than the pane's rows,
+    // and the shared menu says so and says the download is recorded.
+    expect(screen.getByText("All matching rows")).toBeInTheDocument();
+    expect(screen.getAllByText("Export start logged")).toHaveLength(2);
+  });
+
   it("says the inbox is unavailable when conversations are disabled", () => {
     render(<CoachInbox enabled={false} initialConversations={[]} />);
 

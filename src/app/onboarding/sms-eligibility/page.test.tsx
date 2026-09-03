@@ -33,22 +33,23 @@ describe("SmsEligibilityPage", () => {
     const user = userEvent.setup();
     render(<SmsEligibilityPage />);
 
-    const counter = (await screen.findByText("Day 2")).closest("p");
-    expect(counter).not.toBeNull();
-    const text = counter!.textContent ?? "";
-    expect(text).toContain(`typical ${CARRIER_TYPICAL_DAYS[0]} to ${CARRIER_TYPICAL_DAYS[1]} days`);
-    expect(text).toContain("no action needed from you");
+    const panel = (await screen.findByText("day 2")).closest("[data-slot='rehaul-sms-review']");
+    expect(panel).not.toBeNull();
+    const text = panel!.textContent ?? "";
+    expect(text).toContain(`typically ${CARRIER_TYPICAL_DAYS[0]} to ${CARRIER_TYPICAL_DAYS[1]} days once filed`);
     // No percentage, and no date beyond the one that already happened: a decision date would be a
     // prediction about a carrier that publishes no schedule.
     expect(text).not.toContain("%");
-    const MONTH_DAY = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}\b/gu;
+    // No word boundary in front: the panel's rows concatenate, so the filing date follows its
+    // label with no separator in `textContent`.
+    const MONTH_DAY = /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}\b/gu;
     expect(text.match(MONTH_DAY) ?? []).toEqual(["Aug 29"]);
 
     // The wait is never dressed as completion, and nothing on the page claims approval.
     expect(screen.getByText("With the carriers")).toBeVisible();
     expect(document.body.textContent ?? "").not.toMatch(/all set|100%|approved/i);
 
-    await user.click(screen.getByLabelText("I understand this is an acknowledgement, not carrier approval."));
+    await user.click(screen.getByLabelText("I understand this is an acknowledgement, not carrier approval"));
     await user.click(screen.getByRole("button", { name: "Record acknowledgement" }));
     expect(fetcher).toHaveBeenCalledWith("/api/onboarding/sms-eligibility", expect.objectContaining({ method: "POST" }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
@@ -58,8 +59,11 @@ describe("SmsEligibilityPage", () => {
     );
   });
 
-  /** With nothing filed, there is no clock to run, and the page must not invent one. */
-  it("shows no day count before anything has been filed with the carriers", async () => {
+  /**
+   * With nothing filed, there is no elapsed review to count. The screen prints `day 0` and says
+   * so in its own words rather than starting a clock on a filing that has not happened.
+   */
+  it("starts no running clock before anything has been filed with the carriers", async () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(() => json({
       screen: { screenId: "screen-1", state: "clean", matches: [], coachAcknowledgedAt: null, adminConfirmedAt: null },
       registration: { submittedAt: null, state: null },
@@ -67,8 +71,10 @@ describe("SmsEligibilityPage", () => {
     render(<SmsEligibilityPage />);
 
     await screen.findByText("Screen cleared");
-    expect(screen.queryByText(/^Day \d+$/u)).toBeNull();
-    expect(screen.getByText(/A2P registration has not been filed with carriers/)).toBeVisible();
+    expect(screen.getByText("day 0")).toBeVisible();
+    expect(screen.queryByText(/^day [1-9]/u)).toBeNull();
+    expect(screen.getByText("Nothing is with the carriers yet")).toBeVisible();
+    expect(screen.getByText("Not filed")).toBeVisible();
   });
 
   /**
@@ -87,7 +93,7 @@ describe("SmsEligibilityPage", () => {
    * the half of the bug that shows a coach a wrong number.
    */
   it.each([
-    ["done", "Carrier review complete", /Carrier registration is complete, so there is no review left to count/],
+    ["done", "Carrier review complete", /Carrier registration is complete/],
     ["failed", "Setup needs review", /Text messaging setup did not complete/],
     ["blocked", "Blocked", /Carrier registration was permanently declined/],
   ])("stops the carrier clock once registration reaches %s", async (state, label, prose) => {
@@ -101,7 +107,7 @@ describe("SmsEligibilityPage", () => {
 
     expect(await screen.findByText(label)).toBeVisible();
     expect(screen.getByText(prose)).toBeVisible();
-    expect(screen.queryByText(/^Day \d+$/u)).toBeNull();
+    expect(screen.queryByText(/^day \d+$/u)).toBeNull();
     expect(screen.queryByText("With the carriers")).toBeNull();
     // The wait being over is not the same as the channel being approved to send.
     expect(document.body.textContent ?? "").not.toMatch(/all set|100%|approved/i);
@@ -120,22 +126,8 @@ describe("SmsEligibilityPage", () => {
     render(<SmsEligibilityPage />);
 
     expect(await screen.findByText("We could not check this")).toBeVisible();
-    expect(screen.getByText(/No state was inferred from the failed read/)).toBeVisible();
-    expect(screen.queryByText(/A2P registration has not been filed with carriers/)).toBeNull();
-    expect(screen.queryByText(/^Day \d+$/u)).toBeNull();
-  });
-
-  /** Flag off, and the route hands back the pre-rehaul screen with its own acknowledgement verb. */
-  it("renders the pre-rehaul screen while the rehaul flag is off", async () => {
-    vi.stubEnv("SETTERFI_UI_REHAUL", "false");
-    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => json({
-      screen: { screenId: "screen-1", state: "flagged", matches: [{ phrase: "credit repair" }], coachAcknowledgedAt: null, adminConfirmedAt: null },
-      registration: { submittedAt: null, state: null },
-    })));
-    render(<SmsEligibilityPage />);
-
-    expect(await screen.findByRole("button", { name: "Record acknowledgement" })).toBeVisible();
-    expect(screen.queryByText("Step 5 of 5")).toBeNull();
-    vi.unstubAllEnvs();
+    expect(screen.getByText("The carrier registration check did not run.")).toBeVisible();
+    expect(screen.queryByText("Nothing is with the carriers yet")).toBeNull();
+    expect(screen.queryByText(/^day \d+$/u)).toBeNull();
   });
 });

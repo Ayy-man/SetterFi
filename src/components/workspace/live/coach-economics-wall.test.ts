@@ -194,9 +194,10 @@ describe("client surfaces carry none of the platform's economics", () => {
 
     // If a rename ever drops these from the graph the sweep below would pass vacuously.
     expect(relatives).toContain("src/app/(workspace)/coach/agent/page.tsx");
-    expect(relatives).toContain("src/components/workspace/live/coach-agent.tsx");
+    expect(relatives).toContain("src/components/workspace/rehaul/coach-agent.tsx");
     expect(relatives).toContain("src/components/workspace/live/coach-billing.tsx");
-    expect(relatives).toContain("src/components/workspace/live/coach-measurement.tsx");
+    // Home's surface, `coach-measurement.tsx` until the rehaul took the route.
+    expect(relatives).toContain("src/components/workspace/rehaul/coach-dashboard.tsx");
     expect(modules.length).toBeGreaterThan(20);
 
     // The route that showed the entry list was narrower than the rule. It is not under `coach/`,

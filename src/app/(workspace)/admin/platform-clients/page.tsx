@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { forbidden, redirect } from "next/navigation";
 
 import { GET as loadProvisioning } from "@/app/api/admin/provisioning/route";
-import { SuccessClientBook } from "@/components/workspace/live/success-client-book";
 import { adminMeasurementView } from "@/components/workspace/live/admin-measurement-view-models";
 import {
   OwnerClients,
@@ -11,7 +10,7 @@ import {
   type OwnerClientsPerformance,
   type OwnerClientsTab,
 } from "@/components/workspace/rehaul/owner-clients";
-import { phase5Live, phase7AnalyticsLive, phase8SupportLive, uiRehaulLive } from "@/lib/env-contract";
+import { phase5Live, phase7AnalyticsLive, phase8SupportLive } from "@/lib/env-contract";
 import type { ProvisioningTrackerRow } from "@/lib/onboarding/contracts";
 import { loadAgentRoster, type AgentRoster } from "@/lib/operations/agent-roster";
 import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
@@ -19,12 +18,14 @@ import type { SuccessClientBookRead, SupportBook } from "@/lib/repositories/supp
 import { createSupportRepository } from "@/lib/repositories/support";
 import { createSupportService, loadSupportSession, type SupportSession } from "@/lib/support/service";
 
+import { ClientsSetupSection } from "./install-section";
+
 export const metadata: Metadata = { title: "Clients" };
 export const dynamic = "force-dynamic";
 
 type PageProps = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
-const TABS = ["status", "agent", "performance", "health", "team"] as const;
+const TABS = ["status", "agent", "performance", "health", "team", "setup"] as const;
 
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -139,35 +140,29 @@ async function clientBook(session: SupportSession, book: SupportBook) {
 }
 
 export default async function PlatformClientsPage({ searchParams }: PageProps) {
-  const rehaul = uiRehaulLive();
-
   if (!phase8SupportLive()) {
-    return rehaul
-      ? (
-        <OwnerClients
-          actorRole="admin"
-          agents={{ kind: "refused", reason: "Client-book reads are not enabled in this environment." }}
-          book="all"
-          enabled={false}
-          health={{ kind: "refused", reason: "Client-book reads are not enabled in this environment." }}
-          nowIso={new Date().toISOString()}
-          performance={{ kind: "refused", reason: "Client-book reads are not enabled in this environment." }}
-          rows={[]}
-          rowsError={null}
-          selectedClientId={null}
-          selectedOwnerId={null}
-          tab="status"
-        />
-      )
-      : <SuccessClientBook actorId="" actorRole="admin" enabled={false} />;
+    return (
+      <OwnerClients
+        actorRole="admin"
+        agents={{ kind: "refused", reason: "Client-book reads are not enabled in this environment." }}
+        book="all"
+        enabled={false}
+        health={{ kind: "refused", reason: "Client-book reads are not enabled in this environment." }}
+        nowIso={new Date().toISOString()}
+        performance={{ kind: "refused", reason: "Client-book reads are not enabled in this environment." }}
+        rows={[]}
+        rowsError={null}
+        selectedClientId={null}
+        selectedOwnerId={null}
+        tab="status"
+      />
+    );
   }
 
   const session = await loadSupportSession();
   if (!session) redirect("/login?next=%2Fadmin%2Fplatform-clients");
   if (session.impersonatingTenant
     || (session.role !== "owner" && session.role !== "admin" && session.role !== "success")) forbidden();
-
-  if (!rehaul) return <SuccessClientBook actorId={session.userId} actorRole={session.role} enabled />;
 
   const params = await searchParams;
   const tab = tabOf(first(params.tab));
@@ -193,6 +188,7 @@ export default async function PlatformClientsPage({ searchParams }: PageProps) {
       rowsError={error}
       selectedClientId={first(params.client)?.trim() || null}
       selectedOwnerId={first(params.owner)?.trim() || null}
+      setup={tab === "setup" ? <ClientsSetupSection searchParams={params} /> : null}
       tab={tab}
     />
   );

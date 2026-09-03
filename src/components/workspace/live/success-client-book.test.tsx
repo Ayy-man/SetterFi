@@ -727,7 +727,8 @@ describe("SuccessClientBook nav count", () => {
 
     await screen.findAllByText("Northstar Funding");
     const rail = screen.getByRole("navigation", { name: "Primary" });
-    const book = within(rail).getByRole("link", { name: /Client book/ });
+    // The rail folded to eight destinations: the client book is the Clients row now.
+    const book = within(rail).getByRole("link", { name: /Clients/ });
     expect(book.closest("li")?.querySelector('[data-slot="nav-count"]')).toHaveTextContent("1");
   });
 });

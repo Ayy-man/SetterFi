@@ -21,7 +21,6 @@ import {
   googleCalendarOAuthLive,
   driverSelection,
   inboxVerbsLive,
-  navFoldLive,
   phase1Live,
   phase2Live,
   platformConversationQueueLive,
@@ -91,13 +90,6 @@ describe("environment contract", () => {
     expect(assignments.map(([name]) => name).sort()).toEqual([...ENV_CONTRACT_NAMES].sort());
     expect(new Set(assignments.map(([name]) => name)).size).toBe(assignments.length);
     expect(assignments.every(([, value]) => value === "")).toBe(true);
-  });
-
-  it("keeps the admin nav folded off unless the flag is exactly true", () => {
-    expect(navFoldLive({})).toBe(false);
-    expect(navFoldLive({ SETTERFI_NAV_FOLD: "TRUE" })).toBe(false);
-    expect(navFoldLive({ SETTERFI_NAV_FOLD: "1" })).toBe(false);
-    expect(navFoldLive({ SETTERFI_NAV_FOLD: " true " })).toBe(true);
   });
 
   it("keeps the demo-login flag next to the auth mode it only means anything under", () => {

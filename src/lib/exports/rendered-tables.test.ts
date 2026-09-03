@@ -17,6 +17,7 @@ type DerivedEntry = {
 
 const roots = [
   "src/components/workspace/live",
+  "src/components/workspace/rehaul",
   "src/app/(workspace)",
 ] as const;
 

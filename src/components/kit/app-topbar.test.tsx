@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -10,22 +7,6 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { WorkspaceEnvProvider } from "@/components/workspace/workspace-env";
 import { demoViewTargets } from "@/lib/workspace-navigation";
 
-/**
- * The account menu is the one piece of coach chrome that renders outside the coach shell.
- *
- * `src/components/ui/dropdown-menu.tsx` wraps its content in `MenuPrimitive.Portal`, which mounts
- * to `document.body`, and every rule in `coach.css` is scoped to `[data-shell-role="coach"]` --
- * the attribute `AppShell` stamps on the shell root. So the coach's own menu was rendering at the
- * console's density: roughly a 192px column of 26px rows at 14px, on a surface whose floors are
- * 16px body text and a 44px target with no exceptions, next to an artboard
- * (`CoachAccountMenu.dc.html`) that draws a 340px panel of 48px rows at 17px.
- *
- * These tests assert the seam rather than the sizes: that the portalled popup carries the role
- * attribute the stylesheet needs and that the stylesheet has rules keyed to it. Neither half is
- * worth anything alone -- an attribute nothing styles is noise, and a rule nothing stamps is
- * dead -- and jsdom resolves no stylesheet, so a computed-size assertion here would measure the
- * empty string. The rendered sizes belong in `coach.smoke.spec.ts`, which has a real engine.
- */
 const TOPBAR_PROPS = {
   activePath: "/coach/home",
   crumbs: [{ label: "Home" }],
@@ -35,96 +16,6 @@ const TOPBAR_PROPS = {
 const COACH_NAV = [
   { label: "", items: [{ label: "Home", href: "/coach/home" }] },
 ] as const;
-
-async function openAccountMenu(role: "admin" | "coach", name: string) {
-  const user = userEvent.setup();
-  // The topbar carries the console's mobile-nav trigger, which reads the sidebar context.
-  render(
-    <SidebarProvider>
-      <AppTopbar {...TOPBAR_PROPS} nav={COACH_NAV} role={role} />
-    </SidebarProvider>,
-  );
-  await user.click(screen.getByRole("button", { name }));
-
-  let content: HTMLElement | null = null;
-  await waitFor(() => {
-    content = document.querySelector('[data-slot="dropdown-menu-content"]');
-    expect(content, "the account menu did not open, so nothing below was checked").not.toBeNull();
-  });
-  return content as unknown as HTMLElement;
-}
-
-describe("the coach's account menu", () => {
-  it("carries the shell role out through the portal, so coach.css can reach it", async () => {
-    const content = await openAccountMenu("coach", "Coach account");
-
-    expect(content.getAttribute("data-shell-role")).toBe("coach");
-    expect(content.className).toContain("coach-account-menu");
-    // The portal is the whole point: if this ever renders inside the shell root the attribute is
-    // redundant, and if it stays outside it is the only thing that carries the scope.
-    expect(content.closest("[data-shell-root]")).toBeNull();
-  });
-
-  /**
-   * The console is deliberately the other density -- 13.5px on 30-34px targets, for the client's
-   * own team who are in it all day -- so the fix above must not reach it. A single shared menu
-   * styled to the coach's floors would be this fix's obvious failure mode.
-   */
-  it("leaves the owner console's menu at the console's density", async () => {
-    const content = await openAccountMenu("admin", "Admin account");
-
-    expect(content.getAttribute("data-shell-role")).toBeNull();
-    expect(content.className).not.toContain("coach-account-menu");
-  });
-
-  /**
-   * `CoachAccountMenu.dc.html:217-220` lists Billing in this menu while `:78` keeps the Billing
-   * pill in the bar behind it. Drawing it twice is the point: the pill is not a substitute, and a
-   * coach opening this menu is usually opening it because of the bill.
-   *
-   * Asserted as a link with an href rather than as text, because the failure mode this replaces
-   * was not a missing word -- the label existed on the pill all along -- it was that no route out
-   * of this menu reached the page.
-   */
-  it("reaches billing from the coach's menu, which the pill does not replace", async () => {
-    const content = await openAccountMenu("coach", "Coach account");
-
-    const billing = Array.from(content.querySelectorAll("a")).find(
-      (link) => link.textContent?.trim() === "Billing",
-    );
-    expect(billing, "the coach's account menu has no Billing row").toBeDefined();
-    expect(billing?.getAttribute("href")).toBe("/coach/billing");
-  });
-
-  /**
-   * The other end of the same decision. `/admin/billing` exists, but the console reaches it from
-   * its own rail and no admin artboard puts it in this menu, so the role map holds a null and the
-   * row is not rendered. A row that appeared for every role would be the obvious failure mode of
-   * the test above, in the same way the console-density test guards the one before it.
-   */
-  it("does not put billing in the console's menu, which has its own rail for it", async () => {
-    const content = await openAccountMenu("admin", "Admin account");
-
-    const labels = Array.from(content.querySelectorAll("a")).map(
-      (link) => link.textContent?.trim(),
-    );
-    expect(labels).not.toContain("Billing");
-  });
-
-  it("has rules on the other end of the seam, keyed to the popup itself", () => {
-    const css = readFileSync(
-      resolve(process.cwd(), "src/app/(workspace)/coach/coach.css"),
-      "utf8",
-    );
-
-    // Written against the element rather than as a descendant of it: the popup IS the scope root
-    // once the attribute is stamped, so `[role] .class` would match nothing.
-    expect(css).toContain('[data-shell-role="coach"].coach-account-menu');
-    // The artboard's panel width and row height, which are what the console's defaults got wrong.
-    expect(css).toMatch(/\.coach-account-menu\s*\{[^}]*width:\s*340px/u);
-    expect(css).toMatch(/min-height:\s*48px/u);
-  });
-});
 
 describe("the named account chip", () => {
   /*
@@ -168,35 +59,34 @@ describe("the named account chip", () => {
 });
 
 /**
- * The one place the 2026-09 rehaul reaches into this bar.
+ * Which control the account chip is, per role.
  *
- * `SETTERFI_UI_REHAUL` is not a `NEXT_PUBLIC_` variable, so a client component cannot read it: the
- * flag arrives through `WorkspaceEnvProvider`, resolved once by the workspace layout above every
- * shell mount. These two tests are the seam -- on, the chip opens the sheet and the eleven-row
- * dropdown is gone; off, the dropdown is exactly what it was, which is the half worth guarding.
+ * A coach and an owner get the 520px account sheet: the same sections, over the page the reader is
+ * already on, rather than six separate routes out of it. The affiliate portal has no account
+ * artboard of its own -- and the owner panel carries the terms registry and the operator runbooks,
+ * which an affiliate must not be handed -- so it keeps the dropdown it has always had.
  */
-describe("the account chip under the rehaul flag", () => {
-  function renderChip(rehaulLive: boolean) {
+describe("the account chip", () => {
+  function renderChip(role: "coach" | "admin" | "affiliate", name: string) {
     render(
       <WorkspaceEnvProvider
         account={{ fullName: "Dana Hart", firstName: "Dana", business: "Hart Credit" }}
         demoAccountSwitching={false}
         demoViews={demoViewTargets}
         mode="supabase"
-        rehaulLive={rehaulLive}
       >
         <SidebarProvider>
-          <AppTopbar {...TOPBAR_PROPS} nav={COACH_NAV} role="coach" />
+          <AppTopbar {...TOPBAR_PROPS} nav={COACH_NAV} role={role} />
         </SidebarProvider>
       </WorkspaceEnvProvider>,
     );
-    return screen.getByRole("button", { name: "Coach account" });
+    return screen.getByRole("button", { name });
   }
 
-  it("opens the account sheet instead of the dropdown when the flag is on", async () => {
+  it("opens the account sheet for a coach", async () => {
     const user = userEvent.setup();
-    const chip = renderChip(true);
-    // The chip is the same control either way: same face, same name, same initials and first name.
+    const chip = renderChip("coach", "Coach account");
+    // The chip is the same control the dropdown had: same face, same name, same initials.
     expect(chip.textContent).toContain("Dana");
     expect(chip.textContent).toContain("DH");
 
@@ -208,22 +98,23 @@ describe("the account chip under the rehaul flag", () => {
     expect(document.querySelector('[data-slot="dropdown-menu-content"]')).toBeNull();
   });
 
-  it("leaves the dropdown untouched when the flag is off", async () => {
+  it("opens the account sheet for the owner console too", async () => {
     const user = userEvent.setup();
-    const chip = renderChip(false);
+    await user.click(renderChip("admin", "Admin account"));
 
-    await user.click(chip);
-
-    let content: HTMLElement | null = null;
     await waitFor(() => {
-      content = document.querySelector('[data-slot="dropdown-menu-content"]');
-      expect(content).not.toBeNull();
+      expect(document.querySelector('[data-slot="account-sheet"]')).not.toBeNull();
+    });
+    expect(document.querySelector('[data-slot="dropdown-menu-content"]')).toBeNull();
+  });
+
+  it("keeps the dropdown for the affiliate portal, which has no account panel", async () => {
+    const user = userEvent.setup();
+    await user.click(renderChip("affiliate", "Affiliate account"));
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-slot="dropdown-menu-content"]')).not.toBeNull();
     });
     expect(document.querySelector('[data-slot="account-sheet"]')).toBeNull();
-    const labels = Array.from((content as unknown as HTMLElement).querySelectorAll("a")).map(
-      (link) => link.textContent?.trim(),
-    );
-    expect(labels).toContain("Billing");
-    expect(labels).toContain("Help");
   });
 });
