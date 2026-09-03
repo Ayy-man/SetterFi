@@ -11,7 +11,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => navigation.searchParams,
 }));
 
-import { OwnerSystem } from "@/components/workspace/rehaul/owner-system";
+import {
+  OwnerSystem,
+  type SystemPlatformSnapshot,
+} from "@/components/workspace/rehaul/owner-system";
 import type { SystemHealth } from "@/lib/operations/system-health";
 
 const NOW_ISO = "2026-09-03T12:00:00.000Z";
@@ -86,9 +89,41 @@ const health: SystemHealth = {
   reporting: { state: "stale", reason: "At least one scheduled job report is stale." },
 };
 
-function renderAt(search: string) {
+const platform: SystemPlatformSnapshot = {
+  deliveriesByDay: [
+    { day: "2026-08-28", delivered: 180, failed: 0 },
+    { day: "2026-08-29", delivered: 164, failed: 1 },
+    { day: "2026-08-30", delivered: 171, failed: 0 },
+    { day: "2026-08-31", delivered: 198, failed: 3 },
+    { day: "2026-09-01", delivered: 205, failed: 0 },
+    { day: "2026-09-02", delivered: 187, failed: 0 },
+    { day: "2026-09-03", delivered: 179, failed: 2 },
+  ],
+  textingRegistrationByTenant: [
+    {
+      tenantId: "tenant-a",
+      registrationState: "awaiting_provider",
+      submittedAt: "2026-08-25T12:00:00.000Z",
+      daysElapsed: 9,
+    },
+    {
+      tenantId: "tenant-b",
+      registrationState: "pending",
+      submittedAt: "2026-08-18T12:00:00.000Z",
+      daysElapsed: 16,
+    },
+    {
+      tenantId: "tenant-c",
+      registrationState: "done",
+      submittedAt: "2026-07-01T12:00:00.000Z",
+      daysElapsed: 64,
+    },
+  ],
+};
+
+function renderAt(search: string, snapshot: SystemPlatformSnapshot | null = platform) {
   navigation.searchParams = new URLSearchParams(search);
-  return render(<OwnerSystem health={health} nowIso={NOW_ISO} />);
+  return render(<OwnerSystem health={health} nowIso={NOW_ISO} platform={snapshot} />);
 }
 
 describe("OwnerSystem", () => {
@@ -150,6 +185,69 @@ describe("OwnerSystem", () => {
     expect(dots).toHaveLength(2);
     for (const dot of dots) expect(dot.getAttribute("data-tone")).toBe("bad");
     expect(row.querySelector('[data-slot="pill"]')?.getAttribute("data-tone")).toBe("neutral");
+  });
+
+  it("draws the seven-day delivery bars from the snapshot", () => {
+    renderAt("");
+
+    const card = screen.getByTestId("owner-system-deliveries");
+    expect(within(card).getByText("Deliveries, last 7 days")).toBeInTheDocument();
+    // 180 + 164 + 171 + 198 + 205 + 187 + 179, and 1 + 3 + 2 failures.
+    expect(within(card).getByText("1,284 sent · 6 failed")).toBeInTheDocument();
+    expect(within(card).getByText("Aug 28 → Sep 3")).toBeInTheDocument();
+
+    const bars = [...card.querySelectorAll("rect")];
+    expect(bars).toHaveLength(7);
+    for (const bar of bars) expect(bar.getAttribute("rx")).toBe("4");
+    expect(bars.at(-1)?.getAttribute("fill-opacity")).toBe("1");
+    expect(bars[0]?.getAttribute("fill-opacity")).toBe("0.28");
+    // One baseline, no gridlines.
+    expect(card.querySelectorAll("line")).toHaveLength(1);
+    // Every exact figure is still readable without the picture.
+    expect(within(card).getByRole("table")).toHaveTextContent("Aug 28");
+  });
+
+  it("draws no delivery card and no registration pill without a snapshot", () => {
+    renderAt("", null);
+
+    expect(screen.queryByTestId("owner-system-deliveries")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("owner-system-registration-pill")).not.toBeInTheDocument();
+  });
+
+  it("counts the open texting registrations and dates each one in days", () => {
+    renderAt("");
+
+    const pill = screen.getByTestId("owner-system-registration-pill");
+    // The finished tenant is not counted; both open ones are, and one of them is waiting.
+    expect(pill).toHaveTextContent("2 texting registrations waiting");
+    expect(pill.querySelector('[data-slot="pill"]')?.getAttribute("data-tone")).toBe("amber");
+
+    const row = screen.getAllByTestId("owner-system-service-row")
+      .find((candidate) => candidate.textContent?.includes("Texting registration"))!;
+    expect(row).toHaveTextContent("2 clients waiting");
+    expect(row).toHaveTextContent("Day 16, day 9");
+    expect(row.textContent).not.toMatch(/%|Sep|Aug/);
+  });
+
+  it("keeps amber off a registration that is settled rather than pending", () => {
+    renderAt("", {
+      ...platform,
+      textingRegistrationByTenant: [
+        {
+          tenantId: "tenant-a",
+          registrationState: "blocked",
+          submittedAt: "2026-08-25T12:00:00.000Z",
+          daysElapsed: 9,
+        },
+      ],
+    });
+
+    const pill = screen.getByTestId("owner-system-registration-pill");
+    expect(pill).toHaveTextContent("1 texting registration not complete");
+    expect(pill.querySelector('[data-slot="pill"]')?.getAttribute("data-tone")).toBe("neutral");
+    const row = screen.getAllByTestId("owner-system-service-row")
+      .find((candidate) => candidate.textContent?.includes("Texting registration"))!;
+    expect(row).toHaveTextContent("Day 9 blocked");
   });
 
   it("swaps in the jobs and integrations bodies from the tab query", () => {

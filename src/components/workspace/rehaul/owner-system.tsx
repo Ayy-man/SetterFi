@@ -7,26 +7,24 @@
  * one fact an operator opens this screen for is whether the platform is reporting. So the h1 is
  * the reporting state itself, with the dot beside it, and the tabs underneath carry the detail.
  *
- * This file adds no read of its own. Every row comes out of `loadSystemHealth()` exactly as the
- * live surface receives it. What the artboard asks for that the platform cannot say:
+ * This file adds no read of its own. The route hands it two payloads: `loadSystemHealth()` fills
+ * the services, the queue figures and the incidents rail, and the platform snapshot fills the
+ * seven-day delivery line and the per-client texting-registration state. The snapshot is optional
+ * because it is a separate read behind its own flag, and a measurement outage must not take the
+ * job and integration states down with it -- when it is absent the delivery card and the
+ * registration pill are simply not drawn, which is the honest thing to say about a figure nothing
+ * reported. What the artboard asks for that the platform still cannot say:
  *
- * - **The seven-day delivery line.** `SystemHealth` carries queue totals and the hundred most
- *   recent delivery rows, not a per-day count. Bucketing a capped sample into seven days would
- *   draw a curve that flattens out precisely when volume is high, so the figures the health read
- *   does own take that space instead.
- * - **"2 registrations with carriers" and a day counter per waiting client.** No per-client
- *   texting-registration state reaches this read at all, so neither the amber headline pill nor
- *   the `DayCounter` rows have anything to count. The carrier-vetting probe still appears in
- *   Services as the job it is.
  * - **The window control** selects the span the Incidents rail covers. It does not re-scope the
  *   figures, which are the platform totals this read returns, and saying otherwise on a control
  *   that cannot reach the query would be a filter that quietly does nothing.
  */
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { FigureStrip } from "@/components/kit/atomics";
+import { BarChart } from "@/components/kit/bar-chart";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import {
@@ -37,16 +35,29 @@ import {
   type PillTone,
   type StatusTone,
 } from "@/components/workspace/rehaul/_primitives";
-import { workspaceDateTimeFormat } from "@/lib/format/datetime";
+import { workspaceCountFormat, workspaceDateTimeFormat } from "@/lib/format/datetime";
 import type {
   DeliveryQueueRow,
   SystemHealth,
   SystemHealthState,
 } from "@/lib/operations/system-health";
+import type { PlatformMeasurement } from "@/lib/repositories/platform-analytics";
 import { cn } from "@/lib/utils";
+
+/**
+ * The two slices of the platform snapshot this screen draws, and nothing else: the page takes the
+ * narrowest shape it can read so a test can hand it seven days and two clients without standing up
+ * a whole measurement.
+ */
+export type SystemPlatformSnapshot = Pick<
+  PlatformMeasurement,
+  "deliveriesByDay" | "textingRegistrationByTenant"
+>;
 
 export type OwnerSystemProps = {
   health: SystemHealth;
+  /** Null whenever the platform snapshot did not load. */
+  platform?: SystemPlatformSnapshot | null;
   /**
    * One instant, sampled once on the server and threaded into the window arithmetic. Reading the
    * wall clock at render makes the rail disagree with the page it sits on, because the two are
@@ -133,6 +144,193 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 /* ------------------------------------------------------------------------------------------- */
+/* Texting registration                                                                         */
+/* ------------------------------------------------------------------------------------------- */
+
+type Registration = SystemPlatformSnapshot["textingRegistrationByTenant"][number];
+
+/**
+ * The stored states that mean a registration is still in flight.
+ *
+ * `failed` and `blocked` are not in here on purpose: both are settled outcomes, and amber is the
+ * pending colour. A blocked registration is not waiting on anything, it is stuck, and colouring it
+ * the same as a queue that is simply taking its time is how a page teaches an operator to ignore
+ * amber.
+ */
+const WAITING_REGISTRATIONS = new Set<Registration["registrationState"]>([
+  "awaiting_coach",
+  "awaiting_platform",
+  "awaiting_provider",
+  "pending",
+  "running",
+]);
+
+/**
+ * The word this platform uses for each stored state.
+ *
+ * The states come out of the registration pipeline, whose vocabulary names the vendor and the
+ * carrier programme it talks to. Neither belongs on a screen, so each state is said as the thing an
+ * operator would do about it, and the row it sits on is titled "Texting registration".
+ */
+const REGISTRATION_WORDS: Record<string, string> = {
+  awaiting_coach: "waiting on the client",
+  awaiting_platform: "waiting on us",
+  awaiting_provider: "waiting on review",
+  blocked: "blocked",
+  failed: "failed",
+  pending: "waiting",
+  running: "waiting",
+};
+
+function registrationWord(row: Registration) {
+  return (row.registrationState && REGISTRATION_WORDS[row.registrationState]) ?? "state not recorded";
+}
+
+/**
+ * One client's line: the day count the snapshot measured, and the status word where the state is
+ * not simply "still waiting".
+ *
+ * No percentage and no predicted date, because the snapshot measures neither. Days elapsed is a
+ * fact the read carries; "80% done, expect Friday" would be a guess wearing a number's clothes.
+ */
+function registrationLabel(row: Registration) {
+  const waiting = WAITING_REGISTRATIONS.has(row.registrationState);
+  return [
+    row.daysElapsed === null ? null : `Day ${row.daysElapsed}`,
+    waiting && row.daysElapsed !== null ? null : registrationWord(row),
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" ");
+}
+
+type RegistrationSummary = {
+  /** Every client whose registration has not finished, longest wait first. */
+  open: readonly Registration[];
+  waiting: number;
+  /** "Day 9, day 16" -- the first entry capitalised, the rest running on as one line. */
+  detail: string;
+};
+
+function registrationSummary(rows: readonly Registration[]): RegistrationSummary | null {
+  const open = [...rows]
+    .filter((row) => row.registrationState !== "done")
+    .sort((left, right) => (right.daysElapsed ?? -1) - (left.daysElapsed ?? -1));
+  if (open.length === 0) return null;
+  const detail = open
+    .slice(0, 3)
+    .map((row, index) => {
+      const label = registrationLabel(row);
+      return index === 0 ? label : `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+    })
+    .concat(open.length > 3 ? [`+${open.length - 3} more`] : [])
+    .join(", ");
+  return {
+    open,
+    waiting: open.filter((row) => WAITING_REGISTRATIONS.has(row.registrationState)).length,
+    detail,
+  };
+}
+
+function registrationPill(summary: RegistrationSummary) {
+  const noun = summary.open.length === 1 ? "registration" : "registrations";
+  return {
+    label: `${summary.open.length} texting ${noun} ${summary.waiting > 0 ? "waiting" : "not complete"}`,
+    tone: summary.waiting > 0 ? ("amber" as const) : ("neutral" as const),
+  };
+}
+
+/* ------------------------------------------------------------------------------------------- */
+/* Deliveries                                                                                   */
+/* ------------------------------------------------------------------------------------------- */
+
+/** The artboard's span. The snapshot carries thirty days; the card draws the last seven of them. */
+const DELIVERY_DAYS = 7;
+
+/**
+ * Civil dates formatted as civil dates. `Date.parse("2026-08-28")` is midnight UTC, and printing
+ * that in the workspace zone slides every bar's label back a day.
+ */
+const deliveryDayFormat = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
+
+function deliveryDayLabel(day: string) {
+  const parsed = Date.parse(`${day}T00:00:00.000Z`);
+  return Number.isFinite(parsed) ? deliveryDayFormat.format(new Date(parsed)) : day;
+}
+
+/**
+ * The drawn width of a chart in a fluid column.
+ *
+ * `BarChart` computes its geometry in real pixels rather than stretching a viewBox, which is what
+ * keeps a 4px bar radius round instead of ovalled, so the panel measures itself and hands the
+ * width down. The fallback is the artboard's own width so a server render draws something sensible.
+ */
+function useMeasuredWidth(fallback: number) {
+  const [width, setWidth] = useState(fallback);
+  const measure = useCallback((node: HTMLDivElement | null) => {
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = Math.round(entry?.contentRect.width ?? 0);
+      if (next > 0) setWidth(next);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return { measure, width };
+}
+
+function DeliveriesCard({ days }: { days: SystemPlatformSnapshot["deliveriesByDay"] }) {
+  const { measure, width } = useMeasuredWidth(1100);
+  const span = days.slice(-DELIVERY_DAYS);
+  if (span.length === 0) return null;
+
+  const labels = span.map((day) => deliveryDayLabel(day.day));
+  const sent = span.reduce((total, day) => total + day.delivered, 0);
+  const failed = span.reduce((total, day) => total + day.failed, 0);
+
+  return (
+    <section
+      aria-labelledby="owner-system-deliveries-heading"
+      className="min-w-0 rounded-[14px] border border-[var(--line)] bg-[var(--card)] px-5 py-4 shadow-[var(--shadow-card)]"
+      data-testid="owner-system-deliveries"
+    >
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h2
+          className="m-0 text-[12.5px] font-medium text-[color:var(--faint)]"
+          id="owner-system-deliveries-heading"
+        >
+          Deliveries, last {span.length} days
+        </h2>
+        <span className="font-mono text-[12px] text-[color:var(--muted)]">
+          {workspaceCountFormat.format(sent)} sent · {workspaceCountFormat.format(failed)} failed
+        </span>
+        <span className="ml-auto font-mono text-[12px] text-[color:var(--muted)]">
+          {labels[0]} → {labels[labels.length - 1]}
+        </span>
+      </div>
+      <div className="mt-2" ref={measure}>
+        <BarChart
+          height={84}
+          label={`Deliveries by day: ${span
+            .map(
+              (day, index) =>
+                `${labels[index]} ${day.delivered} delivered, ${day.failed} failed`,
+            )
+            .join(", ")}`}
+          labels={labels}
+          values={span.map((day) => day.delivered)}
+          width={width}
+        />
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------------------------------- */
 /* Services                                                                                     */
 /* ------------------------------------------------------------------------------------------- */
 
@@ -188,7 +386,10 @@ function providerPill(
  * a judgement no field on this read carries; a stable order a reader can learn beats one that
  * rearranges itself between visits.
  */
-function serviceRows(health: SystemHealth): ServiceRow[] {
+function serviceRows(
+  health: SystemHealth,
+  registration: RegistrationSummary | null,
+): ServiceRow[] {
   const integrations = health.providers.map((provider) => ({
     key: `provider:${provider.id}`,
     name: sentenceCase(provider.label),
@@ -201,15 +402,39 @@ function serviceRows(health: SystemHealth): ServiceRow[] {
     pill: providerPill(provider.state),
   }));
 
-  const jobs = health.jobs.map((job) => ({
-    key: `job:${job.id}`,
-    name: jobName(job),
-    provider: JOB_PROVIDERS[job.id] ?? "scheduled job",
-    meta: formatDateTime(job.lastRunAt, "no report yet"),
-    metaAmber: job.lastRunAt === null,
-    dot: jobDot(job.state),
-    pill: jobPill(job.state),
-  }));
+  const jobs = health.jobs.map((job) => {
+    const row = {
+      key: `job:${job.id}`,
+      name: jobName(job),
+      provider: JOB_PROVIDERS[job.id] ?? "scheduled job",
+      meta: formatDateTime(job.lastRunAt, "no report yet"),
+      metaAmber: job.lastRunAt === null,
+      dot: jobDot(job.state),
+      pill: jobPill(job.state),
+    };
+    /*
+     * The registration row speaks for the clients, not for its own schedule.
+     *
+     * An operator opening this screen wants to know who is still waiting and for how long; that
+     * the probe ran at 03:00 is in the Jobs tab, and a fault on it is already on the incidents
+     * rail. A failed job keeps its red dot and a neutral pill, the way every other settled bad
+     * outcome on this page is drawn, so the row never says "waiting" and "broken" in two colours.
+     */
+    if (job.id !== "a2p-probe" || registration === null) return row;
+    const amber = registration.waiting > 0;
+    return {
+      ...row,
+      meta: amber
+        ? `${registration.waiting} ${registration.waiting === 1 ? "client" : "clients"} waiting`
+        : `${registration.open.length} not complete`,
+      metaAmber: amber,
+      dot: job.state === "failed" ? ("bad" as const) : amber ? ("amber" as const) : row.dot,
+      pill: {
+        label: registration.detail,
+        tone: job.state === "failed" || !amber ? ("neutral" as const) : ("amber" as const),
+      },
+    };
+  });
 
   return [...integrations, ...jobs];
 }
@@ -476,7 +701,7 @@ const EYE_COPY = "The jobs, the queues and the integration modes: whether the pl
 const TAB_IDS = ["status", "jobs", "integrations"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
-export function OwnerSystem({ health, nowIso }: OwnerSystemProps) {
+export function OwnerSystem({ health, nowIso, platform = null }: OwnerSystemProps) {
   const pathname = usePathname();
   const params = useSearchParams();
 
@@ -489,7 +714,11 @@ export function OwnerSystem({ health, nowIso }: OwnerSystemProps) {
 
   const state = headlineState(health);
   const headline = HEADLINE[state];
-  const rows = useMemo(() => serviceRows(health), [health]);
+  const registration = useMemo(
+    () => (platform ? registrationSummary(platform.textingRegistrationByTenant) : null),
+    [platform],
+  );
+  const rows = useMemo(() => serviceRows(health, registration), [health, registration]);
   const rail = useMemo(
     () => incidents(health, span, Date.parse(nowIso)),
     [health, nowIso, span],
@@ -511,6 +740,14 @@ export function OwnerSystem({ health, nowIso }: OwnerSystemProps) {
             {headline.label}
           </h1>
         </div>
+        {registration ? (
+          <span data-testid="owner-system-registration-pill">
+            <Pill className="mb-[3px]" tone={registrationPill(registration).tone}>
+              <StatusDot tone={registration.waiting > 0 ? "amber" : "grey"} />
+              {registrationPill(registration).label}
+            </Pill>
+          </span>
+        ) : null}
         <div className="ml-auto flex items-center gap-2">
           <Seg
             items={(Object.keys(WINDOWS) as WindowKey[]).map((key) => ({
@@ -561,6 +798,7 @@ export function OwnerSystem({ health, nowIso }: OwnerSystemProps) {
             ]}
             label="Delivery summary"
           />
+          {platform ? <DeliveriesCard days={platform.deliveriesByDay} /> : null}
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <ServicesCard rows={rows} />
             <IncidentsRail incidents={rail} />
