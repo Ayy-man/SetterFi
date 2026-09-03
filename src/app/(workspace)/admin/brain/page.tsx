@@ -2,17 +2,36 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AdminBrain } from "@/components/workspace/live/admin-brain";
+import { AdminBrainTesting } from "@/components/workspace/live/admin-testing";
 import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
+import type {
+  EvalComparisonConfigOption,
+  EvalComparisonDraftOption,
+} from "@/components/workspace/live/eval-comparison-view-models";
+import {
+  deriveTestingView,
+  type MessageTraceRead,
+  type TestingArmInput,
+} from "@/components/workspace/live/view-models";
+import { OwnerBrain, ownerBrainTab } from "@/components/workspace/rehaul/owner-brain";
 import type {
   AdminBrainInitialState,
   BrainEvalView,
   BrainImportFlagView,
   ObjectionCategory,
 } from "@/components/workspace/live/brain-view-models";
-import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
+import type { PageSearchParams } from "@/lib/admin-route-fold";
+import { canAccessWorkspace, parseAppClaims, workspaceForRole, type AppClaims } from "@/lib/auth/claims";
 import { figuresInResponse } from "@/lib/brain/import/flags";
-import { phase2Live } from "@/lib/env-contract";
+import {
+  driverSelection,
+  environmentValue,
+  phase1Live,
+  phase2Live,
+  phase7EvalsLive,
+  uiRehaulLive,
+} from "@/lib/env-contract";
 import { loadSafetyCorpus } from "@/lib/evals/corpus";
 import { evaluatePublishGate } from "@/lib/evals/publish-gate";
 import { loadEvalRun } from "@/lib/repositories/eval-runs";
@@ -45,6 +64,8 @@ function stringValue(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+type PageProps = { searchParams?: Promise<PageSearchParams> };
+
 async function requireBrainAdmin() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
@@ -55,6 +76,7 @@ async function requireBrainAdmin() {
     redirect(home ? `/${home}` : "/login");
   }
   if (claims.role !== "owner" && claims.role !== "admin") redirect("/admin");
+  return claims;
 }
 
 async function loadAdminBrainStateValue(): Promise<AdminBrainInitialState> {
@@ -232,7 +254,128 @@ async function loadAdminBrainState(): Promise<AdminBrainStateResult> {
   }
 }
 
-export default async function AdminBrainPage() {
+/* --------------------------------------------------------------------------------------------
+ * The Evals tab, folded in from /admin/brain/testing.
+ *
+ * `foldedRouteFor` sends `/admin/brain/testing` to `/admin/brain?tab=evals`, so the reads that
+ * page performs have to happen here for that tab to have anything in it. Nothing below is a new
+ * query: it is the same pair of selects `admin/brain/testing/page.tsx` runs, in the same order,
+ * and it only runs when the reader is actually on that tab.
+ * ------------------------------------------------------------------------------------------ */
+
+function normalizeChecks(value: unknown): Record<string, boolean> {
+  if (!Array.isArray(value)) return {};
+  return Object.fromEntries(value.flatMap((entry, index) => {
+    if (!entry || typeof entry !== "object") return [[`check-${index + 1}`, false] as const];
+    const row = entry as Record<string, unknown>;
+    const key = typeof row.class === "string" ? row.class : `check-${index + 1}`;
+    return [[key, typeof row.passed === "boolean" ? row.passed : false] as const];
+  }));
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function violationLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) return value == null ? [] : ["Recorded violation"];
+  return value.map((item) => {
+    if (typeof item === "string") return item;
+    if (item && typeof item === "object") {
+      const row = item as Record<string, unknown>;
+      if (typeof row.class === "string") return row.class;
+      if (typeof row.code === "string") return row.code;
+    }
+    return "Recorded violation";
+  });
+}
+
+function persistedCounter(value: unknown) {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+  return 0;
+}
+
+async function renderEvalsTab(claims: AppClaims) {
+  if (!phase1Live()) {
+    return (
+      <DataState
+        body="Turn on Brain evals to inspect test-only configuration evidence."
+        kind="empty"
+        title="Brain evals are not enabled"
+      />
+    );
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const [{ data: traceRow, error: traceError }, { data: configRows, error: configError }] = await Promise.all([
+    supabase.from("message_traces").select("message_id, tenant_id, rule_fired, retrieved_entry_ids, checks, violations, model, moderator_state, created_at, tenant:tenants!inner(name,is_demo)").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("model_configs").select("id, label, openrouter_model, role, moderator_unavailable_count").eq("active", true).order("role", { ascending: true }),
+  ]);
+  if (traceError) throw new Error(`TESTING_TRACE_READ_FAILED:${traceError.message}`);
+  if (configError) throw new Error(`TESTING_CONFIG_READ_FAILED:${configError.message}`);
+
+  const persistedTrace: MessageTraceRead | null = traceRow ? {
+    id: traceRow.message_id,
+    tenantId: traceRow.tenant_id,
+    model: traceRow.model ?? "Model not recorded",
+    ruleFired: traceRow.rule_fired,
+    retrievedEntryIds: stringArray(traceRow.retrieved_entry_ids),
+    checks: normalizeChecks(traceRow.checks),
+    violations: violationLabels(traceRow.violations),
+    moderatorState: traceRow.moderator_state === "allowed" || traceRow.moderator_state === "blocked" || traceRow.moderator_state === "unavailable" ? traceRow.moderator_state : "not_recorded",
+    createdAt: traceRow.created_at,
+  } : null;
+  const selector = driverSelection("openrouter", "SETTERFI_OPENROUTER_DRIVER");
+  const hasUsableKey = Boolean(environmentValue("OPENROUTER_API_KEY"));
+  const moderatorUnavailableCount = (configRows ?? []).reduce((total, row) => total + persistedCounter(row.moderator_unavailable_count), 0);
+  const arms: TestingArmInput[] = (configRows ?? []).map((row, index) => ({
+    id: index === 0 ? "A" : String.fromCharCode(65 + index),
+    label: row.label,
+    role: row.role === "generator" ? "Generator" : row.role === "moderator" ? "Moderator" : "Configuration",
+    selector,
+    hasUsableKey,
+    persistedTrace: persistedTrace?.model === row.openrouter_model ? persistedTrace : null,
+  }));
+  if (arms.length === 0) arms.push({ id: "A", label: "No active model configuration", role: null, selector, hasUsableKey, persistedTrace: null });
+  const testing = deriveTestingView({ arms, moderatorUnavailableCount });
+  const joinedTenant = traceRow?.tenant as unknown as { name?: string; is_demo?: boolean } | Array<{ name?: string; is_demo?: boolean }> | null;
+  const tenantRow = Array.isArray(joinedTenant) ? joinedTenant[0] : joinedTenant;
+  const isDemo = Array.isArray(joinedTenant) ? Boolean(joinedTenant[0]?.is_demo) : Boolean(joinedTenant?.is_demo);
+  const tenantId = persistedTrace?.tenantId ?? claims.impersonatingTenant ?? claims.tenantId ?? "No persisted tenant trace";
+  const tenantName = typeof tenantRow?.name === "string" && tenantRow.name.trim()
+    ? tenantRow.name.trim()
+    : "No business trace yet";
+
+  const comparisonsEnabled = phase7EvalsLive();
+  let comparisonConfigs: EvalComparisonConfigOption[] = [];
+  let comparisonDraft: EvalComparisonDraftOption | null = null;
+  if (comparisonsEnabled) {
+    const [{ data: comparisonConfigRows, error: comparisonConfigError }, { data: draftRow, error: draftError }] = await Promise.all([
+      supabase.from("model_configs").select("id, label, openrouter_model, active").eq("role", "generator").order("active", { ascending: false }).order("created_at", { ascending: false }),
+      supabase.from("brain_draft_versions").select("id, content_hash").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (comparisonConfigError) throw new Error(`EVAL_COMPARISON_CONFIG_READ_FAILED:${comparisonConfigError.message}`);
+    if (draftError) throw new Error(`EVAL_COMPARISON_DRAFT_READ_FAILED:${draftError.message}`);
+    comparisonConfigs = (comparisonConfigRows ?? []).map((row) => ({
+      id: row.id,
+      label: row.label,
+      model: row.openrouter_model,
+      active: row.active,
+    }));
+    comparisonDraft = draftRow ? { id: draftRow.id, contentHash: draftRow.content_hash } : null;
+  }
+
+  return (
+    <AdminBrainTesting
+      comparison={{ enabled: comparisonsEnabled, configs: comparisonConfigs, draft: comparisonDraft }}
+      tenant={{ id: tenantId, name: tenantName, isDemo }}
+      testing={testing}
+    />
+  );
+}
+
+export default async function AdminBrainPage({ searchParams }: PageProps) {
   if (!phase2Live()) {
     return (
       <BrainShell>
@@ -245,7 +388,7 @@ export default async function AdminBrainPage() {
     );
   }
 
-  await requireBrainAdmin();
+  const claims = await requireBrainAdmin();
   const initialStateResult = await loadAdminBrainState();
   if (!initialStateResult.ok) {
     return (
@@ -262,5 +405,20 @@ export default async function AdminBrainPage() {
       </BrainShell>
     );
   }
-  return <BrainShell><AdminBrain initialState={initialStateResult.value} /></BrainShell>;
+  if (!uiRehaulLive()) {
+    return <BrainShell><AdminBrain initialState={initialStateResult.value} /></BrainShell>;
+  }
+
+  const params = (await searchParams) ?? {};
+  const requested = params.tab;
+  const tab = ownerBrainTab(Array.isArray(requested) ? requested[0] : requested);
+  return (
+    <BrainShell>
+      <OwnerBrain
+        evals={tab === "evals" ? await renderEvalsTab(claims) : undefined}
+        initialState={initialStateResult.value}
+        tab={tab}
+      />
+    </BrainShell>
+  );
 }
