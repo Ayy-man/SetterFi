@@ -367,11 +367,17 @@ export type CoachCompositionMonth = {
   partial: boolean;
 };
 
+export type CoachCompositionBookedPeriod = {
+  month: string;
+  booked: number;
+};
+
 export type CoachLeadComposition = {
   tenantId: string;
   timezone: string;
   asOf: string;
   months: readonly CoachCompositionMonth[];
+  bookedByPeriod: readonly CoachCompositionBookedPeriod[];
 };
 
 export type CoachLeadCompositionSource = (
@@ -412,7 +418,7 @@ export async function loadCoachLeadComposition(
   const requestedAsOf = evidenceIso(asOf, "COACH_COMPOSITION_AS_OF_INVALID");
   const raw = evidenceObject(
     await source(actor, tenantId, requestedAsOf),
-    ["tenantId", "timezone", "asOf", "months"],
+    ["tenantId", "timezone", "asOf", "months", "bookedByPeriod"],
     "COACH_COMPOSITION_SNAPSHOT_INVALID",
   );
   if (raw.tenantId !== tenantId) {
@@ -457,7 +463,20 @@ export async function loadCoachLeadComposition(
     throw new MeasurementEvidenceError("COACH_COMPOSITION_SNAPSHOT_INVALID");
   }
 
-  return { tenantId, timezone, asOf: asOfValue, months };
+  const bookedByPeriod = evidenceArray(raw.bookedByPeriod, "COACH_COMPOSITION_SNAPSHOT_INVALID")
+    .map((value) => {
+      const row = evidenceObject(value, ["month", "booked"], "COACH_COMPOSITION_SNAPSHOT_INVALID");
+      return {
+        month: dateOnly(row.month, "COACH_COMPOSITION_SNAPSHOT_INVALID"),
+        booked: coachCount(row.booked, "COACH_COMPOSITION_SNAPSHOT_INVALID"),
+      };
+    });
+  if (bookedByPeriod.length !== COMPOSITION_MONTHS
+    || bookedByPeriod.some((row, index) => row.month !== months[index]?.month)) {
+    throw new MeasurementEvidenceError("COACH_COMPOSITION_SNAPSHOT_INVALID");
+  }
+
+  return { tenantId, timezone, asOf: asOfValue, months, bookedByPeriod };
 }
 
 export const COACH_TOP_OBJECTION_LIMIT = 5;

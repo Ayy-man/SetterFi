@@ -259,6 +259,14 @@ function composition() {
       { month: "2026-07-01", label: "Jul 2026", total: 0, qualified: 0, disqualified: 0, active: 0, partial: false },
       { month: "2026-08-01", label: "Aug 2026", total: 5, qualified: 3, disqualified: 1, active: 1, partial: true },
     ],
+    bookedByPeriod: [
+      { month: "2026-03-01", booked: 0 },
+      { month: "2026-04-01", booked: 2 },
+      { month: "2026-05-01", booked: 1 },
+      { month: "2026-06-01", booked: 0 },
+      { month: "2026-07-01", booked: 0 },
+      { month: "2026-08-01", booked: 3 },
+    ],
   };
 }
 
@@ -272,7 +280,7 @@ describe("coach lead composition repository", () => {
     const result = await loadCoachLeadComposition(ACTOR, "tenant-synthetic", COMPOSITION_AS_OF, source);
 
     expect(source).toHaveBeenCalledWith(ACTOR, "tenant-synthetic", COMPOSITION_AS_OF);
-    expect(Object.keys(result).sort()).toEqual(["asOf", "months", "tenantId", "timezone"]);
+    expect(Object.keys(result).sort()).toEqual(["asOf", "bookedByPeriod", "months", "tenantId", "timezone"]);
     expect(result.months.map((row) => row.month)).toEqual([
       "2026-03-01", "2026-04-01", "2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01",
     ]);
@@ -281,6 +289,14 @@ describe("coach lead composition repository", () => {
       month: "2026-04-01", label: "Apr 2026", total: 10, qualified: 4, disqualified: 3, active: 3,
       partial: false,
     });
+    expect(result.bookedByPeriod).toEqual([
+      { month: "2026-03-01", booked: 0 },
+      { month: "2026-04-01", booked: 2 },
+      { month: "2026-05-01", booked: 1 },
+      { month: "2026-06-01", booked: 0 },
+      { month: "2026-07-01", booked: 0 },
+      { month: "2026-08-01", booked: 3 },
+    ]);
   });
 
   it("refuses a payload that answers for a tenant other than the one asked for", async () => {
@@ -315,6 +331,15 @@ describe("coach lead composition repository", () => {
     const twoPartial = composition();
     twoPartial.months[4] = { ...twoPartial.months[4], partial: true };
     await expect(loadComposition(twoPartial)).rejects.toThrow("COACH_COMPOSITION_SNAPSHOT_INVALID");
+
+    const mismatchedBookedPeriods = composition();
+    mismatchedBookedPeriods.bookedByPeriod[1] = { month: "2026-04-02", booked: 2 };
+    await expect(loadComposition(mismatchedBookedPeriods))
+      .rejects.toThrow("COACH_COMPOSITION_SNAPSHOT_INVALID");
+
+    const invalidBookedCount = composition();
+    invalidBookedCount.bookedByPeriod[3] = { month: "2026-06-01", booked: -1 };
+    await expect(loadComposition(invalidBookedCount)).rejects.toThrow("COACH_COMPOSITION_SNAPSHOT_INVALID");
   });
 });
 

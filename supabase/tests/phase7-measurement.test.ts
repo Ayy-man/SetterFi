@@ -927,6 +927,11 @@ describe("coach lead composition", () => {
     partial: boolean;
   };
 
+  type CompositionBookedPeriod = {
+    month: string;
+    booked: number;
+  };
+
   // `app.inherit_is_test` overwrites any is_test a caller supplies: on contacts it derives
   // the flag from the linked test_agent_sessions row, or from the tenant's is_demo when
   // there is none. A test contact therefore has to be born of a session, not of a boolean.
@@ -966,23 +971,47 @@ describe("coach lead composition", () => {
     return row.rows[0].id;
   }
 
+  async function createDatedAppointment(
+    tenantId: string,
+    suffix: string,
+    contactId: string,
+    createdAt: string,
+    status = "scheduled",
+  ) {
+    return db.query<{ id: string; is_test: boolean }>(
+      `insert into public.appointments
+         (tenant_id,contact_id,provider,external_id,start_at,end_at,timezone,status,created_at)
+       values ($1,$2,'ghl',$3,$4::timestamptz + interval '1 day',
+         $4::timestamptz + interval '1 day 30 minutes','America/New_York',$5,$4)
+       returning id,is_test`,
+      [tenantId, contactId, `composition-${suffix}`, createdAt, status],
+    );
+  }
+
   async function seedComposition() {
-    await createDatedContact(TENANT_A, "june-qualified", "2026-06-10T12:00:00.000Z", { stage: "booked" });
-    await createDatedContact(TENANT_A, "june-disqualified", "2026-06-11T12:00:00.000Z", { stage: "disqualified" });
+    const juneQualified = await createDatedContact(TENANT_A, "june-qualified", "2026-06-10T12:00:00.000Z", { stage: "booked" });
+    const juneDisqualified = await createDatedContact(TENANT_A, "june-disqualified", "2026-06-11T12:00:00.000Z", { stage: "disqualified" });
     await createDatedContact(TENANT_A, "june-active", "2026-06-12T12:00:00.000Z", { stage: "qualifying" });
     await createDatedContact(TENANT_A, "june-overlap", "2026-06-13T12:00:00.000Z", {
       stage: "disqualified",
       outcome: "BOOK",
     });
-    await createDatedContact(TENANT_A, "june-test", "2026-06-14T12:00:00.000Z", {
+    const juneTest = await createDatedContact(TENANT_A, "june-test", "2026-06-14T12:00:00.000Z", {
       stage: "booked",
       isTest: true,
     });
-    await createDatedContact(TENANT_A, "august-outcome", "2026-08-05T12:00:00.000Z", {
+    const augustOutcome = await createDatedContact(TENANT_A, "august-outcome", "2026-08-05T12:00:00.000Z", {
       stage: "qualifying",
       outcome: "BOOK",
     });
-    await createDatedContact(TENANT_DEMO, "demo-qualified", "2026-06-10T12:00:00.000Z", { stage: "booked" });
+    const demoQualified = await createDatedContact(TENANT_DEMO, "demo-qualified", "2026-06-10T12:00:00.000Z", { stage: "booked" });
+    await createDatedAppointment(TENANT_A, "june-scheduled", juneQualified, "2026-06-10T12:00:00.000Z");
+    await createDatedAppointment(TENANT_A, "june-canceled", juneDisqualified, "2026-06-11T12:00:00.000Z", "canceled");
+    const testAppointment = await createDatedAppointment(TENANT_A, "june-test", juneTest, "2026-06-14T12:00:00.000Z");
+    expect(testAppointment.rows[0].is_test).toBe(true);
+    await createDatedAppointment(TENANT_A, "august-scheduled", augustOutcome, "2026-08-05T12:00:00.000Z");
+    const demoAppointment = await createDatedAppointment(TENANT_DEMO, "demo-scheduled", demoQualified, "2026-06-10T12:00:00.000Z");
+    expect(demoAppointment.rows[0].is_test).toBe(true);
   }
 
   async function readComposition(tenantId = TENANT_A) {
@@ -997,7 +1026,7 @@ describe("coach lead composition", () => {
     await seedComposition();
     await actAs("service_role", COACH_A, "coach", TENANT_A);
     const snapshot = await readComposition();
-    expect(Object.keys(snapshot).sort()).toEqual(["asOf", "months", "tenantId", "timezone"]);
+    expect(Object.keys(snapshot).sort()).toEqual(["asOf", "bookedByPeriod", "months", "tenantId", "timezone"]);
     expect(snapshot.tenantId).toBe(TENANT_A);
     expect(snapshot.timezone).toBe("America/New_York");
     const months = snapshot.months as CompositionMonth[];
@@ -1007,6 +1036,15 @@ describe("coach lead composition", () => {
     ]);
     expect(months.map((row) => row.partial)).toEqual([false, false, false, false, false, true]);
     expect(months.at(-1)?.label).toBe("Aug 2026");
+    const bookedByPeriod = snapshot.bookedByPeriod as CompositionBookedPeriod[];
+    expect(bookedByPeriod).toEqual([
+      { month: "2026-03-01", booked: 0 },
+      { month: "2026-04-01", booked: 0 },
+      { month: "2026-05-01", booked: 0 },
+      { month: "2026-06-01", booked: 1 },
+      { month: "2026-07-01", booked: 0 },
+      { month: "2026-08-01", booked: 1 },
+    ]);
   });
 
   it("emits a zero row for a month with no contacts instead of dropping the bar", async () => {
@@ -1028,11 +1066,13 @@ describe("coach lead composition", () => {
     await expect(readComposition(TENANT_B)).rejects.toThrow(/PHASE7_COACH_READER_TENANT_MISMATCH/);
   });
 
-  it("counts no test-flagged contact and offers no demo tenant to read at all", async () => {
+  it("excludes test and demo appointments from booked periods, and offers no demo tenant to read at all", async () => {
     await seedComposition();
     await actAs("service_role", COACH_A, "coach", TENANT_A);
     const months = (await readComposition()).months as CompositionMonth[];
     expect(months[3]).toMatchObject({ total: 4, qualified: 1, disqualified: 2, active: 1 });
+    const bookedByPeriod = (await readComposition()).bookedByPeriod as CompositionBookedPeriod[];
+    expect(bookedByPeriod[3]).toEqual({ month: "2026-06-01", booked: 1 });
     await db.query("rollback");
     await db.query("begin");
     await db.query(`
@@ -1154,7 +1194,7 @@ describe("measurement reader actor seam", () => {
       [COACH_A, TENANT_A],
     );
     expect(Object.keys(result.rows[0].snapshot).sort())
-      .toEqual(["asOf", "months", "tenantId", "timezone"]);
+      .toEqual(["asOf", "bookedByPeriod", "months", "tenantId", "timezone"]);
     expect(result.rows[0].snapshot.months as unknown[]).toHaveLength(6);
     expect(result.rows[0].snapshot.tenantId).toBe(TENANT_A);
   });
