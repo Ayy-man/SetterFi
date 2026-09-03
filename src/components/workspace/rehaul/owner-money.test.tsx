@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { OwnerMoney } from "@/components/workspace/rehaul/owner-money";
-import type { MrrMovementRead } from "@/lib/repositories/billing";
+import type { MoneyBillingRead, MrrMovementRead } from "@/lib/repositories/billing";
 
 const MOVEMENT: MrrMovementRead = {
   asOf: "2026-09-03T00:00:00.000Z",
@@ -50,11 +50,57 @@ const ROWS = [
   },
 ];
 
+function client(overrides: Partial<MoneyBillingRead["rows"][number]> = {}) {
+  return {
+    accountStatus: "active",
+    businessName: "Cedar Ridge Credit Coaching",
+    cancelAtPeriodEnd: false,
+    countsAsLive: true,
+    currentPeriodEnd: "2026-09-12T00:00:00.000Z",
+    dataLabel: null,
+    monthlyAmountCents: 29_700,
+    pendingEffectiveAt: null,
+    pendingTierId: null,
+    plan: "Starter",
+    providerUpdatedAt: "2026-09-03T07:00:00.000Z",
+    status: "active",
+    subscriptionStatus: "active",
+    tenantId: "tenant-cedar",
+    ...overrides,
+  };
+}
+
+/** Twelve month ends; only the last `pricedFromEnd` of them carry a price. */
+function periods(pricedFromEnd = 12) {
+  return Array.from({ length: 12 }, (_, index) => ({
+    mrrCents: index >= 12 - pricedFromEnd ? 200_000 + index * 10_000 : null,
+    periodEnd: `2026-${String(index + 1).padStart(2, "0")}-28T00:00:00.000Z`,
+    periodStart: `2026-${String(index + 1).padStart(2, "0")}-01T00:00:00.000Z`,
+  }));
+}
+
+const BILLING: MoneyBillingRead = {
+  mrrByPeriod: periods(),
+  rows: [
+    client({
+      businessName: "Reid Funding Group",
+      countsAsLive: false,
+      monthlyAmountCents: 59_700,
+      plan: "Growth",
+      status: "past_due",
+      subscriptionStatus: "past_due",
+      tenantId: "tenant-reid",
+    }),
+    client(),
+  ],
+};
+
 function renderBilling() {
   return render(
     <OwnerMoney
       actorRole="owner"
       authorized
+      billing={BILLING}
       enabled
       initialRows={ROWS}
       movement={MOVEMENT}
@@ -156,6 +202,74 @@ describe("OwnerMoney, honest states", () => {
     const net = [...container.querySelectorAll('[data-slot="owner-money-net-mrr"] span')]
       .find((node) => node.textContent?.includes("this month"));
     expect(net?.className).toContain("oklch(0.82_0.10_32)");
+  });
+
+  it("draws the priced tail of the month-end series and nothing before it", () => {
+    const { container } = render(
+      <OwnerMoney
+        actorRole="owner"
+        authorized
+        billing={{ ...BILLING, mrrByPeriod: periods(3) }}
+        enabled
+        initialRows={ROWS}
+        movement={MOVEMENT}
+        tab="billing"
+      />,
+    );
+
+    const chart = container.querySelector('[data-slot="owner-money-mrr-chart"]');
+    // Nine unpriced months are absent rather than drawn at the baseline.
+    expect(chart?.querySelectorAll("svg rect")).toHaveLength(3);
+    expect(chart?.querySelectorAll("tbody tr")).toHaveLength(3);
+  });
+
+  it("withholds the chart until two month ends carry a price", () => {
+    const { container } = render(
+      <OwnerMoney
+        actorRole="owner"
+        authorized
+        billing={{ ...BILLING, mrrByPeriod: periods(1) }}
+        enabled
+        initialRows={ROWS}
+        movement={MOVEMENT}
+        tab="billing"
+      />,
+    );
+
+    const chart = container.querySelector('[data-slot="owner-money-mrr-chart"]');
+    expect(chart?.querySelector("svg")).toBeNull();
+    expect(chart?.textContent).toContain("No closed month with priced subscription evidence yet");
+  });
+
+  it("prints the plan and the monthly amount against each client", () => {
+    const { container } = renderBilling();
+
+    const rows = container.querySelectorAll('[data-slot="card-table"] tbody tr');
+    const first = [...(rows[0]?.querySelectorAll("td") ?? [])]
+      .map((cell) => cell.textContent?.trim());
+    expect(first?.slice(0, 4)).toEqual([
+      "Reid Funding Group",
+      "Growth",
+      "Past due",
+      "$597.00",
+    ]);
+  });
+
+  it("says so where the priced read carried no plan and no amount", () => {
+    const { container } = render(
+      <OwnerMoney
+        actorRole="owner"
+        authorized
+        billing={{ ...BILLING, rows: [] }}
+        enabled
+        initialRows={ROWS}
+        movement={MOVEMENT}
+        tab="billing"
+      />,
+    );
+
+    expect(container.textContent).toContain("no plan recorded");
+    expect(container.textContent).toContain("no price recorded");
   });
 
   it("says only that no subscription row came back", () => {

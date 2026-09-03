@@ -11,20 +11,18 @@
  *
  * What the artboard asks for that the platform cannot say, and what stands in its place:
  *
- * - The 1M / 3M / 12M window segment is one item. `projectMrrMovement` produces the current
- *   month and nothing else, and the only history series the platform records is signup counts
- *   (`platform_history_series`), so a three- or twelve-month window would be a control over data
- *   that does not exist.
- * - The subscriptions table has no Plan and no MRR column. The subscription mirror this page
- *   reads carries neither a tier nor a price per row, which is the same gap
- *   `admin-money-billing-revenue.tsx` documents where it declines to draw a plan mix.
+ * - The 1M / 3M / 12M window segment is one item. It labels the movement window, and
+ *   `projectMrrMovement` resolves the current month and nothing else, so a three- or
+ *   twelve-month movement window would be a control over slices nobody computed. The
+ *   twelve-month recurring-revenue series is drawn as its own chart instead.
  * - Every explainer sentence the five surfaces printed under a heading is off this page; the ones
  *   a reader still needs are handed to the eye.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
+import { BarChart } from "@/components/kit/bar-chart";
 import { absentValue } from "@/components/kit/columns";
 import { DataState } from "@/components/kit/data-state";
 import { ExportMenu } from "@/components/kit/export-menu";
@@ -90,7 +88,11 @@ import {
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { workspaceCountFormat } from "@/lib/format/datetime";
 import { formatMetric, money } from "@/lib/format/metric";
-import type { MrrMovementRead } from "@/lib/repositories/billing";
+import type {
+  MoneyBillingRead,
+  MoneyMrrPeriod,
+  MrrMovementRead,
+} from "@/lib/repositories/billing";
 import type { MoneyRefusalRecord } from "@/lib/repositories/money-page-audit";
 
 export const OWNER_MONEY_TABS = ["billing", "costs", "tiers", "affiliates", "corrections"] as const;
@@ -124,6 +126,12 @@ export type OwnerMoneyProps = {
   refusalRecord?: MoneyRefusalRecord;
   /** Billing tab. */
   movement?: MrrMovementRead | null;
+  /**
+   * The month-end recurring-revenue series and the priced client rows behind the table's Plan and
+   * MRR columns. Absent where the read failed, which leaves the chart and both columns saying so
+   * rather than drawing a figure nothing stands behind.
+   */
+  billing?: MoneyBillingRead | null;
   initialRows?: readonly Record<string, unknown>[];
   initialCostRows?: readonly Record<string, unknown>[];
   /** Affiliates tab. */
@@ -143,7 +151,7 @@ export type OwnerMoneyProps = {
 };
 
 const EYE_COPY = [
-  "Billing shows what the platform bills and which subscriptions are in trouble. The subscription mirror carries no price and no tier per row, so there is no plan mix and no dollar figure against the accounts that need a human; cost against revenue is source-backed on the Costs tab.",
+  "Billing shows what the platform bills and which subscriptions are in trouble. Recurring revenue by month is drawn from month-end subscription receipts, and a month the platform could not price is left out of the series rather than drawn as a zero; cost against revenue is source-backed on the Costs tab.",
   "Net revenue retention is what the opening book did without new business: upgrades, churn and downgrades against the opening balance. A movement slice the projection could not resolve withholds the bar rather than drawing three of four.",
   "Costs, Tiers, Affiliates and Corrections are the same surfaces as before, and each keeps its own role gate. Corrections is the one Money tab a success reviewer carries; the other four are open to the platform owner and admins only, because they print cost against revenue.",
 ].join(" ");
@@ -293,15 +301,156 @@ function NetMrrCard({ movement }: { movement: MrrMovementRead | null }) {
   );
 }
 
+/* ------------------------------------------------------------ recurring revenue by month */
+
+const PERIOD_LABEL = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  timeZone: "UTC",
+  year: "numeric",
+});
+
+function periodLabel(value: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "Period" : PERIOD_LABEL.format(parsed);
+}
+
+/** Two months is the shortest thing that is a series rather than a single reading drawn wide. */
+const MRR_CHART_MIN_PERIODS = 2;
+
+/**
+ * The drawn width of a chart that has to fill a fluid column.
+ *
+ * `BarChart` computes its geometry in real pixels rather than stretching a viewBox, which is what
+ * keeps a 4px bar radius round, so the panel measures itself and hands the width down. The
+ * fallback is the artboard's own width, so a server render draws something sensible too.
+ */
+function useMeasuredWidth(fallback: number) {
+  const [width, setWidth] = useState(fallback);
+  const measure = useCallback((node: HTMLDivElement | null) => {
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = Math.round(entry?.contentRect.width ?? 0);
+      if (next > 0) setWidth(next);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return { measure, width };
+}
+
+/**
+ * The run of month-end periods the platform could price, ending at the latest one.
+ *
+ * A month with no priced subscription evidence is `null`, and a null is not a zero: drawing it at
+ * the baseline would say the book was empty that month when what happened is that nobody can say.
+ * Dropping it and closing the gap is worse still, because it would slide two non-adjacent months
+ * next to each other on a time axis. So the chart draws the unbroken tail and stops where the
+ * evidence stops.
+ */
+function pricedTail(periods: readonly MoneyMrrPeriod[]): readonly MoneyMrrPeriod[] {
+  const tail: MoneyMrrPeriod[] = [];
+  for (let index = periods.length - 1; index >= 0; index -= 1) {
+    const period = periods[index];
+    if (!period || period.mrrCents === null) break;
+    tail.unshift(period);
+  }
+  return tail;
+}
+
+function MrrChartPanel({ periods }: { periods: readonly MoneyMrrPeriod[] }) {
+  const { measure, width } = useMeasuredWidth(640);
+  const tail = useMemo(() => pricedTail(periods), [periods]);
+  const labels = tail.map((period) => periodLabel(period.periodEnd));
+
+  return (
+    <section
+      aria-labelledby="owner-money-mrr-heading"
+      className={`${CARD_TABLE.card} flex min-w-0 flex-col px-5 py-[18px]`}
+      data-slot="owner-money-mrr-chart"
+    >
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h2
+          className="m-0 text-[15px] font-semibold text-[var(--ink)]"
+          id="owner-money-mrr-heading"
+        >
+          Recurring revenue by month
+        </h2>
+        <span className="ml-auto text-[12.5px] font-medium text-[var(--faint)]">
+          month end, trailing 12
+        </span>
+      </div>
+      <div className="mt-3.5" ref={measure}>
+        {tail.length >= MRR_CHART_MIN_PERIODS ? (
+          <BarChart
+            height={150}
+            label={`Recurring revenue by month: ${tail
+              .map((period, index) =>
+                `${labels[index]} ${money(period.mrrCents ?? 0, "USD")}`)
+              .join(", ")}`}
+            labels={labels}
+            values={tail.map((period) => (period.mrrCents ?? 0) / 100)}
+            width={width}
+          />
+        ) : (
+          <p className="m-0 flex h-[150px] items-center font-mono text-[11px] text-[var(--faint)]">
+            No closed month with priced subscription evidence yet
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------ the book */
+
+/** One priced client row off `loadMoneyBilling`, keyed into the table by tenant. */
+type MoneyClient = MoneyBillingRead["rows"][number];
+
+/**
+ * The dot beside a subscription's state, from the provider's own words.
+ *
+ * `countsAsLive` is the repository's single definition of live MRR -- status is exactly `active`
+ * -- so green is spent on that and on nothing else. `cancelAtPeriodEnd` takes precedence because
+ * a subscription still collecting but already told to stop is a pending end, and amber is the
+ * colour a pending thing keeps. Everything else falls to the raw status, never to the bucket
+ * label printed beside it: a label is presentation, and colour that reads presentation drifts the
+ * moment the wording does.
+ */
+const STATUS_TONE: Record<string, StatusTone> = {
+  canceled: "grey",
+  incomplete: "amber",
+  incomplete_expired: "bad",
+  past_due: "bad",
+  paused: "wait",
+  trialing: "wait",
+  unpaid: "bad",
+};
+
+function clientTone(client: MoneyClient): StatusTone {
+  if (client.cancelAtPeriodEnd) return "amber";
+  if (client.countsAsLive) return "good";
+  return STATUS_TONE[client.status] ?? "grey";
+}
+
 /**
  * "Live" is the green line on the card, so it counts only what the provider says is `active`.
  *
- * `receiptBackedCount("all", …)` is every receipt-backed row whatever its state, which would put
- * the past-due and cancelling rows listed underneath inside the number above them, and paint a
- * trial green before a payment was ever collected. The receipt test is the same one
- * `receiptBackedCount` applies, so a row without provider evidence is counted by neither.
+ * Where the priced read came back, that test is `countsAsLive`, which the repository defines as
+ * exactly `active` and nothing else; a row cancelling at renewal is held out because it is the
+ * amber line two rows down, and counting it twice would put a leaving account inside the number
+ * that says how many stayed.
+ *
+ * Without that read the fallback is the export mirror, on the same rule: `receiptBackedCount("all",
+ * …)` is every receipt-backed row whatever its state, which would put the past-due and cancelling
+ * rows listed underneath inside the number above them, and paint a trial green before a payment
+ * was ever collected. The receipt test is the same one `receiptBackedCount` applies, so a row
+ * without provider evidence is counted by neither.
  */
-function liveCount(rows: readonly SubscriptionRow[]) {
+function liveCount(rows: readonly SubscriptionRow[], clients: readonly MoneyClient[]) {
+  if (clients.length > 0) {
+    return clients.filter((client) => client.countsAsLive && !client.cancelAtPeriodEnd).length;
+  }
   const receiptBacked = rows.filter((row) =>
     row.dataLabel === null &&
     row.subscriptionStatus !== null &&
@@ -312,15 +461,17 @@ function liveCount(rows: readonly SubscriptionRow[]) {
 }
 
 function BookCard({
+  clients,
   movement,
   rows,
 }: {
+  clients: readonly MoneyClient[];
   movement: MrrMovementRead | null;
   rows: readonly SubscriptionRow[];
 }) {
   const retention = deriveRevenueMovement(movement)?.netRevenueRetention ?? null;
   const lines: readonly { label: string; tone: StatusTone; value: number | null; ink?: string }[] = [
-    { label: "Live", tone: "good", value: liveCount(rows) },
+    { label: "Live", tone: "good", value: liveCount(rows, clients) },
     {
       ink: "text-[var(--failure-text)]",
       label: "Past due",
@@ -409,6 +560,7 @@ function NeedsHumanCard({
 
 function MoneyBillingTab({
   authorized,
+  billing,
   enabled,
   initialCostRows,
   initialRows,
@@ -418,6 +570,7 @@ function MoneyBillingTab({
 }: {
   actorRole: MoneyActorRole;
   authorized: boolean;
+  billing: MoneyBillingRead | null;
   enabled: boolean;
   initialCostRows?: readonly Record<string, unknown>[];
   initialRows?: readonly Record<string, unknown>[];
@@ -461,6 +614,12 @@ function MoneyBillingTab({
     [rows],
   );
   const atRisk = useMemo(() => atRiskFrom(rows), [rows]);
+  const clients = billing?.rows ?? [];
+  const clientByTenantId = useMemo(() => {
+    const index = new Map<string, MoneyClient>();
+    for (const client of billing?.rows ?? []) index.set(client.tenantId, client);
+    return index;
+  }, [billing]);
 
   function openStateChange(row: SubscriptionRow) {
     setSelected(null);
@@ -523,12 +682,14 @@ function MoneyBillingTab({
       <div className="flex min-h-0 flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr_1fr]">
           <NetMrrCard movement={movement} />
-          <BookCard movement={movement} rows={rows} />
+          <BookCard clients={clients} movement={movement} rows={rows} />
           <NeedsHumanCard
             accounts={atRisk}
             onChangeState={firstAtRisk ? () => openStateChange(firstAtRisk) : null}
           />
         </div>
+
+        <MrrChartPanel periods={billing?.mrrByPeriod ?? []} />
 
         <CardTable>
           <div className="flex items-center gap-2.5 border-b border-[var(--line)] px-3.5 py-2.5">
@@ -562,7 +723,9 @@ function MoneyBillingTab({
               <thead>
                 <tr>
                   <th className={CARD_TABLE.th}>Business</th>
+                  <th className={CARD_TABLE.th}>Plan</th>
                   <th className={CARD_TABLE.th}>State</th>
+                  <th className={`${CARD_TABLE.th} text-right`}>MRR</th>
                   <th className={CARD_TABLE.th}>Movement</th>
                   <th className={CARD_TABLE.th}>Renews</th>
                   <th className={CARD_TABLE.th}>Evidence</th>
@@ -572,6 +735,8 @@ function MoneyBillingTab({
               <tbody>
                 {ordered.map((row) => {
                   const bucket = subscriptionViewBucket(row);
+                  const client = clientByTenantId.get(row.tenantId) ?? null;
+                  const tone = client ? clientTone(client) : STATE_TONE[bucket] ?? "grey";
                   return (
                     <tr key={row.rowKey}>
                       <td className={`${CARD_TABLE.td} font-medium text-[var(--ink)]`}>
@@ -580,11 +745,19 @@ function MoneyBillingTab({
                           <span className="ml-2 text-[11.5px] text-[var(--faint)]">{row.dataLabel}</span>
                         )}
                       </td>
+                      <td className={`${CARD_TABLE.td} text-[var(--body)]`}>
+                        {client?.plan ?? absentValue("no plan recorded")}
+                      </td>
                       <td className={CARD_TABLE.td}>
-                        <Pill tone={bucket === "Cancelling" ? "amber" : "neutral"}>
-                          <StatusDot tone={STATE_TONE[bucket] ?? "grey"} />
+                        <Pill tone={tone === "amber" ? "amber" : "neutral"}>
+                          <StatusDot tone={tone} />
                           {bucket}
                         </Pill>
+                      </td>
+                      <td className={`${CARD_TABLE.td} ${CARD_TABLE.num} text-[var(--body)]`}>
+                        {client && client.monthlyAmountCents !== null
+                          ? money(client.monthlyAmountCents, "USD")
+                          : absentValue("no price recorded")}
                       </td>
                       <td className={`${CARD_TABLE.td} text-[var(--body)]`}>
                         {subscriptionMovementLabel(row)}
@@ -716,6 +889,7 @@ export function OwnerMoney({
   actorRole,
   affiliatesEnabled,
   authorized,
+  billing = null,
   corrections,
   correctionsReadFailure = null,
   enabled,
@@ -778,6 +952,7 @@ export function OwnerMoney({
           <MoneyBillingTab
             actorRole={actorRole}
             authorized={billingAuthorized}
+            billing={billing}
             enabled={enabled}
             initialCostRows={initialCostRows}
             initialRows={initialRows}

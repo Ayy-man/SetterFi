@@ -8,6 +8,7 @@ import { OnboardingConnectRehaul } from "@/components/workspace/rehaul/onboardin
 import { OnboardingOfferRehaul } from "@/components/workspace/rehaul/onboarding-offer";
 import { OnboardingProfileRehaul } from "@/components/workspace/rehaul/onboarding-profile";
 import { OnboardingSmsRehaul } from "@/components/workspace/rehaul/onboarding-sms";
+import type { ChannelConnectionView } from "@/lib/repositories/channel-connections";
 
 /**
  * The five setup screens under the rehaul flag.
@@ -94,6 +95,36 @@ describe("OnboardingConnectRehaul", () => {
     // The wait is never dressed as progress, and nothing here is GoHighLevel's.
     expect(body).not.toMatch(/%|all set|approved/i);
     expect(body).not.toMatch(/gohighlevel|ghl|twilio/i);
+    // No receipt on any card, so no card claims a round trip.
+    expect(screen.queryByText("Round trip proved")).not.toBeInTheDocument();
+  });
+
+  it("states the day a round trip was proved, only on the card that carries the receipt", () => {
+    const cards = connectCards({
+      connections: [{
+        capabilities: {} as ChannelConnectionView["capabilities"],
+        channel: "instagram",
+        channelLabel: "Instagram",
+        createdAt: "2026-08-20T10:00:00.000Z",
+        error: null,
+        externalAccountLabel: "@reidfundinggroup",
+        id: "connection-1",
+        receipts: {
+          assetVerifiedAt: null,
+          oauthCompletedAt: null,
+          signedRoundTripAt: "2026-08-28T09:00:00.000Z",
+          webhookSubscribedAt: null,
+        },
+        state: "live",
+        tokenExpiresAt: null,
+        updatedAt: "2026-08-20T10:00:00.000Z",
+      }],
+      registration: null,
+    });
+    render(<OnboardingConnectRehaul cards={cards} nextEnabled />);
+
+    expect(screen.getAllByText("Round trip proved")).toHaveLength(1);
+    expect(screen.getByText("Aug 28, 2026")).toBeVisible();
   });
 });
 

@@ -23,7 +23,11 @@ import {
 import type { PageSearchParams } from "@/lib/admin-route-fold";
 import { loadPlatformActor } from "@/lib/auth/actors";
 import { phase6AffiliatesLive, phase6Live, uiRehaulLive } from "@/lib/env-contract";
-import { createBillingRepository, type MrrMovementRead } from "@/lib/repositories/billing";
+import {
+  createBillingRepository,
+  type MoneyBillingRead,
+  type MrrMovementRead,
+} from "@/lib/repositories/billing";
 import { logMoneyPageRefusal } from "@/lib/repositories/money-page-audit";
 import type { MoneyTabId } from "@/components/workspace/live/admin-money-shell";
 
@@ -196,13 +200,28 @@ export default async function AdminBillingPage({ searchParams }: PageProps) {
   // The page loads the active tab's data and nothing else: four of the five reads are somebody
   // else's tab, and a tab nobody opened is a query nobody asked for.
   if (tab === "billing") {
-    let movement: MrrMovementRead | null = null;
-    try {
-      movement = await createBillingRepository().loadMrrMovement(new Date().toISOString());
-    } catch {
-      movement = null;
-    }
-    return <OwnerMoney actorRole={actorRole} authorized enabled movement={movement} tab={tab} />;
+    // Two reads, caught apart: the movement projection and the priced month-end series fail for
+    // different reasons, and a failure in one is no reason to blank the card the other draws.
+    const repository = createBillingRepository();
+    const asOf = new Date().toISOString();
+    const [movementResult, billingResult] = await Promise.allSettled([
+      repository.loadMrrMovement(asOf),
+      repository.loadMoneyBilling(asOf),
+    ]);
+    const movement: MrrMovementRead | null =
+      movementResult.status === "fulfilled" ? movementResult.value : null;
+    const billing: MoneyBillingRead | null =
+      billingResult.status === "fulfilled" ? billingResult.value : null;
+    return (
+      <OwnerMoney
+        actorRole={actorRole}
+        authorized
+        billing={billing}
+        enabled
+        movement={movement}
+        tab={tab}
+      />
+    );
   }
 
   if (tab === "tiers") {
