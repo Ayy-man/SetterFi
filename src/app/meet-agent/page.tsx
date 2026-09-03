@@ -4,7 +4,8 @@ import { AppShell } from "@/components/kit/app-shell";
 import { CoachAgentPreview, type CoachAgentPreviewRules } from "@/components/workspace/live/coach-agent-preview";
 import { MeetYourAgent } from "@/components/meet-your-agent";
 import { loadPlatformActor, loadRouteActor } from "@/lib/auth/actors";
-import { phase7MeetAgentLive } from "@/lib/env-contract";
+import { RehaulMeetAgent } from "@/components/workspace/rehaul/meet-agent";
+import { phase7MeetAgentLive, uiRehaulLive } from "@/lib/env-contract";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -97,7 +98,14 @@ export default async function MeetAgentPage() {
       crumbs={[{ label: "Coach" }, { label: "Meet your agent" }]}
       role="coach"
     >
-      <CoachAgentPreview coachName={firstName} rules={rules} />
+      {/* One screen, two drawings. The rehaul body is the phone-and-ledger of
+          `MeetAgent.body.html`; with the flag off the shipped preview is untouched. Both take the
+          same `firstName` and the same published rules, so nothing new is read for either. */}
+      {uiRehaulLive() ? (
+        <RehaulMeetAgent coachName={firstName} rules={rules} />
+      ) : (
+        <CoachAgentPreview coachName={firstName} rules={rules} />
+      )}
     </AppShell>
   );
 }
