@@ -7,7 +7,7 @@ import { DataState } from "@/components/kit/data-state";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
-import { phase7AnalyticsLive } from "@/lib/env-contract";
+import { phase7AnalyticsLive, uiRehaulLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import { PROVISIONING_STEPS, type ProvisioningStep } from "@/lib/onboarding/contracts";
 import {
@@ -432,16 +432,40 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
     context.impersonation ? Promise.resolve(null) : loadCoachGreeting(context.actorId),
   ]);
 
+  const navCounts = await coachNavCounts(context.tenantId);
+  const billingPeriod = billing === "unavailable"
+    ? "unavailable" as const
+    : billing
+      ? { periodStart: billing.periodStart, periodEnd: billing.periodEnd }
+      : null;
+
+  /*
+   * The rehaul seam. When the flag is on the new body renders from exactly the reads above -- no
+   * extra query, no different loader -- and when it is off the live surface is untouched.
+   */
+  if (uiRehaulLive()) {
+    const { CoachDashboard } = await import("@/components/workspace/rehaul/coach-dashboard");
+    return (
+      <CoachHomeShell navCounts={navCounts}>
+        <CoachDashboard
+          {...query}
+          attention={attention}
+          billingPeriod={billingPeriod}
+          channelStatus={channelStatus}
+          composition={composition}
+          greeting={greeting}
+          measurement={measurement}
+        />
+      </CoachHomeShell>
+    );
+  }
+
   return (
-    <CoachHomeShell navCounts={await coachNavCounts(context.tenantId)}>
+    <CoachHomeShell navCounts={navCounts}>
       <CoachMeasurementSurface
         {...query}
         attention={attention}
-        billingPeriod={billing === "unavailable"
-          ? "unavailable"
-          : billing
-            ? { periodStart: billing.periodStart, periodEnd: billing.periodEnd }
-            : null}
+        billingPeriod={billingPeriod}
         blockedChannel={blockedChannel}
         channelStatus={channelStatus}
         composition={composition}
