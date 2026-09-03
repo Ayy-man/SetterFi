@@ -475,7 +475,7 @@ export function RehaulMeetAgent({
               className={cn(
                 "flex size-[40px] flex-none items-center justify-center rounded-full",
                 "border border-[var(--accent-edge)] bg-[var(--accent-wash)]",
-                "text-[13px] text-[color:var(--accent-text)]",
+                "text-[14px] text-[color:var(--accent-text)]",
                 MONO_CLASS,
               )}
             >
@@ -485,7 +485,7 @@ export function RehaulMeetAgent({
               <span className="block text-[16px] leading-[1.3] font-semibold text-[color:var(--ink)]">
                 {leadName}
               </span>
-              <span className="flex items-center gap-[7px] text-[13px] text-[color:var(--faint)]">
+              <span className="flex items-center gap-[7px] text-[14px] text-[color:var(--faint)]">
                 Instagram
                 <span className={MONO_CLASS}>CCA</span>
               </span>
@@ -501,7 +501,7 @@ export function RehaulMeetAgent({
             className="flex min-h-[430px] flex-1 flex-col gap-[11px] overflow-y-auto px-[18px] pt-[18px] pb-[8px] text-[15px]"
             ref={scrollRef}
           >
-            <span className={cn("self-center text-[12px] text-[color:var(--faint)]", MONO_CLASS)}>
+            <span className={cn("self-center text-[14px] text-[color:var(--faint)]", MONO_CLASS)}>
               Tue 2 Sept
             </span>
             {turns.map((turn) => (
@@ -521,19 +521,19 @@ export function RehaulMeetAgent({
                   {turn.text}
                 </p>
                 {turn.caption ? (
-                  <span className={cn("mt-[6px] text-[12px] text-[color:var(--faint)]", MONO_CLASS)}>
+                  <span className={cn("mt-[6px] text-[14px] text-[color:var(--faint)]", MONO_CLASS)}>
                     {turn.caption}
                   </span>
                 ) : null}
               </div>
             ))}
             {sending ? (
-              <span className={cn("self-end text-[12px] text-[color:var(--faint)]", MONO_CLASS)}>
+              <span className={cn("self-end text-[14px] text-[color:var(--faint)]", MONO_CLASS)}>
                 your agent is answering
               </span>
             ) : null}
             {error ? (
-              <p className="m-0 self-center text-[13px] text-[color:var(--warning-text)]">{error}</p>
+              <p className="m-0 self-center text-[14px] text-[color:var(--warning-text)]">{error}</p>
             ) : null}
           </div>
 
@@ -600,7 +600,7 @@ export function RehaulMeetAgent({
                   />
                   <span
                     className={cn(
-                      "w-[64px] flex-[0_0_64px] text-[13px] text-[color:var(--faint)]",
+                      "w-[64px] flex-[0_0_64px] text-[14px] text-[color:var(--faint)]",
                       MONO_CLASS,
                     )}
                   >

@@ -365,7 +365,7 @@ export function CoachInbox({
                   >
                     {option.label}
                     {option.count !== null ? (
-                      <span className={`${MONO_CLASS} text-[13px] text-[color:var(--warning-text)]`}>
+                      <span className={`${MONO_CLASS} text-[14px] text-[color:var(--warning-text)]`}>
                         {option.count}
                       </span>
                     ) : null}
@@ -427,7 +427,7 @@ export function CoachInbox({
                           <span className="min-w-0 truncate text-[17px] font-semibold text-[color:var(--ink)]">
                             {conversation.contactName}
                           </span>
-                          <span className={`ml-auto shrink-0 ${MONO_CLASS} text-[13px] text-[color:var(--faint)]`}>
+                          <span className={`ml-auto shrink-0 ${MONO_CLASS} text-[14px] text-[color:var(--faint)]`}>
                             {wait ?? "—"}
                           </span>
                         </span>
@@ -436,7 +436,7 @@ export function CoachInbox({
                             ? `Booked · ${booked}`
                             : latestBody(conversation) ?? "No messages yet"}
                         </span>
-                        <span className="mt-[6px] flex items-center gap-[8px] text-[13px]">
+                        <span className="mt-[6px] flex items-center gap-[8px] text-[14px]">
                           <span className={`flex items-center gap-[6px] ${readout.text}`}>
                             <StatusDot tone={readout.tone} />
                             {readout.label}
@@ -484,7 +484,7 @@ export function CoachInbox({
 
                 <div className="flex min-h-0 flex-1 flex-col gap-[14px] overflow-y-auto p-[28px]">
                   {dayLabel(threadStart) ? (
-                    <div className={`self-center ${MONO_CLASS} text-[13px] text-[color:var(--faint)]`}>
+                    <div className={`self-center ${MONO_CLASS} text-[14px] text-[color:var(--faint)]`}>
                       {dayLabel(threadStart)}
                     </div>
                   ) : null}
@@ -579,7 +579,7 @@ export function CoachInbox({
                     >
                       Send
                     </button>
-                    <span className="text-[12px] text-[color:var(--faint)]">Logged</span>
+                    <span className="text-[14px] text-[color:var(--faint)]">Logged</span>
                   </div>
                 </form>
               </>
@@ -609,7 +609,7 @@ export function CoachInbox({
                   </div>
                   <div className="mt-[10px] flex flex-wrap gap-[8px]">
                     <Pill
-                      className="rounded-[8px] px-[10px] py-[4px] text-[13px]"
+                      className="rounded-[8px] px-[10px] py-[4px] text-[14px]"
                       tone={STATUS_READOUTS[selected.status].tone === "amber" ? "amber" : "neutral"}
                     >
                       <StatusDot tone={STATUS_READOUTS[selected.status].tone} />

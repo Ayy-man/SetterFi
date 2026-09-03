@@ -676,7 +676,7 @@ export function CoachBillingRehaul({
                 ) : actionReceipt === AUDIT_ACTIONS["billing.correction.requested"].microcopy ? (
                   <Status label={actionReceipt} tone="good" />
                 ) : (
-                  <span className={`${MONO_META_CLASS} text-[12px] text-[color:var(--faint)]`}>
+                  <span className={`${MONO_META_CLASS} text-[14px] text-[color:var(--faint)]`}>
                     Logged
                   </span>
                 )}

@@ -61,7 +61,7 @@ export function OnboardingOfferRehaul({ review }: { review: OfferReview }) {
             <dl className="m-0 flex flex-col gap-[16px]">
               {row.values.map((entry, index) => (
                 <div className="min-w-0" key={`${entry.label}-${index}`}>
-                  <dt className="mb-[6px] text-[13px] font-medium text-[color:var(--muted)]">
+                  <dt className="mb-[6px] text-[14px] font-medium text-[color:var(--muted)]">
                     {entry.label}
                   </dt>
                   <dd className="m-0">

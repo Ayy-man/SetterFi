@@ -86,7 +86,7 @@ function CarrierWell({ since }: { since: string | null }) {
       ) : (
         <>
           <Figure className="text-[color:var(--warning-text)]" size="lg">day 0</Figure>
-          <p className={`m-0 mt-[6px] text-[13px] text-[color:var(--warning-text)] ${ONBOARDING_MONO_CLASS}`}>
+          <p className={`m-0 mt-[6px] text-[14px] text-[color:var(--warning-text)] ${ONBOARDING_MONO_CLASS}`}>
             {`typically ${CARRIER_TYPICAL_DAYS[0]} to ${CARRIER_TYPICAL_DAYS[1]} days once filed`}
           </p>
         </>
@@ -130,7 +130,7 @@ export function OnboardingConnectRehaul({
                 </p>
 
                 <div>
-                  <p className="mb-[6px] text-[13px] font-medium text-[color:var(--muted)]">
+                  <p className="mb-[6px] text-[14px] font-medium text-[color:var(--muted)]">
                     {ACCOUNT_LABEL[card.key]}
                   </p>
                   <OnboardingReadback absent={!card.detail} mono={Boolean(card.detail)}>

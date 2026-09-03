@@ -366,7 +366,7 @@ function LeadsTrend({ composition }: { composition: CoachLeadComposition }) {
         width={440}
       />
       {partial.length > 0 ? (
-        <p className="m-0 text-[12.5px] text-[var(--muted)]">
+        <p className="m-0 text-[14px] text-[var(--muted)]">
           {partial.join(" and ")} {partial.length === 1 ? "is" : "are"} still filling.
         </p>
       ) : null}

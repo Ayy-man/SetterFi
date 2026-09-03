@@ -26,7 +26,7 @@ const H1_CLASS =
   "m-0 text-[46px] leading-[1.05] font-semibold tracking-[-0.025em] text-[color:var(--ink)]";
 
 const MONO_META_CLASS =
-  "font-[family-name:var(--font-mono)] text-[13px] leading-[1.4] text-[color:var(--muted)] "
+  "font-[family-name:var(--font-mono)] text-[14px] leading-[1.4] text-[color:var(--muted)] "
   + "[font-variant-numeric:tabular-nums_lining-nums]";
 
 /** The 48px field face every setup input and read-back wears. */
@@ -40,7 +40,7 @@ export const ONBOARDING_READBACK_CLASS =
   `flex items-center gap-[10px] ${ONBOARDING_FIELD_CLASS}`;
 
 export const ONBOARDING_LABEL_CLASS =
-  "mb-[6px] block text-[13px] leading-[1.4] font-medium text-[color:var(--muted)]";
+  "mb-[6px] block text-[14px] leading-[1.4] font-medium text-[color:var(--muted)]";
 
 export const ONBOARDING_SENTENCE_CLASS =
   "m-0 max-w-[58ch] text-[16px] leading-[1.5] text-[color:var(--muted)]";
