@@ -3,9 +3,10 @@ import { forbidden, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { AffiliateMoney } from "@/components/workspace/live/affiliate-money";
+import { AffiliateHome } from "@/components/workspace/rehaul/affiliate-home";
 import { loadPlatformActor } from "@/lib/auth/actors";
 import { canAccessWorkspace, parseAppClaims } from "@/lib/auth/claims";
-import { phase6AffiliatesLive } from "@/lib/env-contract";
+import { phase6AffiliatesLive, uiRehaulLive } from "@/lib/env-contract";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Your referrals" };
@@ -21,7 +22,11 @@ function AffiliateShell({ enabled, termsCopy }: { enabled: boolean; termsCopy: s
       crumbs={CRUMBS}
       role="affiliate"
     >
-      <AffiliateMoney enabled={enabled} termsCopy={termsCopy} />
+      {uiRehaulLive() ? (
+        <AffiliateHome enabled={enabled} termsCopy={termsCopy} />
+      ) : (
+        <AffiliateMoney enabled={enabled} termsCopy={termsCopy} />
+      )}
     </AppShell>
   );
 }
