@@ -3,8 +3,9 @@
  *
  * The local subscription mirror and complete Phase 6 margin view are the only money inputs. The
  * repository refuses partial arrays, pricing, margin, and history evidence instead of filling it.
- * The signup history arrives as a contiguous series of N 30-day periods (20260914000001); the
- * repository checks that they abut rather than assuming any particular count.
+ * The overview histories arrive as contiguous series of N 30-day periods
+ * (20261009000005); the repository checks that they abut rather than assuming any particular
+ * count.
  */
 
 import {
@@ -29,16 +30,22 @@ import {
 /**
  * How many contiguous 30-day periods the signup series asks for.
  *
- * Six is half a year at the resolution the platform records signups, which is enough for a trend
- * to have a shape and short enough that every period fits the panel it is drawn in. The RPC clamps
- * the request to between two and twelve (20260914000001), so this is a request, not a promise: a
- * platform younger than six periods gets fewer periods marked `needs_more_history`, never invented
- * ones.
+ * Twelve periods give the overview a year of comparable trend evidence. The RPC clamps the
+ * request to between two and twelve (20260914000001), so this is a request, not a promise: a
+ * platform younger than a year gets earlier signup periods marked `needs_more_history`, never
+ * invented ones.
  */
-export const PLATFORM_HISTORY_PERIODS = 6;
+export const PLATFORM_HISTORY_PERIODS = 12;
 
 export type PlatformMeasurementSource = (actorId: string, asOf: string) => Promise<unknown>;
 export type PlatformMeasurementOrigin = "real_analytics" | "synthetic_preview";
+
+export type PlatformHistoryPeriod = {
+  periodStart: string;
+  periodEnd: string;
+  value: number;
+  state: "available" | "needs_more_history";
+};
 
 /**
  * A selected measurement source did not return evidence. Callers must render their unavailable
@@ -96,11 +103,20 @@ export type PlatformMeasurement = {
     failures: number;
     medianDaysToClear: number | null;
   }[];
-  history: readonly {
-    periodStart: string;
-    periodEnd: string;
-    value: number;
-    state: "available" | "needs_more_history";
+  history: readonly PlatformHistoryPeriod[];
+  activeSubscriptionsByPeriod: readonly PlatformHistoryPeriod[];
+  revenueByPeriod: readonly PlatformHistoryPeriod[];
+  deliveriesByDay: readonly {
+    day: string;
+    delivered: number;
+    failed: number;
+  }[];
+  textingRegistrationByTenant: readonly {
+    tenantId: string;
+    registrationState: "pending" | "running" | "awaiting_coach" | "awaiting_platform"
+      | "awaiting_provider" | "done" | "failed" | "blocked" | null;
+    submittedAt: string | null;
+    daysElapsed: number | null;
   }[];
 };
 
@@ -159,7 +175,8 @@ export async function loadPlatformMeasurement(
   const envelope = sourceEnvelope(await source(actor, requestedAsOf));
   const raw = evidenceObject(envelope.snapshot, [
     "asOf", "metrics", "subscriptions", "tenantPerformance", "guardrailRules",
-    "followupPerformance", "provisioningPerformance", "history",
+    "followupPerformance", "provisioningPerformance", "history", "activeSubscriptionsByPeriod",
+    "revenueByPeriod", "deliveriesByDay", "textingRegistrationByTenant",
   ], "PLATFORM_MEASUREMENT_SNAPSHOT_INVALID");
   const persistedAsOf = evidenceIso(raw.asOf, "PLATFORM_MEASUREMENT_SNAPSHOT_INVALID");
   // Instant equality, not string equality: the RPC serializes timestamptz as +00:00 while the
@@ -306,42 +323,116 @@ export async function loadPlatformMeasurement(
     };
   });
 
-  const history = evidenceArray(raw.history, "PLATFORM_HISTORY_INVALID").map((value) => {
-    const row = evidenceObject(value, [
-      "periodStart", "periodEnd", "value", "state",
-    ], "PLATFORM_HISTORY_INVALID");
-    // The RPC emits exactly two states here (20260914000001): `available`, and
-    // `needs_more_history` for a period that closed before the platform had its first tenant.
-    // That state describes how much history stands behind the series, not a missing number -
-    // the count is a real count over a real period, and refusing it took the whole page down on
-    // an empty platform. What is still refused is a row that names a period and supplies no
-    // number for it, because the chart would then draw a gap it cannot account for.
-    const state: "available" | "needs_more_history" | null =
-      row.state === "available" || row.state === "needs_more_history" ? row.state : null;
-    if (state === null) {
-      throw new MeasurementEvidenceError("PLATFORM_HISTORY_UNAVAILABLE");
+  function historySeries(
+    value: unknown,
+    invalidCode: string,
+    unavailableCode = "PLATFORM_HISTORY_UNAVAILABLE",
+  ): readonly PlatformHistoryPeriod[] {
+    const history = evidenceArray(value, invalidCode).map((rowValue) => {
+      const row = evidenceObject(rowValue, [
+        "periodStart", "periodEnd", "value", "state",
+      ], invalidCode);
+      // `needs_more_history` is an honest zero over a period before the platform had a signup;
+      // unavailable would be a chart point we cannot account for.
+      const state: "available" | "needs_more_history" | null =
+        row.state === "available" || row.state === "needs_more_history" ? row.state : null;
+      if (state === null) {
+        throw new MeasurementEvidenceError(unavailableCode);
+      }
+      const periodStart = evidenceIso(row.periodStart, invalidCode);
+      const periodEnd = evidenceIso(row.periodEnd, invalidCode);
+      assertHalfOpenWindow(periodStart, periodEnd, invalidCode);
+      return {
+        periodStart,
+        periodEnd,
+        value: count(row.value, invalidCode),
+        state,
+      };
+    });
+    // A series, not a fixed pair. Two periods is still the floor - one point is a dot, and a
+    // growth comparison needs something to compare against - but the length is now whatever the
+    // RPC was asked for. Every period has to abut the next one: a chart drawn from periods with a
+    // gap between them shows a slope across time nobody measured.
+    if (history.length < 2) {
+      throw new MeasurementEvidenceError(invalidCode);
     }
-    const periodStart = evidenceIso(row.periodStart, "PLATFORM_HISTORY_INVALID");
-    const periodEnd = evidenceIso(row.periodEnd, "PLATFORM_HISTORY_INVALID");
-    assertHalfOpenWindow(periodStart, periodEnd, "PLATFORM_HISTORY_INVALID");
+    for (let index = 1; index < history.length; index += 1) {
+      if (Date.parse(history[index - 1].periodEnd) !== Date.parse(history[index].periodStart)) {
+        throw new MeasurementEvidenceError(invalidCode);
+      }
+    }
+    return history;
+  }
+
+  const history = historySeries(raw.history, "PLATFORM_HISTORY_INVALID");
+  const activeSubscriptionsByPeriod = historySeries(
+    raw.activeSubscriptionsByPeriod,
+    "PLATFORM_ACTIVE_SUBSCRIPTIONS_HISTORY_INVALID",
+  );
+  const revenueByPeriod = historySeries(raw.revenueByPeriod, "PLATFORM_REVENUE_HISTORY_INVALID");
+
+  const deliveriesByDay = evidenceArray(
+    raw.deliveriesByDay,
+    "PLATFORM_DELIVERY_ROWS_INVALID",
+  ).map((value) => {
+    const row = evidenceObject(value, ["day", "delivered", "failed"], "PLATFORM_DELIVERY_ROWS_INVALID");
+    const day = evidenceString(row.day, "PLATFORM_DELIVERY_ROWS_INVALID");
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) {
+      throw new MeasurementEvidenceError("PLATFORM_DELIVERY_ROWS_INVALID");
+    }
     return {
-      periodStart,
-      periodEnd,
-      value: count(row.value, "PLATFORM_HISTORY_INVALID"),
-      state,
+      day,
+      delivered: count(row.delivered, "PLATFORM_DELIVERY_ROWS_INVALID"),
+      failed: count(row.failed, "PLATFORM_DELIVERY_ROWS_INVALID"),
     };
   });
-  // A series, not a fixed pair. Two periods is still the floor - one point is a dot, and a growth
-  // comparison needs something to compare against - but the length is now whatever the RPC was
-  // asked for. Every period has to abut the next one: a chart drawn from periods with a gap
-  // between them shows a slope across time nobody measured.
-  if (history.length < 2) {
-    throw new MeasurementEvidenceError("PLATFORM_HISTORY_INVALID");
+  if (deliveriesByDay.length !== 30 || new Set(deliveriesByDay.map((row) => row.day)).size !== 30) {
+    throw new MeasurementEvidenceError("PLATFORM_DELIVERY_ROWS_INVALID");
   }
-  for (let index = 1; index < history.length; index += 1) {
-    if (Date.parse(history[index - 1].periodEnd) !== Date.parse(history[index].periodStart)) {
-      throw new MeasurementEvidenceError("PLATFORM_HISTORY_INVALID");
+
+  const registrationStates = [
+    "pending", "running", "awaiting_coach", "awaiting_platform", "awaiting_provider",
+    "done", "failed", "blocked",
+  ] as const;
+  const textingRegistrationByTenant = evidenceArray(
+    raw.textingRegistrationByTenant,
+    "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID",
+  ).map((value) => {
+    const row = evidenceObject(value, [
+      "tenantId", "registrationState", "submittedAt", "daysElapsed",
+    ], "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
+    const registrationState = row.registrationState === null
+      ? null
+      : evidenceString(row.registrationState, "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
+    if (registrationState !== null && !registrationStates.includes(
+      registrationState as (typeof registrationStates)[number],
+    )) {
+      throw new MeasurementEvidenceError("PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
     }
+    const submittedAt = row.submittedAt === null
+      ? null
+      : evidenceIso(row.submittedAt, "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
+    const daysElapsed = row.daysElapsed === null
+      ? null
+      : count(row.daysElapsed, "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
+    if ((submittedAt === null) !== (daysElapsed === null)) {
+      throw new MeasurementEvidenceError("PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
+    }
+    if (submittedAt !== null && daysElapsed !== Math.max(
+      0,
+      Math.floor((Date.parse(persistedAsOf) - Date.parse(submittedAt)) / 86_400_000),
+    )) {
+      throw new MeasurementEvidenceError("PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
+    }
+    return {
+      tenantId: evidenceString(row.tenantId, "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID"),
+      registrationState: registrationState as PlatformMeasurement["textingRegistrationByTenant"][number]["registrationState"],
+      submittedAt,
+      daysElapsed,
+    };
+  });
+  if (new Set(textingRegistrationByTenant.map((row) => row.tenantId)).size !== textingRegistrationByTenant.length) {
+    throw new MeasurementEvidenceError("PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
   }
 
   return {
@@ -355,5 +446,9 @@ export async function loadPlatformMeasurement(
     followupPerformance,
     provisioningPerformance,
     history,
+    activeSubscriptionsByPeriod,
+    revenueByPeriod,
+    deliveriesByDay,
+    textingRegistrationByTenant,
   };
 }

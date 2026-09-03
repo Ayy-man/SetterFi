@@ -41,6 +41,7 @@ const ANALYTICS_VIEWS = [
   "analytics_messages",
   "analytics_onboarding_runs",
   "analytics_provisioning_steps",
+  "analytics_tenant_cost_rollups",
   "analytics_tenant_price_overrides",
   "analytics_tenants",
   "analytics_tier_price_versions",
@@ -537,8 +538,8 @@ describe("measurement readers", () => {
       `select public.read_platform_measurement(now()) snapshot`,
     );
     expect(Object.keys(result.rows[0].snapshot).sort()).toEqual([
-      "asOf","followupPerformance","guardrailRules","history","metrics",
-      "provisioningPerformance","subscriptions","tenantPerformance",
+      "activeSubscriptionsByPeriod","asOf","followupPerformance","guardrailRules","history",
+      "metrics","provisioningPerformance","revenueByPeriod","subscriptions","tenantPerformance",
     ].sort());
     const metrics = result.rows[0].snapshot.metrics as Array<{ metricKey: string; state: string }>;
     expect(metrics.map((metric) => metric.metricKey).sort()).toEqual(PLATFORM_METRICS);
@@ -1206,11 +1207,135 @@ describe("measurement reader actor seam", () => {
       [OWNER],
     );
     expect(Object.keys(result.rows[0].snapshot).sort()).toEqual([
-      "asOf","followupPerformance","guardrailRules","history","metrics",
-      "provisioningPerformance","subscriptions","tenantPerformance",
+      "activeSubscriptionsByPeriod","asOf","deliveriesByDay","followupPerformance",
+      "guardrailRules","history","metrics","provisioningPerformance","revenueByPeriod",
+      "subscriptions","tenantPerformance","textingRegistrationByTenant",
     ].sort());
     const metrics = result.rows[0].snapshot.metrics as Array<{ metricKey: string }>;
     expect(metrics.map((metric) => metric.metricKey).sort()).toEqual(PLATFORM_METRICS);
+  });
+
+  it("returns active-only subscription and recognised-revenue periods, excluding demo data", async () => {
+    await db.query(`
+      insert into public.billing_subscriptions
+        (tenant_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,
+         current_period_start,current_period_end,provider_updated_at)
+      values
+        ('${TENANT_A}','cus_overview_active','sub_overview_active','price_overview','active',
+         now() - interval '60 days',now() + interval '1 day',now()),
+        ('${TENANT_B}','cus_overview_trial','sub_overview_trial','price_overview','trialing',
+         now() - interval '60 days',now() + interval '1 day',now()),
+        ('${TENANT_DEMO}','cus_overview_demo','sub_overview_demo','price_overview','active',
+         now() - interval '60 days',now() + interval '1 day',now());
+      insert into public.tenant_cost_rollups
+        (tenant_id,window_start,window_end,recognized_subscription_cents,complete,missing_sources)
+      values
+        ('${TENANT_A}',now() - interval '2 days',now() + interval '28 days',12000,false,
+         '{model,messaging,embedding}'),
+        ('${TENANT_DEMO}',now() - interval '2 days',now() + interval '28 days',99000,false,
+         '{model,messaging,embedding}');
+    `);
+    await actAsServiceOnly();
+    const result = await db.query<{
+      snapshot: {
+        history: Array<{ periodStart: string; periodEnd: string; value: number; state: string }>;
+        activeSubscriptionsByPeriod: Array<{ value: number; state: string }>;
+        revenueByPeriod: Array<{ value: number; state: string }>;
+      };
+    }>(`select public.read_platform_measurement_for_actor($1,now()) snapshot`, [OWNER]);
+    const snapshot = result.rows[0].snapshot;
+
+    expect(snapshot.history).toHaveLength(12);
+    expect(snapshot.activeSubscriptionsByPeriod).toHaveLength(12);
+    expect(snapshot.revenueByPeriod).toHaveLength(12);
+    expect(snapshot.activeSubscriptionsByPeriod.at(-1)).toEqual({ value: 1, state: "available" });
+    expect(snapshot.revenueByPeriod.at(-1)).toEqual({ value: 12000, state: "available" });
+    expect(snapshot.activeSubscriptionsByPeriod.every((row) => row.state === "available")).toBe(true);
+    expect(snapshot.revenueByPeriod.at(-2)?.state).toBe("needs_more_history");
+  });
+
+  it("returns UTC delivery outcomes and texting registration while excluding test and demo rows", async () => {
+    const asOf = "2026-10-18T12:00:00.000Z";
+    const writeDelivery = async (
+      tenantId: string,
+      isTest: boolean,
+      outcome: "delivered" | "failed",
+      occurredAt: string,
+    ) => {
+      const notification = await db.query<{ id: string }>(
+        `insert into public.notifications (tenant_id,kind,title,is_test,created_at)
+         values ($1,'synthetic.delivery','Synthetic delivery',$2,$3) returning id`,
+        [tenantId, isTest, occurredAt],
+      );
+      const delivered = outcome === "delivered";
+      const delivery = await db.query<{ id: string }>(
+        `insert into public.notification_deliveries
+           (notification_id,destination,status,attempts,provider_reference,last_attempt_at,
+            delivered_at,terminal_at,last_error_code,created_at)
+         values ($1,'email',$2,1,$3,$4,$5,$6,$7,$4) returning id`,
+        [
+          notification.rows[0].id,
+          delivered ? "delivered" : "unavailable",
+          delivered ? "synthetic-provider-reference" : null,
+          occurredAt,
+          delivered ? occurredAt : null,
+          occurredAt,
+          delivered ? null : "SYNTHETIC_DELIVERY_FAILED",
+        ],
+      );
+      await db.query(
+        `insert into public.notification_delivery_attempts
+           (delivery_id,attempt_number,worker_id,destination,recipient_email,started_at,
+            finished_at,outcome,provider_reference,error_code)
+         values ($1,1,gen_random_uuid(),'email','delivery@synthetic.test',$2,$2,$3,$4,$5)`,
+        [
+          delivery.rows[0].id,
+          occurredAt,
+          outcome,
+          delivered ? "synthetic-provider-reference" : null,
+          delivered ? null : "SYNTHETIC_DELIVERY_FAILED",
+        ],
+      );
+    };
+
+    await writeDelivery(TENANT_A, false, "delivered", "2026-10-17T23:30:00.000Z");
+    await writeDelivery(TENANT_A, false, "failed", "2026-10-18T01:15:00.000Z");
+    await writeDelivery(TENANT_A, true, "delivered", "2026-10-18T02:00:00.000Z");
+    await writeDelivery(TENANT_DEMO, false, "delivered", "2026-10-18T03:00:00.000Z");
+    await db.query(
+      `insert into public.provisioning_steps (tenant_id,step_key,state,external_ref)
+       values ($1,'sms_live','awaiting_provider','{}'),
+         ($1,'a2p_campaign','awaiting_provider',$2::jsonb),
+         ($3,'sms_live','done','{}'),
+         ($3,'a2p_campaign','done',$2::jsonb)`,
+      [TENANT_A, JSON.stringify({ submittedAt: "2026-10-16T12:00:00.000Z" }), TENANT_DEMO],
+    );
+
+    await actAsServiceOnly();
+    const result = await db.query<{
+      snapshot: {
+        deliveriesByDay: Array<{ day: string; delivered: number; failed: number }>;
+        textingRegistrationByTenant: Array<{
+          tenantId: string;
+          registrationState: string | null;
+          submittedAt: string | null;
+          daysElapsed: number | null;
+        }>;
+      };
+    }>(`select public.read_platform_measurement_for_actor($1,$2,12) snapshot`, [OWNER, asOf]);
+    const snapshot = result.rows[0].snapshot;
+    const byDay = new Map(snapshot.deliveriesByDay.map((row) => [row.day, row]));
+
+    expect(snapshot.deliveriesByDay).toHaveLength(30);
+    expect(byDay.get("2026-10-17")).toMatchObject({ delivered: 1, failed: 0 });
+    expect(byDay.get("2026-10-18")).toMatchObject({ delivered: 0, failed: 1 });
+    expect(snapshot.textingRegistrationByTenant).toContainEqual({
+      tenantId: TENANT_A,
+      registrationState: "awaiting_provider",
+      submittedAt: "2026-10-16T12:00:00+00:00",
+      daysElapsed: 2,
+    });
+    expect(snapshot.textingRegistrationByTenant.map((row) => row.tenantId)).not.toContain(TENANT_DEMO);
   });
 
   it("refuses a null actor and an actor with no users row on all three wrappers", async () => {
@@ -1337,6 +1462,66 @@ describe("measurement reader actor seam", () => {
     await actAsServiceOnly();
     await expect(db.query(`select public.read_coach_measurement($1,'1m',null,null,now())`,
       [TENANT_A])).rejects.toThrow(/PHASE7_SESSION_ACTOR_REQUIRED/);
+  });
+
+  it("merges platform questions with tenant order and enabled overrides, with an audit for each write", async () => {
+    const first = "74000000-0000-4000-8000-000000000001";
+    const second = "74000000-0000-4000-8000-000000000002";
+    const vector = `[${Array<number>(1536).fill(0).join(",")}]`;
+    await db.query(
+      `insert into public.brain_knowledge_entries
+        (id,question,answer,category,status,source,source_ref,disposition,response_template,embedding,created_at)
+       values
+        ($1,'What is your goal?','Synthetic answer','General Questions','published','mock',
+          'coach-question-first','shared','Synthetic answer',$3::vector,'2026-01-01T00:00:00Z'),
+        ($2,'What is your credit score?','Synthetic answer','Credit','published','mock',
+          'coach-question-second','shared','Synthetic answer',$3::vector,'2026-01-02T00:00:00Z')`,
+      [first, second, vector],
+    );
+    await actAsServiceOnly();
+
+    const defaults = await db.query<{ snapshot: { questions: Array<{ id: string }> } }>(
+      `select public.read_coach_questions_for_actor($1,$2) snapshot`, [COACH_A, TENANT_A],
+    );
+    const questionIds = [
+      second,
+      first,
+      ...defaults.rows[0].snapshot.questions
+        .map((question) => question.id)
+        .filter((id) => id !== first && id !== second),
+    ];
+
+    await db.query(`select * from public.reorder_coach_questions($1,$2,$3::uuid[])`, [
+      TENANT_A, COACH_A, questionIds,
+    ]);
+    await db.query(`select * from public.set_coach_question_enabled($1,$2,$3,false)`, [
+      TENANT_A, COACH_A, first,
+    ]);
+    const result = await db.query<{ snapshot: { tenantId: string; questions: Array<Record<string, unknown>> } }>(
+      `select public.read_coach_questions_for_actor($1,$2) snapshot`, [COACH_A, TENANT_A],
+    );
+    const questions = result.rows[0].snapshot.questions.filter((question) =>
+      question.id === first || question.id === second,
+    );
+    expect(result.rows[0].snapshot.tenantId).toBe(TENANT_A);
+    expect(questions).toEqual([
+      { id: second, text: "What is your credit score?", tag: "Credit", enabled: true, position: 0 },
+      { id: first, text: "What is your goal?", tag: "General Questions", enabled: false, position: 1 },
+    ]);
+    const audit = await db.query<{ action: string; count: string }>(`
+      select action, count(*)::text count from public.audit_log
+      where tenant_id=$1 and action in ('coach.question_order.saved','coach.question.enabled.changed')
+      group by action order by action
+    `, [TENANT_A]);
+    expect(audit.rows).toEqual([
+      { action: "coach.question.enabled.changed", count: "1" },
+      { action: "coach.question_order.saved", count: "1" },
+    ]);
+    await expectRaises(
+      `select * from public.set_coach_question_enabled($1,$2,$3,false)`,
+      [TENANT_B, COACH_A, first],
+      /PHASE7_COACH_READER_TENANT_MISMATCH/,
+    );
   });
 });
 

@@ -94,6 +94,39 @@ function snapshot() {
       value: 5,
       state: "available",
     }],
+    activeSubscriptionsByPeriod: [{
+      periodStart: "2026-06-19T12:00:00.000Z",
+      periodEnd: "2026-07-19T12:00:00.000Z",
+      value: 3,
+      state: "available",
+    }, {
+      periodStart: "2026-07-19T12:00:00.000Z",
+      periodEnd: AS_OF,
+      value: 4,
+      state: "available",
+    }],
+    revenueByPeriod: [{
+      periodStart: "2026-06-19T12:00:00.000Z",
+      periodEnd: "2026-07-19T12:00:00.000Z",
+      value: 30_000,
+      state: "available",
+    }, {
+      periodStart: "2026-07-19T12:00:00.000Z",
+      periodEnd: AS_OF,
+      value: 40_000,
+      state: "available",
+    }],
+    deliveriesByDay: Array.from({ length: 30 }, (_, index) => ({
+      day: new Date(Date.UTC(2026, 6, 20 + index)).toISOString().slice(0, 10),
+      delivered: index === 29 ? 3 : 0,
+      failed: index === 29 ? 2 : 0,
+    })),
+    textingRegistrationByTenant: [{
+      tenantId: "tenant-synthetic",
+      registrationState: "awaiting_provider",
+      submittedAt: "2026-08-16T12:00:00.000Z",
+      daysElapsed: 2,
+    }],
   };
 }
 
@@ -115,7 +148,7 @@ describe("platform measurement repository", () => {
     expect(rpc).toHaveBeenCalledWith("read_platform_measurement_for_actor", {
       p_actor_id: ACTOR,
       p_as_of: AS_OF,
-      p_history_periods: 6,
+      p_history_periods: 12,
     });
   });
 
@@ -162,8 +195,9 @@ describe("platform measurement repository", () => {
 
     expect(source).toHaveBeenCalledWith(ACTOR, AS_OF);
     expect(Object.keys(result).sort()).toEqual([
-      "asOf", "followupPerformance", "guardrailRules", "history", "metrics", "origin",
-      "provisioningPerformance", "subscriptions", "tenantPerformance",
+      "activeSubscriptionsByPeriod", "asOf", "deliveriesByDay", "followupPerformance",
+      "guardrailRules", "history", "metrics", "origin", "provisioningPerformance",
+      "revenueByPeriod", "subscriptions", "tenantPerformance", "textingRegistrationByTenant",
     ]);
     expect(result.origin).toBe("real_analytics");
     expect(result.metrics.map((row) => row.metricKey)).toEqual(PLATFORM_METRIC_KEYS);
@@ -183,6 +217,27 @@ describe("platform measurement repository", () => {
     expect(Object.keys(result.provisioningPerformance[0]).sort()).toEqual([
       "attempts", "failures", "medianDaysToClear", "state", "stepKey",
     ]);
+    expect(result.activeSubscriptionsByPeriod.map((row) => row.value)).toEqual([3, 4]);
+    expect(result.revenueByPeriod.map((row) => row.value)).toEqual([30_000, 40_000]);
+    expect(result.deliveriesByDay).toHaveLength(30);
+    expect(result.deliveriesByDay.at(-1)).toEqual({ day: "2026-08-18", delivered: 3, failed: 2 });
+    expect(result.textingRegistrationByTenant).toEqual([{
+      tenantId: "tenant-synthetic",
+      registrationState: "awaiting_provider",
+      submittedAt: "2026-08-16T12:00:00.000Z",
+      daysElapsed: 2,
+    }]);
+  });
+
+  it("carries the database's test-excluded delivery series and UTC registration clock unchanged", async () => {
+    const result = await loadPlatformMeasurement(ACTOR, AS_OF, async () => snapshot());
+
+    // The SQL projection removes test notifications before emitting this series; this repository
+    // accepts that closed evidence and never performs a second client-side filter or date clock.
+    expect(result.deliveriesByDay.filter((row) => row.day === "2026-08-18")).toEqual([
+      { day: "2026-08-18", delivered: 3, failed: 2 },
+    ]);
+    expect(result.textingRegistrationByTenant[0]?.daysElapsed).toBe(2);
   });
 
   it("accepts the same instant in Postgres spelling, and still rejects a different instant", async () => {
@@ -447,6 +502,34 @@ function emptyPlatform() {
       value: 0,
       state: "available",
     }],
+    activeSubscriptionsByPeriod: [{
+      periodStart: "2026-06-19T12:00:00.000Z",
+      periodEnd: "2026-07-19T12:00:00.000Z",
+      value: 0,
+      state: "available",
+    }, {
+      periodStart: "2026-07-19T12:00:00.000Z",
+      periodEnd: AS_OF,
+      value: 0,
+      state: "available",
+    }],
+    revenueByPeriod: [{
+      periodStart: "2026-06-19T12:00:00.000Z",
+      periodEnd: "2026-07-19T12:00:00.000Z",
+      value: 0,
+      state: "needs_more_history",
+    }, {
+      periodStart: "2026-07-19T12:00:00.000Z",
+      periodEnd: AS_OF,
+      value: 0,
+      state: "needs_more_history",
+    }],
+    deliveriesByDay: Array.from({ length: 30 }, (_, index) => ({
+      day: new Date(Date.UTC(2026, 6, 20 + index)).toISOString().slice(0, 10),
+      delivered: 0,
+      failed: 0,
+    })),
+    textingRegistrationByTenant: [],
   };
 }
 
@@ -465,5 +548,8 @@ describe("the platform on the day it launches with no coaches", () => {
     expect(result.tenantPerformance).toEqual([]);
     expect(result.history.map((row) => row.value)).toEqual([0, 0]);
     expect(result.history.map((row) => row.state)).toEqual(["needs_more_history", "available"]);
+    expect(result.activeSubscriptionsByPeriod.map((row) => row.value)).toEqual([0, 0]);
+    expect(result.revenueByPeriod.map((row) => row.state))
+      .toEqual(["needs_more_history", "needs_more_history"]);
   });
 });
