@@ -21,7 +21,8 @@ import {
   type AgencyGrantSummary,
   type MessagingInstallOutcome,
 } from "@/components/onboarding/messaging-install-view-models";
-import { phase5Live, phase9GhlOAuthLive } from "@/lib/env-contract";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
+import { navFoldLive, phase5Live, phase9GhlOAuthLive } from "@/lib/env-contract";
 import { createGhlAgencyInstallCustody } from "@/lib/integrations/ghl-oauth-store";
 import type { ProvisioningTrackerRow } from "@/lib/onboarding/contracts";
 import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
@@ -34,7 +35,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 export const metadata: Metadata = { title: "Provisioning" };
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams: Promise<Record<string, string | string[] | undefined>> };
+type PageProps = { searchParams: Promise<PageSearchParams> };
 
 /**
  * Only these scalars may travel into a client component: `load()` hands back credential envelopes,
@@ -268,6 +269,7 @@ async function installSection(input: {
 }
 
 export default async function AdminProvisioningPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/provisioning", foldedRouteSearchParams(await searchParams))!);
   const nowIso = new Date().toISOString();
   const params = await searchParams;
   // The marketplace install is switched independently of self-serve onboarding, so the panel is

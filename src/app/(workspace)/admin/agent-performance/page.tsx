@@ -4,12 +4,15 @@ import { forbidden, redirect } from "next/navigation";
 import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
 import { ListPage } from "@/components/kit/templates/list-page";
-import { phase7AnalyticsLive } from "@/lib/env-contract";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
+import { navFoldLive, phase7AnalyticsLive } from "@/lib/env-contract";
 
 export const metadata: Metadata = { title: "Agent performance" };
 export const dynamic = "force-dynamic";
 
 const CRUMBS = [{ label: "Clients" }, { label: "Agent performance" }] as const;
+
+type PageProps = { searchParams: Promise<PageSearchParams> };
 
 function AgentPerformanceShell({ children }: { children: React.ReactNode }) {
   return (
@@ -23,7 +26,8 @@ function AgentPerformanceShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function AdminAgentPerformancePage() {
+export default async function AdminAgentPerformancePage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/agent-performance", foldedRouteSearchParams(await searchParams))!);
   if (!phase7AnalyticsLive()) {
     return (
       <AgentPerformanceShell>

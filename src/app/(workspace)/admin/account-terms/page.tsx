@@ -7,15 +7,18 @@ import {
   AdminAccountTerms,
   type AccountTermsVersionView,
 } from "@/components/workspace/live/admin-account-terms";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
 import { loadAccountTermsRegistry } from "@/lib/account/terms-publisher";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { accountTermsLive } from "@/lib/env-contract";
+import { accountTermsLive, navFoldLive } from "@/lib/env-contract";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Account terms" };
 export const dynamic = "force-dynamic";
 
 const CRUMBS = [{ label: "Platform", href: "/admin/audit" }, { label: "Account terms" }] as const;
+
+type PageProps = { searchParams: Promise<PageSearchParams> };
 
 /**
  * Publishing the contract every coach signs is an owner or admin act, and the API refuses anyone
@@ -36,7 +39,8 @@ function AccountTermsShell({ children }: { children: ReactNode }) {
  * to exist before that flag can be switched on, so the publisher stays reachable while it is off
  * and the screen states which of the two is true.
  */
-export default async function AdminAccountTermsPage() {
+export default async function AdminAccountTermsPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/account-terms", foldedRouteSearchParams(await searchParams))!);
   const supabase = await createSupabaseServerClient();
   const { data: claimData, error: claimError } = await supabase.auth.getClaims();
   if (claimError || !claimData?.claims) redirect("/login?next=%2Fadmin%2Faccount-terms");

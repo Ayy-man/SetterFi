@@ -2,11 +2,14 @@ import type { Metadata } from "next";
 import { forbidden, redirect } from "next/navigation";
 
 import { AdminSupportTeam } from "@/components/workspace/live/admin-support-team";
-import { phase8SupportLive } from "@/lib/env-contract";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
+import { navFoldLive, phase8SupportLive } from "@/lib/env-contract";
 import { loadSupportSession } from "@/lib/support/service";
 
 export const metadata: Metadata = { title: "Success team" };
 export const dynamic = "force-dynamic";
+
+type PageProps = { searchParams: Promise<PageSearchParams> };
 
 /**
  * The same gate the client book carries, for the same reason: this page groups that read.
@@ -16,7 +19,8 @@ export const dynamic = "force-dynamic";
  * reader who cannot see the book meets a refusal on the page rather than an empty roster that
  * looks like a platform with no success team on it.
  */
-export default async function SupportTeamPage() {
+export default async function SupportTeamPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/support-team", foldedRouteSearchParams(await searchParams))!);
   if (!phase8SupportLive()) return <AdminSupportTeam actorId="" enabled={false} />;
 
   const session = await loadSupportSession();

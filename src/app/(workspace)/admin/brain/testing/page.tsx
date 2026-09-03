@@ -6,8 +6,9 @@ import { DataState } from "@/components/kit/data-state";
 import { AdminBrainTesting } from "@/components/workspace/live/admin-testing";
 import type { EvalComparisonConfigOption, EvalComparisonDraftOption } from "@/components/workspace/live/eval-comparison-view-models";
 import { deriveTestingView, type MessageTraceRead, type TestingArmInput } from "@/components/workspace/live/view-models";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { driverSelection, environmentValue, phase1Live, phase7EvalsLive } from "@/lib/env-contract";
+import { driverSelection, environmentValue, navFoldLive, phase1Live, phase7EvalsLive } from "@/lib/env-contract";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Evals" };
@@ -17,6 +18,8 @@ const CRUMBS = [
   { label: "Brain", href: "/admin/brain" },
   { label: "Evals" },
 ] as const;
+
+type PageProps = { searchParams: Promise<PageSearchParams> };
 
 function TestingShell({ children }: { children: React.ReactNode }) {
   return (
@@ -63,7 +66,8 @@ function persistedCounter(value: unknown) {
   return 0;
 }
 
-export default async function AdminTestingPage() {
+export default async function AdminTestingPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/brain/testing", foldedRouteSearchParams(await searchParams))!);
   if (!phase1Live()) {
     return (
       <TestingShell>

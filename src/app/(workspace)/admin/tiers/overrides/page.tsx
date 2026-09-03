@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
 
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
+import { navFoldLive } from "@/lib/env-contract";
+
 /**
  * The saved link, pointed at the rows it was saved for.
  *
@@ -12,6 +15,9 @@ import { redirect } from "next/navigation";
  * A redirect rather than a re-titled duplicate: two URLs rendering one screen is how the two names
  * got here, and the `#client-overrides` band is what somebody following this link came for.
  */
-export default function AdminTierOverridesPage(): never {
+type PageProps = { searchParams: Promise<PageSearchParams> };
+
+export default async function AdminTierOverridesPage({ searchParams }: PageProps): Promise<never> {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/tiers/overrides", foldedRouteSearchParams(await searchParams))!);
   redirect("/admin/tiers#client-overrides");
 }

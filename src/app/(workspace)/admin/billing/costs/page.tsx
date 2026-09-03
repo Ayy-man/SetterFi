@@ -4,8 +4,9 @@ import { forbidden, redirect } from "next/navigation";
 import { AppShell } from "@/components/kit/app-shell";
 import { AdminMoneyBillingCosts } from "@/components/workspace/live/admin-money-billing-costs";
 import { moneyPageAccessStatus } from "@/components/workspace/live/view-models";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
 import { loadPlatformActor } from "@/lib/auth/actors";
-import { phase6Live } from "@/lib/env-contract";
+import { navFoldLive, phase6Live } from "@/lib/env-contract";
 import { logMoneyPageRefusal } from "@/lib/repositories/money-page-audit";
 
 export const metadata: Metadata = { title: "Cost evidence" };
@@ -17,6 +18,8 @@ const crumbs = [
   { label: "Cost evidence" },
 ] as const;
 
+type PageProps = { searchParams: Promise<PageSearchParams> };
+
 function CostShell({ children }: { children: React.ReactNode }) {
   return (
     <AppShell activePath="/admin/billing" crumbs={crumbs} role="admin">
@@ -25,7 +28,8 @@ function CostShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function AdminBillingCostsPage() {
+export default async function AdminBillingCostsPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/billing/costs", foldedRouteSearchParams(await searchParams))!);
   if (!phase6Live()) {
     return (
       <CostShell>

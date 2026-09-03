@@ -1,11 +1,13 @@
 // @vitest-environment node
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const redirect = vi.fn(() => {
-  throw new Error("NEXT_REDIRECT");
-});
-vi.mock("next/navigation", () => ({ redirect }));
+const navigation = vi.hoisted(() => ({
+  navFoldLive: vi.fn(() => false),
+  redirect: vi.fn((location: string) => { throw new Error(`NEXT_REDIRECT:${location}`); }),
+}));
+vi.mock("next/navigation", () => ({ redirect: navigation.redirect }));
+vi.mock("@/lib/env-contract", () => ({ navFoldLive: navigation.navFoldLive }));
 
 const { default: AdminTierOverridesPage } = await import("./page");
 
@@ -20,8 +22,21 @@ const { default: AdminTierOverridesPage } = await import("./page");
  * something going red.
  */
 describe("/admin/tiers/overrides", () => {
-  it("sends a saved link to the client-override band of Plans and pricing", () => {
-    expect(() => AdminTierOverridesPage()).toThrow("NEXT_REDIRECT");
-    expect(redirect).toHaveBeenCalledWith("/admin/tiers#client-overrides");
+  beforeEach(() => {
+    navigation.navFoldLive.mockReturnValue(false);
+    navigation.redirect.mockClear();
+  });
+
+  it("keeps the saved link's original destination when the nav fold is off", async () => {
+    await expect(AdminTierOverridesPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT:/admin/tiers#client-overrides");
+    expect(navigation.redirect).toHaveBeenCalledWith("/admin/tiers#client-overrides");
+  });
+
+  it("sends the saved link to the folded Billing tab when the nav fold is on", async () => {
+    navigation.navFoldLive.mockReturnValue(true);
+
+    await expect(AdminTierOverridesPage({ searchParams: Promise.resolve({ client: "tenant-1" }) }))
+      .rejects.toThrow("NEXT_REDIRECT:/admin/billing?client=tenant-1&tab=tiers#client-overrides");
+    expect(navigation.redirect).toHaveBeenCalledWith("/admin/billing?client=tenant-1&tab=tiers#client-overrides");
   });
 });

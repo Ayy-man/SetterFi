@@ -12,8 +12,9 @@ import {
   agencyInstallReadLabel,
   agencyInstallSummaryLine,
 } from "@/components/onboarding/messaging-install-view-models";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { phase1Live, phase4Live, phase9GhlOAuthLive } from "@/lib/env-contract";
+import { navFoldLive, phase1Live, phase4Live, phase9GhlOAuthLive } from "@/lib/env-contract";
 import { createGhlAgencyInstallCustody } from "@/lib/integrations/ghl-oauth-store";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import { listChannelConnections } from "@/lib/repositories/channel-connections";
@@ -25,7 +26,7 @@ export const metadata: Metadata = { title: "Channel health" };
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+  searchParams: Promise<PageSearchParams>;
 };
 
 function first(value: string | string[] | undefined) {
@@ -139,6 +140,7 @@ async function agencyInstallSummaries(): Promise<AgencyInstallSummary[] | null> 
 }
 
 export default async function AdminChannelHealthPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/channel-health", foldedRouteSearchParams(await searchParams))!);
   if (!phase1Live() || !phase4Live()) {
     return (
       <AdminChannelHealth

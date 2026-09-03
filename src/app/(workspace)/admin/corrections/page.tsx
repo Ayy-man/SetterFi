@@ -7,8 +7,9 @@ import {
   moneyPageAccessStatus,
   type CorrectionEvidence,
 } from "@/components/workspace/live/view-models";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
 import { loadPlatformActor } from "@/lib/auth/actors";
-import { phase6Live } from "@/lib/env-contract";
+import { navFoldLive, phase6Live } from "@/lib/env-contract";
 import { logMoneyPageRefusal } from "@/lib/repositories/money-page-audit";
 
 export const metadata: Metadata = { title: "Billing corrections" };
@@ -18,6 +19,8 @@ type CorrectionsResult =
   | { ok: true; value: CorrectionEvidence[] }
   | { ok: false; code: "BILLING_CORRECTIONS_READ_FAILED"; reason: string }
   | { ok: false; unauthorized: true };
+
+type PageProps = { searchParams: Promise<PageSearchParams> };
 
 async function loadCorrectionsResult(): Promise<CorrectionsResult> {
   try {
@@ -44,7 +47,8 @@ async function loadCorrectionsResult(): Promise<CorrectionsResult> {
   }
 }
 
-export default async function AdminCorrectionsPage() {
+export default async function AdminCorrectionsPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/corrections", foldedRouteSearchParams(await searchParams))!);
   if (!phase6Live()) {
     return <AdminMoneyCorrections actorRole="admin" enabled={false} />;
   }

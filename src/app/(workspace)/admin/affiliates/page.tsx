@@ -6,7 +6,8 @@ import { AppShell } from "@/components/kit/app-shell";
 import { AdminMoneyAffiliates } from "@/components/workspace/live/admin-money-affiliates";
 import { moneyPageAccessStatus } from "@/components/workspace/live/view-models";
 import { loadPlatformActor } from "@/lib/auth/actors";
-import { phase6AffiliatesLive, phase6Live } from "@/lib/env-contract";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
+import { navFoldLive, phase6AffiliatesLive, phase6Live } from "@/lib/env-contract";
 import { logMoneyPageRefusal } from "@/lib/repositories/money-page-audit";
 
 export const metadata: Metadata = { title: "Affiliates and payouts" };
@@ -29,7 +30,10 @@ function AffiliatesShell({ children }: { children: ReactNode }) {
   );
 }
 
-export default async function AdminAffiliatesPage() {
+type PageProps = { searchParams: Promise<PageSearchParams> };
+
+export default async function AdminAffiliatesPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/affiliates", foldedRouteSearchParams(await searchParams))!);
   if (!phase6Live()) {
     return (
       <AffiliatesShell>

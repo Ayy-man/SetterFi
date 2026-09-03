@@ -9,7 +9,8 @@ import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
 import { PageHeader } from "@/components/kit/page-header";
 import { AdminHelp, type HandoverPackage } from "@/components/workspace/admin-help";
-import { phase8Live } from "@/lib/env-contract";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
+import { navFoldLive, phase8Live } from "@/lib/env-contract";
 import { HANDOVER_CONTENT_FILES } from "@/lib/handover/generator";
 import { loadSupportSession } from "@/lib/support/service";
 
@@ -17,6 +18,8 @@ export const metadata: Metadata = { title: "Help" };
 export const dynamic = "force-dynamic";
 
 const CRUMBS = [{ label: "Platform" }, { label: "Help" }] as const;
+
+type PageProps = { searchParams: Promise<PageSearchParams> };
 
 function AdminHelpShell({ children }: { children: ReactNode }) {
   return (
@@ -44,7 +47,8 @@ async function loadHandoverPackage(): Promise<HandoverPackage> {
   return { generatedAt, guideCount, downloads };
 }
 
-export default async function AdminHelpPage() {
+export default async function AdminHelpPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/help", foldedRouteSearchParams(await searchParams))!);
   if (!phase8Live()) {
     return (
       <AdminHelpShell>

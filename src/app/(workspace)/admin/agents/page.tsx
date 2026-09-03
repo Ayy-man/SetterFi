@@ -6,12 +6,16 @@ import {
   AdminAgentsSurface,
   AdminAgentsUnavailable,
 } from "@/components/workspace/live/admin-agents";
+import { foldedRouteRedirect, foldedRouteSearchParams, type PageSearchParams } from "@/lib/admin-route-fold";
+import { navFoldLive } from "@/lib/env-contract";
 import { loadAgentRoster, type AgentRoster } from "@/lib/operations/agent-roster";
 
 export const metadata: Metadata = { title: "Agents" };
 export const dynamic = "force-dynamic";
 
 const CRUMBS = [{ label: "Clients" }, { label: "Agents" }] as const;
+
+type PageProps = { searchParams: Promise<PageSearchParams> };
 
 function AgentsShell({ children }: { children: React.ReactNode }) {
   return (
@@ -21,7 +25,8 @@ function AgentsShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function AdminAgentsPage() {
+export default async function AdminAgentsPage({ searchParams }: PageProps) {
+  if (navFoldLive()) redirect(foldedRouteRedirect("/admin/agents", foldedRouteSearchParams(await searchParams))!);
   const { loadAlertActor } = await import("@/lib/auth/actors");
   const actor = await loadAlertActor();
   if (!actor) redirect("/login?next=%2Fadmin%2Fagents");
