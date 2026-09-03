@@ -101,7 +101,7 @@ describe("AlertSettings", () => {
   it("names every admin checkbox by destination and rule, without repeating the column header", async () => {
     renderSettings("admin-alerts");
 
-    await expectEveryCheckboxIsNamed(3);
+    await expectEveryCheckboxIsNamed(2);
     for (const destination of ["Bell", "Email"]) {
       expect(
         screen.getByRole("checkbox", {

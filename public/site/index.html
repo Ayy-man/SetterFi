@@ -348,7 +348,7 @@
   .tl li time { font-size: 11px; color: #5e6b83; white-space: nowrap; }
   .tl__reply { background: #eef3ff; border-radius: 8px; margin: 4px 0 4px -22px; padding-left: 44px !important; }
   .tl__reply i { left: 22px !important; background: #2b4bd8 !important; box-shadow: 0 0 0 4px #d5e0ff !important; }
-  .tl__off span, .tl__off b { color: #9aa5b8; text-decoration: line-through; }
+  .tl__off span { color: #9aa5b8; }
   .tl__off i { box-shadow: 0 0 0 2px #c9d0dd inset !important; }
 
   /* The provenance line. */
@@ -610,14 +610,12 @@
 
         <!-- FOLLOW-UPS -->
         <section class="obj card quiet" id="quiet" data-reveal="14.2 14.7" data-leave="15.5 16.0" aria-label="Follow-up schedule for a lead who went quiet, cancelled when they replied, sample data">
-          <header class="card__head"><b>Jordan B.</b><span>Went quiet · Sun 2:16 AM</span></header>
+          <header class="card__head"><b>Jordan B.</b><span>Went quiet</span></header>
           <ol class="tl">
-            <li data-at="14.55"><i></i><b>+3 h</b><span>"Still there, Jordan?"</span><time>Sent 5:16 AM</time></li>
-            <li data-at="14.65"><i></i><b>+1 d</b><span>"Worth 20 minutes this week?"</span><time>Sent Mon 5:16 AM</time></li>
-            <li data-at="14.75"><i></i><b>+1 d</b><span>"Two slots left Friday."</span><time>Sent Tue 5:16 AM</time></li>
-            <li class="tl__reply" data-at="14.95"><i></i><b>Replied</b><span>"yeah friday works"</span><time>Tue 9:41 AM</time></li>
-            <li class="tl__off" data-at="15.05"><i></i><b>+2 d</b><span>Cancelled</span><time></time></li>
-            <li class="tl__off" data-at="15.05"><i></i><b>+2 d</b><span>Cancelled</span><time></time></li>
+            <li data-at="14.55"><i></i><b>+3 h</b><span>"Still there, Jordan?"</span><time>Sent</time></li>
+            <li data-at="14.7"><i></i><b>+1 d</b><span>"Worth 20 minutes this week?"</span><time>Sent</time></li>
+            <li class="tl__reply" data-at="14.9"><i></i><b>Replied</b><span>"yeah friday works"</span><time>Tue 9:41 AM</time></li>
+            <li class="tl__off" data-at="15.05"><i></i><b></b><span>Remaining follow-ups cancelled</span><time></time></li>
           </ol>
         </section>
 
@@ -676,8 +674,8 @@
     </div>
 
     <div class="copy copy--quiet" data-sc-copy data-sc-window="0.903 0.959 0.3 0.3">
-      <h2>If they go quiet, it doesn't.</h2>
-      <p>Five touches over a week. All cancelled the moment they reply.</p>
+      <h2>Smart follow-ups.</h2>
+      <p>A nudge when they go quiet. It stops the moment they reply.</p>
     </div>
 
     <div class="copy copy--finale" data-sc-copy data-sc-window="0.99 1 0.6 0">
