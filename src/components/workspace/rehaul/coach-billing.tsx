@@ -484,8 +484,14 @@ export function CoachBillingRehaul({
           The artboard's Invoices and Update card sit here. Neither has a record or a route behind
           it, so the header carries the one action this screen really has.
         */}
-        <div className="ml-auto flex flex-wrap gap-[10px]">
+        <div className="ml-auto flex flex-wrap items-center gap-[10px]">
           <a className={ACTION_CLASS} href="/coach/help">Ask us to change your plan</a>
+          <ContextEye
+            copy={COACH_BILLING_EYE_COPY}
+            placement="header"
+            scale="coach"
+            screen="coach-billing"
+          />
         </div>
       </div>
 
@@ -712,7 +718,6 @@ export function CoachBillingRehaul({
         ) : null}
       </div>
 
-      <ContextEye copy={COACH_BILLING_EYE_COPY} screen="coach-billing" />
     </div>
   );
 }

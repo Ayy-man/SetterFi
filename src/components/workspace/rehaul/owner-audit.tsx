@@ -461,6 +461,7 @@ export function OwnerAudit({
             label="Time range"
           />
           {exportControl}
+          <ContextEye copy={EYE_COPY} placement="header" screen="owner-audit" />
         </div>
       </div>
 
@@ -560,7 +561,6 @@ export function OwnerAudit({
         ) : null}
       </div>
 
-      <ContextEye copy={EYE_COPY} screen="owner-audit" />
     </div>
   );
 }

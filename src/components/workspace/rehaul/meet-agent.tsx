@@ -499,14 +499,13 @@ export function RehaulMeetAgent({
             </span>
           </div>
         </div>
-        <button
-          className={cn(QUIET_BUTTON_CLASS, "ml-auto")}
-          onClick={replay}
-          type="button"
-        >
-          <RefreshCw aria-hidden className="size-[18px]" strokeWidth={2} />
-          Play it again
-        </button>
+        <div className="ml-auto flex items-center gap-[10px]">
+          <button className={QUIET_BUTTON_CLASS} onClick={replay} type="button">
+            <RefreshCw aria-hidden className="size-[18px]" strokeWidth={2} />
+            Play it again
+          </button>
+          <ContextEye copy={EYE_COPY} placement="header" scale="coach" screen="meet-agent" />
+        </div>
       </div>
 
       <div className="mt-[28px] grid min-w-0 items-start gap-[44px] lg:grid-cols-[390px_minmax(0,1fr)]">
@@ -680,7 +679,6 @@ export function RehaulMeetAgent({
         {playing ? "Playing the sample conversation." : "The sample conversation is complete."}
       </p>
 
-      <ContextEye copy={EYE_COPY} screen="meet-agent" />
     </div>
   );
 }

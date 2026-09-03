@@ -832,16 +832,24 @@ export function CoachDashboard({
             {PROVENANCE_COPY[measurement.isDemo ? "demo" : "real"]}
           </p>
         </div>
-        {firstRun ? (
-          <Link
-            className="ml-auto inline-flex h-11 items-center rounded-xl border border-[var(--line-input)] bg-[var(--card)] px-5 text-[16px] font-medium text-[var(--ink)] no-underline hover:no-underline"
-            href="/coach/help"
-          >
-            Ask us
-          </Link>
-        ) : (
-          <WindowPills window={window} />
-        )}
+        {/*
+          The header's trailing control row. What sits in it changes with the run (Ask us on the
+          first one, the window pills after), so the row itself is the constant, and the eye docks
+          at its end rather than floating over the panels below.
+        */}
+        <div className="ml-auto flex items-center gap-3">
+          {firstRun ? (
+            <Link
+              className="inline-flex h-11 items-center rounded-xl border border-[var(--line-input)] bg-[var(--card)] px-5 text-[16px] font-medium text-[var(--ink)] no-underline hover:no-underline"
+              href="/coach/help"
+            >
+              Ask us
+            </Link>
+          ) : (
+            <WindowPills window={window} />
+          )}
+          <ContextEye copy={EYE_COPY} placement="header" scale="coach" screen="coach-dashboard" />
+        </div>
       </div>
 
       {firstRun && channelStatus ? (
@@ -988,7 +996,6 @@ export function CoachDashboard({
         </>
       )}
 
-      <ContextEye copy={EYE_COPY} screen="coach-dashboard" />
     </div>
   );
 }

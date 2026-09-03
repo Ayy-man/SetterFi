@@ -23,6 +23,12 @@ import { workspaceDateFormat } from "@/lib/format/datetime";
 import { useQueryState } from "@/lib/query-state";
 import type { ContactRead } from "@/lib/repositories/contacts";
 
+/* The sentences this screen no longer prints under its heading, handed to the eye instead. */
+const LEADS_EYE_COPY =
+  "Everyone who has messaged you, and where each one got to. The board reads each lead's "
+  + "stage today, not the path it took. A card marked Needs you is sitting in a no show or "
+  + "a long-term follow-up with no automated touch left to run, so the next move is yours.";
+
 export type CoachLeadsView = "table" | "board";
 
 export type CoachLeadsProps = {
@@ -342,6 +348,12 @@ export function CoachLeads({
             mode="local"
             rows={exportRows}
           />
+          <ContextEye
+            copy={LEADS_EYE_COPY}
+            placement="header"
+            scale="coach"
+            screen="coach-leads"
+          />
         </div>
       </div>
 
@@ -429,14 +441,6 @@ export function CoachLeads({
         </div>
       )}
 
-      <ContextEye
-        copy={
-          "Everyone who has messaged you, and where each one got to. The board reads each lead's "
-          + "stage today, not the path it took. A card marked Needs you is sitting in a no show or "
-          + "a long-term follow-up with no automated touch left to run, so the next move is yours."
-        }
-        screen="coach-leads"
-      />
     </div>
   );
 }

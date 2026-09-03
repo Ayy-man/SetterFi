@@ -912,23 +912,35 @@ export function OwnerMoney({
       <div className="flex min-h-0 flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h1 className="m-0 text-[30px] font-semibold tracking-tight text-[var(--ink)]">Money</h1>
-          {tab === "billing" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {/*
-                * One window, not three. `projectMrrMovement` returns the current month and the
-                * platform records no MRR history, so 3M and 12M would be controls over data that
-                * does not exist.
-                */}
-              <Seg
-                items={[{
-                  active: true,
-                  label: movementView ? movementView.windowLabel : "This month",
-                }]}
-                label="Revenue window"
-              />
-              <ExportMenu {...SUBSCRIPTION_EXPORT} />
-            </div>
-          ) : null}
+          {/*
+            * The page's trailing control row, and the eye is the last thing in it.
+            *
+            * `EyeRule.dc.html` is the reason it moved: floating bottom-right is also where a
+            * pane's action row ends, so the eye sat on top of a primary action. A screen with a
+            * header row docks it there instead, after Export, at the same 32px as its neighbours.
+            * The row now renders on every tab because the eye belongs to the page rather than to
+            * the billing tab that happened to own the only controls.
+            */}
+          <div className="flex flex-wrap items-center gap-2">
+            {tab === "billing" ? (
+              <>
+                {/*
+                  * One window, not three. `projectMrrMovement` returns the current month and the
+                  * platform records no MRR history, so 3M and 12M would be controls over data that
+                  * does not exist.
+                  */}
+                <Seg
+                  items={[{
+                    active: true,
+                    label: movementView ? movementView.windowLabel : "This month",
+                  }]}
+                  label="Revenue window"
+                />
+                <ExportMenu {...SUBSCRIPTION_EXPORT} />
+              </>
+            ) : null}
+            <ContextEye copy={EYE_COPY} placement="header" screen="Money" />
+          </div>
         </div>
 
         <RehaulTabs
@@ -1020,8 +1032,6 @@ export function OwnerMoney({
             )}
           </MoneySurfaceGuard>
         ) : null}
-
-        <ContextEye copy={EYE_COPY} position="fixed" screen="Money" />
       </div>
     </AppShell>
   );

@@ -5,11 +5,14 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
+  type ReactNode,
+  type RefObject,
 } from "react";
 
-import { ExternalLink } from "@/components/kit/icons";
+import { ChevronDown, ExternalLink } from "@/components/kit/icons";
 
 import { Callout } from "@/components/kit/callout";
 import { ConfirmFlow, type Result } from "@/components/kit/confirm-flow";
@@ -23,7 +26,7 @@ import { Field } from "@/components/kit/field";
 import { KeyValue } from "@/components/kit/key-value";
 import { KitButton, Status, StatusAbsent } from "@/components/kit/atomics";
 import type { StateTone } from "@/components/kit/state-badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -34,8 +37,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { ConsoleDeck } from "@/components/kit/console-deck";
-import { DeckPanel } from "@/components/kit/deck-panel";
 import { ListPage } from "@/components/kit/templates/list-page";
 import { TierCommercialTerms } from "@/components/workspace/live/tier-commercial-terms";
 import { MoneySurfaceGuard, moneyPageHeader } from "@/components/workspace/live/admin-money-shell";
@@ -43,6 +44,7 @@ import type { PricingHistoryEntry } from "@/components/workspace/live/admin-mone
 import { moneyPageAccessStatus } from "@/components/workspace/live/view-models";
 import { wholePageProvenanceKind } from "@/components/kit/provenance-chip";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
+import { displayName } from "@/lib/format/display-name";
 import { workspaceCountFormat, workspaceDateFormat } from "@/lib/format/datetime";
 import { money } from "@/lib/format/metric";
 import type { MoneyRefusalRecord } from "@/lib/repositories/money-page-audit";
@@ -166,8 +168,12 @@ type BlockingBannerProps = {
 };
 
 type BannerCopy = {
+  /**
+   * The whole claim, in one line. It used to be a title over a two-sentence body that said again
+   * what the title said; the strip below is one line, so the cause has to be in the title itself
+   * and each of the four spells out which readback is missing.
+   */
   title: string;
-  body: string;
   actionLabel?: string;
   actionHref?: string;
 };
@@ -273,115 +279,280 @@ async function fetchMoneyRows(signal?: AbortSignal) {
   };
 }
 
-/**
- * Seeded copy carries a trailing "(demo)" so a row can never be mistaken for a real one, which
- * reads as a typo once it lands inside a sentence. The page-level provenance line says the same
- * thing once, in the right place, so the marker comes out of the prose.
- */
-function withoutDemoMarker(value: string) {
-  return value.replace(/\s*\(demo\)\s*$/i, "").trim();
-}
-
 function fairUseSentence(tier: TierRow) {
-  if (tier.fairUseNote) return withoutDemoMarker(tier.fairUseNote) || tier.fairUseNote;
+  if (tier.fairUseNote) return displayName(tier.fairUseNote);
   if (tier.fairUseCap === null) return "No fair-use limit recorded.";
   return `Soft cap at ${workspaceCountFormat.format(tier.fairUseCap)} booked calls.`;
 }
 
-function customerCountLabel(count: number | undefined) {
-  if (count === undefined) return "Customer count unavailable";
-  return `${workspaceCountFormat.format(count)} ${count === 1 ? "customer" : "customers"}`;
+/**
+ * The table-in-a-card vocabulary this screen draws with.
+ *
+ * Spelled as class strings rather than as a component, because the plans table and the collapsed
+ * cards under it want the same card face over completely different bodies, and a component that
+ * owned the face would have to own the columns too.
+ */
+const TIER_TABLE = {
+  card: "surface-card is-flush overflow-hidden",
+  header:
+    "flex min-w-0 flex-wrap items-center gap-[var(--s-2)] border-b border-[var(--line)] px-[var(--s-4)] py-[var(--s-2)]",
+  num: "text-right font-mono tabular-nums",
+  table: "w-full border-collapse text-[length:var(--t-body)]",
+  td: "border-b border-[var(--line-soft)] px-[var(--s-3)] py-[var(--s-2)] align-middle",
+  th: "border-b border-[var(--line)] bg-[var(--band)] px-[var(--s-3)] py-[var(--s-2)] text-left text-[11.5px] font-medium tracking-[0.04em] text-[color:var(--faint)] uppercase",
+} as const;
+
+/**
+ * One drawn row of the plans table.
+ *
+ * A plan that was repriced under a new row leaves its predecessor behind as an inactive tier
+ * carrying the same name, and those two rows are one plan's history rather than two products. So
+ * the predecessor is nested under the plan that replaced it (`nested`) instead of standing beside
+ * it as an equal.
+ */
+type PlanLine = {
+  tier: TierRow;
+  nested: boolean;
+  /**
+   * The row's position inside its name group, oldest first. It is a POSITION, not a stored version
+   * number: nothing in `tiers` records one. So it is printed only when the group holds more than
+   * one row and every row in it carries an `updated_at` to order by, which is the only case where
+   * the order is measured rather than guessed.
+   */
+  version: number | null;
+};
+
+/** Positions inside one name group, or an empty map when the order cannot be measured. */
+function groupVersions(group: readonly TierRow[]): ReadonlyMap<string, number> {
+  if (group.length < 2) return new Map();
+  const stamped = group.map((tier) => ({
+    id: tier.id,
+    at: tier.updatedAt === null ? Number.NaN : Date.parse(tier.updatedAt),
+  }));
+  if (stamped.some((entry) => !Number.isFinite(entry.at))) return new Map();
+  return new Map(
+    [...stamped]
+      .sort((left, right) => left.at - right.at)
+      .map((entry, index) => [entry.id, index + 1] as const),
+  );
 }
 
 /**
- * A plan reads as a card, not a table row: name, price, what is included, and
- * the fair-use sentence in the coach's words. Absent fields say so.
+ * The plans in drawn order: each name once, with its retired predecessors immediately under it.
+ *
+ * Grouping is on the displayed name, because that is the thing a reader would otherwise see twice
+ * in one column with no way to tell which of the two they are being billed at.
  */
-function PlanCard({
-  tier,
-  customerCount,
-  mostClients,
-  actionsDisabled,
+function planLines(tiers: readonly TierRow[]): readonly PlanLine[] {
+  const order: string[] = [];
+  const groups = new Map<string, TierRow[]>();
+  for (const tier of tiers) {
+    const key = displayName(tier.name).toLowerCase();
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(tier);
+    else {
+      groups.set(key, [tier]);
+      order.push(key);
+    }
+  }
+
+  const lines: PlanLine[] = [];
+  for (const key of order) {
+    const group = groups.get(key) ?? [];
+    const versions = groupVersions(group);
+    const lead = group.find((tier) => tier.active);
+    // No live plan under this name: nothing is a predecessor of anything, so every row stands on
+    // its own line rather than one of them being promoted to head the others.
+    if (!lead) {
+      for (const tier of group) {
+        lines.push({ nested: false, tier, version: versions.get(tier.id) ?? null });
+      }
+      continue;
+    }
+    lines.push({ nested: false, tier: lead, version: versions.get(lead.id) ?? null });
+    for (const tier of group) {
+      if (tier.id === lead.id) continue;
+      lines.push({ nested: true, tier, version: versions.get(tier.id) ?? null });
+    }
+  }
+  return lines;
+}
+
+function PlanStateCell({ line }: { line: PlanLine }) {
+  if (line.tier.active) return <Status label="Active" tone="good" />;
+  // "Retired" is a claim about a relationship: this plan was replaced by the one above it.
+  // A plan nobody replaced is simply not for sale, which is a different fact.
+  return <Status label={line.nested ? "Retired" : "Inactive"} tone="neutral" />;
+}
+
+/**
+ * The plans, as a table.
+ *
+ * They were a deck of cards, which gave every plan a figure and a paragraph and made five plans a
+ * page of scrolling. The facts a reader compares across plans -- price, allowance, how many
+ * clients are on it, whether it is still sold -- are columns, and a column is the shape that lets
+ * them be compared at all.
+ */
+function PlansTable({
+  actionsBlocked,
+  countFor,
+  exportControl,
+  lines,
   onEdit,
+  onHistory,
 }: {
-  tier: TierRow;
-  customerCount: number | undefined;
-  /** True only for the single plan with the most customers, and only when the counts are real. */
-  mostClients: boolean;
-  actionsDisabled: boolean;
-  onEdit: () => void;
+  actionsBlocked: boolean;
+  countFor: (tierId: string) => number | undefined;
+  exportControl: ReactNode;
+  lines: readonly PlanLine[];
+  onEdit: (tier: TierRow) => void;
+  onHistory: () => void;
 }) {
   return (
-    <DeckPanel
-      /* The count leads as the eyebrow because it is the fact that ranks the three plans against
-         each other, and it frees the name to be the plain word a reader is looking for. */
-      eyebrow={customerCountLabel(customerCount)}
-      figure={(
-        <>
-          {money(tier.priceCents, "USD")}
-          {/* The cadence rides beside the figure rather than under it, because "$299.00" on its
-              own is a price with no period attached and this page sells subscriptions. Small and
-              muted so it reads as the figure's unit rather than as a second number. */}
-          <span className="ml-[6px] align-baseline font-sans text-[12.5px] font-normal tracking-normal text-[color:var(--muted)]">
-            a month
-          </span>
-        </>
-      )}
-      footer={(
-        <div className="flex flex-col gap-[var(--s-3)]">
-          <span className="flex min-w-0 flex-wrap items-center gap-[var(--s-2)]">
-            {/* A measured fact about the book, not a marketing badge: it names the plan that
-                currently has the most customers, and it disappears when a count is unavailable or
-                two plans tie. */}
-            {mostClients ? <Status label="Most clients" tone="neutral" treatment="bare" /> : null}
-            {tier.active ? null : <Status label="Inactive" tone="neutral" treatment="bare" />}
-            <span className="text-[11.5px] text-[color:var(--faint)]">
-              Updated {displayDate(tier.updatedAt)}
-            </span>
-          </span>
-          {/*
-            A button, not a menu. `AdminPlans.dc.html:249,263,277` draws a full-width 34px control
-            reading "Edit this plan" on every card, and this was a one-item `ActionMenu` -- a
-            trigger that opened to reveal a single option, so reaching the only thing behind it
-            cost a click and a decision, and the disclosure implied choices that were never there.
-            Editing is also the only mutation this page has: there is no create-tier action on
-            `src/app/api/platform/billing/handler.ts` for a second menu item to ever arrive as.
+    <section aria-labelledby="tiers-plans-heading" className={TIER_TABLE.card} data-slot="tiers-plans">
+      <div className={TIER_TABLE.header}>
+        <h2 className="m-0 text-[length:var(--t-body)] font-semibold text-[color:var(--ink)]" id="tiers-plans-heading">
+          Plans
+        </h2>
+        <span className="font-mono text-[11.5px] text-[color:var(--faint)]">
+          {workspaceCountFormat.format(lines.length)}
+        </span>
+        <span className="ml-auto text-[12.5px] text-[color:var(--faint)]">
+          A plan change queues for the next renewal
+        </span>
+        {exportControl}
+      </div>
+      <div className="overflow-x-auto">
+        <table className={TIER_TABLE.table}>
+          <thead>
+            <tr>
+              <th className={TIER_TABLE.th} scope="col">Plan</th>
+              <th className={`${TIER_TABLE.th} text-right`} scope="col">Price</th>
+              <th className={`${TIER_TABLE.th} text-right`} scope="col">Calls / mo</th>
+              <th className={`${TIER_TABLE.th} text-right`} scope="col">Customers</th>
+              <th className={TIER_TABLE.th} scope="col">State</th>
+              <th className={TIER_TABLE.th} scope="col">Updated</th>
+              <th className={TIER_TABLE.th} scope="col">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line) => {
+              const name = displayName(line.tier.name);
+              const count = countFor(line.tier.id);
+              return (
+                <tr data-nested={line.nested ? "" : undefined} data-slot="tiers-plan-row" key={line.tier.id}>
+                  <td className={`${TIER_TABLE.td} ${line.nested ? "pl-[var(--s-6)]" : ""}`}>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="flex min-w-0 items-center gap-[var(--s-2)]">
+                        <span className={line.nested ? "text-[color:var(--muted)]" : "font-medium text-[color:var(--ink)]"}>
+                          {name}
+                        </span>
+                        {line.version === null ? null : (
+                          <span className="font-mono text-[11px] text-[color:var(--faint)]">
+                            v{line.version}
+                          </span>
+                        )}
+                      </span>
+                      {/* What happens past the allowance, in the words the plan records. It is a
+                          different claim from the allowance beside it, so it keeps its own line
+                          rather than being folded into the Calls / mo figure. */}
+                      <span className="text-[11.5px] text-[color:var(--faint)]">
+                        {fairUseSentence(line.tier)}
+                      </span>
+                    </span>
+                  </td>
+                  <td className={`${TIER_TABLE.td} ${TIER_TABLE.num} text-[color:var(--ink)]`}>
+                    {money(line.tier.priceCents, "USD")}
+                  </td>
+                  <td className={`${TIER_TABLE.td} ${TIER_TABLE.num} text-[color:var(--body)]`}>
+                    {workspaceCountFormat.format(line.tier.callAllowance)}
+                  </td>
+                  <td className={`${TIER_TABLE.td} ${TIER_TABLE.num} text-[color:var(--body)]`}>
+                    {count === undefined
+                      ? <StatusAbsent label="Customer count unavailable" />
+                      : workspaceCountFormat.format(count)}
+                  </td>
+                  <td className={TIER_TABLE.td}>
+                    <PlanStateCell line={line} />
+                  </td>
+                  <td className={`${TIER_TABLE.td} font-mono text-[12px] text-[color:var(--faint)]`}>
+                    {displayDate(line.tier.updatedAt)}
+                  </td>
+                  <td className={`${TIER_TABLE.td} text-right`}>
+                    {line.nested ? (
+                      // A retired row has no terms left to set. What a reader wants from it is the
+                      // record of what it charged, which is the price history under this table.
+                      <KitButton
+                        aria-label={`Price history for ${name}`}
+                        onClick={onHistory}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        History
+                      </KitButton>
+                    ) : (
+                      <KitButton
+                        aria-label={`Edit this plan: ${name}`}
+                        disabled={actionsBlocked || count === undefined}
+                        onClick={() => onEdit(line.tier)}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        Edit
+                      </KitButton>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
 
-            `size="lg"` is the kit's 34px, which is the height the artboard draws, and `secondary`
-            is its `--line` hairline over `--control-fill` in `--body`, which is the recipe the
-            drawn control spells out inline. The accessible name carries the plan after the visible
-            words rather than replacing them, because three cards otherwise offer three buttons
-            named identically, and a name that dropped "Edit this plan" would no longer contain the
-            label a speech user reads off the screen.
-          */}
-          <KitButton
-            aria-label={`Edit this plan: ${tier.name}`}
-            className="w-full"
-            disabled={actionsDisabled}
-            onClick={onEdit}
-            size="lg"
-            variant="secondary"
-          >
-            Edit this plan
-          </KitButton>
-        </div>
-      )}
-      /* The screen's one fill, and it is spent on a measurement rather than on a favourite: the
-         plan that currently carries the most clients. It disappears the moment the counts cannot
-         be read or two plans tie, which is also when the "Most clients" status disappears -- the
-         fill and the label are the same claim, so they may never disagree. */
-      drench={mostClients ? "info" : undefined}
-      headingId={`plan-${tier.id}-title`}
-      name={tier.name}
-      sentence={`${workspaceCountFormat.format(tier.callAllowance)} booked calls per month`}
+/**
+ * A panel that opens: one line closed, the existing section inside when open.
+ *
+ * Native `<details>`, so it is keyboard-operable and announced as a disclosure without a
+ * component owning the open state. Price history is `open`-controlled from above because a
+ * retired plan's History button has to be able to open it.
+ */
+function CollapsedPanel({
+  children,
+  detailsRef,
+  onToggle,
+  open,
+  slot,
+  summary,
+  title,
+}: {
+  children: ReactNode;
+  detailsRef?: RefObject<HTMLDetailsElement | null>;
+  onToggle?: (open: boolean) => void;
+  open?: boolean;
+  slot: string;
+  summary: string;
+  title: string;
+}) {
+  return (
+    <details
+      className={TIER_TABLE.card}
+      data-slot={slot}
+      onToggle={(event) => onToggle?.(event.currentTarget.open)}
+      open={open}
+      ref={detailsRef}
     >
-      {/* The fair-use line is the second sentence a deck panel is not allowed to have in its
-          `sentence` slot, so it sits in the body under the first one -- it is a different claim
-          (what happens past the allowance) rather than a continuation of the same one. */}
-      <p className="mt-[8px] mb-0 max-w-[var(--measure-deck)] text-[11.5px] leading-[1.45] text-[color:var(--faint)]">
-        {fairUseSentence(tier)}
-      </p>
-    </DeckPanel>
+      <summary className="flex min-w-0 cursor-pointer list-none items-center gap-[var(--s-2)] px-[var(--s-4)] py-[var(--s-3)] marker:hidden">
+        <span className="text-[length:var(--t-body)] font-semibold text-[color:var(--ink)]">{title}</span>
+        <span className="min-w-0 truncate text-[12.5px] text-[color:var(--faint)]">{summary}</span>
+        <ChevronDown aria-hidden className="ml-auto size-4 shrink-0 text-[color:var(--faint)]" />
+      </summary>
+      <div className="border-t border-[var(--line)] p-[var(--s-4)]">{children}</div>
+    </details>
   );
 }
 
@@ -437,6 +608,11 @@ function overrideDelta(overridePriceCents: number, tierPriceCents: number | null
   if (tierPriceCents === null || overridePriceCents === tierPriceCents) return null;
   const difference = overridePriceCents - tierPriceCents;
   return `${difference > 0 ? "+" : "\u2212"}${money(Math.abs(difference), "USD")}`;
+}
+
+/** The Plan chip's value for one client, so the options and the rows cannot spell a plan differently. */
+function planFilterValue(tierName: string | null) {
+  return tierName ? displayName(tierName) : "Plan not recorded";
 }
 
 const PRICING_GROUPS = [
@@ -505,7 +681,6 @@ function blockingCopy({
   ) {
     return {
       title: "Pricing changes are blocked until Stripe is verified",
-      body: "No current Stripe account readback was received. Existing plan and client values remain visible below, but no pricing change can be submitted.",
       actionLabel: "Review Stripe account",
       actionHref: stripeActionHref,
     };
@@ -513,7 +688,6 @@ function blockingCopy({
   if (stripeReadinessReceipt.connectionStatus !== "connected") {
     return {
       title: "Pricing changes are blocked until Stripe setup is complete",
-      body: "Stripe confirmed the account, but its required business details are incomplete. Existing values remain visible below while pricing actions stay blocked.",
       actionLabel: "Complete Stripe setup",
       actionHref: stripeActionHref,
     };
@@ -521,7 +695,6 @@ function blockingCopy({
   if (stripeReadinessReceipt.capabilityStatus !== "available") {
     return {
       title: "Pricing changes are blocked until Stripe finishes its review",
-      body: "Stripe reports that the payments capability is unavailable. Existing plan and client values remain visible below, but no pricing change can be submitted.",
       actionLabel: "Resolve Stripe requirements",
       actionHref: stripeActionHref,
     };
@@ -529,7 +702,6 @@ function blockingCopy({
   if (!tierImpactAvailable) {
     return {
       title: "Pricing changes are blocked until impact can be verified",
-      body: "Current workspace assignments could not be read, so the confirmation cannot show who the plan change affects. Existing values remain visible below.",
       actionLabel: "Reload impact data",
       actionHref: "/admin/tiers",
     };
@@ -537,35 +709,40 @@ function blockingCopy({
   return null;
 }
 
+/**
+ * The one thing a blocked page still has to say, and the reason it is a strip.
+ *
+ * This was a four-line callout at the top of the screen, and it said the same sentence twice: the
+ * title names what is blocked and the body explained again that the values below stay readable.
+ * A reader who is here to look at prices reads all of it once and never again, so it costs a
+ * heading, a paragraph and a button's worth of vertical space above the thing they came for.
+ * One amber line carries the same claim: what is blocked, that reading still works, and the link
+ * to the account that would unblock it.
+ */
 export function MoneyBlockingBanner(props: BlockingBannerProps) {
   const copy = blockingCopy(props);
   if (!copy) return null;
 
   return (
-    // The kit callout, not a second bespoke banner: one hairline border on all four sides and a
-    // single tone dot before the title. Nothing on this page grows a coloured edge.
-    <Callout
-      body={(
-        <>
-          {copy.body}
-          {copy.actionHref && copy.actionLabel ? (
-            <a
-              className={`${buttonVariants({ size: "sm", variant: "outline" })} mt-[var(--s-3)] flex w-fit`}
-              href={copy.actionHref}
-              rel="noreferrer"
-              target="_blank"
-            >
-              {copy.actionLabel}
-              <ExternalLink aria-hidden />
-            </a>
-          ) : null}
-        </>
-      )}
-      className="mb-[var(--s-5)]"
-      title={copy.title}
-      // Blocked is waiting, not broken: the values below still read, only the change is refused.
-      tone="warning"
-    />
+    <div
+      className="mb-[var(--s-3)] flex min-w-0 flex-wrap items-center gap-[var(--s-2)] rounded-[10px] border border-[var(--warning-line)] bg-[var(--warning-wash)] px-[var(--s-3)] py-[var(--s-2)] text-[length:var(--t-body)]"
+      data-slot="money-blocking-strip"
+      role="status"
+    >
+      <Status label={copy.title} tone="warning" treatment="bare" />
+      <span className="text-[color:var(--muted)]">Plans and client pricing stay readable.</span>
+      {copy.actionHref && copy.actionLabel ? (
+        <a
+          className="ml-auto inline-flex items-center gap-[var(--s-1)] text-[12.5px] text-[color:var(--accent-text)] no-underline"
+          href={copy.actionHref}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {copy.actionLabel}
+          <ExternalLink aria-hidden className="size-3" />
+        </a>
+      ) : null}
+    </div>
   );
 }
 
@@ -599,7 +776,7 @@ function TierEditor({
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
           <SheetHeader className="gap-[var(--s-1)] border-b border-[var(--line)] p-[var(--s-5)]">
             <SheetTitle className="text-section text-[color:var(--ink)]">
-              Edit {tier?.name ?? "plan"}
+              Edit {tier ? displayName(tier.name) : "plan"}
             </SheetTitle>
             <SheetDescription className="text-body text-[color:var(--muted)]">
               Set the new terms, then review the impact and record a reason.
@@ -701,7 +878,7 @@ function OverrideEditor({
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
           <SheetHeader className="gap-[var(--s-1)] border-b border-[var(--line)] p-[var(--s-5)]">
             <SheetTitle className="text-section text-[color:var(--ink)]">
-              Set override for {client?.businessName ?? "client"}
+              Set override for {client ? displayName(client.businessName) : "client"}
             </SheetTitle>
             <SheetDescription className="text-body text-[color:var(--muted)]">
               Choose the price and date window, then review the impact and record a reason.
@@ -932,6 +1109,8 @@ export function AdminMoneyTiers({
     useState<OverrideDraft>(EMPTY_OVERRIDE_DRAFT);
   const [overrideEditorOpen, setOverrideEditorOpen] = useState(false);
   const [overrideConfirmOpen, setOverrideConfirmOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyRef = useRef<HTMLDetailsElement>(null);
 
   const loadData = useCallback(async () => {
     if (!canRead) return;
@@ -980,6 +1159,12 @@ export function AdminMoneyTiers({
       fairUseNote: tier.fairUseNote ?? "",
     });
     setTierEditorOpen(true);
+  }
+
+  /** A retired plan's History button: the record it points at is the panel below, so open it. */
+  function openPriceHistory() {
+    setHistoryOpen(true);
+    historyRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   function openOverrideEditor(client: ClientRow) {
@@ -1076,7 +1261,7 @@ export function AdminMoneyTiers({
     [clientPricingByTenantId],
   );
   const tierNameById = useMemo(
-    () => new Map(tiers.map((tier) => [tier.id, withoutDemoMarker(tier.name) || tier.name])),
+    () => new Map(tiers.map((tier) => [tier.id, displayName(tier.name)])),
     [tiers],
   );
   /** Override or standard: the only two answers this page exists to give about a client. */
@@ -1088,26 +1273,47 @@ export function AdminMoneyTiers({
   const clientColumns = useMemo<ColumnDef<ClientRow>[]>(
     () => [
       {
-        accessorKey: "businessName",
+        // The seeded "(demo)" marker is stripped where a human reads the name, and only there:
+        // the export rows below still carry `businessName` raw, and the demo pill beside the row
+        // is what says a row is seeded.
+        id: "businessName",
+        accessorFn: (row) => displayName(row.businessName),
         header: "Client",
         meta: { cellKind: "identity", label: "Client", minWidth: 240 },
-        cell: ({ row }) => <span className="font-medium text-[color:var(--ink)]">{row.original.businessName}</span>,
+        cell: ({ row }) => (
+          <span className="font-medium text-[color:var(--ink)]">
+            {displayName(row.original.businessName)}
+          </span>
+        ),
       },
       {
         // The plan a live subscription price actually maps to. When the mapping could not be read
         // the cell says so: printing the standard plan for a client we cannot place is how a
         // negotiated client silently gets invoiced at list price.
         id: "plan",
-        accessorFn: (row) => pricingFor(row.tenantId)?.tierName ?? "Plan not recorded",
+        accessorFn: (row) => planFilterValue(pricingFor(row.tenantId)?.tierName ?? null),
         filterFn: "arrIncludesSome",
         header: "Plan",
         meta: { label: "Plan", minWidth: 130 },
         cell: ({ row }) => {
           const name = pricingFor(row.original.tenantId)?.tierName;
           return name
-            ? <span className="text-[color:var(--body)]">{withoutDemoMarker(name) || name}</span>
+            ? <span className="text-[color:var(--body)]">{displayName(name)}</span>
             : <StatusAbsent label="Plan not recorded" />;
         },
+      },
+      {
+        /*
+         * The Override filter chip's column, and the reason it is its own column rather than a
+         * filter over the Override column beside it: that column's values are prices and dates,
+         * so a facet built from them would offer one option per amount. This one has exactly the
+         * two answers the chip is for.
+         */
+        id: "overrideBand",
+        accessorFn: (row) => (pricingFor(row.tenantId)?.override ? "Override" : "Standard pricing"),
+        filterFn: "arrIncludesSome",
+        header: "Override state",
+        meta: { cellKind: "secondary", defaultHidden: true, label: "Override state" },
       },
       {
         id: "override",
@@ -1256,18 +1462,25 @@ export function AdminMoneyTiers({
     />
   ) : null;
 
-  // The measured leader, not a favourite: only when the counts are readable and one plan is
-  // strictly ahead of every other.
-  const mostClientsTierId = (() => {
-    if (!tierImpactById) return null;
-    const counted = tiers
-      .map((tier) => ({ id: tier.id, count: tierImpactById[tier.id]?.affectedWorkspaceCount ?? 0 }))
-      .filter((entry) => entry.count > 0)
-      .sort((left, right) => right.count - left.count);
-    if (counted.length === 0) return null;
-    if (counted.length > 1 && counted[0].count === counted[1].count) return null;
-    return counted[0].id;
-  })();
+  const lines = useMemo(() => planLines(tiers), [tiers]);
+  /*
+   * The Plan chip's options come from the rows on screen rather than from the plans table, because
+   * the two can disagree: a client can sit on a plan that is no longer listed, and an option that
+   * matched no row would be a filter that always empties the table.
+   */
+  const planFilterOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const row of clients) {
+      values.add(planFilterValue(clientPricingByTenantId?.[row.tenantId]?.tierName ?? null));
+    }
+    return [...values].sort().map((value) => ({ label: value, value }));
+  }, [clientPricingByTenantId, clients]);
+
+  const historySummary = pricingHistory === null
+    ? "Could not be read"
+    : pricingHistory.length === 0
+      ? "No plan has been repriced yet"
+      : `${workspaceCountFormat.format(pricingHistory.length)} ${pricingHistory.length === 1 ? "price version" : "price versions"}, newest first`;
 
   const body = (
     <>
@@ -1289,65 +1502,75 @@ export function AdminMoneyTiers({
             pricing cannot read either half of it, and saying so twice reads as two faults. */}
         {unavailable}
         {unavailable ? null : (<>
-        {/* The plans are the page's subject, so they lead as cards; the client book underneath is
-            where those prices are bent for one account. One surface, two bands, no tab strip. */}
-        <section className="flex min-w-0 flex-col gap-[var(--s-3)]">
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-[var(--s-3)]">
-            <p className="m-0 max-w-[var(--measure-wide)] text-[length:var(--t-body)] text-[color:var(--muted)]">
-              A plan change is queued for the next renewal, never applied to a period already
-              running.
-            </p>
-            <ExportMenu
-              filename="setterfi-billing-tiers"
-              label="Export plans"
-              mode="server"
-              query={{
-                reason: EXPORT_REASON,
-                order: "created_desc",
-                columns: [
-                  "id",
-                  "name",
-                  "priceCents",
-                  "callAllowance",
-                  "fairUseCap",
-                  "fairUseNote",
-                  "active",
-                  "updatedAt",
-                ],
-              }}
-              resource="billing-tiers"
-            />
-          </div>
-          {tiers.length === 0 ? (
-            <DataState body="No plans have been recorded yet." kind="empty" title="No plans" />
-          ) : (
-            <ConsoleDeck ariaLabel="Plans">
-              {tiers.map((tier) => (
-                <PlanCard
-                  actionsDisabled={actionsBlocked || !tierImpactById?.[tier.id]}
-                  customerCount={tierImpactById?.[tier.id]?.affectedWorkspaceCount}
-                  key={tier.id}
-                  mostClients={tier.id === mostClientsTierId}
-                  onEdit={() => openTierEditor(tier)}
-                  tier={tier}
-                />
-              ))}
-            </ConsoleDeck>
-          )}
-        </section>
-
-        <PricingHistoryPanel entries={pricingHistory} tierImpactById={tierImpactById} />
+        {/* The plans are the page's subject, so they lead; the client book underneath is where
+            those prices are bent for one account. One surface, two bands, no tab strip. */}
+        {tiers.length === 0 ? (
+          <DataState body="No plans have been recorded yet." kind="empty" title="No plans" />
+        ) : (
+          <PlansTable
+            actionsBlocked={actionsBlocked}
+            countFor={(tierId) => tierImpactById?.[tierId]?.affectedWorkspaceCount}
+            exportControl={(
+              <ExportMenu
+                filename="setterfi-billing-tiers"
+                label="Export plans"
+                mode="server"
+                query={{
+                  reason: EXPORT_REASON,
+                  order: "created_desc",
+                  columns: [
+                    "id",
+                    "name",
+                    "priceCents",
+                    "callAllowance",
+                    "fairUseCap",
+                    "fairUseNote",
+                    "active",
+                    "updatedAt",
+                  ],
+                }}
+                resource="billing-tiers"
+              />
+            )}
+            lines={lines}
+            onEdit={openTierEditor}
+            onHistory={openPriceHistory}
+          />
+        )}
 
         {/*
+          Two records rather than two more sections of the page. Neither is what a reader comes to
+          this screen for -- one is what a plan used to cost, the other what it may be sold for --
+          and both were full-height panels above the client book, so the rows a reader was heading
+          for sat two screens down. Closed they are one line each and say what is inside.
+
           The terms ledger is a record of what was sold, not a pricing control, so it is gated on
           reading the page rather than on `actionsBlocked`: a blocked Stripe readback stops a plan
           price changing, and it must not stop an operator writing down the price Stripe already
           has. Turning billing off still takes it away, because then the whole page is gone.
         */}
-        <TierCommercialTerms
-          canRead={canRead}
-          tiers={tiers.map((tier) => ({ id: tier.id, name: tier.name }))}
-        />
+        <div className="grid min-w-0 gap-[var(--s-3)] lg:grid-cols-2">
+          <CollapsedPanel
+            detailsRef={historyRef}
+            onToggle={setHistoryOpen}
+            open={historyOpen}
+            slot="tiers-price-history"
+            summary={historySummary}
+            title="Price history"
+          >
+            <PricingHistoryPanel entries={pricingHistory} tierImpactById={tierImpactById} />
+          </CollapsedPanel>
+          <CollapsedPanel
+            slot="tiers-commercial-terms"
+            summary="What each plan may be sold for, and between which dates"
+            title="Commercial terms"
+          >
+            <TierCommercialTerms
+              canRead={canRead}
+              tiers={tiers.map((tier) => ({ id: tier.id, name: tier.name }))}
+            />
+          </CollapsedPanel>
+        </div>
 
         {/*
           The band `/admin/tiers/overrides` resolves to. That route used to be a second page with
@@ -1376,7 +1599,7 @@ export function AdminMoneyTiers({
                 logged: AUDIT_ACTIONS["billing.tenant_override.updated"].microcopy,
                 onSelect: () => openOverrideEditor(row),
               }]}
-              rowActionsLabel={(row) => `Actions for ${row.businessName}`}
+              rowActionsLabel={(row) => `Actions for ${displayName(row.businessName)}`}
               onRowClick={setSheetClient}
               emptyState={<DataState body="No client billing records have been returned." kind="empty" title="No clients" />}
               exportResource={{
@@ -1395,21 +1618,45 @@ export function AdminMoneyTiers({
                   };
                 }),
               }}
-              facets={[{
-                columnId: "subscriptionBand",
-                title: "Subscription",
-                options: CLIENT_GROUPS.map((group) => ({
-                  label: group.label,
-                  value: group.id,
-                })),
-              }]}
+              facets={[
+                // The two chips the canvas draws, in its order: which plan, and whether the price
+                // was bent. Both filter on the client, over rows the page already holds.
+                { columnId: "plan", title: "Plan", options: planFilterOptions },
+                {
+                  columnId: "overrideBand",
+                  title: "Override",
+                  options: [
+                    { label: "Has an override", value: "Override" },
+                    { label: "On standard pricing", value: "Standard pricing" },
+                  ],
+                },
+                {
+                  columnId: "subscriptionBand",
+                  title: "Subscription",
+                  options: CLIENT_GROUPS.map((group) => ({
+                    label: group.label,
+                    value: group.id,
+                  })),
+                },
+              ]}
               getRowId={(row) => row.tenantId}
               groupBy={pricingBand}
               groups={PRICING_GROUPS}
               pagination={{ mode: "offset", pageSize: 25 }}
               rowLabel={{ singular: "client", plural: "clients" }}
+              variant="ledger"
               search={{ columnId: "businessName", placeholder: "Search clients" }}
               testRow={isDemoClient}
+              toolbar={(
+                <span className="flex min-w-0 items-center gap-[var(--s-2)]">
+                  <span className="text-[length:var(--t-body)] font-semibold text-[color:var(--ink)]">
+                    Client pricing
+                  </span>
+                  <span className="font-mono text-[11.5px] text-[color:var(--faint)]">
+                    {workspaceCountFormat.format(clients.length)}
+                  </span>
+                </span>
+              )}
             />
 
           {/* The kebab already exposes the override action; the List template asks that a row
@@ -1434,7 +1681,7 @@ export function AdminMoneyTiers({
                     <KeyValue
                       label="Plan"
                       layout="stacked"
-                      value={pricingFor(sheetClient.tenantId)?.tierName ?? "Plan not recorded"}
+                      value={planFilterValue(pricingFor(sheetClient.tenantId)?.tierName ?? null)}
                     />
                     <KeyValue
                       label="Override"
@@ -1505,7 +1752,7 @@ export function AdminMoneyTiers({
               tone: subscriptionTone(sheetClient.subscriptionStatus),
             } : undefined}
             technical={sheetClient ? [{ label: "Account ID", value: sheetClient.tenantId }] : undefined}
-            title={sheetClient?.businessName ?? ""}
+            title={sheetClient ? displayName(sheetClient.businessName) : ""}
           />
         </section>
         </>)}
@@ -1529,7 +1776,7 @@ export function AdminMoneyTiers({
         impact={
           selectedTier && tierImpactById?.[selectedTier.id]
             ? [
-                { label: "Plan", value: selectedTier.name },
+                { label: "Plan", value: displayName(selectedTier.name) },
                 {
                   label: "Monthly price",
                   value: `${money(selectedTier.priceCents, "USD")} becomes ${money(tierDraft.priceCents ?? 0, "USD")}`,
@@ -1557,7 +1804,7 @@ export function AdminMoneyTiers({
           label: "Reason",
           hint: "Explain why the plan terms are changing.",
         }}
-        title={`Review ${selectedTier?.name ?? "plan"} change`}
+        title={`Review ${selectedTier ? displayName(selectedTier.name) : "plan"} change`}
       />
 
       <OverrideEditor
@@ -1577,7 +1824,7 @@ export function AdminMoneyTiers({
         impact={
           selectedClient
             ? [
-                { label: "Client", value: selectedClient.businessName },
+                { label: "Client", value: displayName(selectedClient.businessName) },
                 { label: "Override price", value: money(overrideDraft.priceCents ?? 0, "USD") },
                 { label: "Effective at", value: displayDraftDate(overrideDraft.effectiveAt) },
                 {
@@ -1597,7 +1844,7 @@ export function AdminMoneyTiers({
           label: "Reason",
           hint: "Explain why this client needs a different price.",
         }}
-        title={`Review override for ${selectedClient?.businessName ?? "client"}`}
+        title={`Review override for ${selectedClient ? displayName(selectedClient.businessName) : "client"}`}
       />
     </>
   );

@@ -138,6 +138,92 @@ describe("ContextEye", () => {
     expect(panel.className).toContain("motion-reduce:transform-none");
   });
 
+  describe('placement="header"', () => {
+    it("renders an inline 32px control instead of the floating bottom-right one", () => {
+      const { container } = render(
+        <ContextEye copy={COPY} placement="header" screen="owner-inbox" />,
+      );
+
+      const root = container.querySelector<HTMLElement>('[data-slot="context-eye"]');
+      expect(root).toHaveAttribute("data-placement", "header");
+      expect(root?.className).toContain("inline-flex");
+      // The floating corner is what the header placement exists to leave, so none of it survives.
+      expect(root?.className).not.toContain("absolute");
+      expect(root?.className).not.toContain("fixed");
+      expect(root?.className).not.toContain("bottom-6");
+
+      expect(eyeButton().className).toContain("size-8");
+      expect(eyeButton().className).not.toContain("rounded-full");
+    });
+
+    it("wears the coach control size when the screen it docks into runs one", () => {
+      const { container } = render(
+        <ContextEye copy={COPY} placement="header" scale="coach" screen="coach-leads" />,
+      );
+
+      expect(container.querySelector('[data-slot="context-eye"]')).toHaveAttribute(
+        "data-scale",
+        "coach",
+      );
+      expect(eyeButton().className).toContain("size-[46px]");
+      expect(eyeButton().className).not.toContain("size-8");
+    });
+
+    it("keeps the amber unread dot on the docked button", () => {
+      const { container } = render(
+        <ContextEye copy={COPY} placement="header" screen="owner-inbox" />,
+      );
+
+      const dot = eyeButton().querySelector<HTMLElement>("span[aria-hidden]");
+      expect(dot?.className).toContain("bg-[var(--warning)]");
+      // Top-right of the control rather than inside it, which is where a 32px button has room.
+      expect(dot?.className).toContain("-top-1");
+      expect(container.querySelectorAll("span[aria-hidden]")).toHaveLength(1);
+    });
+
+    it("opens the panel downward from the header rather than upward from the corner", async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <ContextEye copy={COPY} placement="header" screen="owner-inbox" />,
+      );
+
+      await user.click(eyeButton());
+
+      const panel = await screen.findByRole("dialog");
+      expect(panel).toHaveTextContent(COPY);
+      expect(panel.className).toContain("top-full");
+      expect(panel.className).toContain("origin-top-right");
+      expect(panel.className).not.toContain("bottom-[68px]");
+
+      const arrow = container.querySelector<HTMLElement>(
+        '[data-slot="context-eye-panel"] > [aria-hidden="true"]:last-child',
+      );
+      expect(arrow?.className).toContain("-top-2");
+    });
+
+    it("still hides for the rest of the visit from the docked control", async () => {
+      const user = userEvent.setup();
+      const { unmount } = render(
+        <ContextEye copy={COPY} placement="header" screen="eye-header-hide" />,
+      );
+
+      await user.click(eyeButton());
+      await user.click(screen.getByRole("button", { name: "Hide for now" }));
+
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("button", { name: "About this screen" }),
+        ).not.toBeInTheDocument();
+      });
+      unmount();
+
+      render(<ContextEye copy={COPY} placement="header" screen="eye-header-hide" />);
+      expect(
+        screen.queryByRole("button", { name: "About this screen" }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("leaves the shared screen list empty for others to extend", () => {
     expect(CONTEXT_EYE_SCREENS).toEqual([]);
   });

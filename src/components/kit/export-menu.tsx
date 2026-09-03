@@ -31,6 +31,7 @@ export type LocalExportMenuProps = {
   rows: ExportRow[];
   className?: string;
   label?: string;
+  groupLabel?: string;
 };
 
 type ServerExportBase = {
@@ -38,6 +39,7 @@ type ServerExportBase = {
   filename: string;
   className?: string;
   label?: string;
+  groupLabel?: string;
 };
 
 type CommonServerQuery = {
@@ -203,7 +205,22 @@ export type ServerExportMenuProps = ServerExportBase & (
     }
 );
 
-export type ExportMenuProps = LocalExportMenuProps | ServerExportMenuProps;
+/** One thing this menu can export: a set of rows already on screen, or a server resource. */
+export type ExportMenuSource = LocalExportMenuProps | ServerExportMenuProps;
+
+/**
+ * `also` puts a second export under the same trigger.
+ *
+ * A screen that can export two different things -- the rows on screen and a server resource the
+ * table only shows part of -- used to need two "Export" buttons beside each other, which reads as
+ * two of the same control rather than one control with two answers. Each source keeps its own
+ * reason field and its own failure message, so neither can be attributed to the other, and
+ * `groupLabel` names them: without it a single-source menu says "Choose a format" exactly as
+ * before.
+ */
+export type ExportMenuProps = ExportMenuSource & {
+  also?: ExportMenuSource;
+};
 
 function safeBaseName(filename: string) {
   const withoutExtension = filename.replace(/\.(csv|json)$/i, "");
@@ -358,18 +375,36 @@ function queryRequiresReason(props: ServerExportMenuProps) {
   return props.query !== undefined && Object.prototype.hasOwnProperty.call(props.query, "reason");
 }
 
-export function ExportMenu(props: ExportMenuProps) {
-  const { filename, className, label } = props;
-  const baseName = safeBaseName(filename);
-  const hasRows = props.mode === "server" || props.rows.length > 0;
-  const requiredReason = props.mode === "server" && queryRequiresReason(props);
-  const suppliedReason = props.mode === "server" ? props.query?.reason ?? "" : "";
-  const exportIdentity = props.mode === "server"
-    ? `${filename}:${serverExportHref(props.resource, "csv", props.query as ServerQuery)}`
-    : `local:${filename}`;
+function sourceHasRows(source: ExportMenuSource) {
+  return source.mode === "server" || source.rows.length > 0;
+}
+
+/**
+ * One source's part of the menu: the reason field its route requires, its two formats, and the
+ * microcopy that says whether taking it is logged.
+ *
+ * The export reason lives here rather than in the menu because a menu can now carry two sources,
+ * and a reason typed for a platform export must not travel with the other one. The failure
+ * message is handed up instead: the item press closes the menu, so the parent is what can put the
+ * message back where the export was asked for.
+ */
+function ExportGroup({
+  failure,
+  onFailure,
+  source,
+}: {
+  failure: string | null;
+  onFailure: (message: string | null) => void;
+  source: ExportMenuSource;
+}) {
+  const baseName = safeBaseName(source.filename);
+  const hasRows = sourceHasRows(source);
+  const requiredReason = source.mode === "server" && queryRequiresReason(source);
+  const suppliedReason = source.mode === "server" ? source.query?.reason ?? "" : "";
+  const exportIdentity = source.mode === "server"
+    ? `${source.filename}:${serverExportHref(source.resource, "csv", source.query as ServerQuery)}`
+    : `local:${source.filename}`;
   const [reasonDraft, setReasonDraft] = useState<{ identity: string; value: string } | null>(null);
-  const [open, setOpen] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
   const reason = reasonDraft?.identity === exportIdentity ? reasonDraft.value : suppliedReason;
   const serverAuditAction = requiredReason
     ? AUDIT_ACTIONS["platform_export.started"]
@@ -378,29 +413,121 @@ export function ExportMenu(props: ExportMenuProps) {
   const canExport = hasRows && (!requiredReason || reason.trim().length > 0);
 
   function exportLocal(format: "csv" | "json") {
-    if (props.mode !== "local" || !canExport) return;
-    setFailure(null);
+    if (source.mode !== "local" || !canExport) return;
+    onFailure(null);
     if (format === "csv") {
-      downloadBlob(`\uFEFF${rowsToCsv(props.rows)}`, `${baseName}.csv`, "text/csv;charset=utf-8");
+      downloadBlob(`\uFEFF${rowsToCsv(source.rows)}`, `${baseName}.csv`, "text/csv;charset=utf-8");
       return;
     }
-    downloadBlob(JSON.stringify(props.rows, null, 2), `${baseName}.json`, "application/json;charset=utf-8");
+    downloadBlob(JSON.stringify(source.rows, null, 2), `${baseName}.json`, "application/json;charset=utf-8");
   }
 
   async function exportServer(format: "csv" | "json") {
-    if (props.mode !== "server" || !canExport) return;
-    setFailure(null);
-    const query = { ...props.query, ...(requiredReason ? { reason: reason.trim() } : {}) } as ServerQuery;
+    if (source.mode !== "server" || !canExport) return;
+    onFailure(null);
+    const query = { ...source.query, ...(requiredReason ? { reason: reason.trim() } : {}) } as ServerQuery;
     const message = await downloadServerExport(
-      serverExportHref(props.resource, format, query),
+      serverExportHref(source.resource, format, query),
       `${baseName}.${format}`,
       format,
     );
     if (message === null) return;
-    // The item press already closed the menu, so the message is put back where the export was
-    // asked for rather than left somewhere the click never was.
-    setFailure(message);
-    setOpen(true);
+    onFailure(message);
+  }
+
+  function request(format: "csv" | "json") {
+    if (source.mode === "local") {
+      exportLocal(format);
+      return;
+    }
+    void exportServer(format);
+  }
+
+  return (
+    <>
+      {requiredReason ? (
+        <div className="space-y-[var(--s-2)] p-[var(--s-2)]">
+          <label className="block text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--body)]" htmlFor={`${baseName}-export-reason`}>
+            {source.groupLabel ? `${source.groupLabel}: export reason` : "Export reason"}
+          </label>
+          <Input
+            aria-describedby={`${baseName}-export-reason-help`}
+            id={`${baseName}-export-reason`}
+            onChange={(event) => setReasonDraft({ identity: exportIdentity, value: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation();
+            }}
+            placeholder="Add a reason to enable export"
+            value={reason}
+          />
+          <p className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]" id={`${baseName}-export-reason-help`}>
+            Required for this export.
+          </p>
+        </div>
+      ) : (
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{source.groupLabel ?? "Choose a format"}</DropdownMenuLabel>
+        </DropdownMenuGroup>
+      )}
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={!canExport} onClick={() => request("csv")}>
+        <Download aria-hidden />
+        <span className="flex flex-col">
+          <span>{source.groupLabel ? `Download CSV, ${source.groupLabel}` : "Download CSV"}</span>
+          <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
+            {source.mode === "local" ? "Current rows" : "All matching rows"}
+          </span>
+          <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
+            {source.mode === "server" ? serverAuditAction.microcopy : "Rows already on screen, not logged"}
+          </span>
+        </span>
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={!canExport} onClick={() => request("json")}>
+        <FileJson aria-hidden />
+        <span className="flex flex-col">
+          <span>{source.groupLabel ? `Download JSON, ${source.groupLabel}` : "Download JSON"}</span>
+          <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
+            Structured source data
+          </span>
+          <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
+            {source.mode === "server" ? serverAuditAction.microcopy : "Rows already on screen, not logged"}
+          </span>
+        </span>
+      </DropdownMenuItem>
+      {failure ? (
+        <p
+          className="p-[var(--s-2)] text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--critical-text)]"
+          role="status"
+        >
+          {failure}
+        </p>
+      ) : null}
+      {!hasRows ? <p className="p-[var(--s-2)] text-[length:var(--t-body)] text-[var(--muted)]">There are no rows to export.</p> : null}
+    </>
+  );
+}
+
+export function ExportMenu(props: ExportMenuProps) {
+  const { className, label } = props;
+  const also = props.also;
+  const primary: ExportMenuSource = props;
+  /*
+   * The trigger only goes dead when nothing under it can be exported. With a second source the
+   * empty one still says "There are no rows to export." inside the menu, which is a better answer
+   * than a disabled button that cannot say why.
+   */
+  const hasRows = sourceHasRows(primary) || (also !== undefined && sourceHasRows(also));
+  const [open, setOpen] = useState(false);
+  const [failures, setFailures] = useState<{ primary: string | null; also: string | null }>({
+    primary: null,
+    also: null,
+  });
+
+  function reportFailure(which: "primary" | "also", message: string | null) {
+    setFailures((current) => ({ ...current, [which]: message }));
+    // The item press already closed the menu, so a refusal is put back where the export was asked
+    // for rather than left somewhere the click never was.
+    if (message !== null) setOpen(true);
   }
 
   return (
@@ -419,7 +546,7 @@ export function ExportMenu(props: ExportMenuProps) {
         )}
         disabled={!hasRows}
         onClick={() => {
-          setFailure(null);
+          setFailures({ primary: null, also: null });
           setOpen((current) => !current);
         }}
       >
@@ -441,70 +568,21 @@ export function ExportMenu(props: ExportMenuProps) {
           className="rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--raised)] p-[var(--s-1)] shadow-[var(--shadow-raised)] duration-[var(--duration-quick)] ease-[var(--ease-out)] motion-reduce:animate-none motion-reduce:transition-none"
         role="menu"
       >
-        {requiredReason ? (
-          <div className="space-y-[var(--s-2)] p-[var(--s-2)]">
-            <label className="block text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--body)]" htmlFor={`${baseName}-export-reason`}>
-              Export reason
-            </label>
-            <Input
-              aria-describedby={`${baseName}-export-reason-help`}
-              id={`${baseName}-export-reason`}
-              onChange={(event) => setReasonDraft({ identity: exportIdentity, value: event.target.value })}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation();
-              }}
-              placeholder="Add a reason to enable export"
-              value={reason}
+        <ExportGroup
+          failure={failures.primary}
+          onFailure={(message) => reportFailure("primary", message)}
+          source={primary}
+        />
+        {also ? (
+          <>
+            <DropdownMenuSeparator />
+            <ExportGroup
+              failure={failures.also}
+              onFailure={(message) => reportFailure("also", message)}
+              source={also}
             />
-            <p className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]" id={`${baseName}-export-reason-help`}>
-              Required for this export.
-            </p>
-          </div>
-        ) : (
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Choose a format</DropdownMenuLabel>
-          </DropdownMenuGroup>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={!canExport}
-          onClick={() => { if (props.mode === "local") { exportLocal("csv"); return; } void exportServer("csv"); }}
-        >
-          <Download aria-hidden />
-          <span className="flex flex-col">
-            <span>Download CSV</span>
-            <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
-              {props.mode === "local" ? "Current rows" : "All matching rows"}
-            </span>
-            <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
-              {props.mode === "server" ? serverAuditAction.microcopy : "Rows already on screen, not logged"}
-            </span>
-          </span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={!canExport}
-          onClick={() => { if (props.mode === "local") { exportLocal("json"); return; } void exportServer("json"); }}
-        >
-          <FileJson aria-hidden />
-          <span className="flex flex-col">
-            <span>Download JSON</span>
-            <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
-              Structured source data
-            </span>
-            <span className="text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--muted)]">
-              {props.mode === "server" ? serverAuditAction.microcopy : "Rows already on screen, not logged"}
-            </span>
-          </span>
-        </DropdownMenuItem>
-        {failure ? (
-          <p
-            className="p-[var(--s-2)] text-[length:var(--t-body)] font-[var(--t-body-w)] text-[var(--critical-text)]"
-            role="status"
-          >
-            {failure}
-          </p>
+          </>
         ) : null}
-        {!hasRows ? <p className="p-[var(--s-2)] text-[length:var(--t-body)] text-[var(--muted)]">There are no rows to export.</p> : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

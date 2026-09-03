@@ -40,6 +40,7 @@ import { DayCounter, elapsedWorkspaceDays } from "@/components/kit/day-counter";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { LoggedButton } from "@/components/kit/logged-button";
 import { CoachPageHead } from "@/components/workspace/live/coach-page-head";
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { TechnicalDetail } from "@/components/kit/technical-detail";
 import { receiptState } from "@/lib/copy/states";
 import { workspaceTimestampFormat } from "@/lib/format/datetime";
@@ -1331,6 +1332,13 @@ function messagingTone(messaging: CoachMessagingConnectionState): Tone {
   return "neutral";
 }
 
+/* The sentences this screen would otherwise print as help text, handed to the eye instead. */
+const CONNECTIONS_EYE_COPY =
+  "Where your agent can talk to leads, and where it books them. Each row is a check against the "
+  + "provider rather than a setting you saved, so the state and the time beside it come from the "
+  + "last check. Read the rows that name you as the next step first, then the calendar, because "
+  + "no booking can happen without one.";
+
 export function CoachIntegrations({
   connections,
   templates,
@@ -1711,6 +1719,12 @@ export function CoachIntegrations({
             >
               Check again
             </KitButton>
+            <ContextEye
+              copy={CONNECTIONS_EYE_COPY}
+              placement="header"
+              scale="coach"
+              screen="coach-connections"
+            />
           </div>
         }
         sub="Where your agent can talk to leads, and where it books them. Each line shows who owns the next step."

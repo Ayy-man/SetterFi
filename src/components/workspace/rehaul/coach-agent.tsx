@@ -1045,6 +1045,12 @@ export function CoachAgent({
           >
             Publish
           </LoggedButton>
+          <ContextEye
+            copy="This is your setter read top to bottom, in the order a lead meets it. You set the keywords, the resource it sends, which questions it asks and the order they come in, the facts an answer is judged against, your voice, your prices, and what each follow-up is for. SetterFi writes the questions themselves, checks in if a lead goes quiet on our own schedule, decides when it stops, and checks every reply against what you are allowed to claim. A qualified lead and a booked call are sent to Meta when they happen, never twice. Texting registration sits with the carrier, who owns that review, so there is nothing on this page to test or press while it runs. Saving keeps a draft; publishing is what your leads meet, and it is logged."
+            placement="header"
+            scale="coach"
+            screen="coach-agent"
+          />
         </div>
       </div>
 
@@ -1938,10 +1944,6 @@ export function CoachAgent({
         Every sentence the old page printed as help text under a heading lives here instead. The
         page states facts and controls; the eye carries the words about them.
       */}
-      <ContextEye
-        copy="This is your setter read top to bottom, in the order a lead meets it. You set the keywords, the resource it sends, which questions it asks and the order they come in, the facts an answer is judged against, your voice, your prices, and what each follow-up is for. SetterFi writes the questions themselves, checks in if a lead goes quiet on our own schedule, decides when it stops, and checks every reply against what you are allowed to claim. A qualified lead and a booked call are sent to Meta when they happen, never twice. Texting registration sits with the carrier, who owns that review, so there is nothing on this page to test or press while it runs. Saving keeps a draft; publishing is what your leads meet, and it is logged."
-        screen="coach-agent"
-      />
     </div>
   );
 }

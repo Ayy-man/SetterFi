@@ -2,14 +2,25 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
+import { DataTableFacetedFilter } from "@/components/kit/data-table-faceted-filter";
+import { Search } from "@/components/kit/icons";
 import { Sparkline, SPARKLINE_MIN_POINTS } from "@/components/kit/sparkline";
 import { ConfirmFlow, type Result } from "@/components/kit/confirm-flow";
 import { DayCounter, elapsedWorkspaceDays } from "@/components/kit/day-counter";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { KitButton } from "@/components/kit/atomics";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
   assigneeOptionsFor,
@@ -22,6 +33,16 @@ import {
 } from "@/components/workspace/live/operations-view-models";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import {
+  applyClientFilters,
+  chipsForTab,
+  savedViewSnapshot,
+  subscribeSavedViews,
+  writeSavedView,
+  type ClientFilterRow,
+  type SavedClientsView,
+  type StageState,
+} from "@/components/workspace/rehaul/owner-clients-filters";
+import {
   CARD_TABLE,
   CardTable,
   Figure,
@@ -33,11 +54,13 @@ import {
 } from "@/components/workspace/rehaul/_primitives";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import type { UserRole } from "@/lib/auth/claims";
+import { displayName, displayNameOrNull } from "@/lib/format/display-name";
 import { WORKSPACE_DISPLAY_TIMEZONE, workspaceTimestampFormat } from "@/lib/format/datetime";
 import { PROVISIONING_STEPS, type ProvisioningTrackerRow } from "@/lib/onboarding/contracts";
 import type { AgentRoster, AgentRosterEntry } from "@/lib/operations/agent-roster";
 import type { PlatformMeasurement } from "@/lib/repositories/platform-analytics";
 import type { SuccessClientBookRead, SupportBook } from "@/lib/repositories/support";
+import { cn } from "@/lib/utils";
 
 /* --------------------------------------------------------------------------------------------
  * Contract
@@ -92,6 +115,9 @@ export type OwnerClientsProps = {
   setup?: ReactNode;
   nowIso: string;
 };
+
+/** An unsaved, unfiltered tab. One frozen object so the render's identity checks stay cheap. */
+const EMPTY_VIEW: SavedClientsView = { search: "", selections: {} };
 
 const REASSIGN_MICROCOPY = AUDIT_ACTIONS["tenant.success_owner.reassigned"].microcopy;
 
@@ -148,8 +174,14 @@ function stateTone(value: string): StatusTone {
   return "grey";
 }
 
+/** The plan as a reader sees it: the seeders' `(demo)` marker is the Demo pill's job, not the text. */
 function planLabel(row: SuccessClientBookRead) {
-  return row.planLabel?.trim() || "No plan";
+  return displayNameOrNull(row.planLabel)?.trim() || "No plan";
+}
+
+/** The success owner's name, stripped the same way. `Unassigned` passes through untouched. */
+function ownerLabel(owner: SuccessClientBookRead["successOwner"]) {
+  return displayName(successOwnerDisplayLabel(owner));
 }
 
 function timestamp(value: string) {
@@ -225,6 +257,21 @@ function stageReads(row: ProvisioningTrackerRow | null): StageRead[] {
   return STAGES.map((stage) => ({ label: stage.label, ...stageTone(row, stage.step) }));
 }
 
+/**
+ * A stage tone flattened to the four states the Health chips name.
+ *
+ * The tone carries a fifth distinction the filter has no use for: "not reached" and "not started"
+ * are different sentences to read in the stepper and the same answer to "has this client filed
+ * yet", which is what a reader picking "Not started" is asking.
+ */
+function stageState(row: ProvisioningTrackerRow | null, step: string): StageState {
+  const { tone } = stageTone(row, step);
+  if (tone === "good") return "cleared";
+  if (tone === "bad") return "blocked";
+  if (tone === "amber" || tone === "wait") return "waiting";
+  return "not_started";
+}
+
 /* --------------------------------------------------------------------------------------------
  * The page
  * ------------------------------------------------------------------------------------------ */
@@ -287,6 +334,36 @@ function Monogram({ name }: { name: string }) {
   );
 }
 
+/**
+ * A chip over a fact nobody measures yet.
+ *
+ * The artboard draws Margin and Period beside the two chips that work, and dropping them would
+ * read as an oversight while wiring them to an invented number would be a lie. So the chip stays,
+ * it never narrows anything, and opening it says which read is missing and why.
+ */
+function NoteChip({ label, note }: { label: string; note: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className={cn(
+          buttonVariants({ size: "sm", variant: "outline" }),
+          "border-dashed text-[var(--faint)]",
+        )}
+      >
+        {label}
+        <span aria-hidden className="font-mono text-[11px]">not measured</span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" aria-label={`${label} filter`} className="max-w-[280px]">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-[12.5px] leading-[1.5] font-normal whitespace-normal text-[var(--muted)]">
+            {note}
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /** A counted tile: the figure, then what it counts. Amber only where the count is work waiting. */
 function Tile({ amber, label, value }: { amber?: boolean; label: string; value: number }) {
   return (
@@ -323,13 +400,35 @@ export function OwnerClients({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [assigneeChoice, setAssigneeChoice] = useState<string | null>(null);
   const [assignmentNote, setAssignmentNote] = useState<string | null>(null);
+  const [viewNote, setViewNote] = useState<string | null>(null);
+
+  /**
+   * The filter row's state: the saved view for this tab, plus whatever the reader has changed
+   * since opening it.
+   *
+   * The saved view is an external store rather than state seeded in an effect. The server draws
+   * the book unfiltered and React re-renders with the remembered view after hydration, which
+   * costs the same single frame a read-in-an-effect would and none of the cascading renders. The
+   * edits are keyed by tab, so moving to another tab drops them and that tab opens on its own
+   * saved view without anything having to reset it.
+   */
+  const savedView = useSyncExternalStore(
+    subscribeSavedViews,
+    useCallback(() => savedViewSnapshot(tab), [tab]),
+    () => null,
+  );
+  const [edited, setEdited] = useState<{ tab: OwnerClientsTab; view: SavedClientsView } | null>(null);
+  const view = edited?.tab === tab ? edited.view : savedView ?? EMPTY_VIEW;
+  const { search, selections } = view;
+
+  function editView(next: SavedClientsView) {
+    setViewNote(null);
+    setEdited({ tab, view: next });
+  }
 
   const now = useMemo(() => new Date(nowIso), [nowIso]);
   const ordered = useMemo(() => [...rows].sort(bookOrder), [rows]);
   const attention = useMemo(() => rows.filter(needsAttention).length, [rows]);
-  const books = useMemo(() => ownerBooks(rows), [rows]);
-  const unassigned = useMemo(() => rows.filter((row) => !row.successOwner), [rows]);
-  const largest = books[0]?.clients ?? 0;
 
   const agentByTenant = useMemo(() => new Map<string, AgentRosterEntry>(
     agents.kind === "ready" ? agents.value.entries.map((entry) => [entry.tenantId, entry]) : [],
@@ -344,6 +443,72 @@ export function OwnerClients({
       ? health.value.rows.flatMap((row) => (row.tenantId ? [[row.tenantId, row] as const] : []))
       : [],
   ), [health]);
+
+  /* ------------------------------------------------------------------------------------------
+   * The filter row
+   *
+   * The five reads are folded into one flat row per client and everything the search and the chips
+   * do is a function of that projection. It is the same fold the table draws, so a chip can never
+   * narrow on a figure the table is not showing, and the search matches the names as displayed
+   * rather than as stored -- a reader who types "reid" is typing what is on the screen.
+   * ---------------------------------------------------------------------------------------- */
+
+  const filterRows = useMemo<ClientFilterRow[]>(() => ordered.map((row) => {
+    const entry = agentByTenant.get(row.client.id);
+    const measured = performanceByTenant.get(row.client.id);
+    const tracker = trackerByTenant.get(row.client.id) ?? null;
+    const stages = tracker ? stageReads(tracker) : [];
+    return {
+      id: row.client.id,
+      name: displayName(row.client.name),
+      ownerId: row.successOwner?.id ?? null,
+      ownerName: displayNameOrNull(row.successOwner?.name ?? null),
+      // The client-book projection carries no address for the coach behind a client, so search
+      // matches names alone rather than a placeholder nobody can type.
+      email: null,
+      plan: planLabel(row),
+      billingState: row.status.toLocaleLowerCase(),
+      lastChangeIso: row.updatedAt,
+      agentState: entry ? (entry.state === "live" ? "live" : entry.state === "draft" ? "draft" : "never") : null,
+      unpublishedEdits: entry ? entry.unpublishedEdits : null,
+      openThreads: entry?.openThreads ?? null,
+      bookedCalls: measured ? measured.bookedAppointments : null,
+      grossMrrCents: measured && "grossMrrCents" in measured ? measured.grossMrrCents ?? null : null,
+      channelConnected: tracker ? stageState(tracker, "meta_connect") === "cleared" : null,
+      calendarConnected: tracker ? stageState(tracker, "calendar_connect") === "cleared" : null,
+      texting: tracker ? stageState(tracker, "a2p_campaign") : null,
+      hasProblem: stages.some((stage) => stage.tone === "bad"),
+    };
+  }), [agentByTenant, ordered, performanceByTenant, trackerByTenant]);
+
+  const chips = useMemo(() => chipsForTab(tab, filterRows), [filterRows, tab]);
+
+  /**
+   * The rows the table draws, in the order it draws them.
+   *
+   * The filtered book drives the Team board and the unassigned table as well as the table itself,
+   * so a search narrows every count on the page at once instead of leaving a tile disagreeing with
+   * the rows under it.
+   */
+  const shown = useMemo(() => {
+    const byId = new Map(ordered.map((row) => [row.client.id, row]));
+    return applyClientFilters({ nowIso, rows: filterRows, search, selections })
+      .flatMap((entry) => {
+        const row = byId.get(entry.id);
+        return row ? [row] : [];
+      });
+  }, [filterRows, nowIso, ordered, search, selections]);
+
+  const books = useMemo(() => ownerBooks(shown), [shown]);
+  const unassigned = useMemo(() => shown.filter((row) => !row.successOwner), [shown]);
+  const largest = books[0]?.clients ?? 0;
+
+  function chooseChip(key: string, value: string | null) {
+    const next = { ...selections };
+    if (value) next[key] = value;
+    else delete next[key];
+    editView({ search, selections: next });
+  }
 
   const open = ordered.find((row) => row.client.id === selectedClientId) ?? null;
   const openBook = books.find((entry) => entry.id === selectedOwnerId) ?? null;
@@ -414,9 +579,9 @@ export function OwnerClients({
           className="font-medium text-[var(--ink)] no-underline hover:underline"
           href={href({ tab, book, client: row.client.id })}
         >
-          {row.client.name}
+          {displayName(row.client.name)}
         </Link>
-        {row.client.isDemo ? <span className="ml-2 text-[11.5px] text-[var(--faint)]">Demo</span> : null}
+        {row.client.isDemo ? <Pill className="ml-2 px-1.5 py-px text-[11px]">Demo</Pill> : null}
       </td>
     );
   }
@@ -434,7 +599,7 @@ export function OwnerClients({
         </td>
         <td className={CARD_TABLE.td}>
           {row.successOwner
-            ? successOwnerDisplayLabel(row.successOwner)
+            ? ownerLabel(row.successOwner)
             : <Quiet>Nobody owns this</Quiet>}
         </td>
         <td className={`${CARD_TABLE.td} ${CARD_TABLE.num}`}>{sinceLabel(row.updatedAt)}</td>
@@ -532,7 +697,7 @@ export function OwnerClients({
 
   const tabular = tab !== "team" && tab !== "setup";
   const heads = tabular ? HEADS[tab] : [];
-  const tableRows = !tabular ? [] : ordered.map((row) => (
+  const tableRows = !tabular ? [] : shown.map((row) => (
       <tr key={row.client.id} className={row.client.id === selectedClientId ? "bg-[var(--accent-wash)]" : undefined}>
         {clientCell(row)}
         {tab === "status" ? statusRow(row) : null}
@@ -591,9 +756,9 @@ export function OwnerClients({
                   key={entry.id}
                 >
                   <div className="flex items-start gap-2.5">
-                    <Monogram name={entry.name} />
+                    <Monogram name={displayName(entry.name)} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13.5px] font-semibold text-[var(--ink)]">{entry.name}</div>
+                      <div className="truncate text-[13.5px] font-semibold text-[var(--ink)]">{displayName(entry.name)}</div>
                       <div className="text-[12.5px] text-[var(--faint)]">
                         {entry.id === actorId ? "Your book" : "Success owner"}
                       </div>
@@ -614,7 +779,7 @@ export function OwnerClients({
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
-                    {held.map((row) => <Pill key={row.client.id}>{row.client.name}</Pill>)}
+                    {held.map((row) => <Pill key={row.client.id}>{displayName(row.client.name)}</Pill>)}
                   </div>
 
                   {/*
@@ -651,9 +816,9 @@ export function OwnerClients({
       <div className={`${CARD_TABLE.card} flex flex-col gap-3.5 p-[18px_20px]`} data-slot="owner-clients-drawer">
         <div>
           <div className="text-[12.5px] font-medium text-[var(--faint)]">Client</div>
-          <div className="mt-0.5 text-[17px] font-semibold tracking-[-0.01em] text-[var(--ink)]">{row.client.name}</div>
+          <div className="mt-0.5 text-[17px] font-semibold tracking-[-0.01em] text-[var(--ink)]">{displayName(row.client.name)}</div>
           <div className="text-[12.5px] text-[var(--faint)]">
-            {planLabel(row)} · {successOwnerDisplayLabel(row.successOwner)} · since {sinceLabel(row.updatedAt)}
+            {planLabel(row)} · {ownerLabel(row.successOwner)} · since {sinceLabel(row.updatedAt)}
           </div>
         </div>
 
@@ -768,9 +933,9 @@ export function OwnerClients({
     return (
       <div className={`${CARD_TABLE.card} flex flex-col gap-3.5 p-[18px_20px]`} data-slot="owner-clients-drawer">
         <div className="flex items-start gap-2.5">
-          <Monogram name={entry.name} />
+          <Monogram name={displayName(entry.name)} />
           <div>
-            <div className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--ink)]">{entry.name}</div>
+            <div className="text-[17px] font-semibold tracking-[-0.01em] text-[var(--ink)]">{displayName(entry.name)}</div>
             <div className="text-[12.5px] text-[var(--faint)]">
               Success owner · {entry.clients} {entry.clients === 1 ? "client" : "clients"}
             </div>
@@ -785,7 +950,7 @@ export function OwnerClients({
                 key={row.client.id}
               >
                 <StatusDot tone={isOpenRequest(row) ? "amber" : stateTone(row.status)} />
-                <span className="flex-1 truncate text-[var(--body)]">{row.client.name}</span>
+                <span className="flex-1 truncate text-[var(--body)]">{displayName(row.client.name)}</span>
                 <span className="text-[11.5px] text-[var(--faint)]">{planLabel(row)}</span>
               </div>
             ))}
@@ -809,7 +974,7 @@ export function OwnerClients({
                     <span className="block truncate text-[13px] font-medium text-[var(--ink)]">
                       {SUPPORT_LABEL[row.supportStatus as keyof typeof SUPPORT_LABEL]}
                     </span>
-                    <span className="block truncate text-[12.5px] text-[var(--faint)]">{row.client.name}</span>
+                    <span className="block truncate text-[12.5px] text-[var(--faint)]">{displayName(row.client.name)}</span>
                   </span>
                   {/*
                     * The client book records when the row last moved and nothing else about the
@@ -887,6 +1052,8 @@ export function OwnerClients({
               query={{ book, reason: "" }}
               resource="success-client-book"
             />
+            {/* Last in the row, at Export's height: nothing can sit under a docked eye. */}
+            <ContextEye copy={EYE_COPY} placement="header" screen="owner-clients" />
           </div>
         </div>
 
@@ -900,6 +1067,87 @@ export function OwnerClients({
           }))}
           label="Client sections"
         />
+
+        {enabled && !rowsError && chips.length > 0 ? (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            data-slot="owner-clients-filter-row"
+          >
+            <div className="relative w-[280px]">
+              <Search
+                aria-hidden
+                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[var(--muted)]"
+              />
+              <Input
+                aria-label="Search clients"
+                className="h-8 w-full pl-8"
+                onChange={(event) => editView({ search: event.target.value, selections })}
+                placeholder="Search clients"
+                type="search"
+                value={search}
+              />
+            </div>
+
+            {chips.map((chip) => {
+              if (chip.kind === "menu") {
+                return (
+                  <DataTableFacetedFilter
+                    key={chip.key}
+                    onChange={(next) => chooseChip(chip.key, next.at(-1) ?? null)}
+                    options={chip.options}
+                    title={chip.label}
+                    value={selections[chip.key] ? [selections[chip.key]] : []}
+                  />
+                );
+              }
+
+              if (chip.kind === "toggle") {
+                const on = selections[chip.key] === "on";
+                return (
+                  <button
+                    aria-pressed={on}
+                    className={cn(
+                      buttonVariants({ size: "sm", variant: "outline" }),
+                      "border-dashed",
+                      on && "border-solid border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[var(--accent-text)]",
+                    )}
+                    key={chip.key}
+                    onClick={() => chooseChip(chip.key, on ? null : "on")}
+                    type="button"
+                  >
+                    <StatusDot tone={on ? "amber" : "grey"} />
+                    {chip.label}
+                  </button>
+                );
+              }
+
+              return <NoteChip key={chip.key} label={chip.label} note={chip.note} />;
+            })}
+
+            <span
+              className="ml-auto font-mono text-[12.5px] text-[var(--faint)]"
+              data-slot="owner-clients-count"
+              data-testid="owner-clients-count"
+            >
+              {shown.length} of {rows.length}
+            </span>
+            <KitButton
+              onClick={() => {
+                const saved = writeSavedView(tab, { search, selections });
+                setViewNote(saved
+                  ? "This tab opens with these filters next time."
+                  : "This browser is not storing the view, so the filters last for this visit.");
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              Save view
+            </KitButton>
+            {viewNote ? (
+              <span className="basis-full text-[12px] text-[var(--faint)]" role="status">{viewNote}</span>
+            ) : null}
+          </div>
+        ) : null}
 
         {!enabled ? (
           <Refusal
@@ -936,7 +1184,9 @@ export function OwnerClients({
                     {tableRows.length === 0 ? (
                       <tr>
                         <td className={`${CARD_TABLE.td} text-[var(--faint)]`} colSpan={heads.length}>
-                          No clients in this book.
+                          {rows.length === 0
+                            ? "No clients in this book."
+                            : "No client in this book matches the search and filters."}
                         </td>
                       </tr>
                     ) : tableRows}
@@ -987,7 +1237,7 @@ export function OwnerClients({
                               className="font-medium text-[var(--ink)] no-underline hover:underline"
                               href={href({ tab: "status", book, client: row.client.id })}
                             >
-                              {row.client.name}
+                              {displayName(row.client.name)}
                             </Link>
                             <span className="ml-2 text-[11.5px] text-[var(--faint)]">{planLabel(row)}</span>
                           </td>
@@ -1010,16 +1260,14 @@ export function OwnerClients({
             {drawer}
           </div>
         )}
-
-        <ContextEye copy={EYE_COPY} position="fixed" screen="owner-clients" />
       </div>
 
       <ConfirmFlow
         action="tenant.success_owner.reassigned"
         confirmLabel={actorRole === "success" ? "Take ownership" : "Change owner"}
         impact={open ? [
-          { label: "Client", value: open.client.name },
-          { label: "Current owner", value: successOwnerDisplayLabel(open.successOwner) },
+          { label: "Client", value: displayName(open.client.name) },
+          { label: "Current owner", value: ownerLabel(open.successOwner) },
           {
             label: "New owner",
             value: candidates.find((candidate) => candidate.value === assigneeId)?.label

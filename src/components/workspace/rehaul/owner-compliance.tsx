@@ -5,7 +5,9 @@
  *
  * Three tabs off `?tab=`, one table each for the first two, and a rule list for the third. Every
  * row here comes from the same three reads the live surface receives -- suppression entries,
- * suppression tombstones, contacts -- and this file adds no query of its own.
+ * suppression tombstones, contacts -- and this file adds no query of its own. The reading logic
+ * (labels, confirmation state, counts, the filter predicate) lives in `owner-compliance-filters`
+ * so it can be tested without a render.
  *
  * What the drawing asks for that the platform cannot say, and what stands in its place:
  *
@@ -15,32 +17,58 @@
  * - The drawing's Source column names a carrier or a person. A suppression row stores the enum
  *   that recorded it and nothing about who, so the column carries that enum in plain words.
  * - Every explainer sentence the live surface printed under a heading is gone from the page. The
- *   ones a reader still needs are handed to the eye.
+ *   ones a reader still needs are handed to the eye; the one rule the table cannot show, that a
+ *   confirmation turns amber once it has waited a week, is a single line in the table's footer.
  */
 
-import { useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import {
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
+
+import type { StateTone } from "@/components/kit/state-badge";
 
 import { ConfirmFlow, type Result } from "@/components/kit/confirm-flow";
 import { DataState } from "@/components/kit/data-state";
 import { DataTable, everyRowIsTest } from "@/components/kit/data-table";
+import { DataTableFacetedFilter } from "@/components/kit/data-table-faceted-filter";
 import { ExportMenu } from "@/components/kit/export-menu";
+import { Search } from "@/components/kit/icons";
 import { RecordSheet } from "@/components/kit/record-sheet";
 import { MonoMeta, STATE_TONE_TO_TONE, Status, StatusAbsent } from "@/components/kit/atomics";
-import type { StateTone } from "@/components/kit/state-badge";
 import { Button } from "@/components/ui/button";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import {
   CARD_TABLE,
   CardTable,
-  Figure,
   Pill,
   RehaulTabs,
   StatusDot,
 } from "@/components/workspace/rehaul/_primitives";
 import {
-  complianceAffirmativeLabel,
+  AMBER_AFTER_DAYS,
+  blockCounts,
+  channelLabel,
+  clientLabel,
+  clientOptions,
+  complianceRecords,
+  COUNT_FILTERS,
+  identifierLabel,
+  INITIAL_BLOCK_FILTERS,
+  matchesBlockFilters,
+  reasonOptions,
+  recordConfirmation,
+  sourceLabel,
+  type BlockFilters,
+  type CountFilter,
+} from "@/components/workspace/rehaul/owner-compliance-filters";
+import {
   deleteFlowState,
   INITIAL_DELETE_FLOW_STATE,
 } from "@/components/workspace/live/view-models";
@@ -54,6 +82,7 @@ import type {
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { PIPELINE_STAGE_COPY } from "@/lib/copy/states";
 import { workspaceCountFormat, workspaceDateTimeYearFormat } from "@/lib/format/datetime";
+import { displayName } from "@/lib/format/display-name";
 
 export type OwnerComplianceProps = {
   initialContacts: readonly ComplianceContact[];
@@ -64,7 +93,6 @@ export type OwnerComplianceProps = {
 };
 
 type TabId = "blocks" | "contacts" | "message-rules";
-type BlockFilter = "all" | "failed" | "stop" | "manual";
 
 const TAB_IDS: readonly TabId[] = ["blocks", "contacts", "message-rules"];
 
@@ -93,61 +121,55 @@ export const MESSAGE_RULES: readonly { title: string; value: string }[] = [
   { title: "Carrier control replies are published copy", value: "Publication receipt required" },
 ];
 
-/**
- * Why a block exists, in the words the table has room for. The six keys are the whole of
- * `suppression_source_chk`; an unrecognised value falls back to the humanised enum.
- */
-const BLOCK_REASON: Record<string, string> = {
-  complaint: "A complaint was recorded",
-  deletion: "Kept from a permanent deletion",
-  import: "Imported from a do-not-contact list",
-  manual: "Recorded by hand",
-  stop_intent: "Asked to stop in their own words",
-  stop_keyword: "Replied STOP",
-};
-
-/** What recorded the block, in plain words. The row stores an enum and nobody's name. */
-const BLOCK_SOURCE: Record<string, string> = {
-  complaint: "Complaint",
-  deletion: "Deletion",
-  import: "Imported list",
-  manual: "By hand",
-  stop_intent: "Intent match",
-  stop_keyword: "Keyword match",
-};
-
 const IDENTITY_WIDTH = "w-[calc(var(--drawer-w)*0.7)] max-w-[calc(var(--drawer-w)*0.7)]";
+
+const CHIP_BASE = "inline-flex h-[28px] cursor-pointer items-center gap-[6px] rounded-full border px-[10px] text-[12.5px]";
+const CHIP_OFF = "border-[var(--line)] bg-transparent text-[var(--muted)]";
+const CHIP_ON = "border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[var(--accent-text)]";
+
+/**
+ * The dot a count chip carries. Three of the five buckets are a state a reader tracks by colour,
+ * and the other two are sizes rather than states, so they carry the figure alone.
+ */
+const COUNT_DOT: Partial<Record<CountFilter, "good" | "amber" | "bad">> = {
+  awaiting: "amber",
+  confirmed: "good",
+  failed: "bad",
+};
+
+/**
+ * The browser's clock, subscribed to rather than read during render.
+ *
+ * How long a confirmation has waited and what counts as the last thirty days are both answers
+ * about the moment a reader is looking, and a server render has no such moment: reading the clock
+ * in the render body makes the server's markup disagree with the browser's across a day boundary.
+ * The server snapshot is `null`, which the table reads as "say nothing about elapsed time", and
+ * the reading is taken when a screen first subscribes, so a console left open overnight picks up
+ * the new day on its next mount rather than answering with yesterday's.
+ */
+const clockListeners = new Set<() => void>();
+let clientNow: number | null = null;
+
+function subscribeToClock(listener: () => void) {
+  const first = clockListeners.size === 0;
+  clockListeners.add(listener);
+  if (first) {
+    clientNow = Date.now();
+    for (const notify of clockListeners) notify();
+  }
+  return () => {
+    clockListeners.delete(listener);
+  };
+}
+
+function useClientNow() {
+  return useSyncExternalStore(subscribeToClock, () => clientNow, () => null);
+}
 
 function humanize(value: string) {
   return value
     .replaceAll(/[._-]+/g, " ")
     .replace(/^./, (character) => character.toLocaleUpperCase());
-}
-
-/**
- * The vendor guard, applied before any enum falls through to `humanize`.
- *
- * `humanize` swaps separators and capitalises, so an unmapped `ghl_*` value reaches a reader
- * verbatim. Every column that can print a raw enum runs this first, not only Source: the whole
- * point of the guard is that the enum is not trusted, and a value the Source column rewrites
- * should not appear untouched in Why or Channel beside it.
- */
-function withoutVendor(value: string) {
-  return /ghl|highlevel|leadconnector|twilio/iu.test(value) ? "SMS" : null;
-}
-
-export function channelLabel(channel: string) {
-  if (channel.toLowerCase() === "sms") return "SMS";
-  return withoutVendor(channel) ?? humanize(channel);
-}
-
-/** The source enum never carries a vendor, and the guard keeps one from reaching a reader if it ever does. */
-export function sourceLabel(source: string) {
-  return withoutVendor(source) ?? BLOCK_SOURCE[source] ?? humanize(source);
-}
-
-function identifierLabel(value: string | null) {
-  return value ? `•••• ${value}` : "No display suffix";
 }
 
 function displayTime(value: string) {
@@ -157,106 +179,11 @@ function displayTime(value: string) {
     : workspaceDateTimeYearFormat.format(date);
 }
 
-function blockReason(row: LiveSuppressionRow) {
-  const base = BLOCK_REASON[row.source]
-    ?? (withoutVendor(row.source) ? "Recorded on the texting channel" : humanize(row.source));
-  const recorded = row.reason?.trim();
-  return recorded ? `${base} (${recorded})` : base;
-}
-
-/**
- * One list, two kinds. A tombstone is the same promise after the contact behind it was forgotten,
- * so it sits in this table under its own source rather than behind a tab nobody thinks to open.
- */
-export function complianceRecords(
-  suppressions: readonly LiveSuppressionRow[],
-  tombstones: readonly SuppressionTombstoneRow[],
-): ComplianceRecord[] {
-  return [
-    ...suppressions.map((row): ComplianceRecord => ({
-      id: `block:${row.id}`,
-      kind: "block",
-      tenantName: row.tenantName,
-      channel: row.channel,
-      contactName: row.contactName,
-      identifierLast4: row.identifierLast4,
-      reason: blockReason(row),
-      recordedAt: row.createdAt,
-      isDemo: row.isDemo,
-      isTest: row.isTest,
-      source: row.source,
-      providerSyncState: row.providerSyncState,
-      providerSyncedAt: row.providerSyncedAt,
-      deletionAuditId: null,
-    })),
-    ...tombstones.map((row): ComplianceRecord => ({
-      id: `deleted:${row.id}`,
-      kind: "deleted",
-      tenantName: row.tenantName,
-      channel: row.channel,
-      contactName: null,
-      identifierLast4: row.identifierLast4,
-      reason: BLOCK_REASON.deletion,
-      recordedAt: row.createdAt,
-      isDemo: row.isDemo,
-      isTest: false,
-      source: "deletion",
-      providerSyncState: null,
-      providerSyncedAt: null,
-      deletionAuditId: row.deletionAuditId,
-    })),
-  ];
-}
-
-/**
- * The column is called Confirmation, so its values do not repeat the word. A block no provider has
- * to confirm is an absence rather than a state, and a tombstone is enforced here and never sent.
- */
-export function recordConfirmation(
-  row: { providerSyncState: string | null; providerSyncedAt: string | null },
-): { label: string; tone: StateTone; kind: "lifecycle" | "none" } {
-  if (row.providerSyncState === null) {
-    return { label: "Not required", tone: "neutral", kind: "none" };
-  }
-  const confirmed = complianceAffirmativeLabel({
-    kind: "provider_confirmation",
-    providerSyncState: row.providerSyncState,
-    providerSyncedAt: row.providerSyncedAt,
-  });
-  if (confirmed) return { label: "Confirmed", tone: "good", kind: "lifecycle" };
-  if (row.providerSyncState === "failed") return { label: "Failed", tone: "critical", kind: "lifecycle" };
-  if (row.providerSyncState === "not_applicable") {
-    return { label: "Not required", tone: "neutral", kind: "none" };
-  }
-  return { label: "Pending", tone: "warning", kind: "lifecycle" };
-}
-
 function pipelineState(value: string): { label: string; tone: StateTone } {
   if (Object.prototype.hasOwnProperty.call(PIPELINE_STAGE_COPY, value)) {
     return PIPELINE_STAGE_COPY[value as keyof typeof PIPELINE_STAGE_COPY];
   }
   return { label: humanize(value), tone: "neutral" };
-}
-
-/** The seg filter over the blocks table. STOP covers both ways a person can say it. */
-export function matchesBlockFilter(row: ComplianceRecord, filter: BlockFilter) {
-  if (filter === "all") return true;
-  if (filter === "failed") return row.providerSyncState === "failed";
-  if (filter === "stop") return row.source === "stop_keyword" || row.source === "stop_intent";
-  return row.source === "manual";
-}
-
-export function matchesSearch(row: ComplianceRecord, query: string) {
-  const term = query.trim().toLocaleLowerCase();
-  if (!term) return true;
-  return [
-    row.contactName ?? "",
-    identifierLabel(row.identifierLast4),
-    row.tenantName,
-    row.reason,
-    channelLabel(row.channel),
-    sourceLabel(row.source),
-  ].some((value) => value.toLocaleLowerCase().includes(term));
 }
 
 function provenanceLabel(isDemo: boolean, isTest: boolean): ReactNode {
@@ -267,67 +194,76 @@ function provenanceLabel(isDemo: boolean, isTest: boolean): ReactNode {
   );
 }
 
-function SegFilter({
-  items,
+/**
+ * A count chip: the figure and the filter in one control.
+ *
+ * The tiles this replaces printed the same five numbers above the table and then left the reader
+ * to find the rows behind one of them by hand. Pressing the number is now the way to see them, so
+ * the count and the filter can never disagree.
+ */
+function CountChip({
+  active,
+  count,
+  dot,
   label,
   onSelect,
-  value,
 }: {
-  items: readonly { id: BlockFilter; label: string }[];
+  active: boolean;
+  count: number;
+  dot?: "good" | "amber" | "bad";
   label: string;
-  onSelect: (next: BlockFilter) => void;
-  value: BlockFilter;
+  onSelect: () => void;
 }) {
   return (
-    <div
-      aria-label={label}
-      className="inline-flex rounded-lg border border-[var(--line-input)] bg-[var(--card)] p-0.5"
-      role="group"
+    <button
+      aria-label={`${workspaceCountFormat.format(count)} ${label}`}
+      aria-pressed={active}
+      className={`${CHIP_BASE} ${active ? CHIP_ON : CHIP_OFF}`}
+      data-slot="count-chip"
+      onClick={onSelect}
+      type="button"
     >
-      {items.map((item) => (
-        <button
-          aria-pressed={item.id === value}
-          className={[
-            "inline-flex cursor-pointer items-center justify-center rounded-md px-2.5 py-[5px] text-[12.5px]",
-            item.id === value
-              ? "bg-[var(--accent-wash-strong)] font-medium text-[var(--accent-text)]"
-              : "text-[var(--muted)]",
-          ].join(" ")}
-          key={item.id}
-          onClick={() => onSelect(item.id)}
-          type="button"
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
+      {dot ? <StatusDot tone={dot} /> : null}
+      <span className="font-mono tabular-nums">{workspaceCountFormat.format(count)}</span>
+      {label}
+    </button>
   );
 }
 
-function Tile({ label, tone, value }: { label: string; tone?: "warning"; value: string }) {
+function ToggleChip({
+  active,
+  label,
+  onSelect,
+}: {
+  active: boolean;
+  label: string;
+  onSelect: () => void;
+}) {
   return (
-    <div
-      className={[
-        "flex items-baseline gap-[12px] rounded-[14px] border px-[18px] py-[14px] shadow-[var(--shadow-card)]",
-        tone === "warning"
-          ? "border-[var(--warning-line)] bg-[var(--warning-wash)]"
-          : "border-[var(--line)] bg-[var(--card)]",
-      ].join(" ")}
+    <button
+      aria-pressed={active}
+      className={`${CHIP_BASE} ${active ? CHIP_ON : CHIP_OFF}`}
+      data-slot="toggle-chip"
+      onClick={onSelect}
+      type="button"
     >
-      <Figure className={tone === "warning" ? "text-[var(--warning-text)]" : "text-[var(--ink)]"} size="md">
-        {value}
-      </Figure>
-      <div className="text-[12.5px] font-[500] text-[color:var(--faint)]">{label}</div>
-    </div>
+      {label}
+    </button>
   );
 }
 
-function ConfirmationCell({ record }: { record: ComplianceRecord }) {
-  const state = recordConfirmation(record);
+function ConfirmationCell({ now, record }: { now: number | null; record: ComplianceRecord }) {
+  const state = recordConfirmation(record, now);
   if (state.kind === "none") return <StatusAbsent label={state.label} />;
+  if (state.tone === "good") {
+    return <Pill tone="good"><StatusDot tone="good" />{state.label}</Pill>;
+  }
+  if (state.tone === "critical") {
+    return <Pill tone="amber"><StatusDot tone="bad" />{state.label}</Pill>;
+  }
   return (
-    <Pill tone={state.tone === "critical" ? "amber" : state.tone === "good" ? "good" : "neutral"}>
-      <StatusDot tone={state.tone === "critical" ? "bad" : state.tone === "good" ? "good" : "amber"} />
+    <Pill tone={state.tone === "warning" ? "amber" : "neutral"}>
+      <StatusDot tone="amber" />
       {state.label}
     </Pill>
   );
@@ -346,13 +282,19 @@ export function OwnerCompliance({
   const tab: TabId = TAB_IDS.includes(requestedTab as TabId) ? (requestedTab as TabId) : "blocks";
 
   const [contacts, setContacts] = useState([...initialContacts]);
-  const [filter, setFilter] = useState<BlockFilter>("all");
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<BlockFilters>(INITIAL_BLOCK_FILTERS);
   const [selected, setSelected] = useState<ComplianceContact | null>(null);
   const [contactSheet, setContactSheet] = useState<ComplianceContact | null>(null);
   const [flow, dispatch] = useReducer(deleteFlowState, INITIAL_DELETE_FLOW_STATE);
   const [announcement, setAnnouncement] = useState("");
   const idempotencyKey = useRef<string | null>(null);
+
+  /** Null until the browser has a clock, so a pending row says "Pending" and no more until then. */
+  const now = useClientNow();
+
+  function updateFilters(patch: Partial<BlockFilters>) {
+    setFilters((current) => ({ ...current, ...patch }));
+  }
 
   async function openPreview(contact: ComplianceContact) {
     idempotencyKey.current = `admin-contact-delete:${contact.id}:${Date.now()}`;
@@ -400,7 +342,7 @@ export function OwnerCompliance({
         return { ok: false, message: next.error ?? "The contact was not deleted." };
       }
       setContacts((current) => current.filter((contact) => contact.id !== selected.id));
-      setAnnouncement(`${selected.name} was deleted after the required checks completed.`);
+      setAnnouncement(`${displayName(selected.name)} was deleted after the required checks completed.`);
       return { ok: true, receipt: { actionKey: "contact.delete", auditId: response.value.auditId } };
     } catch {
       return {
@@ -421,32 +363,34 @@ export function OwnerCompliance({
     () => complianceRecords(suppressions, tombstones),
     [suppressions, tombstones],
   );
+  const chipCounts = useMemo(() => blockCounts(records), [records]);
   const visibleRecords = useMemo(
-    () => records.filter((row) => matchesBlockFilter(row, filter) && matchesSearch(row, search)),
-    [filter, records, search],
+    () => records.filter((row) => matchesBlockFilters(row, filters, now)),
+    [filters, now, records],
   );
-
-  const pendingConfirmations = suppressions.filter(
-    (row) => recordConfirmation(row).tone === "warning",
-  ).length;
-  const failedConfirmations = suppressions.filter(
-    (row) => row.providerSyncState === "failed",
-  ).length;
+  const reasonFacets = useMemo(
+    () => reasonOptions(records).map((reason) => ({ label: reason, value: reason })),
+    [records],
+  );
+  const clientFacets = useMemo(
+    () => clientOptions(records).map((client) => ({ label: client, value: client })),
+    [records],
+  );
 
   /*
    * Green only where the provider confirmed every block. Zero blocks is a fact about an empty
    * table, not a confirmation, so it takes the grey dot rather than the good one.
    */
-  const headerState = failedConfirmations > 0
+  const headerState = chipCounts.failed > 0
     ? {
       amber: true,
-      label: `${workspaceCountFormat.format(failedConfirmations)} confirmation${failedConfirmations === 1 ? "" : "s"} failed`,
+      label: `${workspaceCountFormat.format(chipCounts.failed)} confirmation${chipCounts.failed === 1 ? "" : "s"} failed`,
       tone: "amber" as const,
     }
-    : pendingConfirmations > 0
+    : chipCounts.awaiting > 0
       ? {
         amber: true,
-        label: `${workspaceCountFormat.format(pendingConfirmations)} awaiting confirmation`,
+        label: `${workspaceCountFormat.format(chipCounts.awaiting)} awaiting confirmation`,
         tone: "amber" as const,
       }
       : suppressions.length > 0
@@ -461,8 +405,9 @@ export function OwnerCompliance({
 
   const contactColumns = useMemo<ColumnDef<ComplianceContact>[]>(() => [
     {
-      accessorKey: "name",
+      accessorFn: (row) => displayName(row.name),
       header: "Contact",
+      id: "name",
       meta: {
         cellKind: "identity",
         label: "Contact",
@@ -471,12 +416,19 @@ export function OwnerCompliance({
       },
       cell: ({ row }) => (
         <span className="flex min-w-0 items-center gap-[var(--s-2)] whitespace-normal">
-          <span className="min-w-0 truncate font-medium text-[var(--ink)]">{row.original.name}</span>
+          <span className="min-w-0 truncate font-medium text-[var(--ink)]">
+            {displayName(row.original.name)}
+          </span>
           {everyRowIsSeeded ? null : provenanceLabel(row.original.isDemo, row.original.isTest)}
         </span>
       ),
     },
-    { accessorKey: "tenantName", header: "Workspace", meta: { label: "Workspace" } },
+    {
+      accessorFn: (row) => displayName(row.tenantName),
+      header: "Client",
+      id: "tenantName",
+      meta: { label: "Client" },
+    },
     {
       accessorFn: (row) => pipelineState(row.pipelineStage).label,
       header: "Pipeline stage",
@@ -512,7 +464,10 @@ export function OwnerCompliance({
         {
           title: "What this deletes",
           rows: [
-            { label: "Contact record", value: `${selected.name} in ${selected.tenantName}, deleted` },
+            {
+              label: "Contact record",
+              value: `${displayName(selected.name)} in ${displayName(selected.tenantName)}, deleted`,
+            },
             deletes("Merged duplicate records", counts.mergedContacts),
             deletes("Handles and phone numbers", counts.identities),
             deletes("Conversation threads", counts.conversations),
@@ -572,22 +527,57 @@ export function OwnerCompliance({
             Read-only workspace view
           </Pill>
         ) : null}
+        {/*
+          * The header's trailing control row, and the reason the eye is docked rather than
+          * floating: a screen with this row has somewhere for the eye to sit where nothing can be
+          * underneath it, and it goes last, after the exports.
+          */}
         <div className="ml-auto flex items-center gap-[8px]">
-          {impersonation ? null : (
-            <ExportMenu
-              filename="setterfi-suppression-tombstones"
-              label="Export every deletion record"
-              mode="server"
-              query={{ order: "created_desc", reason: "" }}
-              resource="suppression-tombstones"
-            />
-          )}
+          {/*
+            * One Export, two answers. The rows on screen are the first, and the full deletion
+            * record is the second rather than a button of its own: the two used to sit side by
+            * side reading as two of the same control. The server export stays out of an
+            * impersonated session, exactly as it did when it was its own button.
+            */}
+          <ExportMenu
+            also={impersonation ? undefined : {
+              filename: "setterfi-suppression-tombstones",
+              groupLabel: "Every deletion record",
+              mode: "server",
+              query: { order: "created_desc", reason: "" },
+              resource: "suppression-tombstones",
+            }}
+            filename="setterfi-contact-blocks"
+            groupLabel="Blocks on screen"
+            label="Export"
+            mode="local"
+            rows={visibleRecords.map((row) => ({
+              contact: row.contactName ?? identifierLabel(row.identifierLast4),
+              channel: channelLabel(row.channel),
+              client: row.tenantName,
+              reason: row.reason,
+              confirmation: recordConfirmation(row, now).label,
+              recorded: row.recordedAt,
+              source: sourceLabel(row.source),
+            }))}
+          />
+          <ContextEye
+            copy={OWNER_COMPLIANCE_EYE_COPY}
+            placement="header"
+            screen="owner-compliance"
+          />
         </div>
       </div>
 
       <RehaulTabs
         items={[
-          { active: tab === "blocks", href: `${pathname}?tab=blocks`, label: "Blocks" },
+          {
+            active: tab === "blocks",
+            count: records.length,
+            countTone: "neutral",
+            href: `${pathname}?tab=blocks`,
+            label: "Blocks",
+          },
           { active: tab === "contacts", href: `${pathname}?tab=contacts`, label: "Contacts" },
           {
             active: tab === "message-rules",
@@ -603,126 +593,126 @@ export function OwnerCompliance({
       </div>
 
       {tab === "blocks" ? (
-        <>
-          <div className="grid grid-cols-1 gap-[16px] md:grid-cols-2 xl:grid-cols-4">
-            <Tile label="current blocks" value={workspaceCountFormat.format(suppressions.length)} />
-            <Tile
-              label="awaiting confirmation"
-              tone={pendingConfirmations > 0 ? "warning" : undefined}
-              value={workspaceCountFormat.format(pendingConfirmations)}
-            />
-            <Tile
-              label="confirmation failed"
-              tone={failedConfirmations > 0 ? "warning" : undefined}
-              value={workspaceCountFormat.format(failedConfirmations)}
-            />
-            <Tile label="kept after deletion" value={workspaceCountFormat.format(tombstones.length)} />
-          </div>
-
-          <CardTable className="min-h-0">
-            <div className="flex items-center gap-[8px] border-b border-[var(--line)] px-[14px] py-[10px]">
-              <SegFilter
-                items={[
-                  { id: "all", label: "All" },
-                  { id: "failed", label: "Failed" },
-                  { id: "stop", label: "STOP" },
-                  { id: "manual", label: "By hand" },
-                ]}
-                label="Which blocks this table shows"
-                onSelect={setFilter}
-                value={filter}
+        <CardTable className="min-h-0">
+          <div
+            className="flex flex-wrap items-center gap-[6px] border-b border-[var(--line)] px-[14px] py-[10px]"
+            data-slot="blocks-filters"
+          >
+            {COUNT_FILTERS.map((item) => (
+              <CountChip
+                active={filters.count === item.id}
+                count={chipCounts[item.id]}
+                dot={COUNT_DOT[item.id]}
+                key={item.id}
+                label={item.label}
+                onSelect={() => updateFilters({ count: item.id })}
               />
+            ))}
+            <span aria-hidden className="mx-[4px] h-[18px] w-px bg-[var(--line)]" />
+            {/*
+              * The kit's faceted chip rather than a select of our own: a native select is banned
+              * on a live surface, and these two read and clear the same way as the ones on Audit
+              * and Clients. One value at a time is all the table filters by, so the last thing
+              * pressed wins.
+              */}
+            <DataTableFacetedFilter
+              onChange={(next) => updateFilters({ reason: next.at(-1) ?? null })}
+              options={reasonFacets}
+              title="Reason"
+              value={filters.reason === null ? [] : [filters.reason]}
+            />
+            <DataTableFacetedFilter
+              onChange={(next) => updateFilters({ client: next.at(-1) ?? null })}
+              options={clientFacets}
+              title="Client"
+              value={filters.client === null ? [] : [filters.client]}
+            />
+            <ToggleChip
+              active={filters.recent}
+              label="Last 30 days"
+              onSelect={() => updateFilters({ recent: !filters.recent })}
+            />
+            <label className="ml-auto flex h-[28px] w-[240px] items-center gap-[8px] rounded-lg border border-[var(--line-input)] bg-[var(--card)] px-[10px]">
+              <Search aria-hidden className="size-[14px] text-[var(--faint)]" />
               <input
-                aria-label="Search contact, workspace or reason"
-                className="ml-auto h-[30px] w-[260px] rounded-lg border border-[var(--line-input)] bg-[var(--card)] px-[10px] text-[13px] text-[var(--ink)] placeholder:text-[var(--faint)]"
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search contact, workspace or reason"
+                aria-label="Search contact, number, client or reason"
+                className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ink)] outline-none placeholder:text-[var(--faint)]"
+                onChange={(event) => updateFilters({ search: event.target.value })}
+                placeholder="Search contact or number"
                 type="search"
-                value={search}
+                value={filters.search}
               />
-              {/*
-                * The table's own export. The header's `suppression-tombstones` export covers the
-                * deletion records only, so every suppression row was unreachable, and it is hidden
-                * under impersonation, which left this table with no export at all. This one is
-                * over the rows already on screen, so an impersonated reader can take what they can
-                * already see.
-                */}
-              <ExportMenu
-                filename="setterfi-contact-blocks"
-                label="Export blocks"
-                mode="local"
-                rows={visibleRecords.map((row) => ({
-                  contact: row.contactName ?? identifierLabel(row.identifierLast4),
-                  channel: channelLabel(row.channel),
-                  workspace: row.tenantName,
-                  why: row.reason,
-                  confirmation: recordConfirmation(row).label,
-                  recorded: row.recordedAt,
-                  source: sourceLabel(row.source),
-                }))}
+            </label>
+          </div>
+          {visibleRecords.length === 0 ? (
+            <div className="px-[14px] py-[20px]">
+              <DataState
+                body={records.length === 0 ? "" : "Clear the filter or the search term to see the rest."}
+                kind="empty"
+                title={records.length === 0 ? "No contact blocks recorded" : "No blocks match this filter"}
               />
             </div>
-            {visibleRecords.length === 0 ? (
-              <div className="px-[14px] py-[20px]">
-                <DataState
-                  body={records.length === 0 ? "" : "Clear the filter or the search term to see the rest."}
-                  kind="empty"
-                  title={records.length === 0 ? "No contact blocks recorded" : "No blocks match this filter"}
-                />
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table aria-label="Contact blocks and deletion records" className={CARD_TABLE.table}>
-                  <thead>
-                    <tr>
-                      <th className={CARD_TABLE.th}>Contact</th>
-                      <th className={CARD_TABLE.th}>Channel</th>
-                      <th className={CARD_TABLE.th}>Workspace</th>
-                      <th className={CARD_TABLE.th}>Why</th>
-                      <th className={CARD_TABLE.th}>Confirmation</th>
-                      <th className={CARD_TABLE.th}>Recorded</th>
-                      <th className={CARD_TABLE.th}>Source</th>
+          ) : (
+            <div className="overflow-x-auto">
+              <table aria-label="Contact blocks and deletion records" className={CARD_TABLE.table}>
+                <thead>
+                  <tr>
+                    <th className={CARD_TABLE.th}>Contact</th>
+                    <th className={CARD_TABLE.th}>Channel</th>
+                    <th className={CARD_TABLE.th}>Client</th>
+                    <th className={CARD_TABLE.th}>Reason</th>
+                    <th className={CARD_TABLE.th}>Confirmation</th>
+                    <th className={CARD_TABLE.th}>Recorded</th>
+                    <th className={CARD_TABLE.th}>Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRecords.map((row) => (
+                    <tr
+                      className={row.providerSyncState === "failed" ? "bg-[var(--warning-wash)]" : undefined}
+                      key={row.id}
+                    >
+                      <td className={`${CARD_TABLE.td} font-medium text-[var(--ink)]`}>
+                        {row.kind === "deleted" ? (
+                          <span className="flex items-center gap-[8px]">
+                            <Status label="Deleted contact" tone="neutral" treatment="bare" />
+                            <MonoMeta>{identifierLabel(row.identifierLast4)}</MonoMeta>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-[8px]">
+                            {row.contactName ? displayName(row.contactName) : (
+                              <span className="font-mono">{identifierLabel(row.identifierLast4)}</span>
+                            )}
+                            {everyRowIsSeeded ? null : provenanceLabel(row.isDemo, row.isTest)}
+                          </span>
+                        )}
+                      </td>
+                      <td className={CARD_TABLE.td}>{channelLabel(row.channel)}</td>
+                      <td className={CARD_TABLE.td}>{clientLabel(row)}</td>
+                      <td className={`${CARD_TABLE.td} text-[var(--muted)]`}>{row.reason}</td>
+                      <td className={CARD_TABLE.td}>
+                        <ConfirmationCell now={now} record={row} />
+                      </td>
+                      <td className={`${CARD_TABLE.td} font-mono text-[var(--meta)]`}>
+                        {displayTime(row.recordedAt)}
+                      </td>
+                      <td className={`${CARD_TABLE.td} text-[var(--faint)]`}>{sourceLabel(row.source)}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {visibleRecords.map((row) => (
-                      <tr
-                        className={row.providerSyncState === "failed" ? "bg-[var(--warning-wash)]" : undefined}
-                        key={row.id}
-                      >
-                        <td className={`${CARD_TABLE.td} font-medium text-[var(--ink)]`}>
-                          {row.kind === "deleted" ? (
-                            <span className="flex items-center gap-[8px]">
-                              <Status label="Contact deleted" tone="neutral" treatment="bare" />
-                              <MonoMeta>{identifierLabel(row.identifierLast4)}</MonoMeta>
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-[8px]">
-                              {row.contactName ?? (
-                                <span className="font-mono">{identifierLabel(row.identifierLast4)}</span>
-                              )}
-                              {everyRowIsSeeded ? null : provenanceLabel(row.isDemo, row.isTest)}
-                            </span>
-                          )}
-                        </td>
-                        <td className={CARD_TABLE.td}>{channelLabel(row.channel)}</td>
-                        <td className={CARD_TABLE.td}>{row.tenantName}</td>
-                        <td className={`${CARD_TABLE.td} text-[var(--muted)]`}>{row.reason}</td>
-                        <td className={CARD_TABLE.td}>
-                          <ConfirmationCell record={row} />
-                        </td>
-                        <td className={`${CARD_TABLE.td} font-mono text-[var(--meta)]`}>
-                          {displayTime(row.recordedAt)}
-                        </td>
-                        <td className={`${CARD_TABLE.td} text-[var(--faint)]`}>{sourceLabel(row.source)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardTable>
-        </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div
+            className="flex items-center gap-[12px] border-t border-[var(--line-soft)] px-[14px] py-[8px] text-[12px] text-[var(--faint)]"
+            data-slot="blocks-footer"
+          >
+            <span>
+              {`A block still awaiting confirmation after ${AMBER_AFTER_DAYS} days is shown amber.`}
+            </span>
+            <span className="ml-auto">Deletion records live under Export</span>
+          </div>
+        </CardTable>
       ) : null}
 
       {tab === "contacts" ? (
@@ -760,9 +750,9 @@ export function OwnerCompliance({
               : AUDIT_ACTIONS["contact.delete"].microcopy,
             onSelect: () => void openPreview(row),
           }]}
-          rowActionsLabel={(row) => `Actions for ${row.name}`}
+          rowActionsLabel={(row) => `Actions for ${displayName(row.name)}`}
           rowLabel={{ singular: "contact", plural: "contacts" }}
-          search={{ placeholder: "Search contact, workspace, or stage" }}
+          search={{ placeholder: "Search contact, client, or stage" }}
           variant="ledger"
         />
       ) : null}
@@ -796,17 +786,17 @@ export function OwnerCompliance({
         sections={contactSheet ? [{
           title: "Contact",
           fields: [
-            { label: "Workspace", value: contactSheet.tenantName },
+            { label: "Client", value: displayName(contactSheet.tenantName) },
             { label: "Pipeline stage", value: pipelineState(contactSheet.pipelineStage).label },
             { label: "Last seen", value: displayTime(contactSheet.lastSeenAt) },
           ],
         }] : []}
-        subtitle={contactSheet ? contactSheet.tenantName : undefined}
+        subtitle={contactSheet ? displayName(contactSheet.tenantName) : undefined}
         technical={contactSheet ? [
           { label: "Contact ID", value: contactSheet.id, mono: true },
           { label: "Workspace ID", value: contactSheet.tenantId, mono: true },
         ] : undefined}
-        title={contactSheet?.name ?? ""}
+        title={contactSheet ? displayName(contactSheet.name) : ""}
       />
 
       {selected && flow.kind === "previewing" ? (
@@ -840,15 +830,13 @@ export function OwnerCompliance({
           label: "Privacy-request reason",
           hint: "Record the request and how its source was verified.",
         }}
-        title={selected ? `Delete ${selected.name}` : "Delete contact"}
+        title={selected ? `Delete ${displayName(selected.name)}` : "Delete contact"}
         typeToConfirm={{
           word: "DELETE",
           label: "Type DELETE to confirm",
           hint: "There is no undo and no recovery: the records above are gone the moment this runs.",
         }}
       />
-
-      <ContextEye copy={OWNER_COMPLIANCE_EYE_COPY} screen="owner-compliance" />
     </div>
   );
 }

@@ -273,8 +273,11 @@ export function AffiliateHome({
       keeps the rail rather than taking a coach's pill bar to routes an affiliate is forbidden
       from. Stamping the attribute on the page body puts the deck panels at the coach density that
       `docs/REDESIGN-CANVAS.md` puts this surface in, without a second copy of the stylesheet.
+
+      `pb-[72px]` because this screen's header has no trailing control row, so the eye stays
+      floating. The gutter is what keeps it off the last panel's own content.
     */
-    <CoachScale className="relative flex min-w-0 flex-col gap-[20px]">
+    <CoachScale className="relative flex min-w-0 flex-col gap-[20px] pb-[72px]">
       <div className="flex min-w-0 flex-wrap items-end gap-[24px]">
         <div className="min-w-0">
           <h1 className={H1_CLASS} data-slot="affiliate-title">

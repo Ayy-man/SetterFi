@@ -3,35 +3,55 @@
 /**
  * The owner Inbox, rehaul face.
  *
- * One card, three bands, one detail pane. The bands are the same three lanes the folded Inbox
- * already builds on the server -- client requests, system problems, lead handoffs -- and this
- * file adds no read of its own: every row here comes out of `inboxLanes()` exactly as the live
- * surface receives it.
+ * One continuous list and one detail pane. The list is the same three lanes the folded Inbox
+ * already builds on the server -- client requests, system problems, lead handoffs -- and this file
+ * adds no read of its own: every row comes out of `inboxLanes()` through `owner-inbox-rows.ts`
+ * exactly as the live surface receives it.
  *
  * What the drawing asks for that the platform cannot say, and what stands in its place:
  *
- * - The detail grid is drawn as Calendar / Success owner / Tier. Nothing on a support thread
- *   carries a calendar provider or a price tier, so the grid shows the three the thread does
- *   record: the account, its success owner, and who the request is assigned to.
+ * - A lane is a header and its rows, never a band with a box under it. A lane with nothing in it
+ *   collapses to the header alone, because an empty framed area reads as a thing that failed to
+ *   load rather than as a queue that is clear.
+ * - Amber is spent on lateness and nothing else. Only a notice carries a recorded response target
+ *   (`breach_at` per rule), so only a notice can be late; see `InboxRow.overSla`.
  * - A lead handoff has no detail to open. The cross-tenant projection refuses lead identity and
  *   message bodies on purpose, and the claim route only ever acts on the caller's own tenant, so
  *   that pane carries the account, the channel and the wait, and no action.
+ * - Reassign stays in the request sheet. The owner change is a confirm flow with a reason and an
+ *   audit read-back that `SupportRequestSheet` already owns; a second copy of it in this pane
+ *   would be a second chance to get that wrong.
  * - Every explainer sentence the old surface printed under a heading is gone from the page; the
- *   two that a reader still needs are handed to the eye instead.
+ *   two that a reader still needs are handed to the eye, which is docked in the header row so it
+ *   cannot sit on the pane's action row.
  */
 
-import { useMemo, useState } from "react";
+import { CircleCheck, Search, X } from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ExportMenu } from "@/components/kit/export-menu";
 import { KitButton } from "@/components/kit/atomics";
 import { SupportRequestSheet } from "@/components/workspace/live/admin-support";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
-import { Figure, Pill, Seg, StatusDot } from "@/components/workspace/rehaul/_primitives";
-import { workspaceCountFormat, workspaceTimestampFormat } from "@/lib/format/datetime";
+import { Pill, StatusDot } from "@/components/workspace/rehaul/_primitives";
+import {
+  INBOX_LANE_TITLES,
+  inboxRowMatches,
+  inboxRows,
+  type InboxLaneKey,
+  type InboxRow,
+} from "@/components/workspace/rehaul/owner-inbox-rows";
+import { displayName } from "@/lib/format/display-name";
+import {
+  workspaceCountFormat,
+  workspaceDateTimeFormat,
+  workspaceTimestampFormat,
+} from "@/lib/format/datetime";
 import type { AttentionItem, AttentionQueue } from "@/lib/operations/attention-queue";
 import { formatElapsed } from "@/lib/operations/attention-queue-format";
-import type { PlatformSupportThreadRead } from "@/lib/repositories/support";
+import type { PlatformSupportMessageRead, PlatformSupportThreadRead } from "@/lib/repositories/support";
 import {
   INBOX_NO_CLAIM_REASON,
   INBOX_RANKED_BY,
@@ -46,25 +66,14 @@ export type OwnerInboxProps = {
 };
 
 type Scope = "mine" | "all";
-type LaneKey = "client" | "system" | "handoff";
+type MessageKind = "reply" | "internal_note";
 
-type Row = {
-  key: string;
-  lane: LaneKey;
-  title: string;
-  context: string;
-  /** Minutes waited, or null where nothing recorded one. */
-  waitMinutes: number | null;
-  /** True when this row is in the reader's own book. */
-  mine: boolean;
-  /** Amber when the row is the kind that should not be sitting there. */
-  amber: boolean;
-};
+const LANE_ORDER: readonly InboxLaneKey[] = ["client", "system", "handoff"];
 
-const LANE_TITLES: Record<LaneKey, string> = {
-  client: "Client requests",
-  system: "System problems",
-  handoff: "Lead handoffs",
+const SUPPORT_STATE: Record<PlatformSupportThreadRead["status"], string> = {
+  open: "Open",
+  resolved: "Resolved",
+  waiting_on_coach: "Waiting on coach",
 };
 
 function wait(minutes: number | null) {
@@ -75,66 +84,25 @@ function timestamp(iso: string | null) {
   return iso ? workspaceTimestampFormat.format(new Date(iso)) : "not recorded";
 }
 
-function minutesBetween(fromIso: string, nowIso: string) {
-  const from = new Date(fromIso).getTime();
-  const now = new Date(nowIso).getTime();
-  if (!Number.isFinite(from) || !Number.isFinite(now)) return null;
-  return Math.max(0, Math.floor((now - from) / 60_000));
+function shortTimestamp(iso: string | null) {
+  return iso ? workspaceDateTimeFormat.format(new Date(iso)) : "not recorded";
 }
 
 function assignee(thread: PlatformSupportThreadRead) {
-  return thread.assignedTo?.name?.trim() || (thread.assignedTo ? "Assigned team member" : "Unassigned");
+  const named = displayName(thread.assignedTo?.name?.trim() ?? "");
+  return named || (thread.assignedTo ? "Assigned team member" : "Unassigned");
 }
 
 function ownerName(thread: PlatformSupportThreadRead) {
-  return thread.successOwner?.name?.trim() || (thread.successOwner ? "Named owner" : "Unassigned");
+  const named = displayName(thread.successOwner?.name?.trim() ?? "");
+  return named || (thread.successOwner ? "Named owner" : "Unassigned");
 }
 
-/**
- * Every visible row, in band order, already ranked by the server.
- *
- * `mine` is the only ownership each lane actually records: a support thread carries an assignee,
- * a notice carries the account's success owner, and a handoff carries neither, so a handoff is
- * never in anybody's book and the scope switch says so by leaving it out of "Assigned to me".
- */
-function rowsFor(lanes: InboxLanes, queue: AttentionQueue, actorId: string): Row[] {
-  const client = (lanes.clientRequests ?? [])
-    .filter((thread) => thread.status !== "resolved")
-    .map((thread) => ({
-      key: `client:${thread.id}`,
-      lane: "client" as const,
-      title: thread.subject,
-      context: `${thread.tenantName} · ${assignee(thread)}`,
-      waitMinutes: minutesBetween(thread.updatedAt, queue.asOf),
-      mine: thread.assignedTo?.id === actorId,
-      amber: thread.status === "open",
-    }));
-
-  const system = lanes.system.map((item) => ({
-    key: `system:${item.id}`,
-    lane: "system" as const,
-    title: item.title,
-    context: [item.tenantName ?? "Platform", item.ruleDescription ?? item.body]
-      .filter((part): part is string => Boolean(part && part.trim()))
-      .join(" · "),
-    waitMinutes: item.openForMinutes,
-    mine: item.assignedToMe,
-    amber: item.severity === "critical" || item.severity === "warning",
-  }));
-
-  const handoff = lanes.handoff.state === "available"
-    ? lanes.handoff.rows.map((row) => ({
-        key: `handoff:${row.conversationId}`,
-        lane: "handoff" as const,
-        title: row.tenantName,
-        context: `${row.channelLabel} · ${row.handoff?.label ?? "No handoff reason recorded"}`,
-        waitMinutes: row.waitMinutes,
-        mine: false,
-        amber: false,
-      }))
-    : [];
-
-  return [...client, ...system, ...handoff];
+/** Two letters off a person's name, for the avatar the thread draws beside each message. */
+function initials(name: string) {
+  const parts = name.split(/\s+/u).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return `${parts[0][0] ?? ""}${parts.length > 1 ? parts[parts.length - 1][0] ?? "" : ""}`.toUpperCase();
 }
 
 export function OwnerInbox({ actorId, lanes, queue }: OwnerInboxProps) {
@@ -146,20 +114,32 @@ export function OwnerInbox({ actorId, lanes, queue }: OwnerInboxProps) {
     lanes.clientRequests ?? [],
   );
   const [sheetThreadId, setSheetThreadId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const scope: Scope = params.get("scope") === "all" ? "all" : "mine";
 
   const allRows = useMemo(
-    () => rowsFor({ ...lanes, clientRequests: lanes.clientRequests === undefined ? undefined : clientRequests }, queue, actorId),
+    () => inboxRows(
+      { ...lanes, clientRequests: lanes.clientRequests === undefined ? undefined : clientRequests },
+      queue,
+      actorId,
+    ),
     [actorId, clientRequests, lanes, queue],
   );
-  const rows = useMemo(
+  const scopeRows = useMemo(
     () => (scope === "mine" ? allRows.filter((row) => row.mine) : allRows),
     [allRows, scope],
   );
-  const mineCount = useMemo(() => allRows.filter((row) => row.mine).length, [allRows]);
+  const rows = useMemo(
+    () => scopeRows.filter((row) => inboxRowMatches(row, search)),
+    [scopeRows, search],
+  );
 
   const selectedKey = params.get("item");
-  const selected = rows.find((row) => row.key === selectedKey) ?? rows[0] ?? null;
+  // An empty `item` is an explicit "nothing open", so the close control has somewhere to land: a
+  // missing parameter falls back to the first row, and clearing it would only re-open that row.
+  const selected = selectedKey === ""
+    ? null
+    : rows.find((row) => row.key === selectedKey) ?? rows[0] ?? null;
 
   /** Selection is a URL fact, so a reader can hand somebody the row they are looking at. */
   function select(item: string) {
@@ -175,195 +155,268 @@ export function OwnerInbox({ actorId, lanes, queue }: OwnerInboxProps) {
     return `${pathname}?${query.toString()}`;
   }
 
+  function onThreadChange(thread: PlatformSupportThreadRead) {
+    setClientRequests((current) => current.map((row) => (row.id === thread.id ? thread : row)));
+  }
+
   const longest = lanes.longestWait;
+  const clear = scopeRows.length === 0;
+  const anyDemo = allRows.some((row) => row.demo);
   const exportRows = rows.map((row) => ({
-    lane: LANE_TITLES[row.lane],
+    lane: INBOX_LANE_TITLES[row.lane],
     title: row.title,
     context: row.context,
     waited_minutes: row.waitMinutes ?? "",
   }));
 
+  const summary = clear
+    ? "Nothing is waiting on a person"
+    : [
+        `${workspaceCountFormat.format(scopeRows.length)} waiting on a person`,
+        longest === null ? null : `longest wait ${formatElapsed(longest.minutes)}`,
+      ].filter(Boolean).join(" · ");
+
   return (
     <div className="relative flex min-h-0 flex-col gap-[16px]">
-      <div className="flex items-end gap-[12px]">
-        <h1 className="m-0 text-[30px] leading-[1.1] font-[600] tracking-[-0.02em] text-[color:var(--ink)]">
-          Inbox
-        </h1>
-        <div className="ml-auto flex items-center gap-[8px]">
-          <Seg
-            items={[
-              {
-                active: scope === "mine",
-                href: scopeHref("mine"),
-                label: `Assigned to me · ${workspaceCountFormat.format(mineCount)}`,
-              },
-              {
-                active: scope === "all",
-                href: scopeHref("all"),
-                label: `Everything · ${workspaceCountFormat.format(allRows.length)}`,
-              },
-            ]}
-            label="Which rows this Inbox covers"
-          />
+      <div className="flex items-start justify-between gap-[16px]">
+        <div>
+          <h1 className="m-0 text-[26px] leading-[1.15] font-[600] tracking-[-0.01em] text-[color:var(--ink)]">
+            Inbox
+          </h1>
+          <p className="mt-[4px] mb-0 text-[13px] text-[color:var(--muted)]">{summary}</p>
+        </div>
+        <div className="flex items-center gap-[10px]">
+          {/*
+            * One pill for the whole screen rather than a marker per row. The seeders staple
+            * "(demo)" onto every name they write and `display-name.ts` strips it here, so this
+            * pill is the only thing on the page saying the data is seeded.
+            */}
+          {anyDemo ? <Pill>Demo data</Pill> : null}
+          <ScopeSwitch mineHref={scopeHref("mine")} scope={scope} allHref={scopeHref("all")} />
           <ExportMenu filename="owner-inbox" mode="local" rows={exportRows} />
+          <ContextEye
+            copy={`${INBOX_RANKED_BY} ${INBOX_NO_CLAIM_REASON}`}
+            placement="header"
+            screen="owner-inbox"
+          />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-[16px] md:grid-cols-3">
-        <Tile label="waiting on you" value={workspaceCountFormat.format(rows.length)} />
-        <Tile
-          label="longest wait"
-          tone={longest === null ? undefined : "warning"}
-          value={longest === null ? "none" : formatElapsed(longest.minutes)}
-        />
-        {/*
-          * `clearedInWindow` counts notices whose `readAt` falls inside the window. Nothing in the
-          * payload counts opens, so the label says cleared and claims no more than the field holds.
-          */}
-        <Tile
-          label="cleared this week"
-          value={workspaceCountFormat.format(queue.summary.clearedInWindow)}
-        />
-      </div>
+      <div
+        className={[
+          "grid min-h-0 flex-1 grid-cols-1 gap-[16px]",
+          clear ? "" : "xl:grid-cols-[minmax(0,1fr)_420px]",
+        ].join(" ")}
+      >
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--card)] shadow-[var(--shadow-card)]">
+          <div className="flex items-center gap-[10px] border-b border-[var(--line)] px-[14px] py-[8px]">
+            <label className="flex h-[30px] flex-1 items-center gap-[8px] rounded-lg border border-[var(--line-input)] bg-[var(--well)] px-[10px]">
+              <Search aria-hidden="true" className="size-[14px] shrink-0 text-[color:var(--faint)]" strokeWidth={1.75} />
+              <span className="sr-only">Search people, clients or subjects</span>
+              <input
+                className="min-w-0 flex-1 bg-transparent text-[13px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--faint)]"
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search people, clients or subjects"
+                type="search"
+                value={search}
+              />
+            </label>
+          </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-[16px] xl:grid-cols-[minmax(0,1fr)_440px]">
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-[14px] border border-[var(--line)] bg-[linear-gradient(180deg,var(--card-top),var(--card))] shadow-[var(--shadow-card)]">
-          {(["client", "system", "handoff"] as const).map((lane) => {
-            const laneRows = rows.filter((row) => row.lane === lane);
-            if (lane === "client" && lanes.clientRequests === undefined) return null;
-            return (
-              <div key={lane}>
-                <LaneBand
-                  count={
-                    lane === "handoff" && lanes.handoff.state === "unavailable"
-                      ? "not counted"
-                      : workspaceCountFormat.format(laneRows.length)
-                  }
-                  first={lane === (lanes.clientRequests === undefined ? "system" : "client")}
-                  title={LANE_TITLES[lane]}
-                />
-                {lane === "handoff" && lanes.handoff.state === "unavailable" ? (
-                  <p className="m-0 px-[16px] py-[12px] text-[12px] leading-[1.5] text-[color:var(--muted)]">
-                    {lanes.handoff.reason}
-                  </p>
-                ) : null}
-                <ul className="m-0 list-none p-0">
-                  {laneRows.map((row) => (
-                    <li key={row.key}>
-                      <LaneRow
-                        onSelect={() => select(row.key)}
-                        row={row}
-                        selected={selected?.key === row.key}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="flex min-h-0 flex-col gap-[14px] rounded-[14px] border border-[var(--line)] bg-[var(--card)] p-[18px_20px] shadow-[var(--shadow-card)]">
-          {selected === null ? (
-            <p className="m-0 text-[12.5px] leading-[1.5] text-[color:var(--muted)]">
-              {scope === "mine" ? "Nothing here is assigned to you." : "Nothing is waiting on a person."}
+          {clear ? (
+            <ClearPanel
+              asOf={queue.asOf}
+              cleared={queue.summary.clearedInWindow}
+              lanes={lanes}
+            />
+          ) : rows.length === 0 ? (
+            <p className="m-0 px-[14px] py-[28px] text-center text-[13px] text-[color:var(--muted)]">
+              No row matches that search.
             </p>
-          ) : selected.lane === "client" ? (
-            <ClientRequestDetail
-              onOpenSheet={() => setSheetThreadId(selected.key.slice("client:".length))}
-              onThreadChange={(thread) => setClientRequests((current) =>
-                current.map((row) => (row.id === thread.id ? thread : row)))}
-              row={selected}
-              thread={clientRequests.find((thread) => `client:${thread.id}` === selected.key) ?? null}
-            />
-          ) : selected.lane === "system" ? (
-            <SystemDetail
-              item={lanes.system.find((item) => `system:${item.id}` === selected.key) ?? null}
-              row={selected}
-            />
           ) : (
-            <HandoffDetail
-              handoff={
-                lanes.handoff.state === "available"
-                  ? lanes.handoff.rows.find((row) => `handoff:${row.conversationId}` === selected.key) ?? null
-                  : null
-              }
-              row={selected}
-            />
+            <div className="min-h-0 flex-1 overflow-auto pb-[8px]">
+              {LANE_ORDER.map((lane, index) => {
+                if (lane === "client" && lanes.clientRequests === undefined) return null;
+                const laneRows = rows.filter((row) => row.lane === lane);
+                const unavailable = lane === "handoff" && lanes.handoff.state === "unavailable";
+                return (
+                  <div key={lane}>
+                    <LaneHeader
+                      count={unavailable ? "not counted" : workspaceCountFormat.format(laneRows.length)}
+                      first={index === (lanes.clientRequests === undefined ? 1 : 0)}
+                      note={unavailable
+                        ? lanes.handoff.state === "unavailable" ? lanes.handoff.reason : null
+                        : laneRows.length === 0 ? "none open" : null}
+                      title={INBOX_LANE_TITLES[lane]}
+                    />
+                    {laneRows.length === 0 ? null : (
+                      <ul className="m-0 list-none p-0">
+                        {laneRows.map((row, rowIndex) => (
+                          <li
+                            className={[
+                              "px-[6px]",
+                              rowIndex === laneRows.length - 1 || selected?.key === row.key
+                                ? ""
+                                : "border-b border-[var(--line-soft)]",
+                            ].join(" ")}
+                            key={row.key}
+                          >
+                            <LaneRow
+                              onSelect={() => select(row.key)}
+                              row={row}
+                              selected={selected?.key === row.key}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
+
+        {clear || selected === null ? null : selected.lane === "client" ? (
+          <RequestDetail
+            actorId={actorId}
+            key={selected.key}
+            onClose={() => select("")}
+            onOpenSheet={() => setSheetThreadId(selected.key.slice("client:".length))}
+            onThreadChange={onThreadChange}
+            row={selected}
+            thread={clientRequests.find((thread) => `client:${thread.id}` === selected.key) ?? null}
+          />
+        ) : selected.lane === "system" ? (
+          <NoticeDetail
+            item={lanes.system.find((item) => `system:${item.id}` === selected.key) ?? null}
+            key={selected.key}
+            onClose={() => select("")}
+            row={selected}
+          />
+        ) : (
+          <HandoffDetail
+            handoff={
+              lanes.handoff.state === "available"
+                ? lanes.handoff.rows.find((row) => `handoff:${row.conversationId}` === selected.key) ?? null
+                : null
+            }
+            key={selected.key}
+            onClose={() => select("")}
+            row={selected}
+          />
+        )}
       </div>
 
       <SupportRequestSheet
         actorId={actorId}
         actorRole="admin"
         onOpenChange={(open) => { if (!open) setSheetThreadId(null); }}
-        onThreadChange={(thread) => setClientRequests((current) =>
-          current.map((row) => (row.id === thread.id ? thread : row)))}
+        onThreadChange={onThreadChange}
         selected={clientRequests.find((thread) => thread.id === sheetThreadId) ?? null}
         threads={clientRequests}
       />
-
-      <ContextEye copy={`${INBOX_RANKED_BY} ${INBOX_NO_CLAIM_REASON}`} screen="owner-inbox" />
     </div>
   );
 }
 
-function Tile({ label, tone, value }: { label: string; tone?: "warning"; value: string }) {
+/* --------------------------------------------------------------------------------------------
+ * The list
+ * ------------------------------------------------------------------------------------------ */
+
+/** The scope switch. A local segmented control rather than `Seg`, because both cells are links. */
+function ScopeSwitch({ allHref, mineHref, scope }: { allHref: string; mineHref: string; scope: Scope }) {
+  const cell = "inline-flex items-center rounded-md px-2.5 py-[5px] text-[12.5px]";
+  const on = "bg-[var(--accent-wash-strong)] font-medium text-[color:var(--accent-text)]";
   return (
     <div
-      className={[
-        "flex items-baseline gap-[12px] rounded-[14px] border px-[18px] py-[14px] shadow-[var(--shadow-card)]",
-        tone === "warning"
-          ? "border-[var(--warning-line)] bg-[var(--warning-wash)]"
-          : "border-[var(--line)] bg-[linear-gradient(180deg,var(--card-top),var(--card))]",
-      ].join(" ")}
+      aria-label="Which rows this Inbox covers"
+      className="inline-flex rounded-lg border border-[var(--line-input)] bg-[var(--card)] p-0.5"
+      role="group"
     >
-      <Figure
-        className={tone === "warning" ? "text-[var(--warning-text)]" : "text-[var(--ink)]"}
-        size="md"
+      <Link
+        aria-current={scope === "mine" ? "true" : undefined}
+        className={[cell, scope === "mine" ? on : "text-[color:var(--muted)]", "no-underline hover:no-underline"].join(" ")}
+        href={mineHref}
       >
-        {value}
-      </Figure>
-      <div className="text-[12.5px] font-[500] text-[color:var(--faint)]">{label}</div>
+        Assigned to me
+      </Link>
+      <Link
+        aria-current={scope === "all" ? "true" : undefined}
+        className={[cell, scope === "all" ? on : "text-[color:var(--muted)]", "no-underline hover:no-underline"].join(" ")}
+        href={allHref}
+      >
+        All
+      </Link>
     </div>
   );
 }
 
-function LaneBand({ count, first, title }: { count: string; first: boolean; title: string }) {
+/**
+ * A lane header, and the whole of a lane that has nothing in it.
+ *
+ * The count is mono so the three lanes' figures line up under each other, and the trailing note is
+ * where an empty lane says "none open" and an unreadable one says why. Neither case draws a body:
+ * an empty framed area under a header reads as a failed load.
+ */
+function LaneHeader({
+  count,
+  first,
+  note,
+  title,
+}: { count: string; first: boolean; note: string | null; title: string }) {
   return (
     <div
       className={[
-        "flex items-center gap-[8px] border-b border-[var(--line)] px-[16px] py-[12px]",
-        first ? "" : "mt-[8px] border-t border-[var(--line)]",
+        "flex items-baseline gap-[8px] px-[14px]",
+        first ? "pt-[12px]" : "mt-[8px] border-t border-[var(--line)] pt-[16px]",
+        // A lane with no rows under it owns the space a list would have taken, so the header does
+        // not read as a heading whose content failed to arrive.
+        note === null ? "pb-[4px]" : "pb-[14px]",
       ].join(" ")}
+      data-slot="inbox-lane-header"
     >
-      <span className="text-[13.5px] font-[600] text-[color:var(--ink)]">{title}</span>
-      <span className="mono text-[11.5px] text-[color:var(--meta)]">{count}</span>
+      <span className="text-[11px] font-[500] tracking-[0.08em] text-[color:var(--faint)] uppercase">
+        {title}
+      </span>
+      <span className="font-mono text-[11.5px] tabular-nums text-[color:var(--faint)]">{count}</span>
+      {note === null ? null : (
+        <span className="min-w-0 text-[12.5px] text-[color:var(--faint)]">{note}</span>
+      )}
     </div>
   );
 }
 
-function LaneRow({ onSelect, row, selected }: { onSelect: () => void; row: Row; selected: boolean }) {
+/**
+ * One row: a state dot, two lines of text, one relative time.
+ *
+ * Selection is an accent wash inside a full accent hairline rather than a thick left edge. A
+ * side stripe reads as a nesting level on a list that already has lane headers doing that job.
+ */
+function LaneRow({ onSelect, row, selected }: { onSelect: () => void; row: InboxRow; selected: boolean }) {
   return (
     <button
       aria-current={selected ? "true" : undefined}
       className={[
-        "flex h-[52px] w-full cursor-pointer items-center gap-[12px] border-b border-[var(--line-soft)] px-[16px] text-left",
-        selected ? "bg-[var(--row-selected)]" : "",
+        "flex w-full cursor-pointer items-center gap-[12px] rounded-[10px] border px-[14px] py-[10px] text-left",
+        selected
+          ? "border-[var(--accent-edge)] bg-[var(--accent-wash)]"
+          : "border-transparent",
       ].join(" ")}
+      data-lane={row.lane}
+      data-slot="inbox-row"
       onClick={onSelect}
       type="button"
     >
-      <StatusDot tone={row.amber ? "amber" : "wait"} />
+      <StatusDot tone={row.overSla ? "amber" : "wait"} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-[500] text-[color:var(--ink)]">{row.title}</span>
-        <span className="block truncate text-[12.5px] text-[color:var(--faint)]">{row.context}</span>
+        <span className="block truncate text-[13px] font-[500] text-[color:var(--ink)]">{row.title}</span>
+        <span className="block truncate text-[12.5px] text-[color:var(--muted)]">{row.context}</span>
       </span>
       <span
         className={[
-          "mono shrink-0 text-[11.5px]",
-          row.amber ? "text-[color:var(--warning-text)]" : "text-[color:var(--meta)]",
+          "shrink-0 font-mono text-[12px] tabular-nums",
+          row.overSla ? "text-[color:var(--warning-text)]" : "text-[color:var(--faint)]",
         ].join(" ")}
       >
         {wait(row.waitMinutes)}
@@ -372,74 +425,253 @@ function LaneRow({ onSelect, row, selected }: { onSelect: () => void; row: Row; 
   );
 }
 
-function DetailHead({ overline, pills, title }: { overline: string; pills: readonly string[]; title: string }) {
+/**
+ * The whole-Inbox empty state: the three lane counts on one strip, then one panel.
+ *
+ * The panel says when the Inbox was read rather than "you're all caught up", because the only
+ * thing the page can honestly claim is the instant its queue was sampled at.
+ */
+function ClearPanel({ asOf, cleared, lanes }: { asOf: string; cleared: number; lanes: InboxLanes }) {
   return (
-    <div>
-      <div className="text-[12.5px] font-[500] text-[color:var(--faint)]">{overline}</div>
-      <div className="mt-[4px] text-[17px] leading-[1.25] font-[600] tracking-[-0.01em] text-[color:var(--ink)]">
-        {title}
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-3">
+        {LANE_ORDER.map((lane) => {
+          if (lane === "client" && lanes.clientRequests === undefined) return null;
+          return (
+            <div
+              className="flex items-baseline gap-[8px] px-[16px] py-[14px] sm:[&:not(:last-child)]:border-r sm:[&:not(:last-child)]:border-[var(--line-soft)]"
+              data-slot="inbox-lane-header"
+              key={lane}
+            >
+              <span className="text-[11px] font-[500] tracking-[0.08em] text-[color:var(--faint)] uppercase">
+                {INBOX_LANE_TITLES[lane]}
+              </span>
+              <span className="font-mono text-[11.5px] tabular-nums text-[color:var(--faint)]">
+                {lane === "handoff" && lanes.handoff.state === "unavailable" ? "not counted" : "0"}
+              </span>
+            </div>
+          );
+        })}
       </div>
-      <div className="mt-[8px] flex flex-wrap gap-[8px]">
-        {pills.map((pill, index) => (
-          <Pill key={pill} tone={index === 0 ? "amber" : "neutral"}>
-            {index === 0 ? <StatusDot tone="amber" /> : null}
-            {pill}
-          </Pill>
-        ))}
+      <div className="flex flex-col items-center gap-[10px] border-t border-[var(--line)] px-[24px] pt-[56px] pb-[60px] text-center">
+        <CircleCheck aria-hidden="true" className="size-7 text-[color:var(--good)]" strokeWidth={1.5} />
+        <div className="text-[14px] font-[500] text-[color:var(--ink)]">
+          Clear as of {shortTimestamp(asOf)}
+        </div>
+        <p className="m-0 max-w-[var(--measure-tight)] text-[13px] text-[color:var(--muted)]">
+          Nothing in the three lanes is waiting on a person. {workspaceCountFormat.format(cleared)} notices
+          were cleared in the last week.
+        </p>
       </div>
-    </div>
+    </>
   );
 }
 
-function CollectedGrid({ rows }: { rows: readonly { label: string; value: string }[] }) {
+/* --------------------------------------------------------------------------------------------
+ * The detail pane
+ * ------------------------------------------------------------------------------------------ */
+
+function DetailShell({
+  children,
+  footer,
+  onClose,
+  pills,
+  title,
+}: {
+  children: ReactNode;
+  footer: ReactNode;
+  onClose: () => void;
+  pills: ReactNode;
+  title: string;
+}) {
   return (
-    <div>
-      <div className="mb-[6px] text-[12.5px] font-[500] text-[color:var(--faint)]">
-        Collected from this account
+    <aside
+      className="flex min-h-0 flex-col overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--card)] shadow-[var(--shadow-card)]"
+      data-slot="inbox-detail"
+    >
+      <div className="border-b border-[var(--line)] px-[18px] pt-[16px] pb-[14px]">
+        <div className="flex items-start justify-between gap-[12px]">
+          <h2 className="m-0 text-[15px] leading-[1.3] font-[600] text-[color:var(--ink)]">{title}</h2>
+          <button
+            aria-label="Close this request"
+            className="mt-[2px] shrink-0 cursor-pointer text-[color:var(--faint)] hover:text-[color:var(--ink)]"
+            onClick={onClose}
+            type="button"
+          >
+            <X aria-hidden="true" className="size-[14px]" strokeWidth={1.75} />
+          </button>
+        </div>
+        <div className="mt-[10px] flex flex-wrap gap-[6px]">{pills}</div>
       </div>
-      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-[16px] gap-y-[6px] text-[13px]">
+      {children}
+      {footer}
+    </aside>
+  );
+}
+
+/**
+ * The pane's footer: who opened the record, and the identifiers a support conversation needs.
+ *
+ * Collapsed, because an id is what a reader reaches for once a week and the row above it is what
+ * they read every time. `<details>` rather than state: the disclosure is the browser's.
+ */
+function TechnicalDetail({
+  created,
+  rows,
+}: { created: string; rows: readonly { label: string; value: string }[] }) {
+  return (
+    <details className="border-t border-[var(--line-soft)] px-[18px] py-[8px]" data-slot="inbox-technical">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-[8px] [&::-webkit-details-marker]:hidden">
+        <span className="font-mono text-[11px] text-[color:var(--overline)]">{created}</span>
+        <span className="text-[11.5px] text-[color:var(--faint)]">Technical detail</span>
+      </summary>
+      <dl className="m-0 mt-[8px] grid grid-cols-[auto_1fr] gap-x-[12px] gap-y-[4px] text-[12px]">
         {rows.map((row) => (
           <div className="contents" key={row.label}>
             <dt className="text-[color:var(--meta)]">{row.label}</dt>
-            <dd className="m-0 text-[color:var(--ink)]">{row.value}</dd>
+            <dd className="m-0 truncate font-mono text-[color:var(--ink)]">{row.value}</dd>
           </div>
         ))}
       </dl>
-    </div>
+    </details>
   );
 }
 
-function Logged() {
-  return <div className="mono text-[11px] text-[color:var(--overline)]">Logged</div>;
+function FactList({ rows }: { rows: readonly { label: string; value: string }[] }) {
+  return (
+    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-[16px] gap-y-[6px] text-[13px]">
+      {rows.map((row) => (
+        <div className="contents" key={row.label}>
+          <dt className="text-[color:var(--meta)]">{row.label}</dt>
+          <dd className="m-0 text-[color:var(--ink)]">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function Avatar({ mine, name }: { mine: boolean; name: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={[
+        "inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border text-[10.5px] font-[600]",
+        mine
+          ? "border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[color:var(--accent-text)]"
+          : "border-[var(--line)] bg-[var(--well)] text-[color:var(--muted)]",
+      ].join(" ")}
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+/**
+ * One message in the thread.
+ *
+ * An internal note is drawn as a dashed rule with its own label rather than as another bubble,
+ * because the one thing a reader must never get wrong here is which lines the coach can see.
+ */
+function ThreadMessage({ actorId, message }: { actorId: string; message: PlatformSupportMessageRead }) {
+  const name = displayName(message.authorName?.trim() ?? "") || "Author not recorded";
+  const mine = message.authorId === actorId;
+
+  if (message.internal) {
+    return (
+      <div className="flex flex-col gap-[8px]" data-slot="inbox-internal-note">
+        <div className="flex items-center gap-[10px] py-[6px]">
+          <span aria-hidden="true" className="h-px flex-1 bg-[var(--line-soft)]" />
+          <span className="text-[11.5px] text-[color:var(--faint)]">
+            Internal note · {shortTimestamp(message.createdAt)}
+          </span>
+          <span aria-hidden="true" className="h-px flex-1 bg-[var(--line-soft)]" />
+        </div>
+        <div className="rounded-lg border border-dashed border-[var(--line)] px-[12px] py-[8px] text-[12.5px] text-[color:var(--muted)]">
+          {message.body}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={["flex gap-[10px]", mine ? "flex-row-reverse" : ""].join(" ")}>
+      <Avatar mine={mine} name={mine ? "You" : name} />
+      <div className={["min-w-0", mine ? "text-right" : ""].join(" ")}>
+        <div className={["flex items-baseline gap-[8px]", mine ? "justify-end" : ""].join(" ")}>
+          <span className="text-[12.5px] font-[500] text-[color:var(--ink)]">{mine ? "You" : name}</span>
+          <span className="font-mono text-[11px] text-[color:var(--faint)]">
+            {shortTimestamp(message.createdAt)}
+          </span>
+        </div>
+        <div
+          className={[
+            "mt-[4px] px-[12px] py-[10px] text-left text-[13px] leading-[1.5] text-[color:var(--body)]",
+            mine
+              ? "rounded-[12px_12px_4px_12px] border border-[var(--accent-edge)] bg-[var(--accent-wash)]"
+              : "rounded-[12px_12px_12px_4px] border border-[var(--line)] bg-[var(--well)]",
+          ].join(" ")}
+        >
+          {message.body}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
  * The client-request pane.
  *
- * Reply and Reassign open the request sheet that already owns both writes -- the reply composer
- * and the success-owner confirm flow with its reason -- rather than a second copy of either.
+ * The composer writes through the same thread endpoint the request sheet uses, with the same
+ * `kind` the sheet sends, so a reply typed here and a reply typed there are one write with one
+ * audit trail. Reassign hands off to the sheet, which owns the confirm flow and the read-back.
  * Resolve is the thread lifecycle endpoint, which takes a reason and returns an audit id, so it
  * asks for the reason here before it sends anything.
  */
-function ClientRequestDetail({
+function RequestDetail({
+  actorId,
+  onClose,
   onOpenSheet,
   onThreadChange,
   row,
   thread,
 }: {
+  actorId: string;
+  onClose: () => void;
   onOpenSheet: () => void;
   onThreadChange: (thread: PlatformSupportThreadRead) => void;
-  row: Row;
+  row: InboxRow;
   thread: PlatformSupportThreadRead | null;
 }) {
+  const [tab, setTab] = useState<"request" | "owner">("request");
+  const [kind, setKind] = useState<MessageKind>("reply");
+  const [draft, setDraft] = useState("");
+  const [sendState, setSendState] = useState<"idle" | "sending" | "failed">("idle");
   const [reason, setReason] = useState("");
   const [confirming, setConfirming] = useState(false);
-  const [state, setState] = useState<"idle" | "sending" | "failed">("idle");
-  const request = thread?.messages.find((message) => !message.internal) ?? null;
+  const [resolveState, setResolveState] = useState<"idle" | "sending" | "failed">("idle");
+
+  async function send() {
+    if (!thread || !draft.trim()) return;
+    setSendState("sending");
+    try {
+      const response = await fetch(`/api/platform/support/threads/${thread.id}`, {
+        body: JSON.stringify({ body: draft.trim(), kind }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const value = await response.json() as { thread?: PlatformSupportThreadRead };
+      if (!response.ok || !value.thread) throw new Error("SUPPORT_WRITE_FAILED");
+      onThreadChange(value.thread);
+      setDraft("");
+      setSendState("idle");
+    } catch {
+      setSendState("failed");
+    }
+  }
 
   async function resolve() {
     if (!thread || !reason.trim()) return;
-    setState("sending");
+    setResolveState("sending");
     try {
       const response = await fetch(`/api/platform/support/threads/${thread.id}`, {
         body: JSON.stringify({ kind: "status", reason: reason.trim(), status: "resolved" }),
@@ -449,87 +681,194 @@ function ClientRequestDetail({
       if (!response.ok) throw new Error("REFUSED");
       onThreadChange({ ...thread, status: "resolved" });
       setConfirming(false);
-      setState("idle");
+      setResolveState("idle");
     } catch {
-      setState("failed");
+      setResolveState("failed");
     }
   }
 
-  return (
-    <>
-      <DetailHead
-        overline={`Client request · ${thread?.tenantName ?? row.context}`}
-        pills={[`Open ${wait(row.waitMinutes)}`, thread ? assignee(thread) : "Unassigned"]}
-        title={row.title}
-      />
+  const state = thread ? SUPPORT_STATE[thread.status] : "Open";
+  const waiting = thread?.status === "waiting_on_coach";
 
-      <div className="rounded-[11px] border border-[var(--line-soft)] bg-[var(--well)] px-[14px] py-[12px] text-[13px] leading-[1.5] text-[color:var(--body)]">
-        {request?.body ?? "No message is recorded on this request."}
-        <div className="mt-[6px] text-[12.5px] text-[color:var(--faint)]">
-          {request ? `${request.authorName ?? "Client"} · ${timestamp(request.createdAt)}` : "—"}
-        </div>
+  return (
+    <DetailShell
+      footer={
+        <TechnicalDetail
+          created={`created ${shortTimestamp(thread?.createdAt ?? null)} · ${
+            displayName(thread?.messages.at(0)?.authorName?.trim() ?? "") || "author not recorded"
+          }`}
+          rows={[
+            { label: "Thread ID", value: thread?.id ?? "not recorded" },
+            { label: "Client ID", value: thread?.tenantId ?? "not recorded" },
+          ]}
+        />
+      }
+      onClose={onClose}
+      pills={
+        <>
+          <Pill tone={waiting ? "amber" : "neutral"}>
+            {waiting ? <StatusDot tone="amber" /> : null}
+            {state}
+          </Pill>
+          <Pill>{displayName(thread?.tenantName ?? row.context)}</Pill>
+          <Pill>{thread ? assignee(thread) : "Unassigned"}</Pill>
+        </>
+      }
+      title={row.title}
+    >
+      <div className="flex gap-[20px] border-b border-[var(--line)] px-[18px]" role="tablist">
+        {([["request", "Request"], ["owner", "Success owner"]] as const).map(([id, label]) => (
+          <button
+            aria-selected={tab === id}
+            className={[
+              "-mb-px cursor-pointer border-b-2 pt-[8px] pb-[10px] text-[13px]",
+              tab === id
+                ? "border-[var(--accent-text)] text-[color:var(--ink)]"
+                : "border-transparent text-[color:var(--muted)]",
+            ].join(" ")}
+            key={id}
+            onClick={() => setTab(id)}
+            role="tab"
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      <CollectedGrid
-        rows={[
-          { label: "Account", value: thread?.tenantName ?? "not recorded" },
-          { label: "Success owner", value: thread ? ownerName(thread) : "not recorded" },
-          { label: "Assigned to", value: thread ? assignee(thread) : "not recorded" },
-          { label: "Opened", value: timestamp(thread?.createdAt ?? null) },
-        ]}
-      />
-
-      {confirming ? (
-        <div className="mt-auto flex flex-col gap-[9px] rounded-[11px] border border-[var(--warning-line)] bg-[var(--warning-wash)] p-[12px]">
-          <label className="block">
-            <span className="sr-only">Reason for resolving</span>
-            <input
-              className="h-[30px] w-full rounded-[8px] border border-[var(--line-input)] bg-[var(--control-fill)] px-[10px] text-[12.5px] text-[color:var(--ink)] placeholder:text-[color:var(--faint)]"
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Why now? This is written to the audit log."
-              value={reason}
-            />
-          </label>
-          <div className="flex items-center gap-[8px]">
-            <KitButton
-              disabled={!reason.trim() || state === "sending"}
-              onClick={resolve}
-              size="md"
-              variant="primary"
-            >
-              {state === "sending" ? "Resolving…" : "Resolve request"}
-            </KitButton>
-            <KitButton onClick={() => setConfirming(false)} size="md" variant="ghost">
-              Cancel
+      {tab === "owner" ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-[14px] overflow-auto px-[18px] py-[16px]">
+          <FactList
+            rows={[
+              { label: "Account", value: displayName(thread?.tenantName ?? "not recorded") },
+              { label: "Success owner", value: thread ? ownerName(thread) : "not recorded" },
+              { label: "Assigned to", value: thread ? assignee(thread) : "not recorded" },
+              { label: "Opened", value: timestamp(thread?.createdAt ?? null) },
+              { label: "Waiting", value: wait(row.waitMinutes) },
+            ]}
+          />
+          <div>
+            <KitButton disabled={thread === null} onClick={onOpenSheet} size="md" variant="secondary">
+              Reassign
             </KitButton>
           </div>
-          {state === "failed" ? (
-            <p className="m-0 text-[12px] text-[color:var(--failure-text)]">
-              The change was refused. Nothing was recorded.
-            </p>
-          ) : null}
         </div>
       ) : (
-        <div className="mt-auto flex gap-[8px]">
-          <KitButton disabled={thread === null} onClick={onOpenSheet} size="md" variant="primary">
-            Reply
-          </KitButton>
-          <KitButton disabled={thread === null} onClick={onOpenSheet} size="md" variant="secondary">
-            Reassign
-          </KitButton>
-          <KitButton
-            className="ml-auto"
-            disabled={thread === null}
-            onClick={() => setConfirming(true)}
-            size="md"
-            variant="secondary"
-          >
-            Resolve
-          </KitButton>
-        </div>
+        <>
+          <div className="flex min-h-0 flex-1 flex-col gap-[14px] overflow-auto px-[18px] py-[16px]">
+            {thread === null || thread.messages.length === 0 ? (
+              <p className="m-0 text-[13px] text-[color:var(--muted)]">
+                No message is recorded on this request.
+              </p>
+            ) : (
+              thread.messages.map((message) => (
+                <ThreadMessage actorId={actorId} key={message.id} message={message} />
+              ))
+            )}
+          </div>
+
+          <div className="flex flex-col gap-[8px] border-t border-[var(--line)] px-[18px] pt-[12px] pb-[14px]">
+            {confirming ? (
+              <div className="flex flex-col gap-[9px] rounded-[11px] border border-[var(--warning-line)] bg-[var(--warning-wash)] p-[12px]">
+                <label className="block">
+                  <span className="sr-only">Reason for resolving</span>
+                  <input
+                    className="h-[30px] w-full rounded-lg border border-[var(--line-input)] bg-[var(--control-fill)] px-[10px] text-[12.5px] text-[color:var(--ink)] placeholder:text-[color:var(--faint)]"
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder="Why now? This is written to the audit log."
+                    value={reason}
+                  />
+                </label>
+                <div className="flex items-center gap-[8px]">
+                  <KitButton
+                    disabled={!reason.trim() || resolveState === "sending"}
+                    onClick={resolve}
+                    size="md"
+                    variant="primary"
+                  >
+                    {resolveState === "sending" ? "Resolving…" : "Resolve request"}
+                  </KitButton>
+                  <KitButton onClick={() => setConfirming(false)} size="md" variant="ghost">
+                    Cancel
+                  </KitButton>
+                </div>
+                {resolveState === "failed" ? (
+                  <p className="m-0 text-[12px] text-[color:var(--failure-text)]">
+                    The change was refused. Nothing was recorded.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div
+              aria-label="What this message is"
+              className="inline-flex self-start rounded-lg border border-[var(--line-input)] bg-[var(--well)] p-0.5"
+              role="group"
+            >
+              {([["reply", "Reply to coach"], ["internal_note", "Internal note"]] as const).map(([id, label]) => (
+                <button
+                  aria-pressed={kind === id}
+                  className={[
+                    "cursor-pointer rounded-md px-2.5 py-[4px] text-[12.5px]",
+                    kind === id
+                      ? "bg-[var(--accent-wash-strong)] font-medium text-[color:var(--accent-text)]"
+                      : "text-[color:var(--muted)]",
+                  ].join(" ")}
+                  key={id}
+                  onClick={() => setKind(id)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <label className="block">
+              <span className="sr-only">
+                {kind === "reply" ? "Write a reply to the coach" : "Write an internal note"}
+              </span>
+              <textarea
+                className="min-h-[64px] w-full rounded-lg border border-[var(--line-input)] bg-[var(--well)] px-[10px] py-[8px] text-[13px] text-[color:var(--ink)] placeholder:text-[color:var(--faint)]"
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={kind === "reply" ? "Write a reply to the coach" : "Write an internal note"}
+                value={draft}
+              />
+            </label>
+
+            {sendState === "failed" ? (
+              <p className="m-0 text-[12px] text-[color:var(--failure-text)]">
+                The message was not saved. The thread is unchanged.
+              </p>
+            ) : null}
+
+            <div className="flex items-center justify-between gap-[8px]">
+              <span className="text-[11.5px] text-[color:var(--faint)]">Logged to the audit trail</span>
+              <div className="flex gap-[8px]">
+                <KitButton
+                  disabled={thread === null || thread.status === "resolved"}
+                  onClick={() => setConfirming(true)}
+                  size="md"
+                  variant="ghost"
+                >
+                  Resolve
+                </KitButton>
+                <KitButton disabled={thread === null} onClick={onOpenSheet} size="md" variant="secondary">
+                  Reassign
+                </KitButton>
+                <KitButton
+                  disabled={thread === null || !draft.trim() || sendState === "sending"}
+                  onClick={send}
+                  size="md"
+                  variant="primary"
+                >
+                  {kind === "reply" ? "Send reply" : "Save note"}
+                </KitButton>
+              </div>
+            </div>
+          </div>
+        </>
       )}
-      <Logged />
-    </>
+    </DetailShell>
   );
 }
 
@@ -538,7 +877,11 @@ function ClientRequestDetail({
  * so the action says "Mark read" and never "Resolve": reading a notice does not fix the thing it
  * is about.
  */
-function SystemDetail({ item, row }: { item: AttentionItem | null; row: Row }) {
+function NoticeDetail({
+  item,
+  onClose,
+  row,
+}: { item: AttentionItem | null; onClose: () => void; row: InboxRow }) {
   const [state, setState] = useState<"idle" | "sending" | "done" | "failed">(
     item?.readAt ? "done" : "idle",
   );
@@ -559,72 +902,107 @@ function SystemDetail({ item, row }: { item: AttentionItem | null; row: Row }) {
   }
 
   return (
-    <>
-      <DetailHead
-        overline={`System problem · ${item?.tenantName ?? "Platform"}`}
-        pills={[`Open ${wait(row.waitMinutes)}`, state === "done" ? "Read" : "Unread"]}
-        title={row.title}
-      />
-
-      <div className="rounded-[11px] border border-[var(--line-soft)] bg-[var(--well)] px-[14px] py-[12px] text-[13px] leading-[1.5] text-[color:var(--body)]">
-        {item?.body ?? item?.ruleDescription ?? "No detail is recorded on this notice."}
+    <DetailShell
+      footer={
+        <TechnicalDetail
+          created={`recorded ${shortTimestamp(item?.createdAt ?? null)}`}
+          rows={[
+            { label: "Notice ID", value: item?.id ?? "not recorded" },
+            { label: "Rule", value: item?.ruleName ?? item?.kind ?? "not recorded" },
+          ]}
+        />
+      }
+      onClose={onClose}
+      pills={
+        <>
+          <Pill tone={row.overSla ? "amber" : "neutral"}>
+            {row.overSla ? <StatusDot tone="amber" /> : null}
+            {row.overSla ? "Past its response target" : `Open ${wait(row.waitMinutes)}`}
+          </Pill>
+          <Pill>{item?.tenantName ? displayName(item.tenantName) : "Platform"}</Pill>
+          <Pill>{state === "done" ? "Read" : "Unread"}</Pill>
+        </>
+      }
+      title={row.title}
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-[14px] overflow-auto px-[18px] py-[16px]">
+        <div className="rounded-[11px] border border-[var(--line-soft)] bg-[var(--well)] px-[14px] py-[12px] text-[13px] leading-[1.5] text-[color:var(--body)]">
+          {item?.body ?? item?.ruleDescription ?? "No detail is recorded on this notice."}
+        </div>
+        <FactList
+          rows={[
+            { label: "Account", value: item?.tenantName ? displayName(item.tenantName) : "Platform" },
+            { label: "Recorded", value: timestamp(item?.createdAt ?? null) },
+            { label: "Open for", value: wait(row.waitMinutes) },
+          ]}
+        />
       </div>
 
-      <CollectedGrid
-        rows={[
-          { label: "Account", value: item?.tenantName ?? "Platform" },
-          { label: "Rule", value: item?.ruleName ?? item?.kind ?? "not recorded" },
-          { label: "Recorded", value: timestamp(item?.createdAt ?? null) },
-          { label: "Open for", value: wait(row.waitMinutes) },
-        ]}
-      />
-
-      <div className="mt-auto flex gap-[8px]">
-        <KitButton
-          disabled={item === null || state === "sending" || state === "done"}
-          onClick={markRead}
-          size="md"
-          variant="secondary"
-        >
-          {state === "done" ? "Marked read" : state === "failed" ? "Retry mark read" : "Mark read"}
-        </KitButton>
-        {item?.link ? (
+      <div className="flex items-center justify-between gap-[8px] border-t border-[var(--line)] px-[18px] pt-[12px] pb-[14px]">
+        <span className="text-[11.5px] text-[color:var(--faint)]">Logged to the audit trail</span>
+        <div className="flex gap-[8px]">
+          {item?.link ? (
+            <KitButton
+              onClick={() => { window.location.href = item.link as string; }}
+              size="md"
+              variant="secondary"
+            >
+              Open
+            </KitButton>
+          ) : null}
           <KitButton
-            className="ml-auto"
-            onClick={() => { window.location.href = item.link as string; }}
+            disabled={item === null || state === "sending" || state === "done"}
+            onClick={markRead}
             size="md"
-            variant="secondary"
+            variant="primary"
           >
-            Open
+            {state === "done" ? "Marked read" : state === "failed" ? "Retry mark read" : "Mark read"}
           </KitButton>
-        ) : null}
+        </div>
       </div>
-      <Logged />
-    </>
+    </DetailShell>
   );
 }
 
 /** The handoff pane: an account, a channel and a wait. There is nothing here a platform reader may act on. */
-function HandoffDetail({ handoff, row }: { handoff: InboxHandoffRow | null; row: Row }) {
+function HandoffDetail({
+  handoff,
+  onClose,
+  row,
+}: { handoff: InboxHandoffRow | null; onClose: () => void; row: InboxRow }) {
   return (
-    <>
-      <DetailHead
-        overline={`Lead handoff · ${handoff?.channelLabel ?? "channel not recorded"}`}
-        pills={[`Waiting ${wait(row.waitMinutes)}`, "Not taken over"]}
-        title={row.title}
-      />
-
-      <div className="rounded-[11px] border border-[var(--line-soft)] bg-[var(--well)] px-[14px] py-[12px] text-[13px] leading-[1.5] text-[color:var(--body)]">
-        {handoff?.handoff?.label ?? "No handoff reason is recorded."}
+    <DetailShell
+      footer={
+        <TechnicalDetail
+          created={`waiting ${wait(row.waitMinutes)}`}
+          rows={[
+            { label: "Conversation ID", value: handoff?.conversationId ?? "not recorded" },
+            { label: "Client ID", value: handoff?.tenantId ?? "not recorded" },
+          ]}
+        />
+      }
+      onClose={onClose}
+      pills={
+        <>
+          <Pill>Waiting {wait(row.waitMinutes)}</Pill>
+          <Pill>{handoff?.channelLabel ?? "channel not recorded"}</Pill>
+          <Pill>Not taken over</Pill>
+        </>
+      }
+      title={row.title}
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-[14px] overflow-auto px-[18px] py-[16px]">
+        <div className="rounded-[11px] border border-[var(--line-soft)] bg-[var(--well)] px-[14px] py-[12px] text-[13px] leading-[1.5] text-[color:var(--body)]">
+          {handoff?.handoff?.label ?? "No handoff reason is recorded."}
+        </div>
+        <FactList
+          rows={[
+            { label: "Account", value: displayName(handoff?.tenantName ?? row.title) },
+            { label: "Channel", value: handoff?.channelLabel ?? "not recorded" },
+            { label: "Waiting", value: wait(row.waitMinutes) },
+          ]}
+        />
       </div>
-
-      <CollectedGrid
-        rows={[
-          { label: "Account", value: handoff?.tenantName ?? row.title },
-          { label: "Channel", value: handoff?.channelLabel ?? "not recorded" },
-          { label: "Waiting", value: wait(row.waitMinutes) },
-        ]}
-      />
-    </>
+    </DetailShell>
   );
 }

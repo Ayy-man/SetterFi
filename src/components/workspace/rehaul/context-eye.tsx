@@ -30,6 +30,26 @@ export type ContextEyeProps = {
    * `fixed` so the eye still lands bottom-right of the viewport instead of the document.
    */
   position?: "absolute" | "fixed";
+  /**
+   * Where the eye lives.
+   *
+   * `floating` (the default) is the bottom-right button every screen shipped with. It has one
+   * defect the canvas review named: an absolute bottom-right corner is also where a pane's action
+   * row ends, and on the Inbox the eye sat on the Reply button. `header` is the fix. The eye
+   * becomes a 32px control in the page header's trailing slot, beside Export, where nothing can
+   * be underneath it, and the popover opens downward from there. Screens with a header row use
+   * `header`; screens without one keep `floating` and reserve a bottom gutter for it.
+   */
+  placement?: "floating" | "header";
+  /**
+   * Control density for `placement="header"`.
+   *
+   * The rule the artboard draws is "same height as its neighbours", and the two apps disagree on
+   * what that height is: the owner console runs a 32px control row, the coach app a 46px one. A
+   * scale rather than a caller-supplied className keeps that pair of numbers in one file, so the
+   * eye cannot drift away from the Export button standing next to it.
+   */
+  scale?: "owner" | "coach";
   className?: string;
 };
 
@@ -79,6 +99,8 @@ export function ContextEye({
   className,
   copy,
   position = "absolute",
+  placement = "floating",
+  scale = "owner",
   screen,
 }: ContextEyeProps) {
   /**
@@ -133,11 +155,14 @@ export function ContextEye({
   return (
     <div
       className={cn(
-        "z-40 right-6 bottom-6",
-        position === "fixed" ? "fixed" : "absolute",
+        placement === "header"
+          ? "relative inline-flex"
+          : cn("z-40 right-6 bottom-6", position === "fixed" ? "fixed" : "absolute"),
         className,
       )}
+      data-placement={placement}
       data-screen={screen}
+      data-scale={placement === "header" ? scale : undefined}
       data-slot="context-eye"
       ref={rootRef}
     >
@@ -145,15 +170,18 @@ export function ContextEye({
         <div
           aria-labelledby={`${panelId}-heading`}
           className={cn(
-            "absolute right-2 bottom-[68px] w-[340px] rounded-[14px]",
+            placement === "header"
+              ? "absolute top-full right-0 z-40 mt-2 w-[340px] rounded-[14px]"
+              : "absolute right-2 bottom-[68px] w-[340px] rounded-[14px]",
             "bg-[oklch(0.2325_0.023_262)] px-[18px] py-4 text-[14px] leading-[1.5]",
             "text-[oklch(0.97_0.004_262)]",
             "shadow-[0_18px_40px_-18px_rgba(28,42,82,0.6)]",
             // The enter animation is `@starting-style`, not a state flag: the panel mounts already
             // transitioning, so there is no second render and nothing to get out of sync.
-            "origin-bottom-right translate-y-0 opacity-100",
+            placement === "header" ? "origin-top-right" : "origin-bottom-right",
+            "translate-y-0 opacity-100",
             "transition-[opacity,translate] duration-150 ease-out",
-            "starting:translate-y-1 starting:opacity-0",
+            placement === "header" ? "starting:-translate-y-1 starting:opacity-0" : "starting:translate-y-1 starting:opacity-0",
             "motion-reduce:transition-none motion-reduce:transform-none",
           )}
           data-slot="context-eye-panel"
@@ -194,7 +222,10 @@ export function ContextEye({
           </div>
           <div
             aria-hidden="true"
-            className="absolute right-5 -bottom-2 size-4 rotate-45 rounded-[2px] bg-[oklch(0.2325_0.023_262)]"
+            className={cn(
+              "absolute right-5 size-4 rotate-45 rounded-[2px] bg-[oklch(0.2325_0.023_262)]",
+              placement === "header" ? "-top-2" : "-bottom-2",
+            )}
           />
         </div>
       ) : null}
@@ -203,21 +234,42 @@ export function ContextEye({
         aria-expanded={open}
         aria-label="About this screen"
         className={cn(
-          "relative flex size-11 items-center justify-center rounded-full",
-          "bg-[oklch(0.2325_0.023_262)] text-[oklch(0.96_0.004_262)]",
-          "shadow-[0_10px_26px_-10px_rgba(28,42,82,0.5),0_0_0_3px_rgba(176,116,32,0.25)]",
-          "transition-transform duration-150 hover:scale-105",
-          "motion-reduce:transition-none motion-reduce:hover:scale-100",
+          placement === "header"
+            ? cn(
+                // The same control as the Export button beside it, so the header row reads as one
+                // row of controls rather than a row with a floating thing docked to it. The owner
+                // console's row is 32px, the coach app's is 46px, and the scale picks between them.
+                "relative inline-flex items-center justify-center border bg-transparent",
+                "text-[var(--muted)] transition-colors duration-150",
+                "hover:text-[var(--ink)] hover:border-[var(--accent-edge)]",
+                scale === "coach"
+                  ? "size-[46px] rounded-[12px] border-[var(--line-input)]"
+                  : "size-8 rounded-lg border-[var(--line)]",
+              )
+            : cn(
+                "relative flex size-11 items-center justify-center rounded-full",
+                "bg-[oklch(0.2325_0.023_262)] text-[oklch(0.96_0.004_262)]",
+                "shadow-[0_10px_26px_-10px_rgba(28,42,82,0.5),0_0_0_3px_rgba(176,116,32,0.25)]",
+                "transition-transform duration-150 hover:scale-105",
+                "motion-reduce:transition-none motion-reduce:hover:scale-100",
+              ),
         )}
         onClick={() => (open ? close(false) : setOpen(true))}
         ref={buttonRef}
         type="button"
         {...(open ? { "aria-controls": panelId } : {})}
       >
-        <Eye aria-hidden="true" className="size-5" strokeWidth={1.75} />
+        <Eye
+          aria-hidden="true"
+          className={placement === "header" && scale === "owner" ? "size-4" : "size-5"}
+          strokeWidth={1.75}
+        />
         <span
           aria-hidden="true"
-          className="absolute top-0.5 right-0.5 size-2.5 rounded-full border-2 border-[var(--pane)] bg-[var(--warning)]"
+          className={cn(
+            "absolute rounded-full border-2 border-[var(--pane)] bg-[var(--warning)]",
+            placement === "header" ? "-top-1 -right-1 size-2.5" : "top-0.5 right-0.5 size-2.5",
+          )}
         />
       </button>
     </div>

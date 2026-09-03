@@ -8,6 +8,7 @@ import { DataState } from "@/components/kit/data-state";
 import { DeckPanel } from "@/components/kit/deck-panel";
 import { ArrowLeft, Play, Search } from "@/components/kit/icons";
 import { Prose } from "@/components/kit/atomics";
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { workspaceDateFormat } from "@/lib/format/datetime";
 import { COACH_FOOTNOTE_CLASS, COACH_LEAD_CLASS, COACH_READING_CLASS } from "./coach-type";
 
@@ -263,6 +264,12 @@ function TrainingCard({ training }: { training: CoachTraining }) {
   );
 }
 
+/* The sentences this screen would otherwise print as help text, handed to the eye instead. */
+const TIPS_EYE_COPY =
+  "Short videos from your coaching team, none of them longer than eight minutes. Search reads a "
+  + "training's title, its category and its one-line summary, nothing inside the video itself. "
+  + "Nothing on this page changes your agent, so it is safe to read at any point in setup.";
+
 export function CoachTips({ trainings = [] }: CoachTipsProps) {
   const [query, setQuery] = useState("");
   const searchId = useId();
@@ -284,25 +291,33 @@ export function CoachTips({ trainings = [] }: CoachTipsProps) {
     <div className="flex min-w-0 flex-col gap-[24px]">
       <div className="flex min-w-0 flex-wrap items-end justify-between gap-[24px]">
         <TipsHead />
+        <div className="flex min-w-0 items-center gap-[12px]">
         {/*
           The search field only exists once there is something to search. A box over an empty
           catalogue is a claim that content is there and the reader has not found it, which is the
           opposite of what the empty state below is saying.
         */}
-        {trainings.length > 0 ? (
-          <div className="flex min-w-0 items-center gap-[12px] rounded-[12px] border border-[var(--line)] bg-[var(--well)] px-[18px]">
-            <Search className="text-[color:var(--faint)]" size={18} />
-            <label className="sr-only" htmlFor={searchId}>Search the trainings</label>
-            <input
-              className="h-[48px] min-w-0 flex-1 border-0 bg-transparent text-[16px] leading-[1.4] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--faint)]"
-              id={searchId}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search the trainings"
-              type="search"
-              value={query}
-            />
-          </div>
-        ) : null}
+          {trainings.length > 0 ? (
+            <div className="flex min-w-0 items-center gap-[12px] rounded-[12px] border border-[var(--line)] bg-[var(--well)] px-[18px]">
+              <Search className="text-[color:var(--faint)]" size={18} />
+              <label className="sr-only" htmlFor={searchId}>Search the trainings</label>
+              <input
+                className="h-[48px] min-w-0 flex-1 border-0 bg-transparent text-[16px] leading-[1.4] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--faint)]"
+                id={searchId}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search the trainings"
+                type="search"
+                value={query}
+              />
+            </div>
+          ) : null}
+          <ContextEye
+            copy={TIPS_EYE_COPY}
+            placement="header"
+            scale="coach"
+            screen="coach-tips"
+          />
+        </div>
       </div>
 
       {trainings.length === 0 ? (

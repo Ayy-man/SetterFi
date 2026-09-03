@@ -4,6 +4,7 @@ import { forbidden, redirect } from "next/navigation";
 import { AppShell } from "@/components/kit/app-shell";
 import { PageHeader } from "@/components/kit/page-header";
 import { AccountSecuritySettings } from "@/components/workspace/live/account-security-settings";
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { loadPlatformActor } from "@/lib/auth/actors";
 import { workspaceForRole } from "@/lib/auth/claims";
 import { authMode } from "@/lib/auth/mode";
@@ -14,6 +15,13 @@ export const metadata: Metadata = { title: "Account security" };
 export const dynamic = "force-dynamic";
 
 const CRUMBS = [{ label: "Account" }, { label: "Security" }] as const;
+
+/* The sentences this screen does not print under its heading, handed to the eye instead. */
+const EYE_COPY =
+  "Where you change your password, your sign-in email and your second factor, and where you end "
+  + "a session you do not recognise. Sessions load first because they are the one list that can "
+  + "show you someone else on your account. Ending a session signs that device out at once, and "
+  + "the change is written to the audit trail.";
 
 const HEAD_SENTENCE =
   "Review signed-in devices, replace your password, and manage the extra checks supported for sensitive changes.";
@@ -73,20 +81,27 @@ export default async function AccountSecurityPage() {
       platformRole={actor.role}
       role={role}
     >
-      {role === "coach" ? <CoachSecurityHead /> : (
-        <PageHeader
-          crumbs={CRUMBS}
-          description={HEAD_SENTENCE}
-          title="Account security"
+      {/*
+        `relative` and a 72px gutter because neither head on this screen carries a trailing control
+        row, so the eye stays floating and the gutter keeps it off the last section's own buttons.
+      */}
+      <div className="relative pb-[72px]">
+        {role === "coach" ? <CoachSecurityHead /> : (
+          <PageHeader
+            crumbs={CRUMBS}
+            description={HEAD_SENTENCE}
+            title="Account security"
+          />
+        )}
+        <AccountSecuritySettings
+          currentEmail={email}
+          emailChangeEnabled={accountEmailChangeLive()}
+          emailVerified={Boolean(data.user.email_confirmed_at)}
+          mfaEnabled={accountMfaLive()}
+          securityEnabled={accountSecurityLive()}
         />
-      )}
-      <AccountSecuritySettings
-        currentEmail={email}
-        emailChangeEnabled={accountEmailChangeLive()}
-        emailVerified={Boolean(data.user.email_confirmed_at)}
-        mfaEnabled={accountMfaLive()}
-        securityEnabled={accountSecurityLive()}
-      />
+        <ContextEye copy={EYE_COPY} screen="account-security" />
+      </div>
     </AppShell>
   );
 }

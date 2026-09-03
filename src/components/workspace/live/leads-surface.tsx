@@ -24,6 +24,7 @@ import {
   type AppointmentEvidenceByContact,
 } from "@/components/workspace/live/coach-pipeline";
 import { CoachPageHead } from "@/components/workspace/live/coach-page-head";
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import {
   COACH_EYEBROW_CLASS,
   COACH_FOOTNOTE_CLASS,
@@ -656,6 +657,12 @@ function CallbackList({
   );
 }
 
+/* The sentences this screen would otherwise print as help text, handed to the eye instead. */
+const LEADS_SURFACE_EYE_COPY =
+  "Everyone who has messaged you, and where each one got to. Every row reads the lead's stage "
+  + "today rather than the path it took there. The line under the head says what the list is "
+  + "currently scoped to, so read that before taking a short list for your whole pipeline.";
+
 export function LeadsSurface({
   appointmentEvidence,
   defaultView,
@@ -998,13 +1005,21 @@ export function LeadsSurface({
       */}
       <CoachPageHead
         action={
-          <SegmentedControl
-            ariaLabel="Leads view"
-            onValueChange={(next) => query.set("view", next === defaultView ? null : next)}
-            scale="coach"
-            segments={views}
-            value={activeView}
-          />
+          <div className="flex items-center gap-[var(--s-3)]">
+            <SegmentedControl
+              ariaLabel="Leads view"
+              onValueChange={(next) => query.set("view", next === defaultView ? null : next)}
+              scale="coach"
+              segments={views}
+              value={activeView}
+            />
+            <ContextEye
+              copy={LEADS_SURFACE_EYE_COPY}
+              placement="header"
+              scale="coach"
+              screen="coach-pipelines"
+            />
+          </div>
         }
         provenance={provenance}
         sub="Everyone who has messaged you, and where each one got to."

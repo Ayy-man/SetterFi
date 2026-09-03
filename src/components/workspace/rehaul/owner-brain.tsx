@@ -1397,6 +1397,7 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
           >
             {busy === "publish" ? "Publishing The Brain" : "Publish to all agents"}
           </LoggedButton>
+          <ContextEye copy={OWNER_BRAIN_EYE_COPY} placement="header" screen="owner-brain" />
         </div>
       </div>
 
@@ -1479,7 +1480,6 @@ export function OwnerBrain({ evals, initialState, tab }: OwnerBrainProps) {
         title={objectionSheet?.label ?? ""}
       />
 
-      <ContextEye copy={OWNER_BRAIN_EYE_COPY} screen="owner-brain" />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { DataState } from "@/components/kit/data-state";
 import { DeckPanel } from "@/components/kit/deck-panel";
 import { ArrowLeft } from "@/components/kit/icons";
 import { ExportMenu } from "@/components/kit/export-menu";
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { Field } from "@/components/kit/field";
 import { Prose, STATE_TONE_TO_TONE, Status } from "@/components/kit/atomics";
 import type { StateTone } from "@/components/kit/state-badge";
@@ -177,6 +178,13 @@ function RequestRow({
   );
 }
 
+/* The sentences this screen would otherwise print as help text, handed to the eye instead. */
+const HELP_EYE_COPY =
+  "Your conversations with our team, never with your leads. A request appears in the list once "
+  + "its thread and first message are saved and read back, so anything you can see here is "
+  + "something we hold. Guides are the same answers written down, and they are worth a look "
+  + "before you write.";
+
 export function CoachSupport({ enabled }: CoachSupportProps) {
   const [tab, setTab] = useState<HelpTab>("support");
   const [threads, setThreads] = useState<CoachSupportThreadRead[]>([]);
@@ -297,7 +305,12 @@ export function CoachSupport({ enabled }: CoachSupportProps) {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-[24px]">
+    /*
+      `relative` and a 72px gutter because this screen's head carries no trailing control row, so
+      its eye stays floating and would otherwise land on the composer's Send button.
+    */
+    <div className="relative flex min-w-0 flex-col gap-[24px] pb-[72px]">
+      <ContextEye copy={HELP_EYE_COPY} screen="coach-help" />
       <HelpHead provenance={headProvenance} />
 
       <Tabs onValueChange={(value) => setTab(value as HelpTab)} value={tab}>

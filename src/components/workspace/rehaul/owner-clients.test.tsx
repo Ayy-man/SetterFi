@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({
   pathname: "/admin/platform-clients",
@@ -55,6 +56,20 @@ const rows: SuccessClientBookRead[] = [
   }),
   client({ id: "tenant-3", name: "Evergreen Funding", successOwner: null, status: "onboarding" }),
 ];
+
+/**
+ * A seeded row, exactly as the fixtures write one: the `(demo)` marker is on the tenant, the plan
+ * and the person. The screen has to strip all three and let the pill carry the fact instead.
+ */
+const demoRow: SuccessClientBookRead = {
+  client: { id: "tenant-4", name: "Staging Demo Tenant (demo)", isDemo: true },
+  status: "active",
+  successOwner: { id: "owner-2", name: "Marisol Vance (demo)" },
+  supportStatus: null,
+  planId: "plan-launch",
+  planLabel: "Launch (demo)",
+  updatedAt: "2026-08-27T12:00:00.000Z",
+};
 
 const roster: AgentRoster = {
   brainVersion: 18,
@@ -133,6 +148,27 @@ function renderPage(overrides: Partial<Parameters<typeof OwnerClients>[0]> = {})
 }
 
 describe("OwnerClients", () => {
+  /**
+   * The suite's jsdom carries no storage of its own, and the saved view is browser storage, so each
+   * spec gets a fresh one. A spec's Save view must not open the next spec's tab.
+   */
+  beforeEach(() => {
+    const values = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        clear: () => values.clear(),
+        getItem: (key: string) => values.get(key) ?? null,
+        key: (index: number) => [...values.keys()][index] ?? null,
+        get length() {
+          return values.size;
+        },
+        removeItem: (key: string) => void values.delete(key),
+        setItem: (key: string, value: string) => void values.set(key, value),
+      },
+    });
+  });
+
   it("heads the page with Clients and a counted subline, and prints none of the old explainers", () => {
     renderPage();
 
@@ -249,6 +285,128 @@ describe("OwnerClients", () => {
 
     expect(screen.getByText("This tab could not be read")).toBeInTheDocument();
     expect(screen.getByText("Platform analytics is not turned on in this environment.")).toBeInTheDocument();
+  });
+
+  it("docks the context eye in the header row as the last control, and never floats it", () => {
+    renderPage();
+
+    const eye = document.querySelector("[data-slot='context-eye']") as HTMLElement;
+    expect(eye).not.toBeNull();
+    expect(eye.dataset.placement).toBe("header");
+    expect(eye.className).not.toMatch(/fixed/u);
+
+    // Last in the header's trailing control row, after Export.
+    const controls = eye.parentElement as HTMLElement;
+    expect(controls.lastElementChild).toBe(eye);
+    expect(within(controls).getByRole("button", { name: /Export/u })).toBeInTheDocument();
+  });
+
+  it("prints a seeded name without its marker and lets the Demo pill carry the fact", () => {
+    renderPage({ rows: [demoRow] });
+
+    expect(screen.getByRole("link", { name: "Staging Demo Tenant" })).toBeInTheDocument();
+    expect(screen.getByText("Launch")).toBeInTheDocument();
+    expect(screen.getByText("Marisol Vance")).toBeInTheDocument();
+    expect(screen.getByRole("table").textContent).not.toContain("(demo)");
+    const pill = document.querySelector("[data-slot='pill']");
+    expect(pill).toHaveTextContent("Demo");
+  });
+
+  it("searches the client and the owner name across every tab and counts what survives", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage();
+
+    const box = screen.getByRole("searchbox", { name: "Search clients" });
+    expect(screen.getByTestId("owner-clients-count")).toHaveTextContent("3 of 3");
+
+    await user.type(box, "northstar");
+    expect(screen.getByRole("link", { name: "Northstar Funding" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Reid Funding Group" })).toBeNull();
+    expect(screen.getByTestId("owner-clients-count")).toHaveTextContent("1 of 3");
+
+    // A search that matches nothing says so, rather than reading as an empty book.
+    await user.clear(box);
+    await user.type(box, "nobody");
+    expect(screen.getByText(/matches the search and filters/u)).toBeInTheDocument();
+    unmount();
+
+    // The same box, on a tab with a different column set, over the owner's name this time.
+    renderPage({ tab: "health" });
+    await user.type(screen.getByRole("searchbox", { name: "Search clients" }), "brightwell");
+    expect(screen.getByTestId("owner-clients-count")).toHaveTextContent("2 of 3");
+  });
+
+  it("carries the artboard's chips per tab and narrows the rows with them", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage();
+
+    for (const chip of ["Plan", "Billing state", "Live since", "Owner"]) {
+      expect(screen.getByRole("button", { name: new RegExp(chip, "u") })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("button", { name: /^Plan/u }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Launch" }));
+    expect(screen.getByRole("button", { name: /Plan/u })).toHaveTextContent("Launch");
+    expect(screen.getByTestId("owner-clients-count")).toHaveTextContent("1 of 3");
+    expect(screen.getByRole("link", { name: "Northstar Funding" })).toBeInTheDocument();
+    unmount();
+
+    renderPage({ tab: "performance" });
+    for (const chip of ["Booked calls", "Gross MRR", "Margin", "Period"]) {
+      expect(screen.getByRole("button", { name: new RegExp(chip, "u") })).toBeInTheDocument();
+    }
+    // Margin has no read behind it, so its chip says which figure is missing instead of filtering.
+    await user.click(screen.getByRole("button", { name: /Margin/u }));
+    expect(await screen.findByText(/Margin is not measured per client yet/u)).toBeInTheDocument();
+    expect(screen.getByTestId("owner-clients-count")).toHaveTextContent("3 of 3");
+  });
+
+  it("lifts the problem rows on Health without hiding the rest", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      health: {
+        kind: "ready",
+        value: {
+          a2pSubmittedAtByTenant: {},
+          rows: [{ ...tracker, tenantId: "tenant-2", state: "failed", currentStep: "phone_number" }],
+        },
+      },
+      tab: "health",
+    });
+
+    const first = () => within(screen.getByRole("table")).getAllByRole("link")[0];
+    expect(first()).toHaveTextContent("Reid Funding Group");
+
+    await user.click(screen.getByRole("button", { name: /Problems first/u }));
+    expect(first()).toHaveTextContent("Northstar Funding");
+    expect(screen.getByTestId("owner-clients-count")).toHaveTextContent("3 of 3");
+  });
+
+  it("remembers a saved view per tab and opens the tab with it", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search clients" }), "evergreen");
+    await user.click(screen.getByRole("button", { name: "Save view" }));
+    expect(screen.getByRole("status")).toHaveTextContent(/opens with these filters/u);
+    unmount();
+
+    const reopened = renderPage();
+    expect(screen.getByRole("searchbox", { name: "Search clients" })).toHaveValue("evergreen");
+    expect(screen.getByTestId("owner-clients-count")).toHaveTextContent("1 of 3");
+    reopened.unmount();
+
+    // The view is scoped to the tab it was saved on: Health opens unfiltered.
+    renderPage({ tab: "health" });
+    expect(screen.getByRole("searchbox", { name: "Search clients" })).toHaveValue("");
+    expect(screen.getByTestId("owner-clients-count")).toHaveTextContent("3 of 3");
+  });
+
+  it("draws no filter row on Setup, which is an install surface rather than a book of clients", () => {
+    renderPage({ setup: <div>Marketplace install</div>, tab: "setup" });
+
+    expect(screen.queryByRole("searchbox", { name: "Search clients" })).toBeNull();
+    expect(screen.queryByTestId("owner-clients-count")).toBeNull();
   });
 
   it("refuses honestly when the client book is not enabled", () => {

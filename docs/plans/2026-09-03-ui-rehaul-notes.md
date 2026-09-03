@@ -394,3 +394,21 @@ The full Vitest suite (568 files) surfaced 23 failures in the repo's tree-wide r
 ## Flags removed: 2026-09-03 13:10
 
 Per note 24, `SETTERFI_UI_REHAUL` and `SETTERFI_NAV_FOLD` are deleted from the env contract, `.env.example` and `docs/SETUP.md`. Every page renders the rehaul unconditionally; the folded 8-item rail is the only admin navigation; the 13 folded routes redirect unconditionally. Deleted with the flags: the legacy onboarding pages, five old admin components, the old coach offer/conversations/measurement components, the six offer-editor shells and coach-owned-sections. Surfaces that would otherwise have been lost were re-homed: the marketplace install panel and attempts table live on Clients as the Setup tab (`/admin/platform-clients?tab=setup`, provisioning redirects there); the cadence-purpose editor is Agent step 7 "If they go quiet"; the five coach server exports the rehaul had dropped are back; the login return-path field and signup referral prefill were ported. Full suite 551 files, 6607 tests green; tsc 0; eslint 0 errors (15 warnings, pre-existing).
+
+## Note 25 (2026-09-03)
+
+Owner console refinements from the reviewed design canvas, implemented by five parallel agents with
+disjoint file ownership. Inbox: one continuous list with lane headers and mono counts, empty lanes
+collapse to a line, the all-clear state is a single "Clear as of" panel, amber now means over SLA
+rather than merely open, and the detail pane carries Request / Success owner tabs, a segmented
+reply-or-note composer and a collapsed Technical detail footer. Clients: 280px search plus per-tab
+filter chips (Status, Performance, Health, Agent, Team) built on the kit faceted filter, an "n of m"
+count and a saved view per tab read through useSyncExternalStore so hydration matches the server.
+Money Tiers: one-line Stripe strip, plans as a table with retired versions nested under the plan
+that replaced them, price history and commercial terms as collapsed records, client pricing with
+Plan and Override chips. Compliance Blocks: the four tiles became count chips that filter, plus
+Reason, Client, Last 30 days and search; the deletion export moved under the Export menu through a
+new additive `also` prop on ExportMenu. Names on screen go through `displayName` (`(demo)` stays in
+the column, the pill carries the fact). ContextEye gained `placement="header"` (32px owner / 46px
+coach control at the end of the page-header row) and thirteen screens dock it there; screens without
+a header row keep the floating eye over a 72px gutter; five screens that had no eye gained one.

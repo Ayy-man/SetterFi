@@ -157,6 +157,36 @@ describe("OwnerMoney, billing tab", () => {
   });
 });
 
+/**
+ * The eye docks in the page header, per `EyeRule.dc.html`.
+ *
+ * Floating bottom-right is where a pane's action row ends, so the eye sat on top of a primary
+ * action on the screens that have one. Money has a header row, so the eye is the last control in
+ * it, at the same 32px as the Export button beside it. The row renders on every tab because the
+ * eye belongs to the page, not to the one tab that happened to own the other controls.
+ */
+describe("OwnerMoney, context eye", () => {
+  it("docks the eye in the page header, after Export, on every tab", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
+    const { container, rerender } = renderBilling();
+
+    const eye = container.querySelector('[data-slot="context-eye"]');
+    expect(eye).toHaveAttribute("data-placement", "header");
+    const row = eye?.parentElement;
+    expect(row?.lastElementChild).toBe(eye);
+    expect(row?.textContent).toContain("Export");
+    expect(screen.getByRole("button", { name: "About this screen" })).toBeTruthy();
+
+    rerender(
+      <OwnerMoney actorRole="owner" authorized enabled movement={MOVEMENT} tab="tiers" />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Money" });
+    expect(container.querySelectorAll('[data-slot="context-eye"]')).toHaveLength(1);
+    expect(container.querySelector('[data-slot="context-eye"]'))
+      .toHaveAttribute("data-placement", "header");
+  });
+});
+
 describe("OwnerMoney, honest states", () => {
   it("counts only active rows as live, so past due sits outside the number above it", () => {
     const { container } = renderBilling();

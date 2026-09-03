@@ -75,7 +75,11 @@ export default async function AccountPage() {
 
   return (
     <AppShell activePath="/account" crumbs={CRUMBS} platformRole={actor.role} role={role}>
-      <div className="relative min-h-[60vh]">
+      {/*
+        `pb-[72px]` because this screen's header carries no trailing control row, so the eye stays
+        floating bottom-right and the gutter keeps it off the sheet's own controls.
+      */}
+      <div className="relative min-h-[60vh] pb-[72px]">
         <h1
           className={
             variant === "coach"

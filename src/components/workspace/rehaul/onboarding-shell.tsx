@@ -149,7 +149,7 @@ export function OnboardingShell({
   return (
     <CoachScale
       as="main"
-      className="min-h-svh bg-[var(--canvas)] pb-[56px] text-[color:var(--body)]"
+      className="min-h-svh bg-[var(--canvas)] text-[color:var(--body)]"
       style={{ backgroundImage: "var(--pane-bloom)" }}
     >
       <div className="flex h-[76px] items-center gap-[16px] border-b border-[var(--line)] bg-[var(--pane)] px-[var(--s-4)] sm:px-[40px]">
@@ -186,8 +186,14 @@ export function OnboardingShell({
         and an anonymous container would bind them to whichever `@container` happens to be nearest
         at runtime -- which changes the day a step wraps its body in a `Surface`.
       */}
+      {/*
+        `pb-[72px]` on this container rather than on the page: a setup step has no trailing control
+        row in its header, so its context eye stays floating and pins to this container. The gutter
+        is what keeps the eye clear of the footer's Continue button, which is the one control it
+        would otherwise land on.
+      */}
       <div
-        className="@container/onboarding relative mx-auto flex w-full flex-col gap-[24px] px-[var(--s-4)] pt-[34px] sm:px-[40px]"
+        className="@container/onboarding relative mx-auto flex w-full flex-col gap-[24px] px-[var(--s-4)] pt-[34px] pb-[72px] sm:px-[40px]"
         style={{ maxWidth: `${width}px` }}
       >
         <header className="flex flex-col gap-[12px]">

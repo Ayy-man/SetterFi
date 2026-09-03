@@ -800,6 +800,7 @@ export function OwnerSystem({ health, nowIso, platform = null }: OwnerSystemProp
               state: row.pill.label,
             }))}
           />
+          <ContextEye copy={EYE_COPY} placement="header" screen="owner-system" />
         </div>
       </div>
 
@@ -843,7 +844,6 @@ export function OwnerSystem({ health, nowIso, platform = null }: OwnerSystemProp
         <IntegrationsTab health={health} />
       )}
 
-      <ContextEye copy={EYE_COPY} screen="owner-system" />
     </div>
   );
 }

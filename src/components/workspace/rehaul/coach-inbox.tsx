@@ -28,8 +28,16 @@ import { ContextEye } from "./context-eye";
  * its own. What changed is the shape: the console's filter bar, facet popover, record sheet and
  * accordions are gone, and the three things a coach actually does (find the thread, read it,
  * answer it) each own a pane. Every sentence the old surface printed as help text moved into the
- * context eye at the bottom right.
+ * context eye, which docks in the list pane's header beside Export so it cannot sit on Send reply.
  */
+
+/* The sentences this screen no longer prints under its heading, handed to the eye instead. */
+const COACH_INBOX_EYE_COPY =
+  "Every thread your agent is running, and the ones it has handed to you. Search reads "
+  + "the lead's name, the channel, the thread's state and the most recent message on it; "
+  + "earlier messages are not loaded here, so a phrase from further back in a thread "
+  + "will not match. Taking over pauses the agent for this lead only, and the thread "
+  + "shows you as the sender. Hand back any time.";
 
 export type CoachInboxProps = {
   initialConversations: ConversationRead[];
@@ -357,6 +365,7 @@ export function CoachInbox({
                   query={{ order: "last_activity_desc", search: query }}
                   resource="conversations"
                 />
+                <ContextEye copy={COACH_INBOX_EYE_COPY} placement="header" screen="coach-inbox" />
               </div>
               {/*
                 A stateful two-way switch, so it is buttons rather than the `Seg` primitive: `Seg`
@@ -733,16 +742,6 @@ export function CoachInbox({
           </aside>
         </div>
 
-        <ContextEye
-          copy={
-            "Every thread your agent is running, and the ones it has handed to you. Search reads "
-            + "the lead's name, the channel, the thread's state and the most recent message on it; "
-            + "earlier messages are not loaded here, so a phrase from further back in a thread "
-            + "will not match. Taking over pauses the agent for this lead only, and the thread "
-            + "shows you as the sender. Hand back any time."
-          }
-          screen="coach-inbox"
-        />
       </div>
     </AppShell>
   );

@@ -173,3 +173,102 @@ describe("ExportMenu server downloads", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A menu can carry a second export. These hold the two apart: each group has its own items, the
+ * reason typed for a platform export does not travel with the rows-on-screen export beside it,
+ * and a refusal is attributed to the source that was asked for.
+ */
+describe("ExportMenu with a second source", () => {
+  function renderTwoSources() {
+    return render(
+      <ExportMenu
+        also={{
+          filename: "setterfi-suppression-tombstones",
+          groupLabel: "Every deletion record",
+          mode: "server",
+          query: { order: "created_desc", reason: "" },
+          resource: "suppression-tombstones",
+        }}
+        filename="setterfi-contact-blocks"
+        groupLabel="Blocks on screen"
+        label="Export"
+        mode="local"
+        rows={[{ contact: "Priya" }]}
+      />,
+    );
+  }
+
+  it("names both exports under one trigger", async () => {
+    const user = userEvent.setup();
+    renderTwoSources();
+
+    expect(screen.queryByRole("button", { name: "Export table" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    expect(await screen.findByRole("menuitem", { name: /Download CSV, Blocks on screen/ }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Download JSON, Blocks on screen/ }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Download CSV, Every deletion record/ }))
+      .toBeInTheDocument();
+    expect(screen.getByText("Blocks on screen")).toBeInTheDocument();
+  });
+
+  it("keeps the reason on the source that requires one, and exports the other without it", async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubFetch(new Response("", { status: 200 }));
+    renderTwoSources();
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    // The deletion export is refused until its reason is given; the rows export never asks.
+    expect(await screen.findByRole("menuitem", { name: /Download CSV, Every deletion record/ }))
+      .toHaveAttribute("data-disabled");
+    expect(screen.getByRole("menuitem", { name: /Download CSV, Blocks on screen/ }))
+      .not.toHaveAttribute("data-disabled");
+
+    await user.click(screen.getByRole("menuitem", { name: /Download CSV, Blocks on screen/ }));
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0].filename).toBe("setterfi-contact-blocks.csv");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.type(
+      await screen.findByLabelText("Every deletion record: export reason"),
+      "Quarterly access review",
+    );
+    await user.click(screen.getByRole("menuitem", { name: /Download CSV, Every deletion record/ }));
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const requested = new URL(String(fetchMock.mock.calls[0][0]), "http://localhost");
+    expect(requested.pathname).toBe("/api/exports/suppression-tombstones");
+    expect(requested.searchParams.get("reason")).toBe("Quarterly access review");
+  });
+
+  it("puts a refusal back under the export that was refused", async () => {
+    const user = userEvent.setup();
+    stubFetch(
+      new Response(JSON.stringify({ error: "Not found." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    renderTwoSources();
+
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.type(
+      await screen.findByLabelText("Every deletion record: export reason"),
+      "Quarterly access review",
+    );
+    await user.click(screen.getByRole("menuitem", { name: /Download CSV, Every deletion record/ }));
+
+    const message = await screen.findByText(
+      "Exports are not enabled in this environment. No file was saved.",
+    );
+    expect(message).toBeVisible();
+    expect(saved).toHaveLength(0);
+    // The rows export beside it is untouched and still offered.
+    expect(screen.getByRole("menuitem", { name: /Download CSV, Blocks on screen/ }))
+      .not.toHaveAttribute("data-disabled");
+  });
+});

@@ -493,6 +493,11 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
             mode="local"
             rows={exportRows(measurement, projected.metrics)}
           />
+          <ContextEye
+            copy="Every figure here is read from one platform measurement snapshot at a single as-of instant. Gross MRR and active subscriptions are point-in-time; signups and booked calls are trailing 30 days; churn is the most recent complete billing cycle. Demo tenants and test rows are excluded at the source."
+            placement="header"
+            screen="owner-overview"
+          />
         </div>
       </header>
 
@@ -737,11 +742,6 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
         openMetric={openMetric}
         subscriptions={projected.subscriptions}
       />
-
-      <ContextEye
-          screen="owner-overview"
-          copy="Every figure here is read from one platform measurement snapshot at a single as-of instant. Gross MRR and active subscriptions are point-in-time; signups and booked calls are trailing 30 days; churn is the most recent complete billing cycle. Demo tenants and test rows are excluded at the source."
-        />
     </div>
   );
 }
