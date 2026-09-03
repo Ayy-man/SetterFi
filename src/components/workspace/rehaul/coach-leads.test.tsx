@@ -77,6 +77,18 @@ describe("leadBoard", () => {
     expect(board.unplaced).toEqual([]);
   });
 
+  it("spends amber only on the stages that are the coach's to act on", () => {
+    const byKey = Object.fromEntries(
+      LEAD_BOARD_COLUMNS.map((column) => [column.key, column.dot]),
+    );
+    // Amber is the one persistent pending colour, so nothing else may carry a second one.
+    expect(Object.entries(byKey).filter(([, dot]) => dot === "var(--warning)").map(([key]) => key))
+      .toEqual(["qualifying", "no_show"]);
+    expect(Object.values(byKey)).not.toContain("var(--waiting)");
+    // Green only where the server recorded the thing: a booking exists or it does not.
+    expect(byKey.booked).toBe("var(--good)");
+  });
+
   it("names a stage it has no column for rather than dropping the lead", () => {
     const board = leadBoard([...contacts, lead({ id: "lead-6", name: "Ray Dunn", pipelineStage: "archived" })]);
     expect(board.unplaced).toEqual([{ count: 1, stage: "archived" }]);

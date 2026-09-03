@@ -56,12 +56,18 @@ export type CoachLeadsProps = {
  *
  * Every column is therefore backed by a real stage key, and the mapping is one to one: no stage is
  * merged into another and none is invented.
+ *
+ * **The dots.** Amber is spent only where the lead is the coach's to act on -- a stage the setter
+ * has stopped working. "Call booked" is green because a booking is a thing the server recorded,
+ * not a thing anyone is still waiting for. Everything else that is merely pending reads `--muted`:
+ * the artboard's indigo for "Call booked" and "Long-term follow-up" was a second persistent colour
+ * standing beside amber, and two persistent colours mean neither of them says anything.
  */
 export const LEAD_BOARD_COLUMNS = [
   { dot: "var(--accent)", key: "new_lead", label: "New lead" },
   { dot: "var(--warning)", key: "qualifying", label: "Qualification active" },
-  { dot: "var(--waiting)", key: "booked", label: "Call booked" },
-  { dot: "var(--waiting)", key: "long_term_followup", label: "Long-term follow-up" },
+  { dot: "var(--good)", key: "booked", label: "Call booked" },
+  { dot: "var(--muted)", key: "long_term_followup", label: "Long-term follow-up" },
   { dot: "var(--warning)", key: "no_show", label: "No show" },
   { dot: "var(--muted)", key: "qualified_no_buy", label: "Qualified, no buy" },
   { dot: "var(--muted)", key: "disqualified", label: "Unqualified" },
@@ -303,9 +309,7 @@ export function CoachLeads({
     <div className="flex min-w-0 flex-col gap-[var(--s-5)]">
       <div className="flex min-w-0 flex-wrap items-end gap-[var(--s-5)]">
         <div className="min-w-0">
-          <h1 className="m-0 text-[length:var(--coach-page-title)] leading-[1.05] font-[500] tracking-[-0.026em] text-[color:var(--ink)]">
-            Leads
-          </h1>
+          <h1 className="coach-page-title m-0">Leads</h1>
           <p className={`m-0 mt-[var(--s-2)] ${COACH_EYEBROW_CLASS}`} data-slot="leads-month-status">
             {status.label}
           </p>
@@ -426,9 +430,13 @@ export function CoachLeads({
       )}
 
       <ContextEye
-            screen="coach-leads"
-            copy="Everyone who has messaged you, and where each one got to. The board reads each lead's stage today, not the path it took. A card marked Needs you is sitting in a no show or a long-term follow-up with no automated touch left to run, so the next move is yours."
-          />
+        copy={
+          "Everyone who has messaged you, and where each one got to. The board reads each lead's "
+          + "stage today, not the path it took. A card marked Needs you is sitting in a no show or "
+          + "a long-term follow-up with no automated touch left to run, so the next move is yours."
+        }
+        screen="coach-leads"
+      />
     </div>
   );
 }

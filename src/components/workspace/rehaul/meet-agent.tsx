@@ -50,10 +50,17 @@ type PreviewTurn = {
   id: string;
   from: "lead" | "agent";
   text: string;
-  /** A mono caption under the bubble, when the turn has one. */
-  caption?: string;
   trace: TraceRow;
 };
+
+/** The avatar for a name, so the two initials cannot disagree with the name beside them. */
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/u).filter(Boolean);
+  if (parts.length === 0) return "??";
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+  return `${first}${last}`.toLocaleUpperCase() || "??";
+}
 
 const CURRENCY = new Intl.NumberFormat("en-US", {
   currency: "USD",
@@ -122,9 +129,19 @@ function rulesRow(rules: CoachAgentPreviewRules): TraceRow {
   };
 }
 
+/** Every scripted row's figure. The turn is written, so the only honest figure is that. */
+const WRITTEN = "written";
+
 /**
  * The demonstration, `MeetAgent.body.html:20`-`:27`, with each turn carrying the row the panel
  * draws for it. Six turns, six rows, and the panel counts them rather than being told a number.
+ *
+ * The artboard's figures beside these rows -- "8s to answer", "question 1 of 4", "3 slots, none
+ * invented" -- were drawings of a run that never happened, in the same mono treatment a real
+ * receipt gets, so each one is `written` instead. For the same reason the wording is third person:
+ * the keyword, the channel and the calendar in this script belong to nobody, and a row saying
+ * "your keyword" claims otherwise. The one row that does read the coach's setup is `rulesRow`, and
+ * it keeps its own figure because it computed it.
  */
 function scriptedTurns(rules: CoachAgentPreviewRules): readonly PreviewTurn[] {
   return [
@@ -133,9 +150,9 @@ function scriptedTurns(rules: CoachAgentPreviewRules): readonly PreviewTurn[] {
       id: "keyword",
       text: "CCA",
       trace: {
-        detail: "8s to answer",
+        detail: WRITTEN,
         tone: "grey",
-        what: "Matched your keyword CCA on Instagram",
+        what: "Matched a keyword on Instagram",
       },
     },
     {
@@ -143,7 +160,7 @@ function scriptedTurns(rules: CoachAgentPreviewRules): readonly PreviewTurn[] {
       id: "purpose",
       text: "Hey, good to connect. What's the funding for, running a business or launching one?",
       trace: {
-        detail: "question 1 of 4",
+        detail: WRITTEN,
         tone: "grey",
         what: "Asked what the funding is for",
       },
@@ -155,7 +172,7 @@ function scriptedTurns(rules: CoachAgentPreviewRules): readonly PreviewTurn[] {
         "Launching a mobile detailing business. About $60k for the van and gear, and I want to "
         + "move now.",
       trace: {
-        detail: "3 of 4 answered",
+        detail: WRITTEN,
         tone: "grey",
         what: "Read purpose, amount and timeline out of one message",
       },
@@ -165,7 +182,7 @@ function scriptedTurns(rules: CoachAgentPreviewRules): readonly PreviewTurn[] {
       id: "score",
       text: "Got it. Do you know your credit score roughly?",
       trace: {
-        detail: "question 4 of 4",
+        detail: WRITTEN,
         tone: "grey",
         what: "Asked for a rough credit score",
       },
@@ -177,14 +194,15 @@ function scriptedTurns(rules: CoachAgentPreviewRules): readonly PreviewTurn[] {
       trace: rulesRow(rules),
     },
     {
-      caption: "replied in 8 seconds",
       from: "agent",
       id: "times",
-      text: "That works. Reid has Wed 10:00, Wed 3:30 and Thu 9:00 open. Which one?",
+      // Not "Reid has": the artboard's coach is a demo person, and the reader's own calendar is
+      // not what this written turn read.
+      text: "That works. Wed 10:00, Wed 3:30 and Thu 9:00 are open. Which one?",
       trace: {
-        detail: "3 slots, none invented",
-        tone: "good",
-        what: "Offered three open times from the calendar you connected",
+        detail: WRITTEN,
+        tone: "grey",
+        what: "Offered three open times",
       },
     },
   ];
@@ -211,7 +229,8 @@ function liveTraceRow(receipt: TestAgentTurnReceipt): TraceRow {
     return { detail, tone: "amber", what: "Held the reply rather than answering" };
   }
   if (turn.stage === "book") {
-    return { detail, tone: "good", what: "Offered times from the calendar you connected" };
+    // The receipt reports the stage, not where the times came from, so the row says the stage.
+    return { detail, tone: "good", what: "Moved to booking and offered times" };
   }
   if (turn.stage === "closing") {
     return { detail, tone: "grey", what: "Closed the conversation" };
@@ -230,11 +249,12 @@ function liveTraceRow(receipt: TestAgentTurnReceipt): TraceRow {
  * ------------------------------------------------------------------ */
 
 const EYE_COPY = [
-  "Both sides of the playback conversation are written: the lead and the replies.",
+  "Both sides of the playback conversation are written: the lead and the replies. Every figure",
+  "beside a written turn reads written, because no run produced it.",
   "What comes from your own setup is the rules it checks, read from your agent page.",
-  "Nothing on this screen reaches anyone, and none of it counts in your numbers.",
-  "Try it yourself runs a real turn against your own configured agent, with no lead send, no",
-  "calendar entry and no billing effect. Your real conversations are in your inbox.",
+  "Nothing on this screen reaches a lead, and none of it counts in your numbers or your bill.",
+  "Try it yourself runs a real turn against your own configured agent and records it on a test",
+  "session, with no lead send and no calendar entry. Your real conversations are in your inbox.",
 ].join(" ");
 
 /* ------------------------------------------------------------------ *
@@ -291,6 +311,28 @@ const DETAIL_TONE: Record<TraceTone, string> = {
 
 /** How long each bubble waits before the next arrives. `coach-agent-preview.tsx`'s cadence. */
 const TURN_DELAY_MS = 900;
+
+/** One line of the ledger. Shared by both groups so a written row cannot be drawn as a live one. */
+function TraceLine({ label, row }: { label: string; row: TraceRow }) {
+  return (
+    <li className="flex min-h-[var(--coach-target,44px)] flex-1 flex-wrap items-center gap-[16px] border-b border-[var(--line-soft)] px-[24px] py-[14px] last:border-b-0">
+      <span
+        aria-hidden
+        className={cn("size-[8px] flex-[0_0_8px] rounded-full", DOT_TONE[row.tone])}
+      />
+      <span
+        className={cn(
+          "w-[64px] flex-[0_0_64px] text-[14px] text-[color:var(--faint)]",
+          MONO_CLASS,
+        )}
+      >
+        {label}
+      </span>
+      <span className="min-w-0 flex-1 text-[16px] text-[color:var(--body)]">{row.what}</span>
+      <span className={cn("text-[14px]", MONO_CLASS, DETAIL_TONE[row.tone])}>{row.detail}</span>
+    </li>
+  );
+}
 
 /* ------------------------------------------------------------------ *
  * The screen
@@ -355,10 +397,8 @@ export function RehaulMeetAgent({
     }
   }, [clearTimers, script.length]);
 
-  const turns = useMemo(
-    () => [...script.slice(0, shown), ...live],
-    [live, script, shown],
-  );
+  const written = useMemo(() => script.slice(0, shown), [script, shown]);
+  const turns = useMemo(() => [...written, ...live], [live, written]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -453,7 +493,9 @@ export function RehaulMeetAgent({
             </span>
             <span className="flex items-center gap-[8px]">
               <span aria-hidden className="size-[8px] flex-[0_0_8px] rounded-full bg-[rgba(60,90,150,0.3)]" />
-              Nothing sent, nothing counted
+              {/* Not "nothing sent": a typed turn is recorded on a test session. What is true of
+                  every turn here is that no lead is messaged and no figure moves. */}
+              Nothing reaches a lead, nothing counted
             </span>
           </div>
         </div>
@@ -479,7 +521,7 @@ export function RehaulMeetAgent({
                 MONO_CLASS,
               )}
             >
-              JT
+              {initials(leadName)}
             </span>
             <span className="min-w-0">
               <span className="block text-[16px] leading-[1.3] font-semibold text-[color:var(--ink)]">
@@ -501,9 +543,8 @@ export function RehaulMeetAgent({
             className="flex min-h-[430px] flex-1 flex-col gap-[11px] overflow-y-auto px-[18px] pt-[18px] pb-[8px] text-[15px]"
             ref={scrollRef}
           >
-            <span className={cn("self-center text-[14px] text-[color:var(--faint)]", MONO_CLASS)}>
-              Tue 2 Sept
-            </span>
+            {/* The artboard's "Tue 2 Sept" divider is gone: a written conversation happened on no
+                day, and a date in the mono treatment a real thread uses reads as one that did. */}
             {turns.map((turn) => (
               <div
                 className={turn.from === "lead" ? "flex flex-col items-start" : "flex flex-col items-end"}
@@ -520,11 +561,6 @@ export function RehaulMeetAgent({
                 >
                   {turn.text}
                 </p>
-                {turn.caption ? (
-                  <span className={cn("mt-[6px] text-[14px] text-[color:var(--faint)]", MONO_CLASS)}>
-                    {turn.caption}
-                  </span>
-                ) : null}
               </div>
             ))}
             {sending ? (
@@ -537,8 +573,13 @@ export function RehaulMeetAgent({
             ) : null}
           </div>
 
+          {/*
+            A column rather than the artboard's single 68px row, because the send is privileged:
+            it opens a session on `/api/agent` and persists a turn against this coach's own agent,
+            so it carries the same Logged microcopy every other write in the product carries.
+          */}
           <form
-            className="flex h-[68px] flex-[0_0_68px] items-center gap-[10px] border-t border-[var(--line)] bg-[var(--well)] px-[18px]"
+            className="flex flex-none flex-col gap-[6px] border-t border-[var(--line)] bg-[var(--well)] px-[18px] py-[12px]"
             onSubmit={(event) => {
               event.preventDefault();
               void send(draft);
@@ -547,6 +588,7 @@ export function RehaulMeetAgent({
             <label className="sr-only" htmlFor="rehaul-meet-agent-composer">
               Type as the lead
             </label>
+            <div className="flex items-center gap-[10px]">
             <input
               autoComplete="off"
               className="h-[44px] min-w-0 flex-1 rounded-full border border-[var(--line-input)] bg-[var(--card)] px-[16px] text-[15px] text-[color:var(--ink)] placeholder:text-[color:var(--faint)]"
@@ -566,6 +608,8 @@ export function RehaulMeetAgent({
             >
               <ArrowRight aria-hidden className="size-[18px]" strokeWidth={2} />
             </button>
+            </div>
+            <span className={cn("text-[14px] text-[color:var(--faint)]", MONO_CLASS)}>Logged</span>
           </form>
         </section>
 
@@ -582,41 +626,36 @@ export function RehaulMeetAgent({
                 </span>
               </span>
               <span className={cn("ml-auto text-[14px] text-[color:var(--faint)]", MONO_CLASS)}>
-                {`${turns.length} turns`}
+                {`${written.length} written`}
               </span>
             </div>
+            {/*
+              Two groups, counted apart. A row built from a `/api/agent` receipt and a row written
+              here are different kinds of fact, and one undifferentiated list with one total was
+              lending the written rows the live ones' authority.
+            */}
             <ol className="m-0 flex list-none flex-col p-0">
-              {turns.map((turn, index) => (
-                <li
-                  className="flex min-h-[var(--coach-target,44px)] flex-1 flex-wrap items-center gap-[16px] border-b border-[var(--line-soft)] px-[24px] py-[14px] last:border-b-0"
-                  key={turn.id}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "size-[8px] flex-[0_0_8px] rounded-full",
-                      DOT_TONE[turn.trace.tone],
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "w-[64px] flex-[0_0_64px] text-[14px] text-[color:var(--faint)]",
-                      MONO_CLASS,
-                    )}
-                  >
-                    {`Turn ${index + 1}`}
-                  </span>
-                  <span className="min-w-0 flex-1 text-[16px] text-[color:var(--body)]">
-                    {turn.trace.what}
-                  </span>
-                  <span
-                    className={cn("text-[14px]", MONO_CLASS, DETAIL_TONE[turn.trace.tone])}
-                  >
-                    {turn.trace.detail}
-                  </span>
-                </li>
+              {written.map((turn, index) => (
+                <TraceLine key={turn.id} label={`Turn ${index + 1}`} row={turn.trace} />
               ))}
             </ol>
+            {live.length > 0 ? (
+              <>
+                <div className="flex items-center gap-[12px] border-y border-[var(--line)] bg-[var(--well)] px-[24px] py-[12px]">
+                  <h3 className="m-0 text-[16px] leading-[1.3] font-semibold text-[color:var(--ink)]">
+                    Your turns
+                  </h3>
+                  <span className={cn("ml-auto text-[14px] text-[color:var(--faint)]", MONO_CLASS)}>
+                    {`${live.length} live`}
+                  </span>
+                </div>
+                <ol className="m-0 flex list-none flex-col p-0">
+                  {live.map((turn, index) => (
+                    <TraceLine key={turn.id} label={`Live ${index + 1}`} row={turn.trace} />
+                  ))}
+                </ol>
+              </>
+            ) : null}
           </section>
 
           <div className="flex flex-wrap gap-[12px]">

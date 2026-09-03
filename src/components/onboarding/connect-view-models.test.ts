@@ -87,6 +87,9 @@ describe("connectCards", () => {
     expect(withReceipt.status).toEqual({ label: "Answering", tone: "good" });
     expect(withReceipt.detail).toBe("@reidfundinggroup");
     expect(withReceipt.action).toBeNull();
+    // The receipt the screen states the day of, carried straight off the row.
+    expect(withReceipt.provedAt).toBe("2026-08-28T09:00:00.000Z");
+    expect(withoutReceipt.provedAt).toBeNull();
   });
 
   it("says a ready connection is not answering yet rather than calling it done", () => {
@@ -140,6 +143,8 @@ describe("connectCards", () => {
     expect(sms.wait).toEqual({ since: "2026-08-20T10:00:00.000Z" });
     expect(sms.action).toBeNull();
     expect(sms.status).toEqual({ label: "With the carriers", tone: "waiting" });
+    // Nothing can have made a round trip on a channel the carriers have not cleared.
+    expect(sms.provedAt).toBeNull();
   });
 
   it("never predicts a date or a percentage on the SMS card", () => {

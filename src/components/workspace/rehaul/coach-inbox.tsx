@@ -472,14 +472,21 @@ export function CoachInbox({
                       {dayLabel(threadStart) ? ` · ${dayLabel(threadStart)}` : ""}
                     </div>
                   </div>
-                  <button
-                    className={`ml-auto shrink-0 ${BUTTON_CLASS} border-transparent bg-[var(--ink)] text-[color:var(--card)]`}
-                    disabled={busy || readOnly}
-                    onClick={() => void mutate(heldByViewer ? "release" : "claim")}
-                    type="button"
-                  >
-                    {heldByViewer ? "Hand back" : "Take over"}
-                  </button>
+                  {/*
+                    Privileged: claim and release pause and resume the agent on a real lead and
+                    write an audit row, so the button carries the same Logged microcopy as Send.
+                  */}
+                  <div className="ml-auto flex shrink-0 flex-col items-center gap-[4px]">
+                    <button
+                      className={`${BUTTON_CLASS} border-transparent bg-[var(--ink)] text-[color:var(--card)]`}
+                      disabled={busy || readOnly}
+                      onClick={() => void mutate(heldByViewer ? "release" : "claim")}
+                      type="button"
+                    >
+                      {heldByViewer ? "Hand back" : "Take over"}
+                    </button>
+                    <span className="text-[14px] text-[color:var(--faint)]">Logged</span>
+                  </div>
                 </header>
 
                 <div className="flex min-h-0 flex-1 flex-col gap-[14px] overflow-y-auto p-[28px]">

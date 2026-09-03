@@ -66,10 +66,11 @@ export const COACH_BILLING_EYE_COPY =
   + "feeds your own analytics; it does not change what you are billed. A correction request is "
   + "read by a person against the conversations, and the saved count does not move until it is "
   + "decided. Plan changes are arranged with SetterFi and always take effect at the start of a "
-  + "billing period.";
+  + "billing period. Coming back from Stripe does not prove a payment: the plan stays unconfirmed "
+  + "here until Stripe confirms the charge to us.";
 
-const H1_CLASS =
-  "m-0 text-[46px] leading-[1.05] font-semibold tracking-[-0.025em] text-[color:var(--ink)]";
+/* The shell's own coach title: 46px/600, and the 30px step-down under 640px comes with it. */
+const H1_CLASS = "coach-page-title m-0";
 const TABULAR_CLASS = "[font-variant-numeric:tabular-nums_lining-nums]";
 const MONO_META_CLASS =
   "font-[family-name:var(--font-mono)] text-[14px] leading-[1.4] text-[color:var(--muted)] "
@@ -228,9 +229,10 @@ function CheckoutPanel({
           {checkoutError}
         </p>
       ) : null}
+      {/* Status, not an explainer: why a return is not a payment is in the eye. */}
       {returned ? (
         <p className={SENT_CLASS} role="status">
-          Returning from Stripe does not prove payment.
+          Payment not confirmed.
         </p>
       ) : null}
     </DeckPanel>
@@ -457,7 +459,9 @@ export function CoachBillingRehaul({
                 <StatusDot size={6} tone={STATE_TONE_TO_TONE[subscription.tone]} />
                 {snapshot.tierName}
                 <span aria-hidden className="text-[color:var(--faint)]">·</span>
-                <span className={MONO_META_CLASS}>{formatDate(snapshot.periodEnd)}</span>
+                {/* The plan's own state in words. The period end is a labelled sentence on the
+                    charge panel now, so it is not repeated here as a bare date. */}
+                {subscription.label}
               </span>
               {invoice ? (
                 <Status
@@ -522,6 +526,9 @@ export function CoachBillingRehaul({
                       {money(snapshot.priceCents, snapshot.currency)}
                     </span>
                   </Figure>
+                  {/* The artboard's "card ending 4242" is not in the snapshot and has no route
+                      behind it, so the sentence carries only the date the record does hold. */}
+                  <p className={SENT_CLASS}>Next charge {formatDate(snapshot.periodEnd)}.</p>
                 </DeckPanel>
 
                 <DeckPanel eyebrow="Booked calls this period" name="Allowance">

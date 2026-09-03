@@ -17,6 +17,7 @@ import {
 } from "@/components/workspace/rehaul/onboarding-shell";
 import type { ConnectCard, ConnectCardKey } from "@/components/onboarding/connect-view-models";
 import { CARRIER_TYPICAL_DAYS } from "@/lib/onboarding/contracts";
+import { workspaceDateFormat } from "@/lib/format/datetime";
 
 /*
  * Step 2 of setup, drawn from `OnboardingConnect.body.html`.
@@ -137,6 +138,22 @@ export function OnboardingConnectRehaul({
                     {card.detail ?? ACCOUNT_ABSENT[card.key]}
                   </OnboardingReadback>
                 </div>
+
+                {/*
+                  The artboard's "Round trip proved" row, and the only one of its four meta rows
+                  a receipt backs. It appears when `signedRoundTripAt` is set and is absent
+                  otherwise, rather than saying a round trip has not happened -- the status word
+                  above already carries that. "Story replies", "Same agent" and "Signs in with"
+                  stay off the card because no field records them.
+                */}
+                {card.provedAt ? (
+                  <div className="flex flex-col">
+                    <MetaRow
+                      label="Round trip proved"
+                      value={workspaceDateFormat.format(new Date(card.provedAt))}
+                    />
+                  </div>
+                ) : null}
 
                 {card.key === "sms" ? (
                   <>

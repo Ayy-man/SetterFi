@@ -130,6 +130,14 @@ describe("CoachInbox", () => {
     expect(within(rail).getByText("not yet")).toBeInTheDocument();
   });
 
+  it("carries Logged on both writes: taking the thread over and sending a reply", () => {
+    renderInbox();
+
+    // Take over pauses the agent on a real lead and writes an audit row; Send writes to the lead.
+    // Neither is a preview, so neither goes without the microcopy.
+    expect(screen.getAllByText("Logged")).toHaveLength(2);
+  });
+
   it("says the inbox is unavailable when conversations are disabled", () => {
     render(<CoachInbox enabled={false} initialConversations={[]} />);
 

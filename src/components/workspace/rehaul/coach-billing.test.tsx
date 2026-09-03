@@ -54,6 +54,11 @@ describe("CoachBillingRehaul", () => {
     expect(screen.getByRole("button", { name: /No show/ })).toBeVisible();
     expect(screen.getByRole("button", { name: /Skip/ })).toBeVisible();
     expect(screen.getByText("Ask us to change your plan")).toBeVisible();
+
+    // The charge panel says when the next one lands, and nothing about a card the snapshot
+    // does not carry.
+    expect(screen.getByText(/^Next charge Sep 7, 2026\.$/u)).toBeVisible();
+    expect(screen.queryByText(/4242/u)).not.toBeInTheDocument();
   });
 
   it("draws one bar per period the projection carries", () => {

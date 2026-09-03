@@ -37,6 +37,16 @@ export type ConnectCard = {
   status: { label: string; tone: Tone } | null;
   /** The provider's own account label, when the row carries one. */
   detail: string | null;
+  /**
+   * When a message last made a signed round trip on this channel, straight off
+   * `receipts.signedRoundTripAt`.
+   *
+   * The one receipt on the row that proves the channel actually works, so the screen can state the
+   * day it was proved rather than only the word "Answering". Null on every card that has no such
+   * receipt, the SMS card included -- there is no round trip to prove while the carriers still
+   * hold the registration.
+   */
+  provedAt: string | null;
   action: ConnectCardAction | null;
   /** Set only on the SMS card, and only once details are actually with the carriers. */
   wait: { since: string } | null;
@@ -65,11 +75,12 @@ function metaCard(
   connection: ChannelConnectionView | undefined,
 ): ConnectCard {
   const copy = META_COPY[key];
-  const base = { ...copy, detail: null, key, wait: null } satisfies Omit<
+  const base = { ...copy, detail: null, key, provedAt: null, wait: null } satisfies Omit<
     ConnectCard,
     "action" | "status"
   >;
   const label = connection?.externalAccountLabel?.trim() || null;
+  const provedAt = connection?.receipts.signedRoundTripAt ?? null;
 
   if (connection?.state === "live" && connection.receipts.signedRoundTripAt) {
     return {
@@ -77,6 +88,7 @@ function metaCard(
       action: null,
       detail: label,
       note: "Answering your messages now.",
+      provedAt,
       status: { label: "Answering", tone: "good" },
     };
   }
@@ -85,6 +97,7 @@ function metaCard(
       ...base,
       action: { href: CONNECT_HREF, label: "Finish connecting" },
       detail: label,
+      provedAt,
       note: "Connected, but no message has made a round trip yet, so it is not answering.",
       status: { label: "Not answering yet", tone: "waiting" },
     };
@@ -98,6 +111,7 @@ function metaCard(
       ...base,
       action: { href: CONNECT_HREF, label: `Reconnect ${copy.name}` },
       detail: label,
+      provedAt,
       note: connection.error ?? "The connection stopped working and no reason was recorded.",
       status: { label: "Needs reconnecting", tone: "failure" },
     };
@@ -107,6 +121,7 @@ function metaCard(
       ...base,
       action: { href: CONNECT_HREF, label: "Open setup" },
       detail: label,
+      provedAt,
       note: "Connecting. Nothing for you to do while this finishes.",
       status: { label: "Connecting", tone: "waiting" },
     };
@@ -121,6 +136,8 @@ function metaCard(
 
 function smsCard(registration: CoachA2pRegistrationProjection | null): ConnectCard {
   const base = {
+    // No round trip can be proved while the carriers still hold the registration.
+    provedAt: null,
     body: "This one does not switch on today. Sending business texts in the US means the phone carriers vet your business first, and that takes about three weeks.",
     detail: null,
     eyebrow: "SMS to your business number",
