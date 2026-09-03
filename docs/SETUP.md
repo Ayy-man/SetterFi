@@ -201,6 +201,17 @@ application row today and not the Supabase Auth identity, so it stays off until 
 `SETTERFI_OFFER_LAYER_ENGINE_INPUT_LIVE` changes agent output for every tenant at once, so switch it
 on for a watched tenant first.
 
+**The public marketing site.** `SETTERFI_PUBLIC_LANDING_LIVE=true` makes `next.config.ts` rewrite
+`/` to `/site/index.html`, the static scroll-driven site whose source lives in
+`scrollcraft/builds/setterfi/` (index, `BRIEF.md`, the engine copy, the `assets/` screenshots). The
+served copy under `public/site/` is generated from that build by rewriting the three relative asset
+paths to `/site/...`, so every edit to the build has to be copied over again before it ships;
+`/site` is a public prefix in `src/lib/auth/claims.ts` so the proxy never asks it for a session.
+With the flag off, `/` still renders the React landing page in `src/app/page.tsx`. The site's Sign
+in and Get started buttons point at `/login` and `/signup`; its footer links `/privacy` and
+`/terms`, which do not exist yet and are required before the Google Calendar OAuth verification is
+filed.
+
 **Placeholder copy markers.** Every `SETTERFI_DEMO_PLACEHOLDER_*` name holds unapproved copy carrying
 a visible unapproved label, and the real filing paths reject a placeholder outright. They are
 `SETTERFI_DEMO_PLACEHOLDER_CONSENT_VERSION`, `_CAMPAIGN_COPY_VERSION`, `_TIER_PRICES`,
