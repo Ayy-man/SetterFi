@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { AdminAuditLog } from "@/components/workspace/live/admin-audit-log";
-import { phase8Live } from "@/lib/env-contract";
+import { OwnerAudit } from "@/components/workspace/rehaul/owner-audit";
+import { phase8Live, uiRehaulLive } from "@/lib/env-contract";
 import { loadSupportSession } from "@/lib/support/service";
 
 import { PAGE_SIZE, loadAuditRows, requestedQuery } from "./load";
@@ -37,15 +38,18 @@ function AuditShell({ children }: { children: ReactNode }) {
 
 export default async function AuditPage({ searchParams }: PageProps) {
   if (!phase8Live()) {
+    const emptyPagination = {
+      hasNextPage: false,
+      hasPreviousPage: false,
+      pageIndex: 0,
+      pageSize: PAGE_SIZE,
+      totalRows: 0,
+    };
     return (
       <AuditShell>
-        <AdminAuditLog enabled={false} rows={[]} pagination={{
-          hasNextPage: false,
-          hasPreviousPage: false,
-          pageIndex: 0,
-          pageSize: PAGE_SIZE,
-          totalRows: 0,
-        }} />
+        {uiRehaulLive()
+          ? <OwnerAudit enabled={false} pagination={emptyPagination} rows={[]} />
+          : <AdminAuditLog enabled={false} rows={[]} pagination={emptyPagination} />}
       </AuditShell>
     );
   }
@@ -57,6 +61,20 @@ export default async function AuditPage({ searchParams }: PageProps) {
 
   const query = requestedQuery(await searchParams);
   const result = await loadAuditRows(query);
+  if (uiRehaulLive()) {
+    return (
+      <AuditShell>
+        <OwnerAudit
+          enabled
+          liveWorkspaceCount={result.liveWorkspaceCount}
+          pagination={result.pagination}
+          rows={result.rows}
+          unavailableReason={result.unavailableReason}
+        />
+      </AuditShell>
+    );
+  }
+
   return (
     <AuditShell>
       <AdminAuditLog
