@@ -120,6 +120,8 @@
     border: 1px dashed color-mix(in oklab, var(--sc-accent) 45%, transparent);
     transition: background 360ms ease, color 360ms ease, border-color 360ms ease, box-shadow 520ms ease;
   }
+  @keyframes slotPop { 0% { transform: scale(0.94); } 55% { transform: scale(1.06); } 100% { transform: scale(1); } }
+  .week--full .booked--friday.is-lit { animation: slotPop 480ms cubic-bezier(0.2, 1, 0.3, 1) both; }
   .week--full .booked--friday.is-lit {
     background: var(--sc-accent); color: var(--sc-accent-ink); border: 1px solid transparent;
     box-shadow: 0 0 0 6px color-mix(in oklab, var(--sc-accent) 22%, transparent), 0 0 48px 8px color-mix(in oklab, var(--sc-accent) 35%, transparent);
@@ -293,7 +295,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .b, .stamp, .console, .booked, .booked--friday { transition: none !important; }
+    .b, .stamp, .console, .booked, .booked--friday { transition: none !important; animation: none !important; }
     .cta .dots i { animation: none; opacity: 0.8; }
   }
 </style>
@@ -383,6 +385,7 @@
         <svg class="line" viewBox="0 0 2400 1700" aria-hidden="true">
           <path id="lineGlow" class="line__glow" d=""></path>
           <path id="linePath" d=""></path>
+          <path id="lineRing" d=""></path>
           <circle id="lineDot" r="7" cx="0" cy="0" opacity="0"></circle>
         </svg>
 
@@ -448,6 +451,8 @@
   var consoles = Array.prototype.slice.call(document.querySelectorAll('[data-reveal]'));
   var linePath = document.getElementById('linePath');
   var lineGlow = document.getElementById('lineGlow');
+  var lineRing = document.getElementById('lineRing');
+  var ringLen = 0;
   var lineDot = document.getElementById('lineDot');
   var friday = document.getElementById('friday');
   var weekFull = document.getElementById('weekFull');
@@ -550,7 +555,7 @@
     var f = friday.getBoundingClientRect();
     var x0 = (p.right - camRect.left) / z, y0 = (p.top - camRect.top) / z + 250;
     // Land just short of the slot's left edge, not inside it.
-    var x1 = (f.left - camRect.left) / z - 12, y1 = (f.top + f.height / 2 - camRect.top) / z;
+    var x1 = (f.left - camRect.left) / z - 7, y1 = (f.top + f.height / 2 - camRect.top) / z;
     var d = 'M' + x0 + ' ' + y0 + ' C ' + (x0 + (x1 - x0) * 0.45) + ' ' + y0 + ', ' + (x0 + (x1 - x0) * 0.6) + ' ' + y1 + ', ' + x1 + ' ' + y1;
     linePath.setAttribute('d', d);
     lineGlow.setAttribute('d', d);
@@ -558,6 +563,20 @@
     linePath.style.strokeDasharray = lineLen;
     lineGlow.style.strokeDasharray = lineLen;
     lineDot.setAttribute('cx', x0); lineDot.setAttribute('cy', y0);
+
+    // The ring: from the contact point on the slot's left edge, up and around
+    // the slot's rounded outline, back to where it started.
+    var rx = (f.left - camRect.left) / z, ry = (f.top - camRect.top) / z, rw = f.width / z, rh = f.height / z, r = 10;
+    var ring = 'M' + rx + ' ' + y1 +
+      ' L' + rx + ' ' + (ry + r) + ' Q' + rx + ' ' + ry + ' ' + (rx + r) + ' ' + ry +
+      ' L' + (rx + rw - r) + ' ' + ry + ' Q' + (rx + rw) + ' ' + ry + ' ' + (rx + rw) + ' ' + (ry + r) +
+      ' L' + (rx + rw) + ' ' + (ry + rh - r) + ' Q' + (rx + rw) + ' ' + (ry + rh) + ' ' + (rx + rw - r) + ' ' + (ry + rh) +
+      ' L' + (rx + r) + ' ' + (ry + rh) + ' Q' + rx + ' ' + (ry + rh) + ' ' + rx + ' ' + (ry + rh - r) +
+      ' Z';
+    lineRing.setAttribute('d', ring);
+    ringLen = lineRing.getTotalLength();
+    lineRing.style.strokeDasharray = ringLen;
+    lineRing.style.strokeDashoffset = ringLen;
   }
 
   var cur = { x: 0, y: 0, z: 0 }, target = { x: 0, y: 0, z: 0 }, first = true;
@@ -624,7 +643,12 @@
       var pt = linePath.getPointAtLength(lineLen * lp);
       lineDot.setAttribute('cx', pt.x.toFixed(1)); lineDot.setAttribute('cy', pt.y.toFixed(1));
     }
-    var arrived = lp >= 0.985;
+    // Once the dot touches the slot the ring traces its outline from the
+    // contact point, and the slot lights the moment the ring closes.
+    var rp = reduce ? (t >= 7.2 ? 1 : 0) : ramp(t, 7.65, 8.15);
+    lineRing.style.strokeDashoffset = ringLen * (1 - rp);
+    lineRing.setAttribute('opacity', rp > 0 ? 1 : 0);
+    var arrived = rp >= 0.97;
     if (arrived !== friday.classList.contains('is-lit')) friday.classList.toggle('is-lit', arrived);
     var peak = t >= 6.9 && t < 9.4;
     if (peak !== weekFull.classList.contains('is-peak')) weekFull.classList.toggle('is-peak', peak);
