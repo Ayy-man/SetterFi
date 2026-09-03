@@ -154,15 +154,18 @@ const PILL_TONE: Record<PillTone, string> = {
 export type PillProps = {
   children: ReactNode;
   tone?: PillTone;
+  /** "coach" holds the coach surface 14px floor; "owner" is the artboard 12px. */
+  density?: "owner" | "coach";
   className?: string;
 };
 
 /** The 12px bordered pill from the artboards. Neutral by default; amber is the loud one. */
-export function Pill({ children, className, tone = "neutral" }: PillProps) {
+export function Pill({ children, className, density = "owner", tone = "neutral" }: PillProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[12px]",
+        "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5",
+        density === "coach" ? "text-[14px]" : "text-[12px]",
         PILL_TONE[tone],
         className,
       )}
