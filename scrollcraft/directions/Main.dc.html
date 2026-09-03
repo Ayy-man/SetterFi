@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --canvas: oklch(0.9612 0.0042 262);
+      --card-top: oklch(0.9975 0.0016 262);
+      --card: oklch(0.9905 0.0026 262);
+      --well: oklch(0.983 0.0048 262);
+      --ink: oklch(0.2325 0.023 262);
+      --body: oklch(0.2905 0.032 262);
+      --muted: oklch(0.3604 0.036 262);
+      --faint: oklch(0.4349 0.039 262);
+      --overline: oklch(0.5261 0.041 262);
+      --line: rgba(60, 90, 150, 0.13);
+      --line-soft: rgba(60, 90, 150, 0.06);
+      --accent: #2e5cc8;
+      --accent-text: oklch(0.44 0.165 264);
+      --accent-wash: rgba(46, 92, 200, 0.07);
+      --accent-edge: rgba(46, 92, 200, 0.22);
+      --on-accent: oklch(0.99 0.003 267);
+      --shadow-card: 0 1px 0 rgba(255,255,255,0.6) inset, 0 1px 2px rgba(28,42,82,0.04), 0 8px 20px -14px rgba(28,42,82,0.16);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Archivo, system-ui, sans-serif; background: var(--canvas); color: var(--body); -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent-text); text-decoration: none; }
+    a:hover { color: oklch(0.36 0.17 264); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .over { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.085em; text-transform: uppercase; color: var(--overline); margin: 0; }
+  </style>
+</helmet>
+
+<div style="width: 1680px; min-height: 1060px; padding: 52px 64px 56px; display: flex; flex-direction: column; gap: 38px; background: var(--canvas)">
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 64px; padding-bottom: 26px; border-bottom: 1px solid var(--line)">
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <p class="over">The structural fork</p>
+      <h1 style="margin: 0; font-size: 46px; font-weight: 600; line-height: 1.03; letter-spacing: -0.032em; color: var(--ink); max-width: 22ch">Two ways to build the same argument.</h1>
+    </div>
+    <p style="margin: 0; font-size: 16px; line-height: 1.5; color: var(--muted); max-width: 46ch; flex: none">Same locked header, same copy, same proof. What changes is whether the scroll cuts between scenes or travels through one place. Every other decision on the build follows from this one, so it is worth picking deliberately.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px">
+
+    <!-- ===================== A ===================== -->
+    <div style="display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; align-items: baseline; gap: 16px">
+        <span class="mono" style="font-size: 40px; font-weight: 600; letter-spacing: -0.03em; color: var(--accent-text); line-height: 1">A</span>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.022em; color: var(--ink)">Distinct scenes</h2>
+          <p style="margin: 0; font-size: 14px; color: var(--faint)">Six frames, six devices, a hard cut between each.</p>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; align-items: center; gap: 16px; height: 75px; padding: 0 18px; background: linear-gradient(180deg, var(--card-top), var(--card)); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card)">
+          <span style="width: 5px; height: 51px; border-radius: 3px; background: var(--accent); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: var(--ink)">The two weeks</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">pin · the week fills under the wheel</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--faint); flex: none">2.2 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 61px; padding: 0 18px; background: linear-gradient(180deg, var(--card-top), var(--card)); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card)">
+          <span style="width: 5px; height: 41px; border-radius: 3px; background: var(--ink); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: var(--ink)">The night shift</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">ground shift to dark · thread scrubs</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--faint); flex: none">1.8 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 18px; background: linear-gradient(180deg, var(--card-top), var(--card)); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card)">
+          <span style="width: 5px; height: 38px; border-radius: 3px; background: var(--accent-edge); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: var(--ink)">What it asks</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">kinetic type · five rungs assemble</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--faint); flex: none">1.6 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 18px; background: linear-gradient(180deg, var(--card-top), var(--card)); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card)">
+          <span style="width: 5px; height: 38px; border-radius: 3px; background: var(--accent-edge); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: var(--ink)">What it refuses</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">lateral pan · three told no</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--faint); flex: none">1.4 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 88px; padding: 0 18px; background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 8%, var(--card-top)), color-mix(in oklab, var(--accent) 4%, var(--card))); border: 1px solid var(--accent-edge); border-radius: 12px; box-shadow: 0 14px 34px -20px color-mix(in oklab, var(--accent) 70%, transparent)">
+          <span style="width: 5px; height: 60px; border-radius: 3px; background: var(--accent); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span style="font-size: 18px; font-weight: 600; color: var(--ink)">The receipt</span>
+              <span class="mono" style="display: inline-flex; align-items: center; height: 21px; padding: 0 8px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent-wash); color: var(--accent-text); border: 1px solid var(--accent-edge)">Peak</span>
+            </div>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">reveal · every booking finds its 2am DM</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--accent-text); flex: none">2.6 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 18px; background: linear-gradient(180deg, var(--card-top), var(--card)); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card)">
+          <span style="width: 5px; height: 38px; border-radius: 3px; background: var(--accent); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: var(--ink)">Give me that week</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">pin · the page stops and responds</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--faint); flex: none">1.4 vh</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; background: var(--well); border: 1px solid var(--line); border-radius: 12px">
+        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--body)"><strong style="color: var(--ink); font-weight: 600">Why it wins.</strong> Six devices means six surprises, and the gaps between them are free. It survives a visitor who scrolls fast, and every act can be cut or reordered without rebuilding the page.</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--body)"><strong style="color: var(--ink); font-weight: 600">The tradeoff.</strong> It reads as a very good marketing page rather than a place. Nothing carries the visitor from one act to the next except the argument itself, so the copy has to be strong.</p>
+      </div>
+    </div>
+
+    <!-- ===================== B ===================== -->
+    <div style="display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; align-items: baseline; gap: 16px">
+        <span class="mono" style="font-size: 40px; font-weight: 600; letter-spacing: -0.03em; color: var(--accent-text); line-height: 1">B</span>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.022em; color: var(--ink)">One unbroken world</h2>
+          <p style="margin: 0; font-size: 14px; color: var(--faint)">One coach's week, travelled from Sunday night to Friday.</p>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-card)">
+        <div style="display: flex; align-items: center; gap: 16px; height: 68px; padding: 0 18px; background: oklch(0.19 0.032 262)">
+          <span style="width: 5px; height: 100%; background: linear-gradient(180deg, oklch(0.19 0.032 262), oklch(0.24 0.036 262)); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: oklch(0.95 0.008 262)">02:14 · the phone lights up</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: oklch(0.66 0.03 262)">camera tight on the screen in the dark</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: oklch(0.6 0.03 262); flex: none">2.0 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 61px; padding: 0 18px; background: oklch(0.34 0.038 262)">
+          <span style="width: 5px; height: 100%; background: linear-gradient(180deg, oklch(0.24 0.036 262), oklch(0.42 0.04 262)); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: oklch(0.95 0.008 262)">it answers, and keeps answering</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: oklch(0.72 0.03 262)">camera holds, the thread runs past</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: oklch(0.7 0.03 262); flex: none">1.8 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 68px; padding: 0 18px; background: oklch(0.62 0.05 262)">
+          <span style="width: 5px; height: 100%; background: linear-gradient(180deg, oklch(0.42 0.04 262), oklch(0.78 0.03 262)); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: oklch(0.99 0.004 262)">the room comes up around it</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: oklch(0.9 0.02 262)">camera pulls back, the week appears</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: oklch(0.92 0.02 262); flex: none">2.0 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 102px; padding: 0 18px; background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 14%, var(--card-top)), color-mix(in oklab, var(--accent) 6%, var(--card))); border-top: 1px solid var(--accent-edge); border-bottom: 1px solid var(--accent-edge)">
+          <span style="width: 5px; height: 100%; background: var(--accent); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span style="font-size: 18px; font-weight: 600; color: var(--ink)">Friday, 11:00</span>
+              <span class="mono" style="display: inline-flex; align-items: center; height: 21px; padding: 0 8px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent-wash); color: var(--accent-text); border: 1px solid var(--accent-edge)">Peak</span>
+            </div>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">the week dims, one slot stays lit, and the 02:14 DM is still attached to it</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--accent-text); flex: none">3.0 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 54px; padding: 0 18px; background: var(--card)">
+          <span style="width: 5px; height: 100%; background: color-mix(in oklab, var(--accent) 40%, var(--card)); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: var(--ink)">what it asked to get there</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">the camera steps into the thread again</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--faint); flex: none">1.6 vh</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; height: 54px; padding: 0 18px; background: linear-gradient(180deg, var(--card-top), var(--card))">
+          <span style="width: 5px; height: 100%; background: var(--accent); flex: none"></span>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 16px; font-weight: 600; color: var(--ink)">Give me that week</span>
+            <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--overline)">the travel stops, the reply bubble waits</span>
+          </div>
+          <span class="mono" style="font-size: 11px; color: var(--faint); flex: none">1.6 vh</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; background: var(--well); border: 1px solid var(--line); border-radius: 12px">
+        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--body)"><strong style="color: var(--ink); font-weight: 600">Why it wins.</strong> The ground travels from night to morning under the visitor's hand, so the product's whole claim is felt before a word of it is read. Nobody leaves in the middle of a move.</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--body)"><strong style="color: var(--ink); font-weight: 600">The tradeoff.</strong> One device stretched over a whole page, so if the move is not beautiful there is nowhere to hide. Without generated footage it has to be built in DOM and canvas, which is real engineering, and a fast scroller gets a blur instead of an argument.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": { "width": 1680, "height": 1060 }}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

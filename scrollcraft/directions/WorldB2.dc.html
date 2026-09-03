@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --ground: oklch(0.4 0.042 262);
+      --ink: oklch(0.985 0.005 262);
+      --soft: oklch(0.86 0.02 262);
+      --dim: oklch(0.72 0.03 262);
+      --accent: #6f95f0;
+      --on-accent: oklch(0.99 0.003 267);
+      --grid-bg: rgba(255,255,255,0.05);
+      --grid-border: rgba(220,232,255,0.16);
+      --slot-bg: rgba(255,255,255,0.06);
+      --slot-border: rgba(220,232,255,0.1);
+      --booked-bg: rgba(111,149,240,0.55);
+      --booked-fg: oklch(0.99 0.003 267);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Archivo, system-ui, sans-serif; background: var(--ground); color: var(--soft); -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: oklch(0.8 0.12 264); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .over { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.085em; text-transform: uppercase; color: var(--dim); margin: 0; }
+
+    .world { position: absolute; left: 0; top: 0; width: 1600px; height: 1000px; transform-origin: 0 0; }
+    .grid { position: absolute; left: 380px; top: 180px; width: 1080px; height: 640px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(6, minmax(0, 1fr)); gap: 10px; padding: 16px; background: var(--grid-bg); border: 1px solid var(--grid-border); border-radius: 18px; }
+    .slot { border-radius: 6px; background: var(--slot-bg); border: 1px solid var(--slot-border); }
+    .booked { border-radius: 6px; background: var(--booked-bg); border: 1px solid rgba(220,232,255,0.3); display: grid; place-items: center; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; font-weight: 600; color: var(--booked-fg); box-shadow: 0 10px 24px -14px rgba(20,30,60,0.7); }
+    .phone { position: absolute; left: 120px; top: 330px; width: 250px; height: 520px; border-radius: 34px; background: oklch(0.15 0.02 262); border: 1px solid rgba(220,232,255,0.2); box-shadow: 0 0 70px 6px rgba(111,149,240,0.28), 0 40px 90px -30px rgba(0,0,0,0.6); padding: 22px 16px; display: flex; flex-direction: column; gap: 9px; overflow: hidden; }
+    .them { align-self: flex-start; max-width: 84%; padding: 9px 12px; border-radius: 14px; border-bottom-left-radius: 5px; background: oklch(0.27 0.026 262); color: var(--ink); font-size: 12.5px; line-height: 1.35; }
+    .me { align-self: flex-end; max-width: 84%; padding: 9px 12px; border-radius: 14px; border-bottom-right-radius: 5px; background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 94%, white), color-mix(in oklab, var(--accent) 82%, black)); color: var(--on-accent); font-size: 12.5px; line-height: 1.35; }
+    .stamp { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 8.5px; letter-spacing: 0.06em; color: oklch(0.6 0.03 262); }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 860px; background: var(--ground); position: relative; overflow: hidden">
+
+  <div class="world" style="transform: translate(-86px, -246px) scale(1.3)">
+    <div class="grid">
+      <span class="booked">09:30</span><span class="slot"></span><span class="booked">09:30</span><span class="slot"></span><span class="booked">09:00</span>
+      <span class="slot"></span><span class="booked">10:00</span><span class="slot"></span><span class="booked">11:00</span><span class="slot"></span>
+      <span class="booked">11:30</span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="booked">11:00</span>
+      <span class="slot"></span><span class="slot"></span><span class="booked">13:30</span><span class="booked">14:00</span><span class="slot"></span>
+      <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+      <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+    </div>
+    <div class="phone">
+      <span class="stamp" style="align-self: flex-start">02:14</span>
+      <div class="them">hey do you still take 1:1 clients?</div>
+      <span class="stamp" style="align-self: flex-end">02:14</span>
+      <div class="me">I do. Are you training already, or starting from scratch?</div>
+      <span class="stamp" style="align-self: flex-start">02:19</span>
+      <div class="them">training 3x a week for about a year</div>
+      <span class="stamp" style="align-self: flex-end">02:19</span>
+      <div class="me">Friday at 11 or Monday at 9:30?</div>
+    </div>
+  </div>
+
+  <div style="position: absolute; inset: 0; pointer-events: none; background: radial-gradient(46% 40% at 78% 82%, rgba(14,20,38,0.62), rgba(14,20,38,0) 72%)"></div>
+
+  <div style="position: absolute; right: 80px; bottom: 84px; z-index: 3; display: flex; flex-direction: column; align-items: flex-end; gap: 16px; text-align: right">
+    <p class="over">Monday, 08:40</p>
+    <h2 style="margin: 0; font-size: 58px; font-weight: 600; line-height: 0.99; letter-spacing: -0.034em; color: var(--ink); max-width: 13ch; text-wrap: balance">The room comes up around it.</h2>
+    <p style="margin: 0; font-size: 17px; line-height: 1.5; color: var(--soft); max-width: 36ch">Same phone, same thread. The camera has not cut, it has only stepped back far enough for you to see what the night turned into.</p>
+  </div>
+
+  <div style="position: absolute; left: 80px; bottom: 24px; display: flex; align-items: center; gap: 10px; z-index: 4">
+    <span style="width: 148px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.18); position: relative; overflow: hidden"><span style="position: absolute; left: 0; top: 0; height: 100%; width: 44%; background: oklch(0.92 0.05 264); border-radius: 2px"></span></span>
+    <span class="mono" style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim)">scroll 0.44 · camera at 1.3x, ground lifting from night to morning</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": { "width": 1440, "height": 860 }}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

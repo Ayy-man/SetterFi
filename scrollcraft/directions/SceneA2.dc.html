@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --ground: oklch(0.19 0.032 262);
+      --ground-2: oklch(0.235 0.036 262);
+      --ink: oklch(0.97 0.006 262);
+      --soft: oklch(0.74 0.024 262);
+      --dim: oklch(0.58 0.03 262);
+      --line: rgba(150, 180, 240, 0.14);
+      --accent: #4d7ae8;
+      --on-accent: oklch(0.99 0.003 267);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Archivo, system-ui, sans-serif; background: var(--ground); color: var(--soft); -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: oklch(0.75 0.13 264); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .over { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.085em; text-transform: uppercase; color: var(--dim); margin: 0; }
+    .them { align-self: flex-start; max-width: 30ch; padding: 13px 17px; border-radius: 18px; border-bottom-left-radius: 6px; background: oklch(0.28 0.028 262); border: 1px solid var(--line); color: var(--ink); font-size: 15.5px; line-height: 1.4; }
+    .me { align-self: flex-end; max-width: 30ch; padding: 13px 17px; border-radius: 18px; border-bottom-right-radius: 6px; background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 94%, white), color-mix(in oklab, var(--accent) 86%, black)); color: var(--on-accent); font-size: 15.5px; line-height: 1.4; box-shadow: 0 14px 30px -18px color-mix(in oklab, var(--accent) 90%, transparent); }
+    .stamp { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10.5px; letter-spacing: 0.06em; color: var(--dim); }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 860px; padding: 0 80px; display: flex; align-items: center; gap: 72px; background: var(--ground); position: relative; overflow: hidden">
+  <div style="position: absolute; inset: 0; pointer-events: none; background: radial-gradient(58% 44% at 74% 44%, rgba(77,122,232,0.16), rgba(77,122,232,0) 66%)"></div>
+  <div style="position: absolute; inset: 0; pointer-events: none; opacity: 0.5; background-image: radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px); background-size: 3px 3px"></div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 26px; position: relative; z-index: 2; max-width: 620px">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 0 5px rgba(77,122,232,0.16)"></span>
+      <p class="over">Sunday, 02:14</p>
+    </div>
+    <h2 style="margin: 0; font-size: 66px; font-weight: 600; line-height: 0.98; letter-spacing: -0.036em; color: var(--ink); max-width: 13ch; text-wrap: balance">You were asleep for all of this.</h2>
+    <p style="margin: 0; font-size: 18px; line-height: 1.5; color: var(--soft); max-width: 42ch">Three people asked about coaching between midnight and three. Two of them went somewhere else by breakfast, in the week where nothing answered.</p>
+    <div style="display: flex; align-items: center; gap: 14px; padding-top: 6px">
+      <span class="mono" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--soft); border: 1px solid var(--line); background: rgba(255,255,255,0.03)">the ground has gone dark</span>
+      <span class="mono" style="font-size: 11px; letter-spacing: 0.05em; color: var(--dim)">act 2 of 6</span>
+    </div>
+  </div>
+
+  <div style="flex: none; width: 520px; display: flex; flex-direction: column; gap: 12px; position: relative; z-index: 2">
+    <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid var(--line)">
+      <span class="mono" style="font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--dim)">Instagram · direct</span>
+      <span class="stamp">live</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span class="stamp" style="align-self: flex-start">02:14</span>
+      <div class="them">hey do you still take 1:1 clients? saw the reel</div>
+      <span class="stamp" style="align-self: flex-end">02:14</span>
+      <div class="me">I do. Quick one so I don't waste your time: are you training already, or starting from scratch?</div>
+      <span class="stamp" style="align-self: flex-start">02:19</span>
+      <div class="them">training 3x a week for about a year, want to actually get strong</div>
+      <span class="stamp" style="align-self: flex-end">02:19</span>
+      <div class="me">Perfect. Friday at 11 or Monday at 9:30, which suits?</div>
+      <div style="display: flex; align-items: center; gap: 10px; align-self: flex-start; padding-top: 4px; opacity: 0.5">
+        <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--dim)"></span>
+        <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--dim)"></span>
+        <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--dim)"></span>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 80px; bottom: 24px; display: flex; align-items: center; gap: 10px; z-index: 4">
+    <span style="width: 148px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.12); position: relative; overflow: hidden"><span style="position: absolute; left: 0; top: 0; height: 100%; width: 52%; background: var(--accent); border-radius: 2px"></span></span>
+    <span class="mono" style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim)">scroll 0.52 · the thread runs under the wheel</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": { "width": 1440, "height": 860 }}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

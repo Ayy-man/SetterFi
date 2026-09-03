@@ -1,0 +1,3 @@
+builds/*/lab/
+builds/*/lab/**
+.*.mjs

@@ -1,0 +1,17 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1680, "h": 1060, "title": "The fork" },
+    { "file": "SceneA1.dc.html", "x": 0, "y": 1320, "w": 1440, "h": 860, "title": "A · act 1 · the two weeks" },
+    { "file": "SceneA2.dc.html", "x": 1560, "y": 1320, "w": 1440, "h": 860, "title": "A · act 2 · the night shift" },
+    { "file": "SceneA3.dc.html", "x": 3120, "y": 1320, "w": 1440, "h": 860, "title": "A · act 5 · the receipt (peak)" },
+    { "file": "WorldB1.dc.html", "x": 0, "y": 2400, "w": 1440, "h": 860, "title": "B · 02:14 · camera at 3x" },
+    { "file": "WorldB2.dc.html", "x": 1560, "y": 2400, "w": 1440, "h": 860, "title": "B · Monday · camera at 1.3x" },
+    { "file": "WorldB3.dc.html", "x": 3120, "y": 2400, "w": 1440, "h": 860, "title": "B · Friday 11:00 · camera at 0.78x (peak)" }
+  ],
+  "annotations": [
+    { "id": "fork-intro", "x": 1760, "y": 0, "w": 1000, "text": "THE FORK. Same locked C6 header, same copy, same proof. What is being decided is whether the scroll CUTS between scenes (A) or TRAVELS through one place (B). Pushed bolder off the canvas tokens: type up to 78px, one dark act, mono labels doing the work.\n\nRead the map on the left first, then the three frames from each direction below. Each frame is one scroll position, not a section: the bar bottom-left says where in the page it sits.\n\nMotion is DOM and SVG driven off scroll position in both directions. No generated footage." },
+    { "id": "row-a", "x": 0, "y": 1200, "w": 1440, "text": "A · DISTINCT SCENES. Three of the six acts. Each has its own device and its own ground, and a hard cut sits between them. Act 1 is the locked header with the right-hand week filling as you scroll. Act 2 shifts the ground to dark and runs the thread under the wheel. Act 5 is the peak: every booking resolves to the DM it came from, one row at a time." },
+    { "id": "row-b", "x": 0, "y": 2280, "w": 1440, "text": "B · ONE UNBROKEN WORLD. The same three moments, but there is only one scene: a phone on the left, a week on the right, and a camera that pulls back from 3x to 0.78x while the ground lifts from 02:14 to Friday morning. Nothing cuts. The phone and the week are in the same place in all three frames, which is the whole point, and also the whole risk." }
+  ],
+  "launch": { "view": "canvas" }
+}

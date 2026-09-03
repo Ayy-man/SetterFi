@@ -1,0 +1,349 @@
+{
+  "doc": {
+    "height": 9284,
+    "vh": 844,
+    "acts": [],
+    "world": {
+      "seam": 0.12,
+      "segs": [
+        {
+          "w": 10,
+          "linger": 0,
+          "label": "The week"
+        }
+      ]
+    }
+  },
+  "report": [
+    {
+      "i": 0,
+      "y": 0,
+      "pct": 0,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Same week. Same leads. One of these is y",
+          "dir": "dark-on-light",
+          "worst": 14.82,
+          "mean": 14.94
+        }
+      ],
+      "cues": [
+        {
+          "t": "Same week. Same leads. One of these is your ca",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [],
+      "act": "-",
+      "stages": [],
+      "segs": [
+        {
+          "i": 0,
+          "label": "The week",
+          "op": 1,
+          "painted": false,
+          "t": null
+        }
+      ],
+      "custom": [
+        "cam:1770,380,0.390|g:0.961|ph:0.00|th:-1|cs:0,0,0|ln:0.000|cta:1.00"
+      ],
+      "customHold": false,
+      "seg": 0,
+      "segp": 0,
+      "bg": "oklch(0.9612 0.0042 262)"
+    },
+    {
+      "i": 1,
+      "y": 169,
+      "pct": 2,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Same week. Same leads. One of these is y",
+          "dir": "dark-on-light",
+          "worst": 14.66,
+          "mean": 14.78
+        }
+      ],
+      "cues": [
+        {
+          "t": "Same week. Same leads. One of these is your ca",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [],
+      "act": "-",
+      "stages": [],
+      "segs": [
+        {
+          "i": 0,
+          "label": "The week",
+          "op": 1,
+          "painted": false,
+          "t": null
+        }
+      ],
+      "custom": [
+        "cam:1757,399,0.390|g:0.958|ph:0.00|th:-1|cs:0,0,0|ln:0.000|cta:1.00"
+      ],
+      "customHold": false,
+      "seg": 0,
+      "segp": 0.02,
+      "bg": "oklch(0.9612 0.0042 262)"
+    },
+    {
+      "i": 2,
+      "y": 1789,
+      "pct": 21,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "02:14. A lead is typing.",
+          "dir": "light-on-dark",
+          "worst": 11.18,
+          "mean": 13
+        }
+      ],
+      "cues": [
+        {
+          "t": "02:14. A lead is typing.",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [],
+      "act": "-",
+      "stages": [],
+      "segs": [
+        {
+          "i": 0,
+          "label": "The week",
+          "op": 1,
+          "painted": false,
+          "t": null
+        }
+      ],
+      "custom": [
+        "cam:1297,1062,0.715|g:0.252|ph:0.00|th:-1|cs:0,0,0|ln:0.000|cta:0.00"
+      ],
+      "customHold": false,
+      "seg": 0,
+      "segp": 0.212,
+      "bg": "oklch(0.9612 0.0042 262)"
+    },
+    {
+      "i": 3,
+      "y": 3410,
+      "pct": 40,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Sample conversation. Names, numbers and ",
+          "dir": "light-on-dark",
+          "worst": 17.77,
+          "mean": 17.81
+        }
+      ],
+      "cues": [
+        {
+          "t": "Sample conversation. Names, numbers and times ",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [],
+      "act": "-",
+      "stages": [],
+      "segs": [
+        {
+          "i": 0,
+          "label": "The week",
+          "op": 1,
+          "painted": false,
+          "t": null
+        }
+      ],
+      "custom": [
+        "cam:1200,1211,0.929|g:0.160|ph:1.00|th:11|cs:0,0,0|ln:0.000|cta:0.00"
+      ],
+      "customHold": false,
+      "seg": 0,
+      "segp": 0.404,
+      "bg": "oklch(0.9612 0.0042 262)"
+    },
+    {
+      "i": 4,
+      "y": 5030,
+      "pct": 60,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Five answers, in the fields. The setter ",
+          "dir": "dark-on-light",
+          "worst": 7.85,
+          "mean": 12.56
+        }
+      ],
+      "cues": [
+        {
+          "t": "Five answers, in the fields. The setter is bui",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [],
+      "act": "-",
+      "stages": [],
+      "segs": [
+        {
+          "i": 0,
+          "label": "The week",
+          "op": 1,
+          "painted": false,
+          "t": null
+        }
+      ],
+      "custom": [
+        "cam:1200,1060,0.527|g:0.880|ph:1.00|th:15|cs:1,1,0.972|ln:0.000|cta:0.00"
+      ],
+      "customHold": false,
+      "seg": 0,
+      "segp": 0.596,
+      "bg": "oklch(0.9612 0.0042 262)"
+    },
+    {
+      "i": 5,
+      "y": 6651,
+      "pct": 79,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Friday, 11:00. Every booking carries the",
+          "dir": "dark-on-light",
+          "worst": 11.78,
+          "mean": 15.92
+        }
+      ],
+      "cues": [
+        {
+          "t": "Friday, 11:00. Every booking carries the messa",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [],
+      "act": "-",
+      "stages": [],
+      "segs": [
+        {
+          "i": 0,
+          "label": "The week",
+          "op": 1,
+          "painted": false,
+          "t": null
+        }
+      ],
+      "custom": [
+        "cam:1850,620,0.390|g:0.985|ph:1.00|th:15|cs:1,1,1|ln:1.000|cta:0.00"
+      ],
+      "customHold": false,
+      "seg": 0,
+      "segp": 0.788,
+      "bg": "oklch(0.9612 0.0042 262)"
+    },
+    {
+      "i": 6,
+      "y": 8271,
+      "pct": 98,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Your next lead is typing. Instagram, Mes",
+          "dir": "dark-on-light",
+          "worst": 14.82,
+          "mean": 14.94
+        }
+      ],
+      "cues": [
+        {
+          "t": "Your next lead is typing. Instagram, Messenger",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [],
+      "act": "-",
+      "stages": [],
+      "segs": [
+        {
+          "i": 0,
+          "label": "The week",
+          "op": 1,
+          "painted": false,
+          "t": null
+        }
+      ],
+      "custom": [
+        "cam:1770,380,0.406|g:0.961|ph:1.00|th:15|cs:0,0,0|ln:1.000|cta:1.00"
+      ],
+      "customHold": false,
+      "seg": 0,
+      "segp": 0.98,
+      "bg": "oklch(0.9612 0.0042 262)"
+    },
+    {
+      "i": 7,
+      "y": 8440,
+      "pct": 100,
+      "settled": true,
+      "contrast": [
+        {
+          "t": "Your next lead is typing. Instagram, Mes",
+          "dir": "dark-on-light",
+          "worst": 14.82,
+          "mean": 14.95
+        }
+      ],
+      "cues": [
+        {
+          "t": "Your next lead is typing. Instagram, Messenger",
+          "o": 1
+        }
+      ],
+      "clips": [],
+      "rails": [],
+      "wipes": [],
+      "act": "-",
+      "stages": [],
+      "segs": [
+        {
+          "i": 0,
+          "label": "The week",
+          "op": 1,
+          "painted": false,
+          "t": null
+        }
+      ],
+      "custom": [
+        "cam:1770,380,0.404|g:0.961|ph:1.00|th:15|cs:0,0,0|ln:1.000|cta:1.00"
+      ],
+      "customHold": false,
+      "seg": 0,
+      "segp": 1,
+      "bg": "oklch(0.9612 0.0042 262)"
+    }
+  ],
+  "consoleErrors": [],
+  "failed": []
+}

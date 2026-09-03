@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SetterFi. The AI setter for funding coaches.</title>
+<meta name="description" content="SetterFi answers, qualifies and books your Instagram and Messenger leads while you sleep. Every booking carries the message it came from.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%232e5cc8%27/%3E%3Ccircle cx=%2711%27 cy=%2716%27 r=%272.4%27 fill=%27white%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%272.4%27 fill=%27white%27/%3E%3Ccircle cx=%2721%27 cy=%2716%27 r=%272.4%27 fill=%27white%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="scrollcraft.css">
+<style>
+  :root {
+    /* C6 Reply palette, lifted from the locked header. */
+    --sc-canvas: oklch(0.9612 0.0042 262);
+    --sc-surface: oklch(0.9905 0.0026 262);
+    --sc-ink: oklch(0.2325 0.023 262);
+    --sc-ink-soft: oklch(0.3604 0.036 262);
+    --sc-accent: oklch(0.5 0.15 264);
+    --sc-accent-ink: oklch(0.99 0.003 267);
+    --sc-font-display: "Archivo", system-ui, sans-serif;
+    --sc-font-text: "Archivo", system-ui, sans-serif;
+
+    --card-top: oklch(0.9975 0.0016 262);
+    --card: oklch(0.9905 0.0026 262);
+    --well: oklch(0.983 0.0048 262);
+    --faint: oklch(0.4349 0.039 262);
+    --overline: oklch(0.5261 0.041 262);
+    --accent-text: oklch(0.44 0.165 264);
+    --line: rgba(60, 90, 150, 0.13);
+    --line-soft: rgba(60, 90, 150, 0.08);
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+    /* The ground is written by the page from the track. Everything that has to
+       agree with it (scrims, nav, copy) reads this one value. */
+    --ground: oklch(0.9612 0.0042 262);
+    /* Copy colours are sRGB hex on purpose: the verification harness reads
+       computed text colour as r,g,b and cannot parse an oklch() value. */
+    --ink-now: #181e28;
+    --soft-now: #333d50;
+    --over-now: #5e6b83;
+  }
+  html[data-phase="night"] {
+    --ink-now: #f4f5f8;
+    --soft-now: #c0c4cc;
+    --over-now: #9aa5b8;
+  }
+
+  html, body { margin: 0; background: var(--ground); color: var(--ink-now); font-family: var(--sc-font-text); }
+  body { -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--sc-accent); outline-offset: 3px; }
+
+  /* ------------------------------------------------------------- stage -- */
+  .sc-world { background: var(--ground); }
+  .leg { position: absolute; inset: 0; }
+  .ground { position: absolute; inset: 0; background: var(--ground); }
+  .cam {
+    position: absolute; left: 0; top: 0;
+    width: 2400px; height: 1700px;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+  .obj { position: absolute; }
+
+  /* Weeks: the locked header's two calendars, as world objects. */
+  .week {
+    left: 160px; top: 260px; width: 940px; height: 560px;
+    box-sizing: border-box;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: 0 1px 0 var(--card-top) inset, 0 24px 60px -30px rgba(30, 50, 100, 0.25);
+    padding: 26px 28px 28px;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .week--full { left: 1300px; }
+  .week { transition: opacity 600ms ease; }
+  html[data-phase="night"] .week { opacity: 0.22; }
+  html[data-quiet-weeks] .week { opacity: 0.35; }
+  .phone { opacity: 0; }
+  .week__head { display: flex; align-items: center; justify-content: space-between; }
+  .over {
+    margin: 0;
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--overline);
+  }
+  .week--full .over { color: var(--accent-text); }
+  .tag {
+    font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
+    padding: 6px 12px; border-radius: 999px;
+    background: var(--well); color: var(--faint); border: 1px solid var(--line);
+  }
+  .week--full .tag { background: var(--sc-accent); color: var(--sc-accent-ink); border-color: transparent; }
+  .grid {
+    flex: 1; display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: auto repeat(6, minmax(0, 1fr));
+    gap: 8px; min-height: 0;
+  }
+  .day {
+    font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--overline); text-align: center; padding-bottom: 4px;
+  }
+  .slot { border-radius: 10px; background: var(--well); border: 1px solid var(--line-soft); min-height: 0; }
+  .booked {
+    border-radius: 10px; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: 0.02em;
+    background: color-mix(in oklab, var(--sc-accent) 14%, var(--card));
+    color: var(--accent-text);
+    border: 1px solid color-mix(in oklab, var(--sc-accent) 30%, transparent);
+  }
+  .week--full .booked { background: var(--sc-accent); color: var(--sc-accent-ink); border-color: transparent; }
+  /* The Friday 11:00 slot waits dim until the provenance line reaches it. */
+  .week--full .booked--friday {
+    background: color-mix(in oklab, var(--sc-accent) 18%, var(--card));
+    color: var(--accent-text);
+    border: 1px dashed color-mix(in oklab, var(--sc-accent) 45%, transparent);
+    transition: background 360ms ease, color 360ms ease, border-color 360ms ease, box-shadow 520ms ease;
+  }
+  .week--full .booked--friday.is-lit {
+    background: var(--sc-accent); color: var(--sc-accent-ink); border: 1px solid transparent;
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--sc-accent) 22%, transparent), 0 0 48px 8px color-mix(in oklab, var(--sc-accent) 35%, transparent);
+  }
+  .week--full.is-peak .booked:not(.booked--friday) { opacity: 0.32; }
+  .week--full .booked:not(.booked--friday) { transition: opacity 420ms ease; }
+
+  /* Phone: the night object. */
+  .phone {
+    left: 1050px; top: 900px; width: 300px; height: 600px;
+    box-sizing: border-box;
+    border-radius: 44px;
+    background: oklch(0.22 0.02 262);
+    box-shadow: 0 0 0 2px oklch(0.32 0.02 262) inset, 0 40px 90px -30px rgba(0, 0, 0, 0.7);
+    padding: 14px;
+  }
+  .phone::before {
+    content: ""; position: absolute; inset: 0; border-radius: 44px; pointer-events: none; z-index: 3;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, 0 -1px 0 rgba(255, 255, 255, 0.14) inset;
+  }
+  .phone::after {
+    content: ""; position: absolute; left: 50%; top: 24px; width: 92px; height: 26px; margin-left: -46px;
+    border-radius: 14px; background: oklch(0.14 0.015 262); z-index: 4;
+  }
+  .phone__screen {
+    position: absolute; inset: 12px; border-radius: 34px; overflow: hidden;
+    background: oklch(0.985 0.003 262);
+    opacity: 0;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+  }
+  .phone__bar {
+    position: absolute; left: 0; right: 0; top: 0; height: 66px; z-index: 2;
+    background: oklch(0.985 0.003 262);
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: flex-end; justify-content: space-between; padding: 0 18px 10px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint);
+  }
+  .phone__bar b { font-family: var(--sc-font-display); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 13px; color: var(--sc-ink); }
+  .thread {
+    position: absolute; left: 0; right: 0; top: 66px;
+    padding: 18px 14px 28px;
+    display: flex; flex-direction: column; gap: 8px;
+    will-change: transform;
+  }
+  .stamp { align-self: center; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--faint); margin: 6px 0 2px; }
+  .b {
+    max-width: 82%; padding: 9px 12px; border-radius: 16px;
+    font-size: 13.5px; line-height: 1.32; letter-spacing: -0.005em;
+    opacity: 0; transform: translateY(10px) scale(0.98);
+    transform-origin: 0 100%;
+  }
+  .b.is-in { opacity: 1; transform: none; }
+  .b--lead { align-self: flex-start; background: oklch(0.93 0.006 262); color: var(--sc-ink); border-bottom-left-radius: 5px; }
+  .b--agent { align-self: flex-end; background: var(--sc-accent); color: var(--sc-accent-ink); border-bottom-right-radius: 5px; transform-origin: 100% 100%; }
+  .stamp { opacity: 0; }
+  .stamp.is-in { opacity: 1; }
+  .b, .stamp { transition: opacity 260ms ease, transform 320ms cubic-bezier(0.2, 1, 0.3, 1); }
+
+  /* Consoles: real screenshots from the product. */
+  .console {
+    border-radius: 16px; overflow: hidden;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 70px -30px rgba(20, 40, 90, 0.35);
+    opacity: 0; transform: translateY(40px);
+  }
+  .console img { display: block; width: 100%; height: auto; }
+  .console--learned { left: 1420px; top: 930px; width: 420px; }
+  .console--handles { left: 560px; top: 1080px; width: 440px; }
+  .console--takeover { left: 1420px; top: 1420px; width: 420px; }
+  .console__cap {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 10px 14px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--overline);
+    background: linear-gradient(to top, var(--card) 70%, transparent);
+  }
+
+  /* The provenance line. */
+  .line { position: absolute; left: 0; top: 0; width: 2400px; height: 1700px; overflow: visible; pointer-events: none; }
+  .line path { fill: none; stroke: var(--sc-accent); stroke-width: 4; stroke-linecap: round; }
+  .line circle { fill: var(--sc-accent); }
+  .line .line__glow { stroke-width: 14; opacity: 0.18; }
+
+  /* The reply bubble: the CTA lives in the world, where the header put it. */
+  .cta {
+    left: 1980px; top: 790px;
+    display: inline-flex; align-items: center; gap: 14px;
+    padding: 18px 26px 18px 22px;
+    background: var(--sc-accent); color: var(--sc-accent-ink);
+    border-radius: 30px; border-bottom-right-radius: 8px;
+    font-family: var(--sc-font-display); font-weight: 600; font-size: 26px; letter-spacing: -0.02em;
+    text-decoration: none; white-space: nowrap;
+    box-shadow: 0 24px 60px -20px color-mix(in oklab, var(--sc-accent) 60%, transparent);
+    transform-origin: 100% 100%;
+  }
+  .cta:hover { filter: brightness(1.06); }
+  .cta .dots { display: inline-flex; gap: 5px; }
+  .cta .dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.5; animation: pulse 1.4s ease-in-out infinite; }
+  .cta .dots i:nth-child(2) { animation-delay: 0.18s; }
+  .cta .dots i:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes pulse { 0%, 100% { opacity: 0.35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+  /* ----------------------------------------------------------- copy -- */
+  .sc-world__scrim.scrim-top, .sc-world__scrim.scrim-bottom { inset: 0; }
+  .scrim-top { background: linear-gradient(to bottom, var(--ground) 0%, color-mix(in oklab, var(--ground) 70%, transparent) 18%, transparent 38%); }
+  .scrim-bottom { background: linear-gradient(to top, var(--ground) 0%, color-mix(in oklab, var(--ground) 60%, transparent) 14%, transparent 30%); }
+
+  .copy { position: absolute; max-width: 44rem; color: var(--ink-now); }
+  .copy--hero { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(4.5rem, 9vh, 6rem); }
+  .copy--night { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(5.5rem, 12vh, 8rem); }
+  .copy--note { left: clamp(1.25rem, 5vw, 4.5rem); bottom: clamp(1.5rem, 5vh, 3rem); max-width: 22rem; }
+  .copy--answers { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(4.5rem, 9vh, 6rem); max-width: 30rem; }
+  .copy--answers h2 { font-size: clamp(2.2rem, 4.3vw, 4rem); }
+  .copy--answers p { max-width: 30ch; font-size: clamp(1rem, 1.2vw, 1.15rem); }
+  .copy--peak { right: clamp(1.25rem, 5vw, 4.5rem); bottom: clamp(2.5rem, 9vh, 6rem); text-align: right; max-width: 34rem; }
+  .copy--finale { left: clamp(1.25rem, 5vw, 4.5rem); top: clamp(4.5rem, 9vh, 6rem); max-width: 40rem; }
+
+  .copy .over { color: var(--over-now); margin-bottom: 14px; }
+  .copy h1, .copy h2 {
+    margin: 0; font-family: var(--sc-font-display); font-weight: 700;
+    line-height: 0.98; letter-spacing: -0.035em; text-wrap: balance;
+  }
+  .copy h1 { font-size: clamp(2.5rem, 5.4vw, 4.8rem); max-width: 22ch; }
+  .copy h2 { font-size: clamp(2.4rem, 5.6vw, 5.4rem); }
+  .copy .named { color: var(--sc-accent); }
+  html[data-phase="night"] .copy .named { color: oklch(0.78 0.12 264); }
+  .copy p { margin: 18px 0 0; font-size: clamp(1.05rem, 1.35vw, 1.3rem); line-height: 1.4; color: var(--soft-now); max-width: 34ch; text-wrap: pretty; }
+  .copy--peak p { margin-left: auto; }
+  .copy--finale h2 { font-size: clamp(2.5rem, 5.4vw, 4.8rem); }
+  .copy--note p { margin: 0; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; line-height: 1.5; color: var(--soft-now); max-width: none; }
+
+  .foot { margin-top: clamp(1.25rem, 3vh, 2rem); display: flex; gap: 22px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; color: var(--over-now); }
+  .foot a { text-decoration: none; border-bottom: 1px solid color-mix(in oklab, currentColor 40%, transparent); padding-bottom: 1px; }
+  .foot a:hover { color: var(--ink-now); }
+
+  /* ------------------------------------------------------------- nav -- */
+  .nav {
+    position: fixed; inset: 0 0 auto 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: clamp(0.9rem, 2vh, 1.4rem) clamp(1.25rem, 5vw, 4.5rem);
+    color: var(--ink-now);
+    pointer-events: none;
+  }
+  .nav > * { pointer-events: auto; }
+  .wordmark { font-family: var(--sc-font-display); font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em; text-decoration: none; }
+  .map { display: flex; gap: 4px; list-style: none; margin: 0; padding: 4px; border-radius: 999px; background: color-mix(in oklab, var(--ground) 70%, transparent); backdrop-filter: blur(10px); }
+  .map button {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    padding: 8px 14px; border-radius: 999px;
+    font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--over-now);
+    transition: color 200ms ease, background 200ms ease;
+  }
+  .map button:hover { color: var(--ink-now); }
+  .map button[aria-current="true"] { color: var(--sc-accent-ink); background: var(--sc-accent); }
+  .map button[aria-current="true"] .map__t { color: inherit; }
+
+  /* --------------------------------------------------------- mobile -- */
+  @media (max-width: 860px) {
+    .map { display: none; }
+    .console--learned { left: 1050px; top: 1560px; width: 300px; }
+    .console--handles { left: 1050px; top: 1900px; width: 300px; }
+    .console--takeover { left: 1050px; top: 2190px; width: 300px; }
+    .cam { height: 2300px; }
+    .line { height: 2300px; }
+    .cta { left: 1720px; top: 840px; font-size: 22px; padding: 14px 20px 14px 18px; }
+    .copy--peak { text-align: left; right: auto; left: clamp(1.25rem, 5vw, 4.5rem); bottom: clamp(2rem, 6vh, 4rem); }
+    .copy h1 { font-size: clamp(2.3rem, 11vw, 3.4rem); }
+    .copy h2 { font-size: clamp(2.1rem, 10vw, 3.2rem); }
+    .copy p { font-size: 1rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .b, .stamp, .console, .booked, .booked--friday { transition: none !important; }
+    .cta .dots i { animation: none; opacity: 0.8; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <a class="wordmark" href="#top" data-t="0">SetterFi</a>
+  <ul class="map" aria-label="Page map">
+    <li><button type="button" data-t="0" aria-current="true">Your week</button></li>
+    <li><button type="button" data-t="2.6">02:14</button></li>
+    <li><button type="button" data-t="3.6">The thread</button></li>
+    <li><button type="button" data-t="6.0">The answers</button></li>
+    <li><button type="button" data-t="7.9">Friday 11:00</button></li>
+  </ul>
+</header>
+
+<main id="top" data-sc-mode="worldflight" data-sc-seam="0.12">
+
+  <div data-sc-world class="sc-world" data-sc-verify-state="">
+    <div data-sc-segment data-sc-w="10" data-sc-waypoint="The week" class="sc-world__seg leg">
+      <div data-sc-poster hidden></div>
+      <div class="ground"></div>
+
+      <div class="cam" id="cam">
+
+        <section class="obj week week--quiet" aria-label="Your week without SetterFi">
+          <div class="week__head"><p class="over">Without</p><span class="tag">2 booked</span></div>
+          <div class="grid">
+            <span class="day">Mon</span><span class="day">Tue</span><span class="day">Wed</span><span class="day">Thu</span><span class="day">Fri</span>
+            <span class="slot"></span><span class="booked">10:00</span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="booked">14:00</span><span class="slot"></span>
+            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+          </div>
+        </section>
+
+        <section class="obj week week--full" id="weekFull" aria-label="Your week with SetterFi">
+          <div class="week__head"><p class="over">With SetterFi</p><span class="tag">9 booked</span></div>
+          <div class="grid">
+            <span class="day">Mon</span><span class="day">Tue</span><span class="day">Wed</span><span class="day">Thu</span><span class="day">Fri</span>
+            <span class="booked">09:30</span><span class="slot"></span><span class="booked">09:30</span><span class="slot"></span><span class="booked">09:00</span>
+            <span class="slot"></span><span class="booked">10:00</span><span class="slot"></span><span class="booked">11:00</span><span class="slot"></span>
+            <span class="booked">11:30</span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="booked booked--friday" id="friday">11:00</span>
+            <span class="slot"></span><span class="slot"></span><span class="booked">13:30</span><span class="booked">14:00</span><span class="slot"></span>
+            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+            <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+          </div>
+        </section>
+
+        <div class="obj phone" id="phone" aria-label="A Messenger conversation at 02:14, sample data">
+          <div class="phone__screen" id="screen">
+            <div class="phone__bar"><b>Messenger</b><span>02:14</span></div>
+            <div class="thread" id="thread">
+              <span class="stamp">Sun 02:14</span>
+              <p class="b b--lead">Hi, a friend said you help people get funded. Is that right?</p>
+              <p class="b b--agent">It is. So I point you the right way: roughly where is your personal credit sitting right now?</p>
+              <p class="b b--lead">Mid 600s I think. Haven't pulled it in a couple of months.</p>
+              <p class="b b--agent">Understood. How much are you trying to raise for the business?</p>
+              <p class="b b--lead">Maybe 100k if I can get it</p>
+              <p class="b b--agent">And what sort of timing are you working to?</p>
+              <p class="b b--lead">Next couple of months</p>
+              <p class="b b--agent">What would the 100k go toward?</p>
+              <p class="b b--lead">Ad spend mostly. Scaling the coaching program.</p>
+              <p class="b b--agent">That works. One more: is the business bringing in revenue today?</p>
+              <p class="b b--lead">About 8k a month</p>
+              <p class="b b--agent">Good. You qualify for a call. Friday 11:00 or Monday 09:30?</p>
+              <p class="b b--lead">friday 11</p>
+              <p class="b b--agent">Booked. Confirmation is on its way, and a reminder an hour before. Sleep well.</p>
+              <span class="stamp">Sun 02:21</span>
+            </div>
+          </div>
+        </div>
+
+        <figure class="obj console console--learned" data-reveal="4.9 5.5">
+          <img src="assets/learned.webp" width="1080" height="1155" alt="The console panel for this lead: wants $50K to 100K, timeline 1 to 3 months, credit 640 to 680, decided Qualified" decoding="async">
+        </figure>
+        <figure class="obj console console--handles" data-reveal="5.2 5.8">
+          <img src="assets/handles.webp" width="1155" height="1056" alt="What SetterFi handles: replies as soon as the channel accepts, follows up five times over fourteen days, stops when they reply or opt out, quotes only prices you saved, hands to you when it goes off script" decoding="async">
+        </figure>
+        <figure class="obj console console--takeover" data-reveal="5.6 6.0">
+          <img src="assets/takeover.webp" width="2100" height="264" alt="The take-over composer: one button hands any thread back to you" decoding="async">
+        </figure>
+
+        <svg class="line" viewBox="0 0 2400 1700" aria-hidden="true">
+          <path id="lineGlow" class="line__glow" d=""></path>
+          <path id="linePath" d=""></path>
+          <circle id="lineDot" r="7" cx="0" cy="0" opacity="0"></circle>
+        </svg>
+
+        <a class="obj cta" id="cta" href="/signup">Give me that week <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></a>
+      </div>
+    </div>
+  </div>
+
+  <div data-sc-world-copy>
+    <div class="sc-world__scrim scrim-top"></div>
+    <div class="sc-world__scrim scrim-bottom"></div>
+
+    <div class="copy copy--hero" data-sc-copy data-sc-window="0 0.11 0 0.45">
+      <p class="over">Same week. Same leads.</p>
+      <h1>One of these is your calendar <span class="named">with SetterFi.</span></h1>
+      <p>It answers your DMs at night. You take the calls in the morning.</p>
+    </div>
+
+    <div class="copy copy--night" data-sc-copy data-sc-window="0.17 0.31 0.2 0.3">
+      <h2>02:14. A lead is typing.</h2>
+    </div>
+
+    <div class="copy copy--note" data-sc-copy data-sc-window="0.30 0.47 0.25 0.25">
+      <p>Sample conversation. Names, numbers and times are sample data.</p>
+    </div>
+
+    <div class="copy copy--answers" data-sc-copy data-sc-window="0.55 0.68 0.3 0.3">
+      <h2>Five answers, in the fields.</h2>
+      <p>The setter is built on thousands of funding leads closed in this industry. It asks what closers ask, in the order they ask it, and hands you the thread the moment it goes off script.</p>
+    </div>
+
+    <div class="copy copy--peak" data-sc-copy data-sc-window="0.71 0.90 0.2 0.3">
+      <h2>Friday, 11:00.</h2>
+      <p>Every booking carries the message it came from.</p>
+    </div>
+
+    <div class="copy copy--finale" data-sc-copy data-sc-window="0.955 1 0.55 0">
+      <h2>Your next lead is typing.</h2>
+      <p>Instagram, Messenger and your calendar, live the same afternoon.</p>
+      <nav class="foot" aria-label="Footer">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="mailto:hello@setterfi.com">Contact</a>
+        <span>SetterFi 2026</span>
+      </nav>
+    </div>
+  </div>
+
+  <div data-sc-spacer aria-hidden="true"></div>
+</main>
+
+<script src="scrollcraft.js"></script>
+<script>
+(function () {
+  'use strict';
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cam = document.getElementById('cam');
+  var stage = document.querySelector('[data-sc-world]');
+  var screen = document.getElementById('screen');
+  var phone = document.getElementById('phone');
+  var thread = document.getElementById('thread');
+  var items = Array.prototype.slice.call(thread.children);
+  var consoles = Array.prototype.slice.call(document.querySelectorAll('[data-reveal]'));
+  var linePath = document.getElementById('linePath');
+  var lineGlow = document.getElementById('lineGlow');
+  var lineDot = document.getElementById('lineDot');
+  var friday = document.getElementById('friday');
+  var weekFull = document.getElementById('weekFull');
+  var cta = document.getElementById('cta');
+  var mapBtns = Array.prototype.slice.call(document.querySelectorAll('[data-t]'));
+  var copyLinks = Array.prototype.slice.call(document.querySelectorAll('[data-sc-copy] a')).map(function (el) {
+    return { el: el, block: el.closest('[data-sc-copy]') };
+  });
+  var docEl = document.documentElement;
+
+  var TOTAL = 11; // the leg (10vh) plus the engine's landing viewport
+  var vw = innerWidth, vh = innerHeight, mobile = vw <= 860;
+
+  // Camera keyframes: t in vh, world centre (x, y), and the world box (w, h)
+  // that has to fit the viewport. Zoom is derived so the same keyframe list
+  // frames correctly at every viewport size; phones get their own list because
+  // the world is restacked for them in CSS.
+  var KD = [
+    [0.0, 1200, 370, 2300, 1000],
+    [1.0, 1200, 500, 2150, 950],
+    [2.6, 1200, 1200, 700, 800],
+    [4.7, 1200, 1215, 690, 790],
+    [5.7, 1170, 1090, 1500, 940],
+    [6.5, 1170, 1090, 1500, 940],
+    [7.3, 1750, 700, 1500, 1000],
+    [8.9, 1750, 700, 1500, 1000],
+    [9.7, 1200, 370, 2200, 960],
+    [11.0, 1200, 370, 2300, 1000]
+  ];
+  var KM = [
+    [0.0, 1770, 380, 1000, 1300],
+    [1.0, 1650, 560, 1000, 1300],
+    [2.6, 1200, 1200, 420, 760],
+    [4.7, 1200, 1215, 420, 760],
+    [5.7, 1200, 880, 380, 1800],
+    [6.2, 1200, 880, 380, 1800],
+    [6.9, 1200, 1800, 380, 1800],
+    [7.5, 1850, 620, 1000, 1200],
+    [8.9, 1850, 620, 1000, 1200],
+    [9.7, 1770, 380, 960, 1250],
+    [11.0, 1770, 380, 1000, 1300]
+  ];
+  // Ground: t -> [L, C] in oklch, hue fixed at 262.
+  var G = [
+    [0.0, 0.9612, 0.0042],
+    [1.1, 0.93, 0.006],
+    [2.4, 0.16, 0.025],
+    [4.8, 0.16, 0.025],
+    [5.7, 0.86, 0.01],
+    [6.6, 0.9612, 0.0042],
+    [7.4, 0.985, 0.003],
+    [8.9, 0.985, 0.003],
+    [9.7, 0.9612, 0.0042],
+    [11.0, 0.9612, 0.0042]
+  ];
+
+  function smooth(x) { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }
+  function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function ramp(t, a, b) { return smooth((t - a) / (b - a)); }
+
+  // Piecewise interpolation over a keyframe table; smoothstep between rows.
+  // Under reduced motion the camera cuts: it holds each keyframe until the
+  // next one arrives, so nothing on the page moves continuously.
+  function sample(table, t) {
+    var n = table.length, i;
+    if (t <= table[0][0]) return table[0].slice(1);
+    for (i = 1; i < n; i++) {
+      if (t <= table[i][0]) {
+        var a = table[i - 1], b = table[i];
+        if (reduce) return (t - a[0] < b[0] - t ? a : b).slice(1);
+        var u = smooth((t - a[0]) / (b[0] - a[0]));
+        var out = [];
+        for (var k = 1; k < a.length; k++) out.push(a[k] + (b[k] - a[k]) * u);
+        return out;
+      }
+    }
+    return table[n - 1].slice(1);
+  }
+
+  function zoomFor(w, h) { return Math.min(vw / w, vh / h); }
+
+  // Thread geometry, measured once fonts are in: bubble i appears at time
+  // T0 + i * STEP, and the thread scrolls so the newest bubble sits at the
+  // bottom of the screen.
+  var T0 = 2.75, STEP = 0.115;
+  var screenH = 0, threadTop = 66, bottoms = [];
+  function measureThread() {
+    screenH = screen.clientHeight;
+    bottoms = items.map(function (el) { return el.offsetTop + el.offsetHeight; });
+  }
+
+  var lineLen = 0;
+  function layoutLine() {
+    // From the phone's right edge, at the height of the booking reply, to the
+    // centre of the Friday 11:00 slot. Both are read from the DOM so the line
+    // still lands after the mobile restack.
+    var camRect = cam.getBoundingClientRect();
+    var z = camRect.width / 2400;
+    var p = phone.getBoundingClientRect();
+    var f = friday.getBoundingClientRect();
+    var x0 = (p.right - camRect.left) / z, y0 = (p.top - camRect.top) / z + 250;
+    var x1 = (f.left + f.width / 2 - camRect.left) / z, y1 = (f.top + f.height / 2 - camRect.top) / z;
+    var d = 'M' + x0 + ' ' + y0 + ' C ' + (x0 + (x1 - x0) * 0.45) + ' ' + y0 + ', ' + (x0 + (x1 - x0) * 0.6) + ' ' + y1 + ', ' + x1 + ' ' + y1;
+    linePath.setAttribute('d', d);
+    lineGlow.setAttribute('d', d);
+    lineLen = linePath.getTotalLength();
+    linePath.style.strokeDasharray = lineLen;
+    lineGlow.style.strokeDasharray = lineLen;
+    lineDot.setAttribute('cx', x0); lineDot.setAttribute('cy', y0);
+  }
+
+  var cur = { x: 0, y: 0, z: 0 }, target = { x: 0, y: 0, z: 0 }, first = true;
+  var lastT = -1, raf = 0;
+
+  function trackT() {
+    return Math.max(0, Math.min(TOTAL, (scrollY || pageYOffset) / Math.max(vh, 1)));
+  }
+
+  function applyCamera() {
+    var tx = vw / 2 - cur.x * cur.z, ty = vh / 2 - cur.y * cur.z;
+    cam.style.transform = 'translate3d(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px,0) scale(' + cur.z.toFixed(5) + ')';
+  }
+
+  function update(t) {
+    // Camera target.
+    var k = sample(mobile ? KM : KD, t);
+    target.x = k[0]; target.y = k[1]; target.z = zoomFor(k[2], k[3]);
+    if (first || reduce) { cur.x = target.x; cur.y = target.y; cur.z = target.z; first = false; }
+
+    // Ground and phase.
+    var g = sample(G, t);
+    docEl.style.setProperty('--ground', 'oklch(' + g[0].toFixed(4) + ' ' + g[1].toFixed(4) + ' 262)');
+    var night = g[0] < 0.55;
+    if ((docEl.getAttribute('data-phase') === 'night') !== night) docEl.setAttribute('data-phase', night ? 'night' : 'day');
+    // On a phone the answers copy sits over the weeks, which step back for it.
+    var quiet = mobile && t >= 5.3 && t < 6.9;
+    if (quiet !== docEl.hasAttribute('data-quiet-weeks')) { if (quiet) docEl.setAttribute('data-quiet-weeks', ''); else docEl.removeAttribute('data-quiet-weeks'); }
+
+    // The phone lights up.
+    var lit = ramp(t, 2.3, 2.7);
+    screen.style.opacity = reduce ? (t >= 2.3 ? 1 : 0) : lit.toFixed(3);
+    var leave = 1 - ramp(t, 9.0, 9.5);
+    var phoneOn = reduce ? (t >= 1.2 ? 1 : 0) : ramp(t, 1.1, 1.8);
+    phone.style.opacity = phoneOn.toFixed(3);
+
+    // Thread: bubbles arrive under the wheel.
+    var shown = -1;
+    for (var i = 0; i < items.length; i++) {
+      var on = t >= T0 + i * STEP;
+      if (on) shown = i;
+      if (on !== items[i].classList.contains('is-in')) items[i].classList.toggle('is-in', on);
+    }
+    if (reduce && t >= 2.6) shown = items.length - 1;
+    var shift = 0;
+    if (shown >= 0 && bottoms.length) shift = Math.max(0, bottoms[shown] + 18 - (screenH - threadTop));
+    thread.style.transform = 'translate3d(0,' + (-shift).toFixed(1) + 'px,0)';
+
+    // Consoles surface as the camera pulls back.
+    for (var c = 0; c < consoles.length; c++) {
+      var r = consoles[c].getAttribute('data-reveal').split(' ');
+      var p = reduce ? (t >= +r[0] && t < 9.2 ? 1 : 0) : Math.min(ramp(t, +r[0], +r[1]), leave);
+      consoles[c].style.opacity = p.toFixed(3);
+      consoles[c].style.transform = 'translate3d(0,' + ((1 - p) * 40).toFixed(1) + 'px,0)';
+    }
+
+    // The provenance line draws, and the slot lights when it arrives.
+    var lp = reduce ? (t >= 7.2 ? 1 : 0) : ramp(t, 6.7, 7.7);
+    var off = lineLen * (1 - lp);
+    linePath.style.strokeDashoffset = off;
+    lineGlow.style.strokeDashoffset = off;
+    lineDot.setAttribute('opacity', lp > 0 ? 1 : 0);
+    if (lp > 0 && lineLen) {
+      var pt = linePath.getPointAtLength(lineLen * lp);
+      lineDot.setAttribute('cx', pt.x.toFixed(1)); lineDot.setAttribute('cy', pt.y.toFixed(1));
+    }
+    var arrived = lp >= 0.985;
+    if (arrived !== friday.classList.contains('is-lit')) friday.classList.toggle('is-lit', arrived);
+    var peak = t >= 6.9 && t < 9.4;
+    if (peak !== weekFull.classList.contains('is-peak')) weekFull.classList.toggle('is-peak', peak);
+
+    // The reply bubble is present at the wide shot, and only there.
+    var ctaOn = Math.max(1 - ramp(t, 0.6, 1.3), ramp(t, 9.2, 9.7));
+    cta.style.opacity = ctaOn.toFixed(3);
+    cta.style.transform = 'scale(' + (0.9 + 0.1 * ctaOn).toFixed(3) + ')';
+    cta.style.pointerEvents = ctaOn > 0.5 ? 'auto' : 'none';
+    cta.tabIndex = ctaOn > 0.5 ? 0 : -1;
+
+    // Links inside a copy block are only reachable while the block is legible;
+    // otherwise Tab walks through invisible footer links.
+    for (var l = 0; l < copyLinks.length; l++) {
+      var on = parseFloat(copyLinks[l].block.style.opacity || '0') > 0.5;
+      if (on !== (copyLinks[l].el.tabIndex === 0)) copyLinks[l].el.tabIndex = on ? 0 : -1;
+    }
+
+    // Map.
+    var idx = 0, marks = [0, 2.0, 3.3, 5.4, 6.9];
+    for (var m = 0; m < marks.length; m++) if (t >= marks[m]) idx = m;
+    if (t >= 9.5) idx = 0;
+    mapBtns.forEach(function (b, n) {
+      if (b.tagName !== 'BUTTON') return;
+      var want = (n - 1) === idx;
+      if ((b.getAttribute('aria-current') === 'true') !== want) b.setAttribute('aria-current', String(want));
+    });
+
+    // Verification state: the whole visual state in one string, so the harness
+    // can tell a moving camera from dead scroll.
+    stage.setAttribute('data-sc-verify-state',
+      'cam:' + Math.round(target.x) + ',' + Math.round(target.y) + ',' + target.z.toFixed(3) +
+      '|g:' + g[0].toFixed(3) + '|ph:' + lit.toFixed(2) + '|th:' + shown +
+      '|cs:' + consoles.map(function (el) { return el.style.opacity; }).join(',') +
+      '|ln:' + lp.toFixed(3) + '|cta:' + ctaOn.toFixed(2));
+  }
+
+  function frame() {
+    raf = 0;
+    var t = trackT();
+    if (t !== lastT) { lastT = t; update(t); }
+    var a = reduce ? 1 : 0.16;
+    cur.x += (target.x - cur.x) * a;
+    cur.y += (target.y - cur.y) * a;
+    cur.z += (target.z - cur.z) * a;
+    applyCamera();
+    var moving = Math.abs(target.x - cur.x) > 0.05 || Math.abs(target.y - cur.y) > 0.05 || Math.abs(target.z - cur.z) > 0.0002;
+    if (moving) raf = requestAnimationFrame(frame);
+    else { cur.x = target.x; cur.y = target.y; cur.z = target.z; applyCamera(); }
+  }
+  function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+
+  function relayout() {
+    vw = innerWidth; vh = innerHeight; mobile = vw <= 860;
+    measureThread();
+    // The line is measured in world units through the current camera, so the
+    // camera has to be applied once before reading it.
+    lastT = -1; update(trackT()); applyCamera();
+    layoutLine();
+    lastT = -1; kick();
+  }
+
+  // The map is the nav: each waypoint is a scroll position on the track.
+  mapBtns.forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.preventDefault();
+      scrollTo({ top: Math.round(parseFloat(b.getAttribute('data-t')) * vh), behavior: reduce ? 'instant' : 'smooth' });
+    });
+  });
+
+  addEventListener('scroll', kick, { passive: true });
+  addEventListener('resize', relayout);
+  relayout();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+  addEventListener('load', relayout);
+
+  ScrollCraft.mount(document);
+})();
+</script>
+</body>
+</html>

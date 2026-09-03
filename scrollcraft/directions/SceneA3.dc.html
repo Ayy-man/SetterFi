@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --canvas: oklch(0.9612 0.0042 262);
+      --card-top: oklch(0.9975 0.0016 262);
+      --card: oklch(0.9905 0.0026 262);
+      --well: oklch(0.983 0.0048 262);
+      --ink: oklch(0.2325 0.023 262);
+      --muted: oklch(0.3604 0.036 262);
+      --faint: oklch(0.4349 0.039 262);
+      --overline: oklch(0.5261 0.041 262);
+      --line: rgba(60, 90, 150, 0.13);
+      --line-soft: rgba(60, 90, 150, 0.06);
+      --accent: #2e5cc8;
+      --accent-text: oklch(0.44 0.165 264);
+      --accent-wash: rgba(46, 92, 200, 0.07);
+      --accent-edge: rgba(46, 92, 200, 0.22);
+      --on-accent: oklch(0.99 0.003 267);
+      --shadow-card: 0 1px 0 rgba(255,255,255,0.6) inset, 0 1px 2px rgba(28,42,82,0.04), 0 8px 20px -14px rgba(28,42,82,0.16);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Archivo, system-ui, sans-serif; background: var(--canvas); color: var(--muted); -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent-text); text-decoration: none; }
+    a:hover { color: oklch(0.36 0.17 264); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .over { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.085em; text-transform: uppercase; color: var(--overline); margin: 0; }
+    .row { display: grid; grid-template-columns: 68px 1fr 152px; align-items: center; gap: 20px; height: 62px; padding: 0 20px; background: linear-gradient(180deg, var(--card-top), var(--card)); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-card); }
+    .when { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 14px; font-weight: 600; color: var(--ink); }
+    .who { font-size: 15.5px; font-weight: 500; color: var(--ink); }
+    .src { display: inline-flex; align-items: center; gap: 7px; justify-self: end; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 0.04em; color: var(--accent-text); padding: 5px 10px; border-radius: 999px; background: var(--accent-wash); border: 1px solid var(--accent-edge); }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 860px; padding: 0 80px; display: flex; flex-direction: column; justify-content: center; gap: 34px; background: var(--canvas); position: relative; overflow: hidden">
+  <div style="position: absolute; inset: 0; pointer-events: none; background: radial-gradient(72% 50% at 22% 8%, rgba(46,92,200,0.1), rgba(46,92,200,0) 62%)"></div>
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 56px; position: relative; z-index: 2">
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <p class="over">The receipt</p>
+      <h2 style="margin: 0; font-size: 72px; font-weight: 600; line-height: 0.97; letter-spacing: -0.038em; color: var(--ink); max-width: 14ch; text-wrap: balance">Not one of these woke you up.</h2>
+    </div>
+    <p style="margin: 0 0 10px; font-size: 17px; line-height: 1.5; color: var(--muted); max-width: 34ch; flex: none">Every call on next week's calendar, and the message it came from. The timestamps on the right are when the conversation started, not when you read it.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 9px; position: relative; z-index: 2">
+    <div class="row">
+      <span class="when">Mon 09:30</span>
+      <span class="who">Priya R.</span>
+      <span class="src">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 20.5l1.6-4.8A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+        from 02:14 Sun
+      </span>
+    </div>
+    <div class="row">
+      <span class="when">Mon 11:30</span>
+      <span class="who">Daniel O.</span>
+      <span class="src">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 20.5l1.6-4.8A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+        from 23:41 Sat
+      </span>
+    </div>
+    <div class="row" style="border-color: var(--accent-edge); background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 9%, var(--card-top)), color-mix(in oklab, var(--accent) 4%, var(--card))); box-shadow: 0 16px 38px -22px color-mix(in oklab, var(--accent) 70%, transparent)">
+      <span class="when">Tue 10:00</span>
+      <span class="who">Marcus L.</span>
+      <span class="src" style="background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 94%, white), color-mix(in oklab, var(--accent) 86%, black)); color: var(--on-accent); border-color: transparent">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 20.5l1.6-4.8A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+        from 01:08 Mon
+      </span>
+    </div>
+    <div class="row">
+      <span class="when">Wed 09:30</span>
+      <span class="who">Aisha K.</span>
+      <span class="src">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 20.5l1.6-4.8A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+        from 03:22 Tue
+      </span>
+    </div>
+    <div class="row" style="opacity: 0.42">
+      <span class="when">Thu 11:00</span>
+      <span class="who">Tom B.</span>
+      <span class="src" style="background: rgba(28,42,82,0.045); color: var(--faint); border-color: var(--line)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 20.5l1.6-4.8A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+        from 22:07 Wed
+      </span>
+    </div>
+    <div class="row" style="opacity: 0.2">
+      <span class="when">Fri 09:00</span>
+      <span class="who">Sofia M.</span>
+      <span class="src" style="background: rgba(28,42,82,0.045); color: var(--faint); border-color: var(--line)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 20.5l1.6-4.8A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+        from 00:54 Thu
+      </span>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 80px; bottom: 24px; display: flex; align-items: center; gap: 10px; z-index: 4">
+    <span style="width: 148px; height: 3px; border-radius: 2px; background: rgba(28,42,82,0.1); position: relative; overflow: hidden"><span style="position: absolute; left: 0; top: 0; height: 100%; width: 78%; background: var(--accent); border-radius: 2px"></span></span>
+    <span class="mono" style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint)">scroll 0.78 · rows resolve one at a time. this is the peak</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": { "width": 1440, "height": 860 }}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

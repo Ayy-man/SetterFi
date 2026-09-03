@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --ground: oklch(0.9612 0.0042 262);
+      --card-top: oklch(0.9975 0.0016 262);
+      --card: oklch(0.9905 0.0026 262);
+      --well: oklch(0.983 0.0048 262);
+      --ink: oklch(0.2325 0.023 262);
+      --muted: oklch(0.3604 0.036 262);
+      --faint: oklch(0.4349 0.039 262);
+      --overline: oklch(0.5261 0.041 262);
+      --line: rgba(60, 90, 150, 0.13);
+      --line-soft: rgba(60, 90, 150, 0.06);
+      --accent: #2e5cc8;
+      --accent-text: oklch(0.44 0.165 264);
+      --accent-wash: rgba(46, 92, 200, 0.07);
+      --accent-edge: rgba(46, 92, 200, 0.22);
+      --on-accent: oklch(0.99 0.003 267);
+      --shadow-card: 0 1px 0 rgba(255,255,255,0.6) inset, 0 1px 2px rgba(28,42,82,0.04), 0 8px 20px -14px rgba(28,42,82,0.16);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Archivo, system-ui, sans-serif; background: var(--ground); color: var(--muted); -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent-text); text-decoration: none; }
+    a:hover { color: oklch(0.36 0.17 264); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .over { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.085em; text-transform: uppercase; color: var(--overline); margin: 0; }
+
+    .world { position: absolute; left: 0; top: 0; width: 1600px; height: 1000px; transform-origin: 0 0; }
+    .grid { position: absolute; left: 380px; top: 180px; width: 1080px; height: 640px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(6, minmax(0, 1fr)); gap: 10px; padding: 16px; background: linear-gradient(180deg, var(--card-top), var(--card)); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-card); }
+    .slot { border-radius: 6px; background: var(--well); border: 1px solid var(--line-soft); }
+    .booked { border-radius: 6px; background: rgba(46,92,200,0.13); border: 1px solid var(--accent-edge); display: grid; place-items: center; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; font-weight: 600; color: var(--accent-text); opacity: 0.55; }
+    .lit { border-radius: 6px; border: 1px solid var(--accent-edge); background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 92%, white), color-mix(in oklab, var(--accent) 84%, black)); display: grid; place-items: center; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; font-weight: 600; color: var(--on-accent); box-shadow: 0 0 0 6px rgba(46,92,200,0.12), 0 18px 40px -14px color-mix(in oklab, var(--accent) 85%, transparent); position: relative; z-index: 2; }
+    .phone { position: absolute; left: 120px; top: 330px; width: 250px; height: 520px; border-radius: 34px; background: oklch(0.2 0.024 262); border: 1px solid rgba(28,42,82,0.2); box-shadow: 0 30px 70px -28px rgba(28,42,82,0.5); padding: 22px 16px; display: flex; flex-direction: column; gap: 9px; overflow: hidden; }
+    .them { align-self: flex-start; max-width: 84%; padding: 9px 12px; border-radius: 14px; border-bottom-left-radius: 5px; background: oklch(0.3 0.026 262); color: oklch(0.97 0.006 262); font-size: 12.5px; line-height: 1.35; }
+    .me { align-self: flex-end; max-width: 84%; padding: 9px 12px; border-radius: 14px; border-bottom-right-radius: 5px; background: linear-gradient(180deg, color-mix(in oklab, #4d7ae8 94%, white), color-mix(in oklab, #4d7ae8 86%, black)); color: var(--on-accent); font-size: 12.5px; line-height: 1.35; }
+    .stamp { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 8.5px; letter-spacing: 0.06em; color: oklch(0.58 0.03 262); }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 860px; background: var(--ground); position: relative; overflow: hidden">
+  <div style="position: absolute; inset: 0; pointer-events: none; background: radial-gradient(60% 50% at 66% 40%, rgba(46,92,200,0.1), rgba(46,92,200,0) 64%)"></div>
+
+  <div class="world" style="transform: translate(96px, 40px) scale(0.78)">
+    <div class="grid">
+      <span class="booked">09:30</span><span class="slot"></span><span class="booked">09:30</span><span class="slot"></span><span class="booked">09:00</span>
+      <span class="slot"></span><span class="booked">10:00</span><span class="slot"></span><span class="booked">11:00</span><span class="slot"></span>
+      <span class="booked">11:30</span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="lit">11:00</span>
+      <span class="slot"></span><span class="slot"></span><span class="booked">13:30</span><span class="booked">14:00</span><span class="slot"></span>
+      <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+      <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+    </div>
+
+    <svg style="position: absolute; left: 0; top: 0; pointer-events: none" width="1600" height="1000" viewBox="0 0 1600 1000" fill="none" aria-hidden="true">
+      <path d="M 370 640 C 700 640, 900 470, 1300 462" stroke="#2e5cc8" stroke-width="2" stroke-dasharray="6 7" opacity="0.7"></path>
+      <circle cx="370" cy="640" r="5" fill="#2e5cc8"></circle>
+      <circle cx="1300" cy="462" r="5" fill="#2e5cc8"></circle>
+    </svg>
+
+    <div class="phone">
+      <span class="stamp" style="align-self: flex-start">02:14</span>
+      <div class="them">hey do you still take 1:1 clients?</div>
+      <span class="stamp" style="align-self: flex-end">02:14</span>
+      <div class="me">I do. Are you training already, or starting from scratch?</div>
+      <span class="stamp" style="align-self: flex-start">02:19</span>
+      <div class="them">training 3x a week for about a year</div>
+      <span class="stamp" style="align-self: flex-end">02:19</span>
+      <div class="me">Friday at 11 or Monday at 9:30?</div>
+      <span class="stamp" style="align-self: flex-start">02:20</span>
+      <div class="them">friday 11 works</div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 80px; top: 64px; z-index: 3; display: flex; flex-direction: column; gap: 16px">
+    <p class="over">Friday, 11:00</p>
+    <h2 style="margin: 0; font-size: 68px; font-weight: 600; line-height: 0.97; letter-spacing: -0.038em; color: var(--ink); max-width: 12ch; text-wrap: balance">This one started at 02:14.</h2>
+  </div>
+
+  <div style="position: absolute; right: 80px; bottom: 96px; z-index: 3; display: flex; flex-direction: column; align-items: flex-end; gap: 8px">
+    <span class="mono" style="font-size: 11px; letter-spacing: 0.04em; color: var(--overline)">you</span>
+    <span style="border-radius: 26px; border-bottom-right-radius: 8px; overflow: hidden; box-shadow: 0 24px 50px -22px color-mix(in oklab, var(--accent) 70%, transparent)">
+      <a href="#" style="display: inline-flex; align-items: center; min-height: 62px; padding: 0 34px; font-size: 19px; font-weight: 600; color: var(--on-accent); background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 94%, white), color-mix(in oklab, var(--accent) 88%, black))">Give me that week</a>
+    </span>
+  </div>
+
+  <div style="position: absolute; left: 80px; bottom: 24px; display: flex; align-items: center; gap: 10px; z-index: 4">
+    <span style="width: 148px; height: 3px; border-radius: 2px; background: rgba(28,42,82,0.1); position: relative; overflow: hidden"><span style="position: absolute; left: 0; top: 0; height: 100%; width: 74%; background: var(--accent); border-radius: 2px"></span></span>
+    <span class="mono" style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint)">scroll 0.74 · camera at 0.78x, full daylight. this is the peak</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": { "width": 1440, "height": 860 }}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

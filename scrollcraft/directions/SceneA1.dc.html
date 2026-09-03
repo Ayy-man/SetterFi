@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --canvas: oklch(0.9612 0.0042 262);
+      --card-top: oklch(0.9975 0.0016 262);
+      --card: oklch(0.9905 0.0026 262);
+      --well: oklch(0.983 0.0048 262);
+      --ink: oklch(0.2325 0.023 262);
+      --muted: oklch(0.3604 0.036 262);
+      --faint: oklch(0.4349 0.039 262);
+      --overline: oklch(0.5261 0.041 262);
+      --line: rgba(60, 90, 150, 0.13);
+      --line-soft: rgba(60, 90, 150, 0.06);
+      --accent: #2e5cc8;
+      --accent-text: oklch(0.44 0.165 264);
+      --accent-wash: rgba(46, 92, 200, 0.07);
+      --accent-edge: rgba(46, 92, 200, 0.22);
+      --on-accent: oklch(0.99 0.003 267);
+      --shadow-card: 0 1px 0 rgba(255,255,255,0.6) inset, 0 1px 2px rgba(28,42,82,0.04), 0 8px 20px -14px rgba(28,42,82,0.16);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Archivo, system-ui, sans-serif; background: var(--canvas); color: var(--muted); -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent-text); text-decoration: none; }
+    a:hover { color: oklch(0.36 0.17 264); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .over { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.085em; text-transform: uppercase; color: var(--overline); margin: 0; }
+    .day { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--overline); text-align: center; padding-bottom: 4px; }
+    .slot { border-radius: 4px; background: var(--well); border: 1px solid var(--line-soft); min-height: 0; }
+    .booked { border-radius: 4px; border: 1px solid var(--accent-edge); background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 92%, white), color-mix(in oklab, var(--accent) 84%, black)); display: grid; place-items: center; min-height: 0; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 9.5px; font-weight: 600; color: var(--on-accent); box-shadow: 0 6px 14px -10px color-mix(in oklab, var(--accent) 80%, transparent); }
+    .cal { flex-grow: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: auto repeat(5, minmax(0, 1fr)); gap: 5px; padding: 12px; background: linear-gradient(180deg, var(--card-top), var(--card)); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-card); min-height: 0; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 860px; padding: 0 80px; display: flex; flex-direction: column; background: var(--canvas); position: relative; overflow: hidden">
+  <div style="position: absolute; inset: 0; pointer-events: none; background: radial-gradient(80% 46% at 76% -6%, rgba(46,92,200,0.09), rgba(46,92,200,0) 62%)"></div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 22px 0; border-bottom: 1px solid var(--line); position: relative; z-index: 2">
+    <div style="display: flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" stroke="var(--faint)" stroke-width="1.4" opacity="0.5"></rect><path d="M7.5 13.4l3.1 3.1 6-7.4" stroke="#2e5cc8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span>SetterFi</span>
+    </div>
+    <div style="display: flex; gap: 26px">
+      <a href="#" style="font-size: 13.5px; font-weight: 500; color: var(--muted)">How it works</a>
+      <a href="#" style="font-size: 13.5px; font-weight: 500; color: var(--muted)">What it asks</a>
+      <a href="#" style="font-size: 13.5px; font-weight: 500; color: var(--muted)">Pricing</a>
+    </div>
+  </div>
+
+  <div style="padding: 44px 0 30px; display: flex; align-items: flex-end; justify-content: space-between; gap: 56px; position: relative; z-index: 2">
+    <div style="display: flex; flex-direction: column; gap: 18px">
+      <p class="over">Same week. Same leads.</p>
+      <h1 style="margin: 0; font-size: 78px; font-weight: 600; line-height: 0.96; letter-spacing: -0.038em; color: var(--ink); max-width: 15ch; text-wrap: balance">One of these is your calendar <span style="color: var(--accent-text)">with SetterFi.</span></h1>
+    </div>
+    <p style="margin: 0 0 8px; font-size: 18px; line-height: 1.45; color: var(--muted); max-width: 30ch; flex: none">SetterFi works your DMs while you don't. The right-hand week is the one where something was answering at 2am.</p>
+  </div>
+
+  <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; padding-bottom: 44px; position: relative; z-index: 2; min-height: 0">
+    <div style="display: flex; flex-direction: column; min-height: 0">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px">
+        <p class="over">Without</p>
+        <span class="mono" style="display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; background: rgba(28,42,82,0.045); color: var(--faint); border: 1px solid var(--line)">2 booked</span>
+      </div>
+      <div class="cal">
+        <span class="day">Mon</span><span class="day">Tue</span><span class="day">Wed</span><span class="day">Thu</span><span class="day">Fri</span>
+        <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+        <span class="slot"></span><span class="booked">10:00</span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+        <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+        <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="booked">14:00</span><span class="slot"></span>
+        <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; min-height: 0; position: relative">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px">
+        <p class="over" style="color: var(--accent-text)">With SetterFi</p>
+        <span class="mono" style="display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; background: var(--accent-wash); color: var(--accent-text); border: 1px solid var(--accent-edge); box-shadow: 0 0 0 5px rgba(46,92,200,0.07)">6 booked</span>
+      </div>
+      <div class="cal">
+        <span class="day">Mon</span><span class="day">Tue</span><span class="day">Wed</span><span class="day">Thu</span><span class="day">Fri</span>
+        <span class="booked">09:30</span><span class="slot"></span><span class="booked">09:30</span><span class="slot"></span><span class="booked">09:00</span>
+        <span class="slot"></span><span class="booked">10:00</span><span class="slot"></span><span class="booked">11:00</span><span class="slot"></span>
+        <span class="booked">11:30</span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot" style="border-style: dashed; border-color: var(--accent-edge)"></span>
+        <span class="slot"></span><span class="slot"></span><span class="slot" style="border-style: dashed; border-color: var(--accent-edge)"></span><span class="slot"></span><span class="slot"></span>
+        <span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span>
+      </div>
+
+      <div style="position: absolute; right: -8px; bottom: -22px; z-index: 3; display: flex; flex-direction: column; align-items: flex-end; gap: 8px">
+        <span class="mono" style="font-size: 11px; letter-spacing: 0.04em; color: var(--overline)">you</span>
+        <span style="border-radius: 26px; border-bottom-right-radius: 8px; overflow: hidden; box-shadow: 0 24px 50px -22px color-mix(in oklab, var(--accent) 70%, transparent)">
+          <a href="#" style="display: inline-flex; align-items: center; min-height: 62px; padding: 0 34px; font-size: 19px; font-weight: 600; color: var(--on-accent); background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 94%, white), color-mix(in oklab, var(--accent) 88%, black))">Give me that week</a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 80px; bottom: 18px; display: flex; align-items: center; gap: 10px; z-index: 4">
+    <span style="width: 148px; height: 3px; border-radius: 2px; background: rgba(28,42,82,0.1); position: relative; overflow: hidden"><span style="position: absolute; left: 0; top: 0; height: 100%; width: 34%; background: var(--accent); border-radius: 2px"></span></span>
+    <span class="mono" style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint)">scroll 0.34 · the week is still filling</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": { "width": 1440, "height": 860 }}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>
