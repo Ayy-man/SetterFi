@@ -143,7 +143,9 @@ describe("OwnerOverview", () => {
     await userEvent.click(screen.getByRole("button", { name: "Expand New signups" }));
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("Signups by 30-day period")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Signups and active subscriptions" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Subscriptions in this snapshot" })).toBeInTheDocument();
   });
 
