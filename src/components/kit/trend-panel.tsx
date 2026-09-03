@@ -210,11 +210,16 @@ function TrendChart({
           focusable="false"
           viewBox={`0 0 ${size.width} ${size.height}`}
         >
-          <g className="grid" stroke="var(--line)" strokeWidth="1">
-            {[gridTop, (gridTop + gridBottom) / 2, gridBottom].map((y) => (
-              <line key={y} x1={PAD_X} x2={size.width - PAD_X} y1={y} y2={y} />
-            ))}
-          </g>
+          {/* One baseline, no gridlines: the zero line is the only rule a reader measures against. */}
+          <line
+            className="baseline"
+            stroke="var(--line)"
+            strokeWidth="1"
+            x1={PAD_X}
+            x2={size.width - PAD_X}
+            y1={gridBottom}
+            y2={gridBottom}
+          />
           <g aria-hidden="true">
             {points.map((point, index) => {
               const y = Math.min(point.y, point.zeroY)
@@ -224,11 +229,10 @@ function TrendChart({
               return (
                 <rect
                   className={cn(
-                    "bar opacity-20",
-                    isFinalBar
-                      ? "bar--end fill-[var(--color-chart-1)] opacity-30"
-                      : "fill-[var(--color-chart-2)]"
+                    "bar fill-[var(--color-chart-1)]",
+                    isFinalBar ? "bar--end opacity-100" : "opacity-[0.28]"
                   )}
+                  rx="4"
                   height={barHeight}
                   key={`${point.at}-${index}`}
                   width={barWidth}
@@ -242,7 +246,7 @@ function TrendChart({
             className="line fill-none stroke-[var(--color-chart-1)]"
             d={path}
             strokeLinejoin="round"
-            strokeWidth="1.75"
+            strokeWidth="2"
             vectorEffect="non-scaling-stroke"
           />
           {points.map((point, index) => (

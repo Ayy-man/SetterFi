@@ -148,9 +148,12 @@ describe("TrendPanel", () => {
     expect(bars).toHaveLength(mixedData.points.length)
     expect(bars[0]).toHaveAttribute("height", "0")
     expect(Number(bars[1]?.getAttribute("height"))).toBeGreaterThan(0)
-    expect(bars[0]).toHaveClass("fill-[var(--color-chart-2)]")
-    expect(bars.at(-1)).toHaveClass("fill-[var(--color-chart-1)]")
-    expect(bars.at(-1)).not.toHaveClass("fill-[var(--color-chart-2)]")
+    // Past bars are the accent at 28%; only the current period is solid, so one hue reads as
+    // one series and the eye lands on now.
+    expect(bars[0]).toHaveClass("fill-[var(--color-chart-1)]")
+    expect(bars[0]).toHaveClass("opacity-[0.28]")
+    expect(bars.at(-1)).toHaveClass("bar--end")
+    expect(bars.at(-1)).not.toHaveClass("opacity-[0.28]")
   })
 
   it("renders one axis label for every available period", () => {
