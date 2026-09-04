@@ -200,3 +200,10 @@ figures, absence stated in words, and no shape drawn over data that is not there
 
 Rulings the boards make that the spec left open are listed per board in
 `docs/plans/2026-09-04-coach-rehaul-notes.md`, Note 5.
+
+**Built, 2026-09-04.** Every board on the coach canvas is in the code on `main`: Billing
+(`ee4db83`), Leads (`0be62bd`), Setup (`3235628`), Onboarding (`74bb921`), the chrome, Settings,
+support bubble, Tips and Guides (`2d66f92`), Agent (`008b2a7`), Inbox (`157e6f5`) and Home
+(`94e8b30`). Each surface's departures from its board are recorded under its "what shipped"
+section in `docs/plans/2026-09-04-coach-rehaul-notes.md`. Where a board and the code differ now,
+the code is the authority and the note says why.
