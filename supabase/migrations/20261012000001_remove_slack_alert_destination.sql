@@ -20,7 +20,16 @@
 -- ---------------------------------------------------------------------------
 -- 1. Remove every row that targets Slack. Children first: notification_delivery_attempts
 --    references notification_deliveries with on delete restrict, so it cannot be left to cascade.
+--
+--    That table is append-only: `notification_delivery_attempts_immutable` raises on any delete,
+--    which is what keeps the attempt ledger honest. The rows removed here are demo residue from the
+--    hand-inserted 'phase8.demo.slack' rule, and they cannot survive the enum rebuild in section 3
+--    because 'slack' has no value left to cast to. So the guard comes off for the deletes and goes
+--    back on unchanged at the end of section 3, and nothing else may run between the two.
 -- ---------------------------------------------------------------------------
+
+drop trigger if exists notification_delivery_attempts_immutable
+  on public.notification_delivery_attempts;
 
 delete from public.notification_delivery_attempts
 where destination = 'slack';
@@ -28,21 +37,29 @@ where destination = 'slack';
 delete from public.notification_deliveries
 where destination = 'slack';
 
--- The demo rule's own notifications and their deliveries, which may carry a bell row too.
+-- The demo rule's own notifications and their deliveries, which may carry a bell row too. These
+-- follow notifications.rule_id rather than notifications.kind: the seeder writes the rule's
+-- notifications under kinds of its own choosing ('phase8.slack.retry' is the one in the hosted
+-- data), so matching on kind misses them and the rule delete then trips notifications_rule_id_fkey.
 delete from public.notification_delivery_attempts
 where delivery_id in (
   select delivery.id
   from public.notification_deliveries delivery
   join public.notifications notification on notification.id = delivery.notification_id
-  where notification.kind = 'phase8.demo.slack'
+  join public.alert_rules rule on rule.id = notification.rule_id
+  where rule.event_key = 'phase8.demo.slack'
 );
 
 delete from public.notification_deliveries
 where notification_id in (
-  select id from public.notifications where kind = 'phase8.demo.slack'
+  select notification.id
+  from public.notifications notification
+  join public.alert_rules rule on rule.id = notification.rule_id
+  where rule.event_key = 'phase8.demo.slack'
 );
 
-delete from public.notifications where kind = 'phase8.demo.slack';
+delete from public.notifications
+where rule_id in (select id from public.alert_rules where event_key = 'phase8.demo.slack');
 
 -- notification_preferences.rule_id cascades on rule delete; this clears Slack preferences held
 -- against rules that survive.
@@ -77,6 +94,13 @@ drop function if exists public.claim_notification_deliveries(uuid, int, int, tim
 alter table public.notification_delivery_attempts
   drop constraint if exists notification_delivery_attempt_target_chk;
 
+-- The delivery receipt check carries a literal bound to the old enum (`destination = 'bell'`), and
+-- a check constraint is not re-parsed when the column is retyped, so the retype would fail on
+-- `operator does not exist: notification_destination_next = notification_destination`. It is
+-- dropped here and recreated unchanged at the end of this section.
+alter table public.notification_deliveries
+  drop constraint if exists notification_delivery_receipt_chk;
+
 create type public.notification_destination_next as enum ('bell', 'email');
 
 alter table public.alert_rules
@@ -106,6 +130,23 @@ alter table public.notification_delivery_attempts
     and nullif(btrim(recipient_email), '') is not null
     and destination_url is null
   );
+
+-- Recreated exactly as `20260817000002_phase1_review_fixes.sql` left it. Bell delivery is
+-- database-local and has no provider receipt, which is the whole point of the constraint.
+alter table public.notification_deliveries
+  add constraint notification_delivery_receipt_chk check (
+    (status = 'delivered'
+      and delivered_at is not null
+      and (destination = 'bell' or provider_reference is not null))
+    or (status <> 'delivered' and delivered_at is null)
+  );
+
+-- The append-only guard goes back on, recreated exactly as
+-- `20260824000001_phase8_operate_handover.sql` declared it. Its function body never named the enum,
+-- so the function itself needs no change.
+create trigger notification_delivery_attempts_immutable
+before update or delete on public.notification_delivery_attempts
+for each row execute function app.enforce_notification_attempt_immutable();
 
 -- ---------------------------------------------------------------------------
 -- 4. Drop the columns that existed only to carry Slack.
