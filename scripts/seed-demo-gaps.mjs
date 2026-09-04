@@ -2,8 +2,9 @@
  * Fills the three demo surfaces that render empty because nothing was ever written behind them:
  * the coach onboarding checklist, `/coach/billing`, and the affiliate portal.
  *
- * This seeder is additive and idempotent. It writes only to the labelled demo tenant
- * (`is_demo = true`), and to three referred tenants it creates and labels the same way, so every
+ * This seeder is additive and idempotent. It writes only to labelled demo tenants
+ * (`is_demo = true`) -- `DEMO_IDS.tenant`, whichever demo tenant the /login coach button lands on
+ * (see `loginCoachEmail` below), and three referred tenants it creates and labels the same way, so every
  * row it produces is excluded from real analytics by the same `not tenant.is_demo` /
  * `not row.is_test` filters every `analytics_*` view already applies. It never sets `is_test`
  * itself. `app.inherit_is_test()` derives that from the tenant, and a seeder that wrote its own
@@ -71,6 +72,20 @@ export const DEMO_GAPS_VALUES = Object.freeze({
   tierFairUseNote: DEMO_FAIR_USE_NOTE,
   customer: "SETTERFI_DEMO_PLACEHOLDER_CUSTOMER_DEMO_COACH",
   subscription: "SETTERFI_DEMO_PLACEHOLDER_SUBSCRIPTION_DEMO_COACH",
+  /*
+   * The /login "Sign in as coach" button does not necessarily land on `DEMO_IDS.tenant`.
+   * `seed-staging-users.mjs` assigns that tenant only when it creates the account, and leaves an
+   * account it finds already seeded on whatever tenant it holds, so on the hosted project the
+   * demo coach sits on the phase 7 measurement workspace. That tenant carries contacts,
+   * conversations and appointments, and `demo-history.mjs` counts it as the oldest subscriber,
+   * but nothing ever wrote it a tier or a `billing_subscriptions` row, so
+   * `coach_billing_projection` inner-joined itself to nothing and /coach/billing rendered
+   * "Billing details could not load". Seeding the tenant the button actually reaches fixes the
+   * screen without moving the coach off the workspace every other screen is seeded against.
+   */
+  loginCoachEmail: "support+coach@livelegacystrong.com",
+  loginCoachCustomer: "SETTERFI_DEMO_PLACEHOLDER_CUSTOMER_LOGIN_COACH",
+  loginCoachSubscription: "SETTERFI_DEMO_PLACEHOLDER_SUBSCRIPTION_LOGIN_COACH",
   programName: DEMO_ONBOARDING_COPY.offerProgram,
   affiliateEmail: "support+affiliate@livelegacystrong.com",
   adminEmail: "support+admin@livelegacystrong.com",
@@ -289,6 +304,30 @@ async function ensureSubscription(client, tenantId, { customer, subscription, no
   return { changed: true };
 }
 
+/**
+ * The demo tenant the /login coach button lands on, when that is not `DEMO_IDS.tenant`.
+ *
+ * Returns null when the button already lands on the tenant this seeder bills, so a database where
+ * the two agree does no extra work. Anything that is not a labelled demo tenant stops the seeder
+ * rather than getting fixtures written into it, which is the same guard `requireKnownDemoTenant`
+ * applies from the other side.
+ */
+async function resolveDemoLoginCoachTenant(client) {
+  const user = await requireUserByEmail(
+    client,
+    DEMO_GAPS_VALUES.loginCoachEmail,
+    ["coach", "coach_member"],
+    "DEMO_GAPS_LOGIN_COACH_MISSING",
+  );
+  if (!user.tenant_id || user.tenant_id === DEMO_IDS.tenant) return null;
+  const tenant = await ok(
+    "DEMO_GAPS_LOGIN_COACH_TENANT_READ_FAILED",
+    client.from("tenants").select("id, slug, is_demo").eq("id", user.tenant_id).maybeSingle(),
+  );
+  assert(tenant?.is_demo === true, "DEMO_GAPS_LOGIN_COACH_TENANT_NOT_DEMO");
+  return tenant;
+}
+
 async function seedBillingSurface(client, now) {
   const tierId = await ensureTier(client);
   await ok(
@@ -311,7 +350,30 @@ async function seedBillingSurface(client, now) {
    * billing screen read the contracted $597 one. Returning the id the billing surface actually
    * wrote leaves one source for both.
    */
-  return { ...subscription, tierId };
+  /*
+   * The same plan, period and allowance written onto whichever demo tenant the login button
+   * reaches. It is the same rung on purpose: a coach reading one price on their own billing page
+   * and the admin book quoting another for the same workspace is the defect this avoids.
+   */
+  const loginTenant = await resolveDemoLoginCoachTenant(client);
+  let loginChanged = false;
+  if (loginTenant) {
+    await ok(
+      "DEMO_GAPS_LOGIN_COACH_TIER_UPDATE_FAILED",
+      client.from("tenants").update({ tier_id: tierId }).eq("id", loginTenant.id),
+    );
+    ({ changed: loginChanged } = await ensureSubscription(client, loginTenant.id, {
+      customer: DEMO_GAPS_VALUES.loginCoachCustomer,
+      subscription: DEMO_GAPS_VALUES.loginCoachSubscription,
+      now,
+    }));
+  }
+  return {
+    ...subscription,
+    tierId,
+    loginTenantId: loginTenant ? loginTenant.id : null,
+    loginChanged,
+  };
 }
 
 /**
@@ -597,13 +659,34 @@ async function seedPayouts(client, { affiliateId, actorId, ledgerIds, now }) {
   return { payoutsCreated: 2, payoutsExisting: 0 };
 }
 
-async function readBack(client) {
+async function readBack(client, billing) {
   const subscription = await ok(
     "DEMO_GAPS_READBACK_SUBSCRIPTION_FAILED",
     client.from("billing_subscriptions").select("status, current_period_end")
       .eq("tenant_id", DEMO_IDS.tenant).maybeSingle(),
   );
   assert(subscription?.status === "active", "DEMO_GAPS_READBACK_SUBSCRIPTION_INVALID");
+
+  /*
+   * `coach_billing_projection` needs both halves, so both are read back: a tenant with a
+   * subscription and no tier renders exactly the same empty screen as one with neither.
+   */
+  if (billing.loginTenantId) {
+    const loginTenant = await ok(
+      "DEMO_GAPS_READBACK_LOGIN_COACH_TENANT_FAILED",
+      client.from("tenants").select("tier_id").eq("id", billing.loginTenantId).maybeSingle(),
+    );
+    assert(loginTenant?.tier_id === billing.tierId, "DEMO_GAPS_READBACK_LOGIN_COACH_TIER_INVALID");
+    const loginSubscription = await ok(
+      "DEMO_GAPS_READBACK_LOGIN_COACH_SUBSCRIPTION_FAILED",
+      client.from("billing_subscriptions").select("status")
+        .eq("tenant_id", billing.loginTenantId).maybeSingle(),
+    );
+    assert(
+      loginSubscription?.status === "active",
+      "DEMO_GAPS_READBACK_LOGIN_COACH_SUBSCRIPTION_INVALID",
+    );
+  }
 
   const smsStep = await ok(
     "DEMO_GAPS_READBACK_SMS_FAILED",
@@ -640,11 +723,14 @@ export async function seedDemoGaps({ argumentsList = process.argv.slice(2), now 
   const billing = await seedBillingSurface(client, now);
   const onboarding = await seedOnboardingEvidence(client, now);
   const affiliate = await seedAffiliateSurface(client, now, billing.tierId);
-  const verified = await readBack(client);
+  const verified = await readBack(client, billing);
 
   console.log(
     `Demo gaps seeded: subscription_active=true period_end=${verified.subscriptionEnd} `
-    + `subscription_written=${billing.changed} calendar_evidence=${onboarding.calendarSeeded} `
+    + `subscription_written=${billing.changed} `
+    + `login_coach_tenant=${billing.loginTenantId ?? "same"} `
+    + `login_coach_subscription_written=${billing.loginChanged} `
+    + `calendar_evidence=${onboarding.calendarSeeded} `
     + `referrals=${affiliate.referrals} ledger_entries=${affiliate.ledgerEntries} `
     + `payouts_created=${affiliate.payoutsCreated} sms_live=${verified.smsState} billable_events_written=0`,
   );

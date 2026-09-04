@@ -301,6 +301,18 @@ export function CoachBillingRehaul({
           cache: "no-store",
           signal: controller.signal,
         });
+        /*
+         * A 404 is the route saying hosted checkout is not configured in this deployment, which
+         * is a reading rather than a failure: there is no offer, no attempt and nothing to
+         * verify. Printing "could not be verified" over it told a coach with a paid, active
+         * subscription that their payment was in doubt. It is the same "unavailable" the route
+         * returns when the flag is on and the tenant has no offer, so it is recorded as that.
+         */
+        if (response.status === 404) {
+          setCheckout({ state: "unavailable", offer: null, attempt: null });
+          setCheckoutError(null);
+          return;
+        }
         const payload: unknown = await response.json();
         if (!response.ok) throw new Error("BILLING_CHECKOUT_STATE_REFUSED");
         setCheckout(parseBillingCheckoutState(payload));
@@ -516,7 +528,18 @@ export function CoachBillingRehaul({
             />
           ) : null}
 
-          {checkout?.state === "active" ? null : (
+          {/*
+            The panel is the call to action for a plan that is not paid for yet, so it is drawn
+            only when it has something to say: an offer that stands, a return from Stripe to
+            resolve, or a read that genuinely failed. An "unavailable" reading with neither is
+            none of those, and drawing it anyway left a coach on a live subscription looking at
+            an empty card headed "Activate your plan" over the words "Checkout unavailable".
+            `parseBillingCheckoutState` only allows a null offer on `unavailable`, so an offer is
+            exactly the test for "there is a checkout to act on".
+          */}
+          {checkoutError !== null
+            || checkoutReturn !== null
+            || (checkout !== null && checkout.state !== "active" && checkout.offer !== null) ? (
             <CheckoutPanel
               checkout={checkout}
               checkoutError={checkoutError}
@@ -525,7 +548,7 @@ export function CoachBillingRehaul({
               onCheckout={startCheckout}
               onRefresh={refreshCheckout}
             />
-          )}
+          ) : null}
 
           {snapshot ? (
             <>

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CoachBillingSnapshot } from "@/components/workspace/live/coach-billing";
@@ -105,5 +105,50 @@ describe("CoachBillingRehaul", () => {
       screen.queryByText(/a person checks it against the conversations/),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/Stripe collects payment/)).not.toBeInTheDocument();
+  });
+
+  /*
+   * `/api/billing/checkout` answers 404 whenever `checkoutAttemptsLive()` is off, which is every
+   * deployment where hosted Stripe checkout is not configured. Reading that as a failed
+   * verification printed "Checkout status could not be verified" in red, plus a "Checkout
+   * unavailable" pill over an empty "Activate your plan" card, on a screen whose own snapshot
+   * says the subscription is active and paid. It is a reading, not a failure.
+   */
+  it("says nothing about checkout when the route reports it is not configured", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => (
+      String(input).includes("/api/billing/checkout")
+        ? new Response(JSON.stringify({ error: "Not found." }), {
+          headers: { "Content-Type": "application/json" }, status: 404,
+        })
+        : new Response(JSON.stringify({ snapshot }), {
+          headers: { "Content-Type": "application/json" }, status: 200,
+        })
+    )));
+    render(<CoachBillingRehaul checkoutReturn={null} enabled initialSnapshot={snapshot} />);
+
+    await waitFor(() => expect(screen.getByText("$597.00")).toBeVisible());
+    expect(
+      screen.queryByText(/Checkout status could not be verified/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Checkout unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Activate your plan")).not.toBeInTheDocument();
+  });
+
+  /* A 503 is a real failure and still says so, so the branch above cannot swallow one. */
+  it("still reports a checkout read that genuinely failed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => (
+      String(input).includes("/api/billing/checkout")
+        ? new Response(JSON.stringify({ error: "Checkout status is unavailable." }), {
+          headers: { "Content-Type": "application/json" }, status: 503,
+        })
+        : new Response(JSON.stringify({ snapshot }), {
+          headers: { "Content-Type": "application/json" }, status: 200,
+        })
+    )));
+    render(<CoachBillingRehaul checkoutReturn={null} enabled initialSnapshot={snapshot} />);
+
+    expect(
+      await screen.findByText(/Checkout status could not be verified/),
+    ).toBeVisible();
   });
 });
