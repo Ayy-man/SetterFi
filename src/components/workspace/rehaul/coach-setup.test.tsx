@@ -5,13 +5,16 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { STEP_LABELS } from "@/components/onboarding/view-models";
-import type { ProvisioningStep } from "@/lib/onboarding/contracts";
 import {
   CoachSetup,
-  coachSetupAccentRow,
+  CoachSetupRows,
   coachSetupBlockedNames,
   coachSetupChannels,
+  coachSetupOpenRow,
+  coachSetupRows,
+  coachSetupSentence,
   coachSetupSteps,
+  coachSetupYours,
   type CoachSetupChannelRead,
   type CoachSetupRead,
 } from "@/components/workspace/rehaul/coach-setup";
@@ -40,9 +43,9 @@ function channel(overrides: Partial<CoachSetupChannelRead> = {}): CoachSetupChan
 }
 
 /**
- * The demo coach mid-provisioning, which is the state the artboard draws: business details filed,
- * the carriers still deciding, the safe test and go-live ahead, Messenger answering, Instagram's
- * token expired and no calendar yet.
+ * The demo coach mid-provisioning: business details filed, the carriers still deciding, the safe
+ * test and go-live ahead, Messenger answering, Instagram's token expired, no calendar yet and no
+ * offer yet.
  */
 function read(overrides: Partial<CoachSetupRead> = {}): CoachSetupRead {
   return {
@@ -58,6 +61,7 @@ function read(overrides: Partial<CoachSetupRead> = {}): CoachSetupRead {
       state: "live",
     }),
     metaConnect: "ready",
+    offer: { checked: true, published: false },
     record: {
       checked: true,
       rows: [
@@ -71,320 +75,314 @@ function read(overrides: Partial<CoachSetupRead> = {}): CoachSetupRead {
   };
 }
 
-describe("CoachSetup, the four steps", () => {
-  it("draws the artboard's four steps in the runner's order and no others", () => {
-    render(<CoachSetup now={NOW} read={read()} />);
-    const rows = document.querySelectorAll('[data-slot="coach-setup-step"]');
-    expect([...rows].map((row) => row.querySelector("h3")?.textContent)).toEqual([
-      "Business details",
-      "Carrier review",
-      "Safe test",
-      "Go live",
+/** Everything done: the state the demo override presents and the state a live coach is in. */
+function finished(): CoachSetupRead {
+  return read({
+    calendar: { checked: true, connected: true, name: "Coaching calls", needsReconnect: false },
+    carrier: { kind: "live" },
+    goLive: { checked: true, completedAt: "2026-09-03T14:00:00.000Z" },
+    instagram: channel({ accountLabel: "reid.funding", liveSince: "2026-08-29T14:00:00.000Z", state: "live" }),
+    offer: { checked: true, published: true },
+    sms: channel({ accountLabel: "+1 555 0100", state: "live" }),
+    test: { checked: true, completedAt: "2026-09-02T14:00:00.000Z" },
+  });
+}
+
+function rowsOnScreen() {
+  return [...document.querySelectorAll("[data-slot='coach-setup-row']")] as HTMLElement[];
+}
+
+function accentFills() {
+  return [...document.querySelectorAll("a, button")].filter((node) =>
+    node.className.includes("[background:var(--accent-fill)]")
+  );
+}
+
+describe("coachSetupRows, one list in journey order", () => {
+  it("draws the coach's four rows, then the timeline, and gives every row an owner", () => {
+    const rows = coachSetupRows(read(), NOW);
+    expect(rows.map((row) => row.key)).toEqual([
+      "business", "channels", "calendar", "offer", "carrier", "test", "live",
+    ]);
+    expect(rows.map((row) => row.owner)).toEqual([
+      "you", "you", "you", "you", "carriers", "us", "you",
     ]);
   });
 
-  /*
-   * The rule the whole page turns on. A registration that is `running` with a submission date is
-   * filed and waiting, not approved, and every earlier version of this screen had a state that
-   * could read finished while the carriers were still deciding.
-   */
+  it("puts a button only on a row the coach owns", () => {
+    for (const row of coachSetupRows(read(), NOW)) {
+      if (row.owner !== "you") expect(row.action, row.key).toBeNull();
+    }
+  });
+
+  it("opens the first row the coach can move that is not done, never a repair on a finished row", () => {
+    const rows = coachSetupRows(read(), NOW);
+    // Messenger answers, so the pair is done and Instagram's reconnect is a repair, not the gap.
+    expect(rows.find((row) => row.key === "channels")?.done).toBe(true);
+    expect(rows.find((row) => row.key === "channels")?.action?.label).toBe("Reconnect Instagram");
+    expect(coachSetupOpenRow(rows)).toBe("calendar");
+    expect(coachSetupYours(rows).map((row) => row.key)).toEqual(["channels", "calendar", "offer"]);
+  });
+
   it("never reads done while the carriers are still deciding", () => {
-    const steps = coachSetupSteps(read(), NOW);
-    expect(steps.filter((step) => step.done).map((step) => step.key)).toEqual(["business"]);
-    render(<CoachSetup now={NOW} read={read()} />);
-    const carrier = document.querySelector('[data-step="carrier"]')!;
-    expect(within(carrier as HTMLElement).queryByText("Done")).toBeNull();
+    const rows = coachSetupRows(read(), NOW);
+    expect(rows.find((row) => row.key === "carrier")?.done).toBe(false);
+    expect(rows.find((row) => row.key === "test")?.done).toBe(false);
+    expect(rows.find((row) => row.key === "live")?.done).toBe(false);
   });
 
   it("counts the carrier wait in real days elapsed, never a percentage or a predicted date", () => {
     render(<CoachSetup now={NOW} read={read()} />);
-    const carrier = document.querySelector('[data-step="carrier"]') as HTMLElement;
-    // 21 August to 4 September in the workspace zone is fourteen whole days.
-    expect(carrier.textContent).toContain("Day");
-    expect(carrier.querySelector(".mono")?.textContent).toBe("14");
-    expect(carrier.textContent).toContain("of about 21");
-    expect(carrier.textContent).not.toMatch(/%/u);
-    // The only date on the row is the one we filed on, which happened, not one we predicted.
+    const carrier = rowsOnScreen().find((row) => row.dataset.row === "carrier")!;
+    expect(carrier.textContent).toContain("Day 14 of about 21");
     expect(carrier.textContent).toContain("Sent August 21");
-    expect(carrier.textContent).not.toMatch(/(?:by|expect|estimated|due)\s/iu);
+    expect(carrier.textContent).not.toMatch(/%/u);
+    expect(carrier.textContent).not.toMatch(/finish(es|ed)? on/u);
   });
 
   it("counts nothing when the filing date was never recorded", () => {
-    const steps = coachSetupSteps(read({ carrier: { kind: "in-review", submittedAt: null } }), NOW);
-    const carrier = steps.find((step) => step.key === "carrier")!;
+    const rows = coachSetupRows(read({ carrier: { kind: "in-review", submittedAt: null } }), NOW);
+    const carrier = rows.find((row) => row.key === "carrier")!;
     expect(carrier.pill.label).toBe("In review");
-    expect(carrier.receipt).toBe("The filing date was not recorded, so no day count is shown.");
+    expect(carrier.receipt).toContain("not recorded");
   });
 
-  it("keeps a failed read distinct from a filing that was never made", () => {
-    const unchecked = coachSetupSteps(read({ carrier: { kind: "unchecked" } }), NOW);
-    const notFiled = coachSetupSteps(read({ carrier: { kind: "not-filed" } }), NOW);
-    expect(unchecked.find((step) => step.key === "carrier")!.pill.label).toBe("Not checked");
-    expect(notFiled.find((step) => step.key === "carrier")!.pill.label).toBe("Not filed");
+  it("offers go live only once every row above it is done, and says what it waits on until then", () => {
+    const waiting = coachSetupRows(read(), NOW).find((row) => row.key === "live")!;
+    expect(waiting.action).toBeNull();
+    expect(waiting.receipt).toBe("After your calendar, your offer, and then the safe test.");
+
+    const readyRead = finished();
+    readyRead.goLive = { checked: true, completedAt: null };
+    const ready = coachSetupRows(readyRead, NOW).find((row) => row.key === "live")!;
+    expect(ready.action).toEqual({ href: "/onboarding/go-live", kind: "link", label: "Go live" });
+    expect(coachSetupOpenRow(coachSetupRows(readyRead, NOW))).toBe("live");
   });
 
-  it("says what go-live is waiting on rather than counting it", () => {
-    const waitingOnCalendar = coachSetupSteps(read(), NOW).find((step) => step.key === "live")!;
-    expect(waitingOnCalendar.receipt).toBe("Waiting on your calendar");
-    const waitingOnTest = coachSetupSteps(
-      read({ calendar: { checked: true, connected: true, name: "Reid", needsReconnect: false } }),
-      NOW,
-    ).find((step) => step.key === "live")!;
-    expect(waitingOnTest.receipt).toBe("Waiting on the safe test");
+  it("keeps a failed read distinct from a step that was never done", () => {
+    const rows = coachSetupRows(read({ offer: { checked: false, published: false } }), NOW);
+    const offer = rows.find((row) => row.key === "offer")!;
+    expect(offer.action).toBeNull();
+    expect(offer.pill.label).toBe("Not checked");
   });
 });
 
-describe("CoachSetup, the four channels", () => {
-  it("draws Instagram, Messenger, texting and the calendar, in that order", () => {
-    render(<CoachSetup now={NOW} read={read()} />);
-    const rows = document.querySelectorAll('[data-slot="coach-setup-channel"]');
-    expect([...rows].map((row) => row.getAttribute("data-channel"))).toEqual([
-      "instagram",
-      "messenger",
-      "sms",
-      "calendar",
-    ]);
+describe("the sentence both surfaces print", () => {
+  it("counts only the coach's own work, in words, and says where the carriers are", () => {
+    const rows = coachSetupRows(read(), NOW);
+    expect(coachSetupSentence(rows, read(), NOW)).toBe(
+      "Three things are yours to do. Text messages are on day 14 of about 21.",
+    );
   });
 
-  it("names the account on a connected row and offers nothing to press", () => {
-    render(<CoachSetup now={NOW} read={read()} />);
-    const messenger = document.querySelector('[data-channel="messenger"]') as HTMLElement;
-    // `displayText` strips the seeder's marker where a human reads the name, and only there.
-    expect(messenger.textContent).toContain("Answering messages for Reid Funding since August 29.");
-    expect(messenger.textContent).not.toContain("(demo)");
-    expect(within(messenger).queryByRole("button")).toBeNull();
-    expect(within(messenger).queryByRole("link")).toBeNull();
+  it("says nothing is waiting when nothing is", () => {
+    const done = finished();
+    expect(coachSetupSentence(coachSetupRows(done, NOW), done, NOW)).toBe(
+      "Nothing is waiting on you. Everything here is with us or the carriers.",
+    );
+  });
+
+  it("says the read failed rather than reporting an empty setup", () => {
+    const unread = read({
+      business: { checked: false, completedAt: null },
+      calendar: { checked: false, connected: false, name: null, needsReconnect: false },
+      carrier: { kind: "unchecked" },
+      instagram: channel({ checked: false }),
+      messenger: channel({ checked: false }),
+      sms: channel({ checked: false }),
+      test: { checked: false, completedAt: null },
+    });
+    expect(coachSetupSentence(coachSetupRows(unread, NOW), unread, NOW)).toContain("could not read your setup");
+  });
+});
+
+describe("a step the runner stopped", () => {
+  const stopped = () => read({
+    blocked: { checked: true, steps: [{ key: "optin_artifact", stoppedAt: "2026-09-02T14:00:00.000Z" }] },
+  });
+
+  it("becomes a row of ours, under the name Home used to give it, with nothing to press", () => {
+    const rows = coachSetupRows(stopped(), NOW);
+    const row = rows.find((entry) => entry.key === "blocked:optin_artifact")!;
+    expect(row.name).toBe(STEP_LABELS.optin_artifact);
+    expect(row.owner).toBe("us");
+    expect(row.action).toBeNull();
+    expect(row.pill.label).toBe("Stopped");
+    expect(row.receipt).toBe("Stopped September 2");
+  });
+
+  it("changes the row a stopped step already has rather than drawing that step twice", () => {
+    const rows = coachSetupRows(read({
+      blocked: { checked: true, steps: [{ key: "a2p_brand", stoppedAt: null }] },
+    }), NOW);
+    expect(rows.filter((row) => row.key.startsWith("blocked:"))).toHaveLength(0);
+    const carrier = rows.find((row) => row.key === "carrier")!;
+    expect(carrier.pill.label).toBe("Stopped");
+    expect(carrier.owner).toBe("us");
+    expect(carrier.receipt).toBe("The day it stopped was not recorded.");
+  });
+
+  it("names the stopped step in the sentence and never counts it as the coach's", () => {
+    const rows = coachSetupRows(stopped(), NOW);
+    const sentence = coachSetupSentence(rows, stopped(), NOW);
+    expect(sentence).toContain(`${STEP_LABELS.optin_artifact} stopped, and it is ours to fix, not yours.`);
+    expect(sentence).toContain("Three things are yours to do.");
+    expect(coachSetupBlockedNames(stopped())).toEqual([STEP_LABELS.optin_artifact]);
+  });
+});
+
+describe("the channels, folded into the journey", () => {
+  it("names the account on a connected row and offers nothing to press for it", () => {
+    render(<CoachSetup now={NOW} read={finished()} />);
+    const pair = rowsOnScreen().find((row) => row.dataset.row === "channels")!;
+    expect(pair.textContent).toContain("Answering messages for Reid Funding since August 29.");
+    expect(pair.textContent).not.toContain("(demo)");
+    expect(pair.querySelectorAll("a, button")).toHaveLength(0);
   });
 
   it("offers a reconnect, in those words, when the coach's own permission ran out", () => {
     render(<CoachSetup now={NOW} read={read()} />);
-    const instagram = document.querySelector('[data-channel="instagram"]') as HTMLElement;
-    expect(instagram.textContent).toContain("Its permission ran out, and reconnecting brings it back.");
-    expect(within(instagram).getByRole("button").textContent).toBe("Reconnect Instagram");
+    const pair = rowsOnScreen().find((row) => row.dataset.row === "channels")!;
+    expect(within(pair).getByRole("button", { name: "Reconnect Instagram" })).toBeTruthy();
+    expect(pair.textContent).toContain("Its permission ran out, and reconnecting brings it back.");
   });
 
   it("says an outage is ours and presses nothing, because it is not the coach's to fix", () => {
-    render(
-      <CoachSetup
-        now={NOW}
-        read={read({
-          instagram: channel({ changedAt: "2026-09-01T14:00:00.000Z", state: "error" }),
-        })}
-      />,
-    );
-    const instagram = document.querySelector('[data-channel="instagram"]') as HTMLElement;
-    expect(instagram.textContent).toContain("Instagram stopped answering on Tuesday. We’re fixing it.");
-    expect(within(instagram).queryByRole("button")).toBeNull();
+    const rows = coachSetupRows(read({
+      instagram: channel({ changedAt: "2026-09-01T14:00:00.000Z", state: "error" }),
+    }), NOW);
+    const pair = rows.find((row) => row.key === "channels")!;
+    expect(pair.action).toBeNull();
+    expect(pair.facts.find((fact) => fact.name === "Instagram")?.sentence)
+      .toBe("Instagram stopped answering on Tuesday. We’re fixing it.");
   });
 
-  it("presses nothing on texting in any state, and never repeats the day count", () => {
-    for (const state of ["live", "error", null] as const) {
-      const rows = coachSetupChannels(read({ sms: channel({ state }) }));
-      const sms = rows.find((row) => row.key === "sms")!;
-      expect(sms.action).toBeNull();
-      expect(sms.sentence).not.toMatch(/day \d/iu);
-    }
+  it("offers no Facebook sign-in when Facebook has not approved our app, and says whose wait it is", () => {
+    const rows = coachSetupRows(read({
+      instagram: channel(),
+      messenger: channel(),
+      metaConnect: "awaiting_meta",
+    }), NOW);
+    const pair = rows.find((row) => row.key === "channels")!;
+    expect(pair.action).toBeNull();
+    expect(pair.pill.label).toBe("Not ready yet");
+    expect(pair.body).toContain("ours to chase");
   });
 
-  it("offers no Meta sign-in when Meta has not approved our app, and says whose wait it is", () => {
-    const rows = coachSetupChannels(read({ metaConnect: "awaiting_meta" }));
-    const instagram = rows.find((row) => row.key === "instagram")!;
-    expect(instagram.action).toBeNull();
-    expect(instagram.sentence).toContain("ours to chase");
+  it("presses nothing on texting in any state and says it on the carrier row only once", () => {
+    expect(coachSetupChannels(finished()).find((row) => row.key === "sms")?.action).toBeNull();
+    const rows = coachSetupRows(finished(), NOW);
+    expect(rows.find((row) => row.key === "carrier")?.receipt).toBe("Your leads can text you at +1 555 0100.");
+    expect(rows.filter((row) => row.receipt?.includes("+1 555 0100"))).toHaveLength(1);
   });
 
-  it("spends the page's one accent fill on the first connection, not on a repair", () => {
-    expect(coachSetupAccentRow(coachSetupChannels(read()))).toBe("calendar");
-    const { container } = render(<CoachSetup now={NOW} read={read()} />);
-    const filled = [...container.querySelectorAll("a, button")].filter((element) =>
-      element.className.includes("var(--accent-fill)"),
-    );
-    expect(filled).toHaveLength(1);
-    expect(filled[0].textContent).toBe("Connect calendar");
-  });
-
-  it("falls back to the repair when nothing is waiting to be connected for the first time", () => {
-    const rows = coachSetupChannels(
-      read({ calendar: { checked: true, connected: true, name: "Reid", needsReconnect: false } }),
-    );
-    expect(coachSetupAccentRow(rows)).toBe("instagram");
+  it("keeps the four per-channel derivations in order for the read that composes them", () => {
+    expect(coachSetupChannels(read()).map((row) => row.key)).toEqual([
+      "instagram", "messenger", "sms", "calendar",
+    ]);
+    expect(coachSetupSteps(read(), NOW).map((row) => row.key)).toEqual([
+      "business", "carrier", "test", "live",
+    ]);
   });
 });
 
-describe("CoachSetup, what the page says and what it no longer carries", () => {
-  it("counts only the coach's own work in the sentence under the title", () => {
+describe("CoachSetup, the page", () => {
+  it("spends its one accent fill on the open row's button and none when nothing is the coach's", () => {
+    const view = render(<CoachSetup now={NOW} read={read()} />);
+    const fills = accentFills();
+    expect(fills).toHaveLength(1);
+    expect(fills[0].textContent).toBe("Connect your calendar");
+    expect((fills[0].closest("[data-slot='coach-setup-row']") as HTMLElement | null)?.dataset.open).toBe("true");
+    view.unmount();
+
+    render(<CoachSetup now={NOW} read={finished()} />);
+    expect(accentFills()).toHaveLength(0);
+    expect(rowsOnScreen().filter((row) => row.dataset.open === "true")).toHaveLength(0);
+  });
+
+  it("opens exactly one row and keeps every other row to a line", () => {
     render(<CoachSetup now={NOW} read={read()} />);
-    expect(
-      screen.getByText("2 things are waiting on you. Everything else is with us or the carriers."),
-    ).toBeTruthy();
+    const open = rowsOnScreen().filter((row) => row.dataset.open === "true");
+    expect(open).toHaveLength(1);
+    expect(open[0].dataset.row).toBe("calendar");
+    expect(open[0].textContent).toContain("Your agent needs somewhere to put the calls it books.");
+    const offer = rowsOnScreen().find((row) => row.dataset.row === "offer")!;
+    expect(offer.textContent).not.toContain("Your agent uses this to answer questions");
+    expect(offer.querySelectorAll("a, button")).toHaveLength(0);
   });
 
-  it("says nothing is waiting when nothing is", () => {
-    render(
-      <CoachSetup
-        now={NOW}
-        read={read({
-          calendar: { checked: true, connected: true, name: "Reid", needsReconnect: false },
-          instagram: channel({ liveSince: "2026-08-29T14:00:00.000Z", state: "live" }),
-        })}
-      />,
-    );
-    expect(
-      screen.getByText("Nothing is waiting on you. Everything here is with us or the carriers."),
-    ).toBeTruthy();
+  it("draws the timeline with a spine that stops at go live", () => {
+    render(<CoachSetup now={NOW} read={read()} />);
+    const timeline = rowsOnScreen().filter((row) => row.dataset.owner !== "you" || row.dataset.row === "live");
+    expect(timeline.map((row) => row.dataset.row)).toEqual(["carrier", "test", "live"]);
+    expect(document.querySelectorAll("[data-slot='coach-setup-spine']")).toHaveLength(2);
+    expect(timeline[2].querySelector("[data-slot='coach-setup-spine']")).toBeNull();
   });
 
-  it("says the read failed rather than reporting an empty setup", () => {
-    render(
-      <CoachSetup
-        now={NOW}
-        read={read({
-          business: { checked: false, completedAt: null },
-          calendar: { checked: false, connected: false, name: null, needsReconnect: false },
-          carrier: { kind: "unchecked" },
-          instagram: channel({ checked: false }),
-          messenger: channel({ checked: false }),
-          sms: channel({ checked: false }),
-          test: { checked: false, completedAt: null },
-        })}
-      />,
+  it("prints the sentence under the title from the same rows it draws", () => {
+    render(<CoachSetup now={NOW} read={read()} />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Getting you live");
+    expect(document.querySelector("[data-slot='coach-setup-sentence']")?.textContent).toBe(
+      "Three things are yours to do. Text messages are on day 14 of about 21.",
     );
-    expect(
-      screen.getByText(
-        "We could not read your setup just now. Nothing has changed while we could not read it.",
-      ),
-    ).toBeTruthy();
+    expect(document.querySelector("[data-slot='coach-setup-count']")?.textContent).toBe("2 of 4 done");
   });
 
   it("keeps the technical record closed, and holds the evidence inside it", () => {
     render(<CoachSetup now={NOW} read={read()} />);
-    const record = document.querySelector('[data-slot="coach-setup-record"]') as HTMLDetailsElement;
-    expect(record.open).toBe(false);
-    expect(record.querySelector("summary")?.textContent).toContain("Show the technical record");
-    expect(record.textContent).toContain("SetterFi, on your behalf");
-    expect(record.textContent).toContain("a1b2c3");
+    const details = document.querySelector("[data-slot='coach-setup-record']") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain("a1b2c3");
+    expect(details.textContent).toContain("SetterFi, on your behalf");
   });
 
   it("says a record is absent rather than drawing an empty drawer", () => {
     render(<CoachSetup now={NOW} read={read({ record: { checked: true, rows: [] } })} />);
-    expect(document.querySelector('[data-slot="coach-setup-record"]')).toBeNull();
-    expect(screen.getByText("No filing record has been stored yet.")).toBeTruthy();
+    expect(document.querySelector("[data-slot='coach-setup-record']")).toBeNull();
+    expect(document.body.textContent).toContain("No filing record has been stored yet.");
   });
 
-  /*
-   * `docs/SIMPLIFICATION-SPEC.md` 2.6 sent all of these to admin. The check is on the rendered
-   * page rather than on the source so that re-adding one through a helper still fails.
-   */
   it("carries none of the diagnostics the spec moved to admin", () => {
-    const { container } = render(<CoachSetup now={NOW} read={read()} />);
-    for (const banned of [
-      "reply window",
-      "connection history",
-      "last error",
-      "message template",
-      "what to try",
-      "last message event",
-      "check again",
-    ]) {
-      expect(container.textContent?.toLowerCase()).not.toContain(banned);
+    render(<CoachSetup now={NOW} read={read()} />);
+    for (const phrase of ["Reply window", "Connection history", "Last error", "What to try", "Check again", "Message templates"]) {
+      expect(document.body.textContent).not.toContain(phrase);
     }
+    expect(screen.queryByRole("button", { name: /check again/iu })).toBeNull();
   });
 
   it("holds the coach type floor: no rendered size under 14px", () => {
-    const source = readFileSync(
-      resolve(process.cwd(), "src/components/workspace/rehaul/coach-setup.tsx"),
-      "utf8",
-    ).replace(/\/\*[\s\S]*?\*\//gu, " ");
-    const sizes = [...source.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/gu)].map((m) => Number(m[1]));
-    expect(sizes.length).toBeGreaterThan(4);
-    expect(sizes.filter((size) => size < 14)).toEqual([]);
+    render(<CoachSetup now={NOW} read={read()} />);
+    for (const node of document.body.querySelectorAll("*")) {
+      for (const match of (node.className.toString()).matchAll(/text-\[(\d+)px\]/gu)) {
+        expect(Number(match[1]), node.className.toString()).toBeGreaterThanOrEqual(14);
+      }
+    }
   });
 });
 
-describe("a step the runner stopped, which is what Home links here to show", () => {
-  /*
-   * The defect this covers, found 2026-09-04: Home's status line said "1 step is waiting on you"
-   * and drew an "Opt-in pages / Blocked / Fix this step" rung linking to `/coach/get-started`,
-   * while Setup's header said nothing was waiting and carried no such row anywhere. A coach was
-   * sent to fix a step the destination did not show. Both surfaces read `provisioning_steps` now,
-   * and the names come from the same `STEP_LABELS` map Home names its rung from.
-   */
-  const blocked = (key: ProvisioningStep, stoppedAt: string | null = "2026-09-03T17:34:30.000Z") =>
-    read({ blocked: { checked: true, steps: [{ key, stoppedAt }] } });
-
-  it("shows the stopped step as a row, under the name Home gives it", () => {
-    render(<CoachSetup now={NOW} read={blocked("optin_artifact")} />);
-    const row = screen.getByText("Opt-in pages").closest("li");
-    expect(row).toBeTruthy();
-    expect(row?.textContent).toContain("Blocked");
-    expect(row?.textContent).toContain("Stopped September 3");
-    expect(STEP_LABELS.optin_artifact).toBe("Opt-in pages");
-  });
-
-  it("names the stopped step in the header sentence instead of saying nothing is waiting", () => {
-    render(
-      <CoachSetup
-        now={NOW}
-        read={{
-          ...blocked("optin_artifact"),
-          calendar: { checked: true, connected: true, name: "Reid", needsReconnect: false },
-          instagram: channel({ liveSince: "2026-08-29T14:00:00.000Z", state: "live" }),
-        }}
-      />,
-    );
-    expect(
-      screen.getByText(
-        "Opt-in pages stopped, and it is ours to fix, not yours. Nothing else is waiting on you.",
-      ),
-    ).toBeTruthy();
-  });
-
-  it("presses nothing on a stopped step, because a blocked step offers the coach no retry", () => {
-    render(<CoachSetup now={NOW} read={blocked("optin_artifact")} />);
-    const row = screen.getByText("Opt-in pages").closest("li");
-    expect(row?.querySelectorAll("button, a").length).toBe(0);
-  });
-
-  it("changes the row a stopped step already has rather than drawing that step twice", () => {
-    const rows = coachSetupSteps(blocked("business_profile"), NOW);
-    expect(rows.map((row) => row.name)).toEqual([
-      "Business details",
-      "Carrier review",
-      "Safe test",
-      "Go live",
-    ]);
-    expect(rows[0].pill.label).toBe("Blocked");
-    expect(rows[0].done).toBe(false);
-    expect(coachSetupBlockedNames(blocked("business_profile"))).toEqual(["Business details"]);
-  });
-
-  it("says the day it stopped in words when the row carried no timestamp", () => {
-    const rows = coachSetupSteps(blocked("optin_artifact", null), NOW);
-    const stopped = rows.find((row) => row.key === "blocked:optin_artifact");
-    expect(stopped?.receipt).toBe("The day it stopped was not recorded.");
-  });
-
-  it("draws no stopped row and says nothing about one when the table has none", () => {
-    const rows = coachSetupSteps(read(), NOW);
-    expect(rows).toHaveLength(4);
-    expect(coachSetupBlockedNames(read())).toEqual([]);
-    render(<CoachSetup now={NOW} read={read()} />);
-    expect(screen.queryByText("Blocked")).toBeNull();
+describe("CoachSetupRows, compact, which is what Home draws", () => {
+  it("draws the same rows, opens the same one, and keeps the closed rows to their line", () => {
+    const rows = coachSetupRows(read(), NOW);
+    render(<CoachSetupRows compact headingId="home-setup" rows={rows} />);
+    expect(rowsOnScreen().map((row) => row.dataset.row)).toEqual(rows.map((row) => row.key));
+    expect(rowsOnScreen().filter((row) => row.dataset.open === "true").map((row) => row.dataset.row)).toEqual(["calendar"]);
+    expect(accentFills()).toHaveLength(1);
+    const carrier = rowsOnScreen().find((row) => row.dataset.row === "carrier")!;
+    expect(carrier.textContent).toContain("Day 14 of about 21");
+    expect(carrier.textContent).not.toContain("nobody is told a finish date");
   });
 });
 
 describe("both demoted routes still render Setup", () => {
-  /*
-   * `src/lib/workspace-navigation.test.ts` pins that Get started and Connections stay reachable
-   * outside the rail. Folding two pages into one component is exactly the change that could make
-   * one of them stop rendering, and a Meta sign-in returns to `/coach/integrations` by name.
-   */
-  it.each([
-    "src/app/(workspace)/coach/get-started/page.tsx",
-    "src/app/(workspace)/coach/integrations/page.tsx",
-  ])("%s mounts CoachSetup", (path) => {
-    const source = readFileSync(resolve(process.cwd(), path), "utf8");
-    expect(source).toContain("<CoachSetup read={read} />");
-    expect(source).toContain('activePath="/coach/home"');
+  const source = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
+
+  it("mounts CoachSetup from /coach/get-started and /coach/integrations off one read", () => {
+    for (const page of [
+      "src/app/(workspace)/coach/get-started/page.tsx",
+      "src/app/(workspace)/coach/integrations/page.tsx",
+    ]) {
+      expect(source(page)).toContain("loadCoachSetup(context.tenantId");
+      expect(source(page)).toContain("<CoachSetup");
+    }
   });
 });

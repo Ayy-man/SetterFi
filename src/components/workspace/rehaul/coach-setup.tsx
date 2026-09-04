@@ -1,36 +1,30 @@
 "use client";
 
 /*
- * Setup, drawn from `design/coach/Setup.dc.html`.
+ * Setup: one list of what stands between a coach and a live agent, drawn from one read.
  *
- * One surface replaces two: `/coach/get-started` (the six-step `GetStartedChecklist`) and
- * `/coach/integrations` (the 1936-line connections page). Both routes mount this, because
- * `src/lib/workspace-navigation.test.ts` pins that every destination demoted off the coach rail
- * stays reachable, and a route that stops rendering is a destination that stopped being reachable.
+ * The 2026-09-04 screenshots showed the same coach three lists about the same afternoon: Home's
+ * three-row rail said a step was blocked and offered to fix it, this page said nothing was waiting,
+ * and `/onboarding` said five steps were still theirs. Each read something true. Together they
+ * were a contradiction a coach cannot resolve, and `docs/plans/2026-09-04-coach-setup-and-thread-
+ * design.md` records the four rules that replace them:
  *
- * What the audit sent away, per `docs/SIMPLIFICATION-SPEC.md` 2.5 and 2.6: reply windows,
- * connection history, last error, message templates, the four-up stat strip, the "what to try"
- * prose and every other diagnostic. Those are admin's. What is left is the two questions a coach
- * actually opens this page with -- how far along am I, and where can my leads reach me -- as four
- * receipt-backed steps and four channel rows.
+ *   1. One list. `coachSetupRows` is the only derivation, `loadCoachSetup` the only read. Home
+ *      draws the rows compact through `CoachSetupRows`; this page draws them in full.
+ *   2. Every row has an owner. A row that is the coach's carries at most one button. A row that is
+ *      SetterFi's or the carriers' carries a date, a day count or a sentence, and nothing to press.
+ *   3. One row is open: the first that is the coach's to do. It carries its explanation and its
+ *      button; every other row is a line. The page spends its one accent fill on that button.
+ *   4. The wait is a timeline: filed on a date, in review on day N of about 21, the safe test, live.
  *
- * Three rules do most of the work here and each is enforced by the derivation rather than by
- * discipline at the callsite:
- *
- *   1. **Nothing reads done while provisioning.** A step is `done` only when it holds a receipt
- *      timestamp. `carrierReviewFrom` already refuses to call a filing approved on the strength of
- *      a `running` state, and a step with `ready` but no `evidenceAt` is a claim with no evidence.
- *   2. **The carrier counter is real days elapsed.** `elapsedWorkspaceDays` is the same function
- *      `DayCounter` computes from, so this pill and the counter on Home cannot drift by a day. It
- *      is never a percentage and never a predicted date: carriers publish no decision schedule, so
- *      "about 21" is `CARRIER_TYPICAL_DAYS`'s upper bound in words and not a promise.
- *   3. **A row that SetterFi broke offers no button.** The mobbin research's Customer.io and
- *      LangChain precedents both name the failure rather than flattening it into "disconnected",
- *      and a Reconnect button on a failure the coach cannot fix is an invitation to fail twice.
+ * `coachSetupSteps` and `coachSetupChannels` survive from the first build as the per-fact
+ * derivations the rows are assembled from, because their arms (nothing reads done while the
+ * carriers decide, a row SetterFi broke offers no button, the outage names the day) are each a
+ * ruling with a test behind it.
  */
 
 import Link from "next/link";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { type ComponentType, type ReactNode } from "react";
 
 import { Status } from "@/components/kit/atomics";
 import { ConnectChannelButton } from "@/components/workspace/rehaul/connect-channel-button";
@@ -38,9 +32,9 @@ import { ACCENT_FILL_SHADOW_CLASS } from "@/components/kit/atomics/button-class"
 import {
   CalendarDays,
   ChatText,
-  FacebookLogo,
+  Check,
+  CreditCard,
   FileText,
-  InstagramLogo,
   OctagonAlert,
   ShieldCheck,
   Smartphone,
@@ -50,9 +44,7 @@ import {
 } from "@/components/kit/icons";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { elapsedWorkspaceDays } from "@/components/kit/day-counter";
-import {
-  type MetaConnectChannel,
-} from "@/components/workspace/live/coach-meta-connect";
+import type { MetaConnectChannel } from "@/components/workspace/live/coach-meta-connect";
 import type { Tone } from "@/components/kit/atomics/tone";
 import type { CarrierReview } from "@/lib/onboarding/carrier-review";
 import { STEP_LABELS } from "@/components/onboarding/view-models";
@@ -62,17 +54,9 @@ import { displayTextOrNull } from "@/lib/format/display-name";
 import type { ChannelConnectionState } from "@/lib/repositories/channel-connections";
 
 /* --------------------------------------------------------------------------------------------
- * What the page is handed
+ * The read
  * ------------------------------------------------------------------------------------------ */
 
-/**
- * A messaging channel's row as the server read it.
- *
- * `state: null` with `checked: true` is a channel with no connection row at all, which is a
- * different fact from a read that did not answer (`checked: false`) and both are different from
- * `disconnected`. Flattening the three is how a page ends up telling a coach to connect something
- * that is already connected, or that nothing is connected when the query timed out.
- */
 export type CoachSetupChannelRead = {
   checked: boolean;
   state: ChannelConnectionState | null;
@@ -91,16 +75,8 @@ export type CoachSetupCalendarRead = {
   name: string | null;
 };
 
-/** One row of the technical record. Every value is a field the record actually carries. */
 export type CoachSetupRecordRow = { label: string; value: string };
 
-/**
- * A provisioning step the runner stopped, by key and by when it stopped.
- *
- * `/coach/home` counts these and names the oldest one, so this page has to be able to name the
- * same rows. The key is the contract's own, not a label: the coach-facing name comes from
- * `STEP_LABELS`, which is the map Home reads, so the two surfaces cannot call one step two things.
- */
 export type CoachSetupBlockedStep = { key: ProvisioningStep; stoppedAt: string | null };
 
 export type CoachSetupRead = {
@@ -113,6 +89,11 @@ export type CoachSetupRead = {
   test: { checked: boolean; completedAt: string | null };
   /** `provisioning_steps.go_live`. */
   goLive: { checked: boolean; completedAt: string | null };
+  /**
+   * The published offer row, which is the same read the offer step makes. Published, not saved: a
+   * draft is words the agent has never said to a lead, and the row says so rather than ticking.
+   */
+  offer: { checked: boolean; published: boolean };
   instagram: CoachSetupChannelRead;
   messenger: CoachSetupChannelRead;
   sms: CoachSetupChannelRead;
@@ -132,29 +113,19 @@ export type CoachSetupProps = {
   now?: Date;
 };
 
-/* --------------------------------------------------------------------------------------------
- * Copy that left the page
- * ------------------------------------------------------------------------------------------ */
-
 /**
- * The explanations this page used to print under its headings, handed to the eye.
- *
- * The old Connections page carried roughly 1,500 words of this in three places at once, and the
- * carrier reassurance was the single most load-bearing sentence in it: the most common support
- * contact during the A2P window is a coach who believes something has broken. It is one sentence
- * here rather than one per channel card, which is the "each fact once" rule doing its job.
- *
- * The support hours are deliberately not in this list. They are the "Ask a person" panel's whole
- * content, and saying them twice on one screen is exactly what this page was rebuilt to stop.
+ * What the eye says. The support hours are deliberately not in this list: they are the "Ask a
+ * person" panel's whole content, and saying them twice on one screen is what this page was rebuilt
+ * to stop.
  */
 export const COACH_SETUP_EYE_COPY = [
-  "Carriers take about three weeks to approve a new business for texting.",
-  "Nothing is broken while that runs and there is nothing for you to do.",
-  "The day count is real days since we filed, never a prediction and never a percentage.",
-  "Every step here has a receipt; the technical record holds the hashes, the carrier's own",
-  "decision code and who filed it, for the day you need to prove when something happened.",
-  "A channel that stopped answering because our connection broke is ours to fix, so it carries",
-  "no button.",
+  "Every row here is either yours or ours, and only yours carry a button.",
+  "Carriers take about three weeks to approve a new business for texting; nothing is broken while",
+  "that runs and the day count is real days since we filed, never a prediction and never a",
+  "percentage.",
+  "A step that stopped is ours to restart, so it carries no button either.",
+  "The technical record holds the hashes, the carrier's own decision code and who filed it, for",
+  "the day you need to prove when something happened.",
 ].join(" ");
 
 /* --------------------------------------------------------------------------------------------
@@ -186,16 +157,25 @@ function weekdayLabel(iso: string | null): string | null {
   return Number.isFinite(parsed) ? WEEKDAY_FORMAT.format(new Date(parsed)) : null;
 }
 
+/** "A", "A and B", "A, B and C". */
+function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** A row name mid-sentence: "your calendar", but "Instagram and Messenger" keeps its capitals. */
+function mention(name: string): string {
+  return /^[A-Z][a-z]+ and /.test(name) || /^(Instagram|Messenger|WhatsApp)/.test(name)
+    ? name
+    : name.charAt(0).toLowerCase() + name.slice(1);
+}
+
+const COUNT_WORDS = ["Nothing", "One thing", "Two things", "Three things", "Four things", "Five things"];
+
 /* --------------------------------------------------------------------------------------------
- * The four steps
+ * The receipt-backed steps
  * ------------------------------------------------------------------------------------------ */
 
-/**
- * The four journey rows, plus one row per stopped step the four do not already stand for.
- *
- * A stopped step keyed `blocked:<provisioning key>` so the row can be told from the journey rows
- * in the DOM and so two stopped steps never collide on one React key.
- */
 export type CoachSetupStepKey =
   | "business"
   | "carrier"
@@ -214,24 +194,13 @@ export type CoachSetupStepView = {
   done: boolean;
 };
 
-const STEP_ICON: Record<"business" | "carrier" | "test" | "live", ComponentType<KitIconProps>> = {
-  business: UserRound,
-  carrier: ShieldCheck,
-  live: Sparkle,
-  test: ChatText,
-};
-
-function stepIcon(key: CoachSetupStepKey): ComponentType<KitIconProps> {
-  return key.startsWith("blocked:") ? OctagonAlert : STEP_ICON[key as "business"];
-}
-
 /**
  * The journey row each provisioning key already stands for.
  *
  * A stopped `business_profile` has to change the "Business details" row rather than add a second
  * row about the same subject, or the page would show one step twice under two names. Keys with no
- * entry here -- opt-in pages, the calendar, the offer -- have no row of their own on this page and
- * get one when they stop, which is what lets Setup name the step `/coach/home` names.
+ * entry here get a row of their own when they stop, which is what lets this page name the step
+ * `/coach/home` used to name.
  */
 const BLOCKED_ROW_OWNER: Partial<Record<ProvisioningStep, "business" | "carrier" | "test" | "live">> = {
   a2p_brand: "carrier",
@@ -252,7 +221,7 @@ function stoppedRow(base: { key: CoachSetupStepKey; name: string }, stoppedAt: s
     done: false,
     key: base.key,
     name: base.name,
-    pill: { label: "Blocked", tone: "warning" },
+    pill: { label: "Stopped", tone: "warning" },
     receipt: stopped ? `Stopped ${stopped}` : "The day it stopped was not recorded.",
   };
 }
@@ -266,10 +235,7 @@ function stoppedRow(base: { key: CoachSetupStepKey; name: string }, stoppedAt: s
  * answer the honest-states rule exists to stop.
  */
 function carrierStep(carrier: CarrierReview, now: Date | undefined): CoachSetupStepView {
-  const base = {
-    key: "carrier" as const,
-    name: "Carrier review",
-  };
+  const base = { key: "carrier" as const, name: "Carrier review" };
   const typicalEnd = CARRIER_TYPICAL_DAYS[1];
 
   if (carrier.kind === "unchecked") {
@@ -296,7 +262,7 @@ function carrierStep(carrier: CarrierReview, now: Date | undefined): CoachSetupS
       body: "The carriers approved your business for texting.",
       done: true,
       pill: { label: "Done", tone: "good" },
-      receipt: "Approved. The decision is in the technical record below.",
+      receipt: "Approved. The decision is in the technical record.",
     };
   }
   if (carrier.kind === "failed") {
@@ -314,7 +280,7 @@ function carrierStep(carrier: CarrierReview, now: Date | undefined): CoachSetupS
       body: "The carriers refused this filing. We will contact you about what they need.",
       done: false,
       pill: { label: "Refused", tone: "warning" },
-      receipt: "The carrier's decision code is in the technical record below.",
+      receipt: "The carrier's decision code is in the technical record.",
     };
   }
 
@@ -343,11 +309,8 @@ function carrierStep(carrier: CarrierReview, now: Date | undefined): CoachSetupS
 }
 
 /**
- * The four steps, in the order the runner enforces.
- *
- * `test_pass` sits between the carrier and go-live rather than being folded into it, because the
- * runner already gates `go_live` on it: a journey that jumped from the carrier straight to live
- * was hiding a gate the coach still had to clear.
+ * The four receipt-backed steps, in the order the runner enforces, with a stopped step either
+ * changing the row that stands for it or adding a row of its own.
  */
 export function coachSetupSteps(read: CoachSetupRead, now?: Date): readonly CoachSetupStepView[] {
   const businessFiled = dayLabel(read.business.completedAt);
@@ -365,12 +328,14 @@ export function coachSetupSteps(read: CoachSetupRead, now?: Date): readonly Coac
     }
     : read.business.checked
       ? {
-        body: "Your name, address and website go to the carriers with your texting application.",
+        body:
+          "Your name, address and website. The carriers need them before we can file your "
+          + "texting application, and it takes about five minutes.",
         done: false,
         key: "business",
         name: "Business details",
-        pill: { label: "Not filed yet", tone: "neutral" },
-        receipt: "We collect these with you before anything is filed.",
+        pill: { label: "Yours to do", tone: "warning" },
+        receipt: "About five minutes.",
       }
       : {
         body: "We could not read your business details just now, so this step is not reporting.",
@@ -399,7 +364,7 @@ export function coachSetupSteps(read: CoachSetupRead, now?: Date): readonly Coac
       name: "Safe test",
       pill: { label: "Comes later", tone: "neutral" },
       receipt: read.test.checked
-        ? "Runs after the carrier review."
+        ? "After the carriers finish."
         : "We could not read this step just now.",
     };
 
@@ -413,27 +378,17 @@ export function coachSetupSteps(read: CoachSetupRead, now?: Date): readonly Coac
       receipt: `Live since ${liveSince}`,
     }
     : {
-      body: "Your agent turns on once your calendar is connected and the safe test has passed.",
+      body: "Your agent turns on when you press go live, once everything above is done.",
       done: false,
       key: "live",
       name: "Go live",
       pill: { label: "Comes last", tone: "neutral" },
-      receipt: !read.calendar.checked
-        ? "We could not read your calendar just now."
-        : read.calendar.connected
-          ? "Waiting on the safe test"
-          : "Waiting on your calendar",
+      receipt: "After the safe test.",
     };
 
   const journey = [business, carrierStep(read.carrier, now), test, live];
   const stopped = read.blocked.steps;
 
-  /*
-   * A stopped step either replaces the row that already stands for it or becomes a row of its own.
-   * Both arms name it from `STEP_LABELS` when it is a row of its own, which is the map
-   * `/coach/home` names the blocked step from, so the page a coach is sent to shows the step they
-   * were sent to look at.
-   */
   const rows = journey.map((row) => {
     const hit = stopped.find((candidate) => BLOCKED_ROW_OWNER[candidate.key] === row.key);
     return hit ? stoppedRow(row, hit.stoppedAt) : row;
@@ -447,14 +402,7 @@ export function coachSetupSteps(read: CoachSetupRead, now?: Date): readonly Coac
   return [...rows, ...ownRows];
 }
 
-/**
- * The coach-facing names of the stopped steps, in the order they stopped.
- *
- * Read by the status sentence so the header can name what Home names. A step folded into a journey
- * row keeps that row's name -- "Business details", not "Business profile" -- because that is the
- * name the row under the sentence carries, and a sentence that points at a row nobody can find is
- * the defect this whole change is about.
- */
+/** The coach-facing names of the stopped steps, in the order they stopped. */
 export function coachSetupBlockedNames(read: CoachSetupRead): readonly string[] {
   const JOURNEY_NAMES = {
     business: "Business details",
@@ -472,14 +420,14 @@ export function coachSetupBlockedNames(read: CoachSetupRead): readonly string[] 
 }
 
 /* --------------------------------------------------------------------------------------------
- * The four channels
+ * The channels
  * ------------------------------------------------------------------------------------------ */
 
 export type CoachSetupChannelKey = "instagram" | "messenger" | "sms" | "calendar";
 
 export type CoachSetupChannelAction =
-  | { kind: "meta"; label: "Connect" | "Reconnect"; channel: MetaConnectChannel; name: string }
-  | { kind: "link"; label: string; href: string };
+  | { kind: "link"; href: string; label: string }
+  | { kind: "meta"; channel: MetaConnectChannel; label: "Connect" | "Reconnect"; name: string };
 
 export type CoachSetupChannelView = {
   key: CoachSetupChannelKey;
@@ -489,30 +437,9 @@ export type CoachSetupChannelView = {
   action: CoachSetupChannelAction | null;
 };
 
-const CHANNEL_ICON: Record<CoachSetupChannelKey, ComponentType<KitIconProps>> = {
-  calendar: CalendarDays,
-  instagram: InstagramLogo,
-  messenger: FacebookLogo,
-  sms: Smartphone,
-};
+/** The states that are SetterFi's connection failing, as opposed to the coach's permission. */
+const OUTAGE_STATES: readonly ChannelConnectionState[] = ["error", "flagged", "restricted", "blocked_permanent"];
 
-/** The states SetterFi owns. None of them is the coach's to press, so none of them gets a button. */
-const OUTAGE_STATES: readonly ChannelConnectionState[] = [
-  "error",
-  "flagged",
-  "restricted",
-  "blocked_permanent",
-];
-
-/**
- * One Meta channel's row.
- *
- * The three sentences the brief names are all here and each belongs to exactly one state.
- * `expired` is the coach's: a token that ran out is fixed by signing in again, which is a thing
- * they can do in thirty seconds. Everything in `OUTAGE_STATES` is ours, and it says so and offers
- * nothing to press. A connected row names the account and stops, because there is nothing on a
- * working connection worth a coach's attention.
- */
 function metaChannelRow(
   key: "instagram" | "messenger",
   name: string,
@@ -559,7 +486,7 @@ function metaChannelRow(
         ? "Its permission ran out, and reconnecting brings it back."
         : metaConnect === "read_only"
           ? "Its permission ran out. Reconnecting needs the coach's own sign-in, and this view is read only."
-          : "Its permission ran out. Signing in again opens here once Meta approves our app, which is ours to chase.",
+          : "Its permission ran out. Signing in again opens here once Facebook approves our app, which is ours to chase.",
     };
   }
 
@@ -596,7 +523,7 @@ function metaChannelRow(
       ? "Your agent answers here once you connect the account."
       : metaConnect === "read_only"
         ? "Connecting needs the coach's own sign-in, and this view is read only."
-        : "Sign-in opens here once Meta approves our app, which is ours to chase.",
+        : "Sign-in opens here once Facebook approves our app, which is ours to chase.",
   };
 }
 
@@ -604,8 +531,8 @@ function metaChannelRow(
  * Texting, which is the one channel with no button in any state.
  *
  * A coach cannot make a carrier decide faster and there is nothing to press, so the row carries
- * its state and stops. It also does not repeat the day count: that fact belongs to the carrier
- * step above it and appears on this screen exactly once.
+ * its state and stops. It does not repeat the day count: that fact belongs to the carrier step and
+ * appears on this screen exactly once.
  */
 function smsRow(read: CoachSetupChannelRead, carrier: CarrierReview): CoachSetupChannelView {
   const base = { action: null, key: "sms" as const, name: "Text messaging" };
@@ -658,7 +585,7 @@ function calendarRow(read: CoachSetupCalendarRead): CoachSetupChannelView {
   if (read.needsReconnect) {
     return {
       ...base,
-      action: { href: "/onboarding/calendar", kind: "link", label: "Reconnect calendar" },
+      action: { href: "/onboarding/calendar", kind: "link", label: "Reconnect your calendar" },
       pill: { label: "Not answering", tone: "warning" },
       sentence: "Its permission ran out, and reconnecting brings it back.",
     };
@@ -676,9 +603,9 @@ function calendarRow(read: CoachSetupCalendarRead): CoachSetupChannelView {
   }
   return {
     ...base,
-    action: { href: "/onboarding/calendar", kind: "link", label: "Connect calendar" },
-    pill: { label: "Waiting on you", tone: "warning" },
-    sentence: "Your agent needs somewhere to put the calls it books.",
+    action: { href: "/onboarding/calendar", kind: "link", label: "Connect your calendar" },
+    pill: { label: "Yours to do", tone: "warning" },
+    sentence: "Your agent needs somewhere to put the calls it books. Google and Outlook both work.",
   };
 }
 
@@ -691,32 +618,324 @@ export function coachSetupChannels(read: CoachSetupRead): readonly CoachSetupCha
   ];
 }
 
-/**
- * Which row spends the page's one accent fill.
- *
- * A first connection outranks a reconnection, which is what the artboard draws: the calendar has
- * never been connected and it is the gate on going live, while Instagram was working an hour ago
- * and its Reconnect is a thirty-second repair. Returning a key rather than a boolean per row is
- * what makes "exactly one" a property of the function instead of a thing every row has to agree
- * about.
- */
-export function coachSetupAccentRow(
-  rows: readonly CoachSetupChannelView[],
-): CoachSetupChannelKey | null {
-  const actionable = rows.filter((row) => row.action !== null);
-  const firstConnect = actionable.find((row) => row.action?.label.startsWith("Connect"));
-  return (firstConnect ?? actionable[0])?.key ?? null;
+/* --------------------------------------------------------------------------------------------
+ * The rows
+ * ------------------------------------------------------------------------------------------ */
+
+/** Who moves a row. Only `you` may carry a button. */
+export type CoachSetupOwner = "you" | "us" | "carriers";
+
+export type CoachSetupRowKey =
+  | "business"
+  | "channels"
+  | "calendar"
+  | "offer"
+  | "carrier"
+  | "test"
+  | "live"
+  | `blocked:${ProvisioningStep}`;
+
+export type CoachSetupRowAction =
+  | { kind: "link"; href: string; label: string }
+  | { kind: "meta"; channels: readonly MetaConnectChannel[]; label: string };
+
+/** One line inside a row: the channels row lists Instagram and Messenger this way. */
+export type CoachSetupFact = { name: string; sentence: string; pill: { label: string; tone: Tone } };
+
+export type CoachSetupRow = {
+  key: CoachSetupRowKey;
+  name: string;
+  owner: CoachSetupOwner;
+  /** True only on a receipt. Nothing reads done while provisioning. */
+  done: boolean;
+  pill: { label: ReactNode; tone: Tone };
+  /** The explanation, drawn while the row is open or current. One idea, two sentences at most. */
+  body: string;
+  /** The receipt or timing line, drawn on every row that has one. */
+  receipt: string | null;
+  /** Only on a row the coach owns. A done row may still carry a repair. */
+  action: CoachSetupRowAction | null;
+  facts: readonly CoachSetupFact[];
+  icon: ComponentType<KitIconProps>;
+};
+
+const ROW_ICON: Record<Exclude<CoachSetupRowKey, `blocked:${ProvisioningStep}`>, ComponentType<KitIconProps>> = {
+  business: UserRound,
+  calendar: CalendarDays,
+  carrier: ShieldCheck,
+  channels: Smartphone,
+  live: Sparkle,
+  offer: CreditCard,
+  test: ChatText,
+};
+
+function fromStep(step: CoachSetupStepView, owner: CoachSetupOwner, icon: ComponentType<KitIconProps>): CoachSetupRow {
+  return {
+    action: null,
+    body: step.body,
+    done: step.done,
+    facts: [],
+    icon,
+    key: step.key,
+    name: step.name,
+    owner: step.pill.label === "Stopped" ? "us" : owner,
+    pill: step.pill,
+    receipt: step.receipt,
+  };
+}
+
+function channelsRow(read: CoachSetupRead, channels: readonly CoachSetupChannelView[]): CoachSetupRow {
+  const instagram = channels.find((row) => row.key === "instagram")!;
+  const messenger = channels.find((row) => row.key === "messenger")!;
+  const pair = [instagram, messenger];
+  const facts: CoachSetupFact[] = pair.map((row) => ({ name: row.name, pill: row.pill, sentence: row.sentence }));
+  const live = pair.filter((row) => row.pill.label === "Connected");
+  const connect = pair.filter((row) => row.action?.kind === "meta" && row.action.label === "Connect");
+  const reconnect = pair.filter((row) => row.action?.kind === "meta" && row.action.label === "Reconnect");
+  const outage = pair.some((row) => row.pill.label === "Not answering" && row.action === null);
+  const unchecked = pair.every((row) => row.pill.label === "Not checked");
+  const done = live.length > 0;
+
+  const action: CoachSetupRowAction | null = connect.length > 0
+    ? {
+      channels: connect.map((row) => row.key as MetaConnectChannel),
+      kind: "meta",
+      label: `Connect ${nameList(connect.map((row) => row.name))}`,
+    }
+    : reconnect.length > 0
+      ? {
+        channels: reconnect.map((row) => row.key as MetaConnectChannel),
+        kind: "meta",
+        label: `Reconnect ${nameList(reconnect.map((row) => row.name))}`,
+      }
+      : null;
+
+  const pill: CoachSetupRow["pill"] = unchecked
+    ? { label: "Not checked", tone: "neutral" }
+    : done
+      ? reconnect.length > 0 || outage
+        ? { label: "Partly answering", tone: "warning" }
+        : { label: "Connected", tone: "good" }
+      : action
+        ? { label: "Yours to do", tone: "warning" }
+        : outage
+          ? { label: "Not answering", tone: "warning" }
+          : read.metaConnect === "awaiting_meta"
+            ? { label: "Not ready yet", tone: "neutral" }
+            : pair.some((row) => row.pill.label === "Connecting")
+              ? { label: "Connecting", tone: "waiting" }
+              : { label: "Not connected", tone: "neutral" };
+
+  const body = unchecked
+    ? "We could not check these connections just now. Nothing has changed."
+    : action?.label.startsWith("Connect")
+      ? "Your agent answers Instagram and Messenger messages the moment they arrive. Connecting "
+        + "opens Facebook in a new window and takes about a minute."
+      : action
+        ? "A permission ran out, and reconnecting brings it back in about a minute."
+        : read.metaConnect === "awaiting_meta" && !done
+          ? "Sign-in opens here once Facebook approves our app, which is ours to chase. There is "
+            + "nothing for you to do yet."
+          : read.metaConnect === "read_only" && !done
+            ? "Connecting needs the coach's own sign-in, and this view is read only."
+            : done
+              ? "Your agent answers messages here."
+              : "We are finishing this connection. There is nothing for you to do.";
+
+  const since = live
+    .map((row) => (row.key === "instagram" ? read.instagram : read.messenger).liveSince)
+    .map(dayLabel)
+    .filter((label): label is string => label !== null);
+
+  return {
+    action,
+    body,
+    done,
+    facts,
+    icon: ROW_ICON.channels,
+    key: "channels",
+    name: "Instagram and Messenger",
+    owner: "you",
+    pill,
+    receipt: since.length > 0
+      ? `Answering since ${since[0]}`
+      : action?.label.startsWith("Connect")
+        ? "About a minute."
+        : null,
+  };
+}
+
+function calendarSetupRow(channel: CoachSetupChannelView): CoachSetupRow {
+  const done = channel.pill.label === "Connected";
+  return {
+    action: channel.action?.kind === "link" ? channel.action : null,
+    body: channel.sentence,
+    done,
+    facts: [],
+    icon: ROW_ICON.calendar,
+    key: "calendar",
+    name: "Your calendar",
+    owner: "you",
+    pill: channel.pill,
+    receipt: channel.action ? "About a minute." : null,
+  };
+}
+
+function offerRow(read: CoachSetupRead): CoachSetupRow {
+  const base = { facts: [], icon: ROW_ICON.offer, key: "offer" as const, name: "Your offer", owner: "you" as const };
+  if (!read.offer.checked) {
+    return {
+      ...base,
+      action: null,
+      body: "We could not read your offer just now, so this step is not reporting.",
+      done: false,
+      pill: { label: "Not checked", tone: "neutral" },
+      receipt: "Nothing changed while we could not read it.",
+    };
+  }
+  if (read.offer.published) {
+    return {
+      ...base,
+      action: null,
+      body: "Your agent knows what you sell, who it is for and what it costs.",
+      done: true,
+      pill: { label: "Done", tone: "good" },
+      receipt: "Change it any time from Your agent.",
+    };
+  }
+  return {
+    ...base,
+    action: { href: "/onboarding/offer", kind: "link", label: "Tell us about your offer" },
+    body:
+      "What you sell, who it is for and what it costs. Your agent uses this to answer questions "
+      + "and to decide who to book.",
+    done: false,
+    pill: { label: "Yours to do", tone: "warning" },
+    receipt: "About ten minutes.",
+  };
 }
 
 /**
- * How many of these are the coach's own to do, which is the only count the page states.
+ * The whole setup as one list, in journey order.
  *
- * Steps are excluded on purpose. Every step on this page is either finished, with SetterFi, or
- * with the carriers; the coach's own work always lands as a channel row with a button, so counting
- * both halves would count the calendar twice.
+ * The coach's four rows come first, then the carriers' wait, the safe test and the final press.
+ * Go live is the coach's, and it carries its button only once every row above it is done: a
+ * button that would be refused at the route is the completion theatre the honest-states rule
+ * forbids, so until then the row says what it is waiting on.
  */
-export function coachSetupWaitingCount(rows: readonly CoachSetupChannelView[]): number {
-  return rows.filter((row) => row.action !== null).length;
+export function coachSetupRows(read: CoachSetupRead, now?: Date): readonly CoachSetupRow[] {
+  const steps = coachSetupSteps(read, now);
+  const channels = coachSetupChannels(read);
+  const step = (key: CoachSetupStepKey) => steps.find((row) => row.key === key)!;
+
+  const business = fromStep(step("business"), "you", ROW_ICON.business);
+  if (!business.done && business.owner === "you" && read.business.checked) {
+    business.action = { href: "/onboarding/business-profile", kind: "link", label: "Add your business details" };
+  }
+  const pair = channelsRow(read, channels);
+  const calendar = calendarSetupRow(channels.find((row) => row.key === "calendar")!);
+  const offer = offerRow(read);
+  const carrier = fromStep(step("carrier"), "carriers", ROW_ICON.carrier);
+  const sms = channels.find((row) => row.key === "sms")!;
+  if (carrier.done && sms.pill.label === "Connected") carrier.receipt = sms.sentence;
+  const test = fromStep(step("test"), "us", ROW_ICON.test);
+  const live = fromStep(step("live"), "you", ROW_ICON.live);
+
+  const ready = [business, pair, calendar, offer, carrier, test].every((row) => row.done);
+  if (!live.done && live.owner === "you") {
+    if (ready) {
+      live.action = { href: "/onboarding/go-live", kind: "link", label: "Go live" };
+      live.pill = { label: "Ready when you are", tone: "good" };
+      live.body = "Everything above is done. Pressing go live turns your agent on for real leads.";
+      live.receipt = null;
+    } else {
+      const waitingOn = [business, pair, calendar, offer].filter((row) => !row.done).map((row) => row.name);
+      live.receipt = waitingOn.length > 0
+        ? `After ${waitingOn.map(mention).join(", ")}, and then the safe test.`
+        : carrier.done
+          ? test.done
+            ? live.receipt
+            : "After the safe test."
+          : "After the carriers finish and the safe test passes.";
+    }
+  }
+
+  const own = steps
+    .filter((row) => row.key.startsWith("blocked:"))
+    .map((row) => fromStep(row, "us", OctagonAlert));
+
+  return [business, pair, calendar, offer, carrier, ...own, test, live];
+}
+
+/** The rows that are the coach's to move: owned by them and carrying something to press. */
+export function coachSetupYours(rows: readonly CoachSetupRow[]): readonly CoachSetupRow[] {
+  return rows.filter((row) => row.owner === "you" && row.action !== null);
+}
+
+/**
+ * The one open row: the first the coach can move that is not done. A repair on a finished row
+ * is offered inline and never opens, because the thing to do next is always the first gap.
+ */
+export function coachSetupOpenRow(rows: readonly CoachSetupRow[]): CoachSetupRowKey | null {
+  return rows.find((row) => row.owner === "you" && row.action !== null && !row.done)?.key
+    ?? coachSetupYours(rows)[0]?.key
+    ?? null;
+}
+
+/**
+ * The status sentence, which both surfaces print from the same rows.
+ *
+ * Three clauses at most: how much is the coach's, in words; where the carriers are; and what
+ * stopped, by name and with whose it is. It never counts a stopped step as the coach's, because
+ * nothing on a stopped row can be pressed.
+ */
+export function coachSetupSentence(
+  rows: readonly CoachSetupRow[],
+  read: CoachSetupRead,
+  now?: Date,
+): string {
+  const everythingUnchecked = !read.business.checked
+    && !read.test.checked
+    && read.carrier.kind === "unchecked"
+    && !read.instagram.checked
+    && !read.messenger.checked
+    && !read.sms.checked
+    && !read.calendar.checked;
+  if (everythingUnchecked) {
+    return "We could not read your setup just now. Nothing has changed while we could not read it.";
+  }
+
+  const yours = coachSetupYours(rows).length;
+  const stopped = coachSetupBlockedNames(read);
+  const clauses: string[] = [];
+
+  if (yours === 0) {
+    clauses.push(stopped.length > 0 ? "Nothing else is waiting on you." : "Nothing is waiting on you.");
+  } else {
+    clauses.push(`${COUNT_WORDS[yours] ?? `${yours} things`} ${yours === 1 ? "is" : "are"} yours to do.`);
+  }
+
+  const carrier = read.carrier;
+  if (carrier.kind === "in-review") {
+    const day = carrier.submittedAt ? elapsedWorkspaceDays(carrier.submittedAt, now) : null;
+    clauses.push(
+      day === null
+        ? "Text messages are still with the carriers."
+        : `Text messages are on day ${day} of about ${CARRIER_TYPICAL_DAYS[1]}.`,
+    );
+  } else if (carrier.kind === "blocked" || carrier.kind === "failed") {
+    clauses.push("The carrier filing is ours to sort out.");
+  }
+
+  if (stopped.length > 0) {
+    clauses.unshift(
+      `${nameList(stopped)} stopped, and ${stopped.length === 1 ? "it is" : "they are"} ours to fix, not yours.`,
+    );
+  } else if (yours === 0 && clauses.length === 1) {
+    clauses.push("Everything here is with us or the carriers.");
+  }
+
+  return clauses.join(" ");
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -734,12 +953,12 @@ const PANEL_CLASS = [
  * 48px and 16px, which is the coach control scale in `design/coach/VOCABULARY.md` and not the
  * kit's. `kitButtonClass` tops out at 34px because the owner console's toolbar is 30 to 34px, and
  * `coach.css` can raise a mounted kit button to 44px but cannot make it the 48px the artboards
- * draw. The accent fill's shadow is imported rather than retyped so this file shares one string
- * with the kit's own primary variant.
+ * draw. The accent fill's shadow is imported so this file shares one string with the kit's own
+ * primary variant.
  */
 const BUTTON_BASE =
-  "inline-flex h-[48px] shrink-0 items-center justify-center gap-[10px] whitespace-nowrap "
-  + "rounded-[9px] border px-[22px] text-[16px] no-underline hover:no-underline";
+  "inline-flex min-h-[48px] shrink-0 items-center justify-center gap-[10px] text-center "
+  + "rounded-[9px] border px-[22px] py-[10px] text-[16px] no-underline hover:no-underline";
 const BUTTON_SECONDARY =
   `${BUTTON_BASE} border-[var(--line)] bg-[var(--control-fill)] font-medium text-[var(--body)] `
   + "hover:border-[var(--accent-edge)] hover:text-[var(--ink)]";
@@ -764,117 +983,197 @@ function Band({ eyebrow, name, titleId }: { eyebrow: string; name: string; title
 }
 
 /**
- * The round tile beside a step, and the square one beside a channel.
- *
- * `aria-hidden` on the glyph: the row already carries the step's name and its state in words, and
- * a tile that repeats either of them in a picture is the fourth time this screen would have said
- * the same thing.
+ * The mark beside a row: a tick on a done row, the row's glyph otherwise, on a face that says
+ * which of the three states it is in. `aria-hidden`: the row carries its name and its state in
+ * words, and a picture that repeats either would be the same fact said twice.
  */
-function RowTile({
-  children,
-  round,
-  tone,
-}: {
-  children: ReactNode;
-  round?: boolean;
-  tone: "good" | "waiting" | "plain";
-}) {
-  const face = tone === "good"
+function RowMark({ row, open }: { row: CoachSetupRow; open: boolean }) {
+  const Icon = row.icon;
+  const face = row.done
     ? "border-[var(--good-line)] bg-[var(--good-wash)] text-[var(--good-text)]"
-    : tone === "waiting"
-      ? "border-[var(--waiting-line)] bg-[var(--waiting-wash)] text-[var(--waiting-text)]"
-      : "border-[var(--line)] bg-[var(--well)] text-[var(--body)]";
+    : open
+      ? "border-[var(--accent-edge)] bg-[var(--accent-wash-strong)] text-[var(--accent-text)]"
+      : row.pill.tone === "warning" && row.owner !== "you"
+        ? "border-[var(--warning-line)] bg-[var(--warning-wash)] text-[var(--warning-text)]"
+        : row.pill.tone === "waiting"
+          ? "border-[var(--waiting-line)] bg-[var(--waiting-wash)] text-[var(--waiting-text)]"
+          : "border-[var(--line)] bg-[var(--well)] text-[var(--muted)]";
   return (
     <span
       aria-hidden="true"
-      className={`grid size-[44px] flex-none place-items-center border ${
-        round ? "rounded-full" : "rounded-[10px]"
-      } ${face}`}
+      className={`relative z-[1] grid size-[44px] flex-none place-items-center rounded-full border ${face}`}
+      data-slot="coach-setup-mark"
     >
-      {children}
+      {row.done ? <Check size={22} strokeWidth={2.25} /> : <Icon size={20} strokeWidth={1.75} />}
     </span>
   );
 }
 
-const ROW_CLASS =
-  "flex flex-wrap items-start gap-[18px] px-5 py-[22px] border-b border-[var(--line-soft)] last:border-b-0";
-const STEP_ROW_CLASS =
-  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 sm:gap-x-[18px] px-5 py-[22px] border-b border-[var(--line-soft)] last:border-b-0";
+function RowAction({ action, accent }: { action: CoachSetupRowAction; accent: boolean }) {
+  const className = `${accent ? BUTTON_ACCENT : BUTTON_SECONDARY} w-full sm:w-auto`;
+  if (action.kind === "link") {
+    return (
+      <Link className={className} href={action.href}>
+        {action.label}
+      </Link>
+    );
+  }
+  return (
+    <ConnectChannelButton channels={action.channels} className={className}>
+      {action.label}
+    </ConnectChannelButton>
+  );
+}
+
 const ROW_NAME_CLASS =
   "m-0 text-[20px] leading-[1.25] font-medium tracking-[-0.015em] text-[var(--ink)]";
 const ROW_BODY_CLASS =
-  "m-0 mt-2 max-w-[var(--measure-sentence)] text-[16px] leading-[1.55] text-[var(--muted)]";
-const ROW_RECEIPT_CLASS = "m-0 mt-2 text-[14px] leading-[1.55] text-[var(--muted)]";
+  "m-0 mt-[10px] max-w-[var(--measure-sentence)] text-[16px] leading-[1.55] text-[var(--body)]";
+const ROW_RECEIPT_CLASS = "m-0 mt-[6px] text-[14px] leading-[1.55] text-[var(--muted)]";
 
 /**
- * A step row: tile, name, state pill, then the two sentences.
- *
- * Grid rather than the flex `ROW_CLASS` the channel rows use, because at 390 the flex version put
- * the pill on a line of its own *under* the sentences, where it read as orphaned from the step it
- * describes. The grid keeps the pill on the name's line at every width -- right-aligned in its own
- * column -- and lets the sentences take the width the pill vacates on the row below, which is the
- * only thing that changes below `sm`. At `sm` and up the sentences stay inside the name's column,
- * so the 1440 rendering is byte-for-byte what it was.
+ * One row: the mark, the name with its state on the same line at every width, and under the name
+ * whatever the row's state earns. A closed row is the name, the state and its receipt. The open
+ * row adds its explanation, its facts and its one button. A row on the timeline draws a spine to
+ * the next, which is what makes the wait read as a sequence rather than a list of pills.
  */
-function StepRow({ step }: { step: CoachSetupStepView }) {
-  const Icon = stepIcon(step.key);
+function SetupRow({
+  compact,
+  last,
+  open,
+  row,
+  timeline,
+}: {
+  compact: boolean;
+  last: boolean;
+  open: boolean;
+  row: CoachSetupRow;
+  timeline: boolean;
+}) {
+  const current = timeline && !row.done && row.pill.tone === "waiting";
+  const showBody = open || (current && !compact) || (row.owner === "us" && row.pill.label === "Stopped");
+  const showFacts = row.facts.length > 0 && (open || row.done) && !compact;
+  // A finished row may still carry a repair; an unfinished closed row carries nothing, or the page
+  // would offer two things to press for one gap.
+  const repair = row.action && !open && row.done ? row.action : null;
   return (
-    <li className={`${STEP_ROW_CLASS} list-none`} data-slot="coach-setup-step" data-step={step.key}>
-      <div className="col-start-1 row-start-1 row-span-2">
-        <RowTile
-          round
-          tone={step.done
-            ? "good"
-            : step.pill.tone === "waiting" || step.pill.tone === "warning"
-              ? "waiting"
-              : "plain"}
-        >
-          <Icon size={20} strokeWidth={1.75} />
-        </RowTile>
+    <li
+      className={[
+        "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x-[16px] px-5 sm:gap-x-[18px]",
+        compact ? "py-[16px]" : "py-[20px]",
+        timeline ? "" : "border-b border-[var(--line-soft)] last:border-b-0",
+        open ? "bg-[var(--accent-wash)]" : "",
+      ].join(" ")}
+      data-done={row.done ? "true" : "false"}
+      data-open={open ? "true" : undefined}
+      data-owner={row.owner}
+      data-row={row.key}
+      data-slot="coach-setup-row"
+    >
+      {timeline && !last ? (
+        <span
+          aria-hidden="true"
+          className="absolute top-[64px] bottom-[-4px] left-[41px] w-[2px] bg-[var(--line)]"
+          data-slot="coach-setup-spine"
+        />
+      ) : null}
+      <div className="row-span-2">
+        <RowMark open={open} row={row} />
       </div>
-      <h3 className={`${ROW_NAME_CLASS} col-start-2 row-start-1 min-w-0`}>{step.name}</h3>
-      <div className="col-start-3 row-start-1 justify-self-end pt-[6px]">
-        <Status label={step.pill.label} tone={step.pill.tone} />
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-[8px]">
+        <h3 className={`${ROW_NAME_CLASS} min-w-0`}>{row.name}</h3>
+        <Status className="text-[14px]" label={row.pill.label} tone={row.pill.tone} />
       </div>
-      <div className="col-start-2 col-span-2 row-start-2 min-w-0 sm:col-span-1">
-        <p className={ROW_BODY_CLASS}>{step.body}</p>
-        <p className={ROW_RECEIPT_CLASS}>{step.receipt}</p>
+      <div className="col-start-2 min-w-0">
+        {showBody ? <p className={ROW_BODY_CLASS}>{row.body}</p> : null}
+        {row.receipt && (showBody || !compact || row.done) ? (
+          <p className={ROW_RECEIPT_CLASS}>{row.receipt}</p>
+        ) : null}
+        {showFacts ? (
+          <ul className="m-0 mt-[12px] flex list-none flex-col gap-[8px] p-0" data-slot="coach-setup-facts">
+            {row.facts.map((fact) => (
+              <li className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[15px] leading-[1.5]" key={fact.name}>
+                <span className="font-medium text-[var(--ink)]">{fact.name}</span>
+                <span className="text-[var(--muted)]">{fact.sentence}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {open && row.action ? (
+          <div className="mt-[16px]">
+            <RowAction accent action={row.action} />
+          </div>
+        ) : repair ? (
+          <div className="mt-[12px]">
+            <RowAction accent={false} action={repair} />
+          </div>
+        ) : null}
       </div>
     </li>
   );
 }
 
-function ChannelRow({ accent, row }: { accent: boolean; row: CoachSetupChannelView }) {
-  const Icon = CHANNEL_ICON[row.key];
+export type CoachSetupRowsProps = {
+  rows: readonly CoachSetupRow[];
+  /** Home's rendering: closed rows are one line and the timeline carries no explanation. */
+  compact?: boolean;
+  headingId: string;
+};
+
+/**
+ * The list, in two bands inside one panel: the coach's four rows, then the timeline that ends in
+ * go live. Both bands read the same array, so a row cannot appear in one and be counted in the
+ * other.
+ */
+export function CoachSetupRows({ compact = false, headingId, rows }: CoachSetupRowsProps) {
+  const openKey = coachSetupOpenRow(rows);
+  const yours = rows.filter((row) => ["business", "channels", "calendar", "offer"].includes(row.key));
+  const timeline = rows.filter((row) => !yours.includes(row));
+  const yoursDone = yours.filter((row) => row.done).length;
+
   return (
-    <li className={`${ROW_CLASS} list-none`} data-channel={row.key} data-slot="coach-setup-channel">
-      <RowTile tone="plain">
-        <Icon size={20} strokeWidth={1.75} />
-      </RowTile>
-      <div className="min-w-0 flex-1 basis-[min(100%,24ch)]">
-        <div className="flex flex-wrap items-center gap-3">
-          <h3 className={ROW_NAME_CLASS}>{row.name}</h3>
-          <Status label={row.pill.label} tone={row.pill.tone} />
-        </div>
-        <p className={ROW_BODY_CLASS}>{row.sentence}</p>
+    <div className={PANEL_CLASS} data-slot="coach-setup-list">
+      <div className="flex min-h-[64px] items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-[16px]">
+        <h2
+          className="m-0 text-[20px] leading-[1.25] font-medium tracking-[-0.015em] text-[var(--ink)]"
+          id={headingId}
+        >
+          Yours to do
+        </h2>
+        <span className="text-[14px] text-[var(--muted)]" data-slot="coach-setup-count">
+          <span className="mono">{yoursDone}</span> of <span className="mono">{yours.length}</span> done
+        </span>
       </div>
-      {row.action ? (
-        <div className="flex-none">
-          {row.action.kind === "link" ? (
-            <Link className={accent ? BUTTON_ACCENT : BUTTON_SECONDARY} href={row.action.href}>
-              {row.action.label}
-            </Link>
-          ) : (
-            <ConnectChannelButton
-              channels={[row.action.channel]}
-              className={accent ? BUTTON_ACCENT : BUTTON_SECONDARY}
-            >
-              {`${row.action.label} ${row.action.name}`}
-            </ConnectChannelButton>
-          )}
-        </div>
-      ) : null}
-    </li>
+      <ol aria-labelledby={headingId} className="m-0 flex list-none flex-col p-0">
+        {yours.map((row, index) => (
+          <SetupRow
+            compact={compact}
+            key={row.key}
+            last={index === yours.length - 1}
+            open={row.key === openKey}
+            row={row}
+            timeline={false}
+          />
+        ))}
+      </ol>
+      <div className="flex min-h-[64px] items-center border-y border-[var(--line)] bg-[var(--well)] px-5 py-[16px]">
+        <h2 className="m-0 text-[20px] leading-[1.25] font-medium tracking-[-0.015em] text-[var(--ink)]" id={`${headingId}-then`}>
+          Then, with us and the carriers
+        </h2>
+      </div>
+      <ol aria-labelledby={`${headingId}-then`} className="m-0 flex list-none flex-col p-0 pb-[6px]">
+        {timeline.map((row, index) => (
+          <SetupRow
+            compact={compact}
+            key={row.key}
+            last={index === timeline.length - 1}
+            open={row.key === openKey}
+            row={row}
+            timeline
+          />
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -882,27 +1181,25 @@ function ChannelRow({ accent, row }: { accent: boolean; row: CoachSetupChannelVi
  * The technical record, closed.
  *
  * A native `<details>` rather than a kit disclosure, so it opens with no JavaScript and so the
- * summary inherits the 44px target `coach.css` puts on every `summary` under this shell. The rows
- * are the hashes, the carrier's decision code and who filed: evidence for a reviewer, which
- * `docs/SIMPLIFICATION-SPEC.md` 2.5 demotes off the face and does not delete.
+ * summary inherits the 44px target `coach.css` puts on every `summary` under this shell.
  */
 function TechnicalRecord({ record }: { record: CoachSetupRead["record"] }) {
   if (!record.checked) {
     return (
-      <p className="m-0 px-5 pb-5 text-[16px] leading-[1.55] text-[var(--muted)]">
+      <p className="m-0 px-5 py-5 text-[16px] leading-[1.55] text-[var(--muted)]">
         We could not read the filing record just now.
       </p>
     );
   }
   if (record.rows.length === 0) {
     return (
-      <p className="m-0 px-5 pb-5 text-[16px] leading-[1.55] text-[var(--muted)]">
+      <p className="m-0 px-5 py-5 text-[16px] leading-[1.55] text-[var(--muted)]">
         No filing record has been stored yet.
       </p>
     );
   }
   return (
-    <div className="px-5 pb-5">
+    <div className="px-5 py-5">
       <details
         className="rounded-[11px] border border-[var(--line)] bg-[var(--well)]"
         data-slot="coach-setup-record"
@@ -928,74 +1225,21 @@ function TechnicalRecord({ record }: { record: CoachSetupRead["record"] }) {
  * The page
  * ------------------------------------------------------------------------------------------ */
 
-/** "A", "A and B", "A, B and C". */
-function nameList(names: readonly string[]): string {
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
-/**
- * The status sentence under the title, which names what stopped, counts what waits, and says who
- * has the rest.
- *
- * The stopped clause comes first and by name because `/coach/home` prints the same step's name on
- * its own setup rung and links here. Until 2026-09-04 this sentence read "Nothing is waiting on
- * you" while Home said a step was blocked and offered "Fix this step", so a coach arrived at a
- * page that showed neither the step nor the trouble. The clause never says the stopped step is
- * waiting on the coach: `provisioningStepDescriptor` refuses to offer a retry on any step in
- * `blocked`, whoever owns it, so there is nothing for them to press and saying otherwise would be
- * the same lie in the other direction.
- *
- * The count that follows is still only what a coach can act on, which on this page is a channel
- * row carrying a button.
- */
-function statusSentence(
-  waiting: number,
-  everythingUnchecked: boolean,
-  blockedNames: readonly string[],
-): string {
-  if (everythingUnchecked) {
-    return "We could not read your setup just now. Nothing has changed while we could not read it.";
-  }
-  const rest = waiting === 0
-    ? blockedNames.length > 0
-      ? "Nothing else is waiting on you."
-      : "Nothing is waiting on you. Everything here is with us or the carriers."
-    : waiting === 1
-      ? "One thing is waiting on you. Everything else is with us or the carriers."
-      : `${waiting} things are waiting on you. Everything else is with us or the carriers.`;
-  if (blockedNames.length === 0) return rest;
-  const stopped = `${nameList(blockedNames)} stopped, and ${
-    blockedNames.length === 1 ? "it is" : "they are"
-  } ours to fix, not yours.`;
-  return `${stopped} ${rest}`;
-}
-
 export function CoachSetup({ now, read }: CoachSetupProps) {
-
-  const steps = coachSetupSteps(read, now);
-  const channels = coachSetupChannels(read);
-  const accentKey = coachSetupAccentRow(channels);
-  const waiting = coachSetupWaitingCount(channels);
-  const blockedNames = coachSetupBlockedNames(read);
-  const everythingUnchecked = !read.business.checked
-    && !read.test.checked
-    && read.carrier.kind === "unchecked"
-    && !read.instagram.checked
-    && !read.messenger.checked
-    && !read.sms.checked
-    && !read.calendar.checked;
-
+  const rows = coachSetupRows(read, now);
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div className="flex flex-wrap items-end gap-6">
         <div className="min-w-0">
           <h1 className="m-0 text-[46px] leading-[1.05] font-semibold tracking-[-0.026em] text-[var(--ink)]">
-            Your setup
+            Getting you live
           </h1>
-          <p className="m-0 mt-3 max-w-[var(--measure-wide)] text-[17px] leading-[1.5] text-[var(--body)]">
-            {statusSentence(waiting, everythingUnchecked, blockedNames)}
+          <p
+            className="m-0 mt-3 max-w-[var(--measure-wide)] text-[17px] leading-[1.5] text-[var(--body)]"
+            data-slot="coach-setup-sentence"
+          >
+            {coachSetupSentence(rows, read, now)}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -1008,45 +1252,12 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
         </div>
       </div>
 
-      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <section
-          aria-labelledby="coach-setup-steps-heading"
-          className={`${PANEL_CLASS} flex-grow`}
-          data-slot="coach-setup-steps"
-        >
-          <Band
-            eyebrow="Each step here carries a receipt"
-            name="How far along you are"
-            titleId="coach-setup-steps-heading"
-          />
-          <ul className="m-0 flex list-none flex-col p-0">
-            {steps.map((step) => (
-              <StepRow key={step.key} step={step} />
-            ))}
-          </ul>
-          <div className="mt-auto pt-5">
-            <TechnicalRecord record={read.record} />
-          </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
+        <section aria-labelledby="coach-setup-heading" data-slot="coach-setup-steps">
+          <CoachSetupRows headingId="coach-setup-heading" rows={rows} />
         </section>
 
         <div className="flex min-w-0 flex-col gap-5">
-          <section
-            aria-labelledby="coach-setup-channels-heading"
-            className={`${PANEL_CLASS} flex-grow`}
-            data-slot="coach-setup-channels"
-          >
-            <Band
-              eyebrow="Where your leads reach you"
-              name="Your channels"
-              titleId="coach-setup-channels-heading"
-            />
-            <ul className="m-0 flex list-none flex-col p-0">
-              {channels.map((row) => (
-                <ChannelRow accent={row.key === accentKey} key={row.key} row={row} />
-              ))}
-            </ul>
-          </section>
-
           <section
             aria-labelledby="coach-setup-support-heading"
             className={PANEL_CLASS}
@@ -1061,6 +1272,19 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
               Message us from the bubble in the corner. Someone answers on weekdays between 9 and 6
               Eastern.
             </p>
+          </section>
+
+          <section
+            aria-labelledby="coach-setup-record-heading"
+            className={PANEL_CLASS}
+            data-slot="coach-setup-evidence"
+          >
+            <Band
+              eyebrow="For the day you need to prove it"
+              name="The record"
+              titleId="coach-setup-record-heading"
+            />
+            <TechnicalRecord record={read.record} />
           </section>
         </div>
       </div>

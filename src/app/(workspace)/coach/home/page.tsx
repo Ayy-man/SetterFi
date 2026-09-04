@@ -20,6 +20,7 @@ import {
   type CoachChannelStatus,
 } from "@/components/workspace/live/coach-channel-status";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
+import { loadCoachSetup } from "@/components/workspace/rehaul/coach-setup-read";
 
 export const metadata: Metadata = { title: "Coach dashboard" };
 export const dynamic = "force-dynamic";
@@ -334,6 +335,19 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
     context.impersonation ? Promise.resolve(null) : loadCoachGreeting(context.actorId),
   ]);
 
+  /*
+   * Setup's own read, made only when the connection read found nothing live, because that is the
+   * only composition that draws it. It is the same read `/coach/get-started` makes, so Home and
+   * Setup draw one list; the record is left off because Home does not draw it and it was a fifth
+   * round trip in series.
+   */
+  const setup = channelStatus && channelStatus.channelsChecked && channelStatus.liveChannels.length === 0
+    ? await loadCoachSetup(context.tenantId, {
+      impersonating: context.impersonation !== null,
+      record: false,
+    }).catch(() => null)
+    : null;
+
   const billingPeriod = billing === "unavailable"
     ? "unavailable" as const
     : billing
@@ -351,6 +365,7 @@ export default async function CoachHomePage({ searchParams }: PageProps) {
         composition={composition}
         greeting={greeting}
         measurement={measurement}
+        setup={setup}
       />
     </CoachHomeShell>
   );

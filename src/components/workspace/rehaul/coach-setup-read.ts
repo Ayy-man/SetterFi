@@ -36,6 +36,7 @@ import {
   listChannelConnections,
   type ChannelConnectionView,
 } from "@/lib/repositories/channel-connections";
+import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
 import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
 import { isDemoTenant } from "@/lib/repositories/tenant-demo-flag";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -235,15 +236,29 @@ async function technicalRecord(
   return { checked: true, rows };
 }
 
+/**
+ * Published, not saved, which is the offer step's own reading: a draft is words the agent has
+ * never said to a lead. A failed read is `checked: false`, never "not published".
+ */
+async function offerRead(tenantId: string): Promise<CoachSetupRead["offer"]> {
+  try {
+    const offer = await createOfferLayerRepository().loadOffer({ status: "published", tenantId });
+    return { checked: true, published: offer !== null };
+  } catch {
+    return { checked: false, published: false };
+  }
+}
+
 export async function loadCoachSetup(
   tenantId: string,
-  options: { impersonating?: boolean } = {},
+  options: { impersonating?: boolean; record?: boolean } = {},
 ): Promise<CoachSetupRead> {
-  const [connections, filing, receipts, calendar] = await Promise.all([
+  const [connections, filing, receipts, calendar, offer] = await Promise.all([
     listChannelConnections(tenantId).catch(() => null),
     registrationRead(tenantId),
     provisioningReceipts(tenantId),
     calendarRead(tenantId),
+    offerRead(tenantId),
   ]);
 
   /*
@@ -258,7 +273,14 @@ export async function loadCoachSetup(
     terminalRejection: filing.registration?.terminalRejection ?? false,
   });
 
-  const record = await technicalRecord(tenantId, carrier, filing.registration?.terminalCode ?? null);
+  /*
+   * The record is a second round trip in series, and Home does not draw it, so Home asks for the
+   * read without it. An unrequested record reads as unchecked rather than as empty, because
+   * "not read" and "nothing stored" are different facts and only one of them is safe to print.
+   */
+  const record = options.record === false
+    ? { checked: false, rows: [] as CoachSetupRecordRow[] }
+    : await technicalRecord(tenantId, carrier, filing.registration?.terminalCode ?? null);
 
   return {
     blocked: receipts.blocked,
@@ -276,6 +298,7 @@ export async function loadCoachSetup(
       ? "read_only"
       : metaConnectAvailability({ isDemo: await isDemoTenant(tenantId) }),
     messenger: channelRead(connections, "messenger"),
+    offer,
     record,
     sms: channelRead(connections, "sms"),
     test: receipts.test,
