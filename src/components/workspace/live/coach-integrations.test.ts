@@ -11,18 +11,43 @@ function source(path: string) {
 }
 
 describe("Coach Integrations live reachability", () => {
-  it("uses a dedicated dynamic claims-bound page with both flags and server repositories", () => {
+  /*
+   * `/coach/integrations` renders Setup now.
+   *
+   * `docs/SIMPLIFICATION-SPEC.md` 2.6 killed Connections as a destination and folded the four
+   * channel rows into `rehaul/coach-setup.tsx`; the route stays because `META_CONNECT_RETURN_PATH`
+   * sends every Meta sign-in back to it and `workspace-navigation.test.ts` pins that both demoted
+   * coach destinations remain reachable. So the three assertions below moved with the page rather
+   * than being deleted: what they were protecting is that this route is a real, dynamic,
+   * claims-bound page reading on the server, and every one of those is still true and still
+   * checkable. What went with the old surface -- the message templates, the stored calendar error,
+   * the install card -- is asserted absent instead, because the spec sent all three to admin and
+   * a guard that only stopped watching would let them drift back.
+   */
+  it("uses a dedicated dynamic claims-bound page reading on the server", () => {
     const page = source("src/app/(workspace)/coach/integrations/page.tsx");
+    const read = source("src/components/workspace/rehaul/coach-setup-read.ts");
     expect(page).toContain('export const dynamic = "force-dynamic"');
-    expect(page).toContain("liveCoachContext");
-    expect(page).toContain("parseAppClaims");
-    expect(page).toContain("impersonatedReadContext");
-    expect(page).toContain("phase1Live() || !phase4Live()");
-    expect(page).toContain("listChannelConnections(context.tenantId)");
-    expect(page).toContain("listMessageTemplates(context.tenantId)");
-    expect(page).toContain("<CoachIntegrations");
-    expect(page).toContain("enabled={false}");
+    expect(page).toContain('coachSetupContext("/coach/integrations")');
+    expect(page).toContain("loadCoachSetup(context.tenantId");
+    expect(page).toContain("<CoachSetup");
     expect(page).not.toContain("FixtureWorkspaceShell");
+    expect(read).toContain("parseAppClaims");
+    expect(read).toContain("canAccessWorkspace");
+    expect(read).toContain("listChannelConnections(tenantId)");
+  });
+
+  it("carries none of the diagnostics the spec moved to admin", () => {
+    const page = source("src/app/(workspace)/coach/integrations/page.tsx");
+    for (const gone of [
+      "listMessageTemplates",
+      "listCapiDatasets",
+      "listGhlInstallLocationsForTenant",
+      "last_error",
+      "channelActivity",
+    ]) {
+      expect(page, gone).not.toContain(gone);
+    }
   });
 
   it("keeps Integrations out of the fixture catch-all and uses only the four approved labels", () => {
@@ -94,20 +119,20 @@ describe("Coach Integrations live reachability", () => {
     expect(calendarAvailabilityErrorCopy("AVAILABILITY_VERIFIED")).toBeNull();
   });
 
-  it("routes the stored calendar error through the calendar translation before the shared copy", () => {
-    const page = source("src/app/(workspace)/coach/integrations/page.tsx");
-    expect(page).toContain("calendarAvailabilityErrorCopy(data.last_error)");
-  });
-
-  it("reads the coach's own installs behind the install flag and never the platform-wide list", () => {
-    const page = source("src/app/(workspace)/coach/integrations/page.tsx");
-    expect(page).toContain("phase9GhlOAuthLive");
-    expect(page).toContain("listGhlInstallLocationsForTenant(tenantId)");
-    expect(page).toContain("messagingConnection(context.tenantId)");
-    expect(page).not.toContain("listGhlInstallsByTenant");
-    // A read that throws hands the card the unchecked state; it must never collapse to an empty
-    // list, which would read as "not connected".
-    expect(page).toContain("checked: false");
-    expect(page).toContain("messaging={");
+  /*
+   * The two assertions that used to sit here read the old page for a stored calendar error and a
+   * messaging-install card, and Setup renders neither: spec 2.6 sends last error to admin, and the
+   * install card was never a coach control -- the install route refuses a coach's role. What
+   * survives of both is the rule that made them worth guarding, which is that a read failing must
+   * not collapse into a claim. `coach-setup-read.ts` is where that now lives.
+   */
+  it("never lets a failed read collapse into a claim about the connection", () => {
+    const read = source("src/components/workspace/rehaul/coach-setup-read.ts");
+    // Three reads, three unchecked arms: channels, the A2P filing, the calendar.
+    expect(read).toContain("checked: false");
+    expect(read).not.toContain("listGhlInstallsByTenant");
+    // `loadCoachA2pRegistration` answers null for a tenant with no filing, so a bare catch-to-null
+    // around it would spend that same null on a query that threw.
+    expect(read).not.toMatch(/loadCoachA2pRegistration\(tenantId\)\.catch/u);
   });
 });
