@@ -734,6 +734,18 @@ export function CoachAgent({
     return row.kind === "money" ? money(value, "USD") : String(value);
   }
 
+  /*
+   * One width for every figure in the group, sized to the longest figure any row can reach. The
+   * cell is mono, so `ch` is exact, and the width is the group's rather than the row's: the
+   * steppers stand in a column, so each row's minus has to land where the others' do whatever
+   * that row currently says, including "Not set". A longer possible number widens every row
+   * together rather than pushing its own buttons out of line.
+   */
+  const boundWidth = `${Math.max(
+    "Not set".length,
+    ...BOUND_ROWS.map((row) => (row.kind === "money" ? money(row.max, "USD") : String(row.max)).length),
+  )}ch`;
+
   /* ---------------- prices ---------------- */
 
   function updatePrice(index: number, patch: Partial<CoachOfferDraftInput["prices"][number]>) {
@@ -1284,12 +1296,16 @@ export function CoachAgent({
                         <Sign minus />
                       </button>
                       {text === null ? (
-                        <span className="min-w-[96px] text-center text-[16px] text-[color:var(--muted)]">
+                        <span
+                          className={`${MONO_CLASS} text-center text-[16px] text-[color:var(--muted)]`}
+                          style={{ minWidth: boundWidth }}
+                        >
                           Not set
                         </span>
                       ) : (
                         <span
-                          className={`${MONO_CLASS} min-w-[96px] text-center text-[22px] font-medium text-[color:var(--ink)]`}
+                          className={`${MONO_CLASS} text-center text-[22px] font-medium text-[color:var(--ink)]`}
+                          style={{ minWidth: boundWidth }}
                         >
                           {text}
                         </span>
