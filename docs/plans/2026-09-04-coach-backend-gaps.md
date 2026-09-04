@@ -307,3 +307,23 @@ file from the stash individually (`git checkout stash@{0} -- <path>`), leaving t
 on-disk versions untouched, then dropping the stash once every file was accounted for. No content
 was lost; `git stash`/`pop` without a path scope is unsafe on this shared tree and should not be
 run again without `--` pathspecs limited to files a single agent actually owns.
+
+## Round 3 intake (lead, 2026-09-04)
+
+**Keyword table scope, ruled.** The table is every conversation in the window grouped by
+first-touch keyword, with the "No keyword" row last, exactly as `docs/PRODUCT.md` states under the
+measurement section: the denominator is conversations and the rows have to cover the whole
+population or the percentages lie. The phase 13 wrapper overwriting `keywords` with the
+keyword-goal-only aggregation is the defect. Fix it in a new migration: keep the phase 13
+per-keyword figures (they carry the CAPI attribution and now `senderCount`) for rows that have a
+keyword goal, but union in the remaining first-touch keywords and the "No keyword" row from the
+pre-phase-13 grouping, so the row set is the whole population and the shared columns agree with
+`read_coach_measurement_pre_phase13`. `senderCount` must be populated on every row, not only the
+goal-attributed ones. Regression test: a window with two goal keywords, one stray keyword and a
+no-keyword conversation returns four rows, "No keyword" last, conversations summing to the window
+total.
+
+**Billing intake from the Billing lane still stands** (period-level correction request, overage
+rate and billing interval on the read, settled attendance rows). Any gaps the remaining lanes
+record under their "what shipped" sections in `docs/plans/2026-09-04-coach-rehaul-notes.md` join
+this round.
