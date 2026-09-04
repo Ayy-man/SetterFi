@@ -24,7 +24,13 @@ import type { ChannelConnectionView } from "@/lib/repositories/channel-connectio
 export const CONNECT_CARD_KEYS = ["instagram", "messenger", "sms"] as const;
 export type ConnectCardKey = (typeof CONNECT_CARD_KEYS)[number];
 
-export type ConnectCardAction = { href: string; label: string };
+/**
+ * `channel` is set on the Instagram and Messenger actions, and the step renders those as the
+ * connect sheet's button rather than as a link: the sheet runs the sign-in in place. `href` stays
+ * as the destination for anything that cannot open a sheet, and as the fallback reachability the
+ * navigation tests pin.
+ */
+export type ConnectCardAction = { href: string; label: string; channel?: "instagram" | "messenger" };
 
 export type ConnectCard = {
   key: ConnectCardKey;
@@ -99,7 +105,7 @@ function metaCard(
   if (connection?.state === "ready") {
     return {
       ...base,
-      action: { href: CONNECT_HREF, label: "Finish connecting" },
+      action: { channel: key, href: CONNECT_HREF, label: "Finish connecting" },
       detail: label,
       provedAt,
       note: "Connected, but no message has made a round trip yet, so it is not answering.",
@@ -113,7 +119,7 @@ function metaCard(
   ) {
     return {
       ...base,
-      action: { href: CONNECT_HREF, label: `Reconnect ${copy.name}` },
+      action: { channel: key, href: CONNECT_HREF, label: `Reconnect ${copy.name}` },
       detail: label,
       provedAt,
       note: connection.error ?? "The connection stopped working and no reason was recorded.",
@@ -132,7 +138,7 @@ function metaCard(
   }
   return {
     ...base,
-    action: { href: CONNECT_HREF, label: `Connect ${copy.name}` },
+    action: { channel: key, href: CONNECT_HREF, label: `Connect ${copy.name}` },
     detail: null,
     status: null,
   };

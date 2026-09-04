@@ -97,6 +97,100 @@
   font-size: var(--coach-body);
 }
 
+/* =====================================================================================
+ * The conversation thread's own surfaces.
+ *
+ * Why these exist rather than the page palette the rest of the coach side reads.
+ *
+ * The page palette walks four grounds, canvas, pane, card and well, and in the dark blocks that
+ * whole ramp spans 0.134 to 0.220 in lightness, because near black a large step still reads as a
+ * quiet one. That is right for a deck of panels sitting still on a page. It is wrong for a
+ * transcript, where a bubble is not a ground the eye rests on but the thing being read, and two
+ * speakers have to be told apart at a glance. Measured on 2026-09-04, the thread drew the lead's
+ * bubble on --raised over a --pane ground at 1.13:1 and the agent's on --accent-wash-strong at
+ * 1.54:1: dark navy on darker navy, so nothing separated the speakers except which side they sat
+ * on, and the coach reading the screen said exactly that.
+ *
+ * So the thread gets its own ramp, walked in far larger steps than the page's, and the two
+ * speakers are told apart by hue as well as by side: the lead's bubble is a neutral grey-blue
+ * raised well clear of the pane, the agent's is a solid muted accent, and the coach's own replies
+ * are outlined rather than filled, because a third fill would be a third thing to learn. Measured
+ * in Chrome at both themes rather than derived:
+ *
+ *              lead fill   agent fill   lead text   agent text   lead time   agent time
+ *   dark        1.64:1      2.94:1       10.2:1       6.4:1       6.4:1       5.9:1
+ *   light       1.08:1      1.24:1       16.8:1      10.3:1       7.3:1       6.0:1
+ *
+ * The light fills sit close to the pane on purpose and carry their separation in hue and in a
+ * hairline instead: up here the eye reads lightness far more finely, which is the reasoning the
+ * light palette's own 0.961-to-0.998 ground ramp is already written on.
+ *
+ * They live in this sheet rather than in tokens.css because they are one surface's language
+ * rather than the app's, which is the line css-budget.test.ts already draws around this file.
+ * ================================================================================= */
+
+/* Light, the palette a browser with no stored theme shows. */
+[data-shell-role="coach"] {
+  --thread-lead: oklch(1 0 264);
+  --thread-lead-edge: oklch(0.905 0.006 262);
+  --thread-lead-ink: var(--ink);
+  --thread-lead-meta: oklch(0.455 0.03 262);
+  --thread-agent: oklch(0.905 0.055 264);
+  --thread-agent-edge: oklch(0.815 0.075 264);
+  --thread-agent-ink: oklch(0.3 0.075 264);
+  --thread-agent-meta: oklch(0.435 0.075 264);
+  --thread-you: oklch(0.955 0.01 264);
+  --thread-you-edge: oklch(0.62 0.115 264);
+  --thread-system: oklch(0.42 0.03 262);
+}
+
+/* Dark by system preference, unless the page explicitly chose light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-shell-role="coach"] {
+    --thread-lead: oklch(0.335 0.021 264);
+    --thread-lead-edge: oklch(0.405 0.024 264);
+    --thread-lead-ink: var(--ink);
+    --thread-lead-meta: oklch(0.8 0.02 264);
+    --thread-agent: oklch(0.478 0.118 264);
+    --thread-agent-edge: oklch(0.545 0.125 264);
+    --thread-agent-ink: oklch(0.985 0.008 264);
+    --thread-agent-meta: oklch(0.955 0.028 264);
+    --thread-you: oklch(0.265 0.03 264);
+    --thread-you-edge: oklch(0.52 0.09 264);
+    --thread-system: oklch(0.83 0.03 262);
+  }
+}
+
+/* Dark by the toggle, so it wins in both directions the way the page palette's blocks do. */
+[data-theme="dark"] [data-shell-role="coach"] {
+  --thread-lead: oklch(0.335 0.021 264);
+  --thread-lead-edge: oklch(0.405 0.024 264);
+  --thread-lead-ink: var(--ink);
+  --thread-lead-meta: oklch(0.8 0.02 264);
+  --thread-agent: oklch(0.478 0.118 264);
+  --thread-agent-edge: oklch(0.545 0.125 264);
+  --thread-agent-ink: oklch(0.985 0.008 264);
+  --thread-agent-meta: oklch(0.955 0.028 264);
+  --thread-you: oklch(0.265 0.03 264);
+  --thread-you-edge: oklch(0.52 0.09 264);
+  --thread-system: oklch(0.83 0.03 262);
+}
+
+/* The forced-light island, last so it wins over the dark toggle at equal specificity. */
+[data-theme="light"] [data-shell-role="coach"] {
+  --thread-lead: oklch(1 0 264);
+  --thread-lead-edge: oklch(0.905 0.006 262);
+  --thread-lead-ink: var(--ink);
+  --thread-lead-meta: oklch(0.455 0.03 262);
+  --thread-agent: oklch(0.905 0.055 264);
+  --thread-agent-edge: oklch(0.815 0.075 264);
+  --thread-agent-ink: oklch(0.3 0.075 264);
+  --thread-agent-meta: oklch(0.435 0.075 264);
+  --thread-you: oklch(0.955 0.01 264);
+  --thread-you-edge: oklch(0.62 0.115 264);
+  --thread-system: oklch(0.42 0.03 262);
+}
+
 /*
  * The deck panel, which is the only card shape on the coach side.
  *

@@ -1,6 +1,7 @@
 import { loadRouteActor, type RouteActor } from "@/lib/auth/actors";
 import { hasImpersonationMarker } from "@/lib/auth/claims";
 import { phase4Live } from "@/lib/env-contract";
+import { isDemoTenant } from "@/lib/repositories/tenant-demo-flag";
 
 import { createLiveMetaOAuth } from "../connect/handler";
 
@@ -72,7 +73,8 @@ export function createMetaCallbackHandler(dependencies: MetaCallbackDependencies
 export const GET = createMetaCallbackHandler({
   session: loadRouteActor,
   complete: async (input) => {
-    const oauth = createLiveMetaOAuth();
+    const isDemo = await isDemoTenant(input.tenantId);
+    const oauth = createLiveMetaOAuth({ isDemo });
     const channel = await oauth.channelForState(
       input.oauthState,
       input.tenantId,

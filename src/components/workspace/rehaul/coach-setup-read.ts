@@ -22,6 +22,7 @@
 import { redirect } from "next/navigation";
 
 import type {
+  CoachSetupBlockedStep,
   CoachSetupCalendarRead,
   CoachSetupChannelRead,
   CoachSetupRead,
@@ -29,12 +30,14 @@ import type {
 } from "@/components/workspace/rehaul/coach-setup";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { carrierReviewFrom, type CarrierReview } from "@/lib/onboarding/carrier-review";
-import { metaOAuthStartAvailable } from "@/lib/integrations/meta-oauth";
+import { PROVISIONING_STEPS, type ProvisioningStep } from "@/lib/onboarding/contracts";
+import { metaConnectAvailability } from "@/lib/integrations/meta-oauth";
 import {
   listChannelConnections,
   type ChannelConnectionView,
 } from "@/lib/repositories/channel-connections";
 import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
+import { isDemoTenant } from "@/lib/repositories/tenant-demo-flag";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 
 const UNCHECKED_CHANNEL: CoachSetupChannelRead = {
@@ -93,39 +96,67 @@ async function registrationRead(tenantId: string) {
   }
 }
 
+function isProvisioningStep(value: unknown): value is ProvisioningStep {
+  return typeof value === "string" && (PROVISIONING_STEPS as readonly string[]).includes(value);
+}
+
 /**
- * The three provisioning steps this page reports, as receipts.
+ * The provisioning steps this page reports: three as receipts, and every blocked row by name.
  *
- * `completed_at` and not `state`. A step can be `done` in the runner's sense while carrying no
- * completion timestamp, and a step that reads done with no receipt behind it is the completion
- * theatre the honest-states rule exists to stop, so the timestamp is what ticks a step here.
+ * `completed_at` and not `state` decides a tick. A step can be `done` in the runner's sense while
+ * carrying no completion timestamp, and a step that reads done with no receipt behind it is the
+ * completion theatre the honest-states rule exists to stop, so the timestamp is what ticks a step
+ * here.
+ *
+ * The blocked rows are read in the same query, and that is the point of the query rather than an
+ * extra it happens to carry. `/coach/home` counts `provisioning_steps` where `state = 'blocked'`
+ * and names the oldest one from `STEP_LABELS`, so a Setup page that read only its own three keys
+ * could tell a coach nothing was waiting while Home sent them here to fix a step by name. Both
+ * surfaces now stand on the same table read, ordered the same way, so the step Home names is a
+ * step this page shows.
+ *
+ * `blocked_reason` is not read. It is operator-authored free text with no contract about audience,
+ * which is the same call `/coach/home` states in its own read.
  */
 async function provisioningReceipts(tenantId: string) {
-  const keys = ["business_profile", "test_pass", "go_live"] as const;
   const service = createSupabaseServiceClient();
   const { data, error } = await service
     .from("provisioning_steps")
-    .select("step_key, state, completed_at")
+    .select("step_key, state, completed_at, updated_at")
     .eq("tenant_id", tenantId)
-    .in("step_key", [...keys]);
+    .order("updated_at", { ascending: true });
 
   if (error) {
     return {
+      blocked: { checked: false, steps: [] as CoachSetupBlockedStep[] },
       business: { checked: false, completedAt: null },
       goLive: { checked: false, completedAt: null },
       test: { checked: false, completedAt: null },
     };
   }
 
-  const receipt = (key: (typeof keys)[number]) => {
-    const row = (data ?? []).find((candidate) => candidate.step_key === key);
+  const rows = data ?? [];
+  const receipt = (key: ProvisioningStep) => {
+    const row = rows.find((candidate) => candidate.step_key === key);
     return {
       checked: true,
       completedAt: row?.state === "done" ? (row.completed_at ?? null) : null,
     };
   };
 
-  return { business: receipt("business_profile"), goLive: receipt("go_live"), test: receipt("test_pass") };
+  const blockedSteps: CoachSetupBlockedStep[] = rows
+    .filter((row) => row.state === "blocked" && isProvisioningStep(row.step_key))
+    .map((row) => ({
+      key: row.step_key as ProvisioningStep,
+      stoppedAt: row.updated_at ?? null,
+    }));
+
+  return {
+    blocked: { checked: true, steps: blockedSteps },
+    business: receipt("business_profile"),
+    goLive: receipt("go_live"),
+    test: receipt("test_pass"),
+  };
 }
 
 async function calendarRead(tenantId: string): Promise<CoachSetupCalendarRead> {
@@ -230,6 +261,7 @@ export async function loadCoachSetup(
   const record = await technicalRecord(tenantId, carrier, filing.registration?.terminalCode ?? null);
 
   return {
+    blocked: receipts.blocked,
     business: receipts.business,
     calendar,
     carrier,
@@ -242,9 +274,7 @@ export async function loadCoachSetup(
      */
     metaConnect: options.impersonating
       ? "read_only"
-      : metaOAuthStartAvailable()
-        ? "ready"
-        : "awaiting_meta",
+      : metaConnectAvailability({ isDemo: await isDemoTenant(tenantId) }),
     messenger: channelRead(connections, "messenger"),
     record,
     sms: channelRead(connections, "sms"),

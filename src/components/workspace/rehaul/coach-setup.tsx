@@ -33,6 +33,7 @@ import Link from "next/link";
 import { useState, type ComponentType, type ReactNode } from "react";
 
 import { Status } from "@/components/kit/atomics";
+import { ConnectChannelButton } from "@/components/workspace/rehaul/connect-channel-button";
 import { ACCENT_FILL_SHADOW_CLASS } from "@/components/kit/atomics/button-class";
 import {
   CalendarDays,
@@ -40,6 +41,7 @@ import {
   FacebookLogo,
   FileText,
   InstagramLogo,
+  OctagonAlert,
   ShieldCheck,
   Smartphone,
   Sparkle,
@@ -49,13 +51,12 @@ import {
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { elapsedWorkspaceDays } from "@/components/kit/day-counter";
 import {
-  META_CONNECT_FAILURE_COPY,
-  startMetaConnection,
   type MetaConnectChannel,
 } from "@/components/workspace/live/coach-meta-connect";
 import type { Tone } from "@/components/kit/atomics/tone";
 import type { CarrierReview } from "@/lib/onboarding/carrier-review";
-import { CARRIER_TYPICAL_DAYS } from "@/lib/onboarding/contracts";
+import { STEP_LABELS } from "@/components/onboarding/view-models";
+import { CARRIER_TYPICAL_DAYS, type ProvisioningStep } from "@/lib/onboarding/contracts";
 import { WORKSPACE_DISPLAY_TIMEZONE } from "@/lib/format/datetime";
 import { displayTextOrNull } from "@/lib/format/display-name";
 import type { ChannelConnectionState } from "@/lib/repositories/channel-connections";
@@ -93,8 +94,19 @@ export type CoachSetupCalendarRead = {
 /** One row of the technical record. Every value is a field the record actually carries. */
 export type CoachSetupRecordRow = { label: string; value: string };
 
+/**
+ * A provisioning step the runner stopped, by key and by when it stopped.
+ *
+ * `/coach/home` counts these and names the oldest one, so this page has to be able to name the
+ * same rows. The key is the contract's own, not a label: the coach-facing name comes from
+ * `STEP_LABELS`, which is the map Home reads, so the two surfaces cannot call one step two things.
+ */
+export type CoachSetupBlockedStep = { key: ProvisioningStep; stoppedAt: string | null };
+
 export type CoachSetupRead = {
   carrier: CarrierReview;
+  /** Every `provisioning_steps` row in `blocked`, oldest first, and whether the read answered. */
+  blocked: { checked: boolean; steps: readonly CoachSetupBlockedStep[] };
   /** `provisioning_steps.business_profile`: its receipt, and whether the read answered. */
   business: { checked: boolean; completedAt: string | null };
   /** `provisioning_steps.test_pass`, the safe test SetterFi runs to a number it owns. */
@@ -178,7 +190,18 @@ function weekdayLabel(iso: string | null): string | null {
  * The four steps
  * ------------------------------------------------------------------------------------------ */
 
-export type CoachSetupStepKey = "business" | "carrier" | "test" | "live";
+/**
+ * The four journey rows, plus one row per stopped step the four do not already stand for.
+ *
+ * A stopped step keyed `blocked:<provisioning key>` so the row can be told from the journey rows
+ * in the DOM and so two stopped steps never collide on one React key.
+ */
+export type CoachSetupStepKey =
+  | "business"
+  | "carrier"
+  | "test"
+  | "live"
+  | `blocked:${ProvisioningStep}`;
 
 export type CoachSetupStepView = {
   key: CoachSetupStepKey;
@@ -191,12 +214,48 @@ export type CoachSetupStepView = {
   done: boolean;
 };
 
-const STEP_ICON: Record<CoachSetupStepKey, ComponentType<KitIconProps>> = {
+const STEP_ICON: Record<"business" | "carrier" | "test" | "live", ComponentType<KitIconProps>> = {
   business: UserRound,
   carrier: ShieldCheck,
   live: Sparkle,
   test: ChatText,
 };
+
+function stepIcon(key: CoachSetupStepKey): ComponentType<KitIconProps> {
+  return key.startsWith("blocked:") ? OctagonAlert : STEP_ICON[key as "business"];
+}
+
+/**
+ * The journey row each provisioning key already stands for.
+ *
+ * A stopped `business_profile` has to change the "Business details" row rather than add a second
+ * row about the same subject, or the page would show one step twice under two names. Keys with no
+ * entry here -- opt-in pages, the calendar, the offer -- have no row of their own on this page and
+ * get one when they stop, which is what lets Setup name the step `/coach/home` names.
+ */
+const BLOCKED_ROW_OWNER: Partial<Record<ProvisioningStep, "business" | "carrier" | "test" | "live">> = {
+  a2p_brand: "carrier",
+  a2p_campaign: "carrier",
+  business_profile: "business",
+  go_live: "live",
+  sms_live: "carrier",
+  test_pass: "test",
+};
+
+/** What a stopped step says. No button anywhere: restarting one is not the coach's to press. */
+function stoppedRow(base: { key: CoachSetupStepKey; name: string }, stoppedAt: string | null): CoachSetupStepView {
+  const stopped = dayLabel(stoppedAt);
+  return {
+    body:
+      "This step stopped before it finished. Starting it again is ours to do, not yours, and we "
+      + "are on it.",
+    done: false,
+    key: base.key,
+    name: base.name,
+    pill: { label: "Blocked", tone: "warning" },
+    receipt: stopped ? `Stopped ${stopped}` : "The day it stopped was not recorded.",
+  };
+}
 
 /**
  * The carrier row, which is the one step whose state is a union rather than a timestamp.
@@ -366,7 +425,50 @@ export function coachSetupSteps(read: CoachSetupRead, now?: Date): readonly Coac
           : "Waiting on your calendar",
     };
 
-  return [business, carrierStep(read.carrier, now), test, live];
+  const journey = [business, carrierStep(read.carrier, now), test, live];
+  const stopped = read.blocked.steps;
+
+  /*
+   * A stopped step either replaces the row that already stands for it or becomes a row of its own.
+   * Both arms name it from `STEP_LABELS` when it is a row of its own, which is the map
+   * `/coach/home` names the blocked step from, so the page a coach is sent to shows the step they
+   * were sent to look at.
+   */
+  const rows = journey.map((row) => {
+    const hit = stopped.find((candidate) => BLOCKED_ROW_OWNER[candidate.key] === row.key);
+    return hit ? stoppedRow(row, hit.stoppedAt) : row;
+  });
+  const ownRows = stopped
+    .filter((candidate) => !BLOCKED_ROW_OWNER[candidate.key])
+    .map((candidate) =>
+      stoppedRow({ key: `blocked:${candidate.key}`, name: STEP_LABELS[candidate.key] }, candidate.stoppedAt)
+    );
+
+  return [...rows, ...ownRows];
+}
+
+/**
+ * The coach-facing names of the stopped steps, in the order they stopped.
+ *
+ * Read by the status sentence so the header can name what Home names. A step folded into a journey
+ * row keeps that row's name -- "Business details", not "Business profile" -- because that is the
+ * name the row under the sentence carries, and a sentence that points at a row nobody can find is
+ * the defect this whole change is about.
+ */
+export function coachSetupBlockedNames(read: CoachSetupRead): readonly string[] {
+  const JOURNEY_NAMES = {
+    business: "Business details",
+    carrier: "Carrier review",
+    live: "Go live",
+    test: "Safe test",
+  } as const;
+  const names: string[] = [];
+  for (const step of read.blocked.steps) {
+    const owner = BLOCKED_ROW_OWNER[step.key];
+    const name = owner ? JOURNEY_NAMES[owner] : STEP_LABELS[step.key];
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -715,13 +817,17 @@ const ROW_RECEIPT_CLASS = "m-0 mt-2 text-[14px] leading-[1.55] text-[var(--muted
  * so the 1440 rendering is byte-for-byte what it was.
  */
 function StepRow({ step }: { step: CoachSetupStepView }) {
-  const Icon = STEP_ICON[step.key];
+  const Icon = stepIcon(step.key);
   return (
     <li className={`${STEP_ROW_CLASS} list-none`} data-slot="coach-setup-step" data-step={step.key}>
       <div className="col-start-1 row-start-1 row-span-2">
         <RowTile
           round
-          tone={step.done ? "good" : step.pill.tone === "waiting" ? "waiting" : "plain"}
+          tone={step.done
+            ? "good"
+            : step.pill.tone === "waiting" || step.pill.tone === "warning"
+              ? "waiting"
+              : "plain"}
         >
           <Icon size={20} strokeWidth={1.75} />
         </RowTile>
@@ -738,19 +844,8 @@ function StepRow({ step }: { step: CoachSetupStepView }) {
   );
 }
 
-function ChannelRow({
-  accent,
-  onStartMeta,
-  pending,
-  row,
-}: {
-  accent: boolean;
-  onStartMeta: (channel: MetaConnectChannel) => void;
-  pending: MetaConnectChannel | null;
-  row: CoachSetupChannelView;
-}) {
+function ChannelRow({ accent, row }: { accent: boolean; row: CoachSetupChannelView }) {
   const Icon = CHANNEL_ICON[row.key];
-  const busy = row.action?.kind === "meta" && pending === row.action.channel;
   return (
     <li className={`${ROW_CLASS} list-none`} data-channel={row.key} data-slot="coach-setup-channel">
       <RowTile tone="plain">
@@ -770,16 +865,12 @@ function ChannelRow({
               {row.action.label}
             </Link>
           ) : (
-            <button
+            <ConnectChannelButton
+              channels={[row.action.channel]}
               className={accent ? BUTTON_ACCENT : BUTTON_SECONDARY}
-              disabled={pending !== null}
-              onClick={() => {
-                if (row.action?.kind === "meta") onStartMeta(row.action.channel);
-              }}
-              type="button"
             >
-              {busy ? "Opening sign-in" : `${row.action.label} ${row.action.name}`}
-            </button>
+              {`${row.action.label} ${row.action.name}`}
+            </ConnectChannelButton>
           )}
         </div>
       ) : null}
@@ -837,34 +928,56 @@ function TechnicalRecord({ record }: { record: CoachSetupRead["record"] }) {
  * The page
  * ------------------------------------------------------------------------------------------ */
 
+/** "A", "A and B", "A, B and C". */
+function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 /**
- * The status sentence under the title, which counts one thing and names who has the rest.
+ * The status sentence under the title, which names what stopped, counts what waits, and says who
+ * has the rest.
  *
- * It counts only what a coach can act on. "Everything else is with us or the carriers" is true by
- * construction: a step is never the coach's on this page, and a channel row without a button is
- * one nobody outside SetterFi can move.
+ * The stopped clause comes first and by name because `/coach/home` prints the same step's name on
+ * its own setup rung and links here. Until 2026-09-04 this sentence read "Nothing is waiting on
+ * you" while Home said a step was blocked and offered "Fix this step", so a coach arrived at a
+ * page that showed neither the step nor the trouble. The clause never says the stopped step is
+ * waiting on the coach: `provisioningStepDescriptor` refuses to offer a retry on any step in
+ * `blocked`, whoever owns it, so there is nothing for them to press and saying otherwise would be
+ * the same lie in the other direction.
+ *
+ * The count that follows is still only what a coach can act on, which on this page is a channel
+ * row carrying a button.
  */
-function statusSentence(waiting: number, everythingUnchecked: boolean): string {
+function statusSentence(
+  waiting: number,
+  everythingUnchecked: boolean,
+  blockedNames: readonly string[],
+): string {
   if (everythingUnchecked) {
     return "We could not read your setup just now. Nothing has changed while we could not read it.";
   }
-  if (waiting === 0) {
-    return "Nothing is waiting on you. Everything here is with us or the carriers.";
-  }
-  if (waiting === 1) {
-    return "One thing is waiting on you. Everything else is with us or the carriers.";
-  }
-  return `${waiting} things are waiting on you. Everything else is with us or the carriers.`;
+  const rest = waiting === 0
+    ? blockedNames.length > 0
+      ? "Nothing else is waiting on you."
+      : "Nothing is waiting on you. Everything here is with us or the carriers."
+    : waiting === 1
+      ? "One thing is waiting on you. Everything else is with us or the carriers."
+      : `${waiting} things are waiting on you. Everything else is with us or the carriers.`;
+  if (blockedNames.length === 0) return rest;
+  const stopped = `${nameList(blockedNames)} stopped, and ${
+    blockedNames.length === 1 ? "it is" : "they are"
+  } ours to fix, not yours.`;
+  return `${stopped} ${rest}`;
 }
 
 export function CoachSetup({ now, read }: CoachSetupProps) {
-  const [pending, setPending] = useState<MetaConnectChannel | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
 
   const steps = coachSetupSteps(read, now);
   const channels = coachSetupChannels(read);
   const accentKey = coachSetupAccentRow(channels);
   const waiting = coachSetupWaitingCount(channels);
+  const blockedNames = coachSetupBlockedNames(read);
   const everythingUnchecked = !read.business.checked
     && !read.test.checked
     && read.carrier.kind === "unchecked"
@@ -873,24 +986,6 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
     && !read.sms.checked
     && !read.calendar.checked;
 
-  /*
-   * The result never claims a connection. A 201 means the browser is being sent to Meta; whether a
-   * connection exists is decided by the callback and read back from `channel_connections`, which is
-   * why the failure arms all say that nothing changed rather than that something failed halfway.
-   */
-  async function runMetaConnect(channel: MetaConnectChannel) {
-    setPending(channel);
-    setFailure(null);
-    const result = await startMetaConnection({
-      assign: (url) => window.location.assign(url),
-      channel,
-      fetch: (url, init) => fetch(url, init),
-    });
-    if (result.status === "failed") {
-      setFailure(META_CONNECT_FAILURE_COPY[result.reason]);
-      setPending(null);
-    }
-  }
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -900,7 +995,7 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
             Your setup
           </h1>
           <p className="m-0 mt-3 max-w-[var(--measure-wide)] text-[17px] leading-[1.5] text-[var(--body)]">
-            {statusSentence(waiting, everythingUnchecked)}
+            {statusSentence(waiting, everythingUnchecked, blockedNames)}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -913,16 +1008,6 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
         </div>
       </div>
 
-      {failure ? (
-        <p
-          className="m-0 rounded-[11px] border border-[var(--warning-line)] bg-[var(--warning-wash)] px-5 py-4 text-[16px] leading-[1.55] text-[var(--warning-text)]"
-          data-slot="coach-setup-failure"
-          role="status"
-        >
-          {failure}
-        </p>
-      ) : null}
-
       <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section
           aria-labelledby="coach-setup-steps-heading"
@@ -930,7 +1015,7 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
           data-slot="coach-setup-steps"
         >
           <Band
-            eyebrow="Four steps, each with a receipt"
+            eyebrow="Each step here carries a receipt"
             name="How far along you are"
             titleId="coach-setup-steps-heading"
           />
@@ -957,13 +1042,7 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
             />
             <ul className="m-0 flex list-none flex-col p-0">
               {channels.map((row) => (
-                <ChannelRow
-                  accent={row.key === accentKey}
-                  key={row.key}
-                  onStartMeta={(channel) => void runMetaConnect(channel)}
-                  pending={pending}
-                  row={row}
-                />
+                <ChannelRow accent={row.key === accentKey} key={row.key} row={row} />
               ))}
             </ul>
           </section>

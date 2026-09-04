@@ -57,6 +57,8 @@ export type MetaOAuthAsset = {
   channel: OAuthChannel;
   label: string;
   eligible: boolean;
+  /** Why an ineligible asset cannot be selected, in words a coach can read. Null when eligible. */
+  reason: string | null;
 };
 
 export type StoredMetaOAuthAsset = MetaOAuthAsset & {
@@ -279,6 +281,112 @@ function graphUrl(path: string) {
   return `https://graph.facebook.com/${META_GRAPH_VERSION}/${path}`;
 }
 
+/**
+ * The literal authorization code the simulated `/demo/meta-login` page sends back to
+ * `GET /api/channels/meta/callback`. A demo tenant's mock fetch refuses any other value, so a
+ * request replayed from outside that page cannot complete a demo connection.
+ */
+export const DEMO_META_AUTHORIZATION_CODE = "demo-authorization-code";
+
+/**
+ * Realistic discovered assets for the demo tenant, keyed by channel and split into one eligible
+ * and one ineligible entry each, mirroring the shapes a coach actually sees from Meta: a real
+ * business Page/Instagram pair, and the personal or under-permissioned assets Meta discovers
+ * alongside it but that setup cannot use.
+ */
+function demoMockConfiguration(): MetaOAuthConfiguration {
+  const synthetic = (name: string) => createHash("sha256").update(name).digest("hex");
+  return {
+    appBaseUrl: "https://setterfi.test",
+    appId: "setterfi-meta-demo-mock-app",
+    appSecret: synthetic("setterfi-meta-oauth-demo-mock-app-secret"),
+    loginConfigId: "setterfi-meta-demo-mock-login-config",
+  };
+}
+
+function demoMockFetch(configuration: MetaOAuthConfiguration): FetchLike {
+  const synthetic = (name: string) => createHash("sha256").update(name).digest("base64url");
+  return async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/oauth/access_token")) {
+      if (url.searchParams.get("code") !== DEMO_META_AUTHORIZATION_CODE) {
+        return Response.json({ error: { type: "demo_code_mismatch" } }, { status: 400 });
+      }
+      return Response.json({ access_token: synthetic("demo-meta-oauth-user-token"), token_type: "bearer" });
+    }
+    if (url.pathname.endsWith("/debug_token")) {
+      return Response.json({
+        data: {
+          app_id: configuration.appId,
+          is_valid: true,
+          expires_at: 1_789_516_800,
+          scopes: [...META_OAUTH_SCOPES],
+        },
+      });
+    }
+    if (url.pathname.endsWith("/me/accounts")) {
+      return Response.json({
+        data: [{
+          id: "demo-page-reid-capital-coaching",
+          name: "Reid Capital Coaching",
+          access_token: synthetic("demo-meta-oauth-page-token"),
+          instagram_business_account: {
+            id: "demo-ig-reidcapitalcoaching",
+            name: "reidcapitalcoaching",
+          },
+        }],
+        // Not a real Graph field: the discovery loop below reads this array only from the demo
+        // mock's response, so a real Meta payload (which never carries it) is unaffected.
+        demo_ineligible_assets: [
+          {
+            channel: "instagram",
+            asset_id: "demo-ig-reid-baxter",
+            label: "Reid Baxter",
+            reason: "Personal account, not a business account.",
+          },
+          {
+            channel: "messenger",
+            asset_id: "demo-page-reids-fishing-trips",
+            label: "Reid's Fishing Trips",
+            reason: "No messaging permission granted for this Page.",
+          },
+        ],
+      });
+    }
+    if (url.pathname.endsWith("/subscribed_apps") && init?.method === "POST") {
+      return Response.json({ success: true });
+    }
+    return Response.json({ error: { type: "unsupported_demo_mock_request" } }, { status: 400 });
+  };
+}
+
+function demoIneligibleAssets(
+  value: unknown,
+  channel: OAuthChannel,
+  encrypt: typeof encryptCredential,
+  environment: EnvironmentSource,
+): StoredMetaOAuthAsset[] {
+  const result: StoredMetaOAuthAsset[] = [];
+  for (const row of objects(value)) {
+    if (text(row.channel) !== channel) continue;
+    const assetId = text(row.asset_id);
+    const label = text(row.label);
+    const reason = text(row.reason);
+    if (!assetId || !label || !reason) continue;
+    result.push({
+      assetId,
+      channel,
+      label,
+      eligible: false,
+      reason,
+      subscriptionTargetId: assetId,
+      // Never decrypted: subscribe() refuses an ineligible asset before it reads this envelope.
+      credentialEnvelope: encrypt("demo-ineligible-asset", environment),
+    });
+  }
+  return result;
+}
+
 export function createMetaOAuthService(
   configuration: MetaOAuthConfiguration,
   {
@@ -402,6 +510,7 @@ export function createMetaOAuthService(
             channel,
             label: text(page.name) ?? "Facebook Page",
             eligible: true,
+            reason: null,
             subscriptionTargetId: pageId,
             credentialEnvelope: encrypt(pageToken, environment),
           });
@@ -414,11 +523,15 @@ export function createMetaOAuthService(
             channel,
             label: text(instagram?.name) ?? "Instagram account",
             eligible: true,
+            reason: null,
             subscriptionTargetId: pageId,
             credentialEnvelope: encrypt(pageToken, environment),
           });
         }
       }
+      discovered.push(
+        ...demoIneligibleAssets(accountsPayload?.demo_ineligible_assets, channel, encrypt, environment),
+      );
       const saved = await repositories.saveSession({
         tenantId: expectedTenant,
         actorId: expectedActor,
@@ -432,11 +545,12 @@ export function createMetaOAuthService(
       return {
         sessionId: saved.sessionId,
         returnPath: state.returnPath,
-        assets: discovered.map(({ assetId, channel: assetChannel, label, eligible }) => ({
+        assets: discovered.map(({ assetId, channel: assetChannel, label, eligible, reason }) => ({
           assetId,
           channel: assetChannel,
           label,
           eligible,
+          reason,
         })),
       };
     },
@@ -492,6 +606,25 @@ export function createMockMetaOAuthService(dependencies: MetaOAuthDependencies) 
   });
 }
 
+/**
+ * The demo tenant's Meta OAuth service: the mock driver's token exchange and inspection, with
+ * `/me/accounts` discovery replaced by the fixed, realistic Reid Capital Coaching asset set (one
+ * eligible Page/Instagram pair, one ineligible asset per channel) instead of the generic "Demo
+ * Page" fixture `createMockMetaOAuthService` returns.
+ *
+ * Selecting this over `createMockMetaOAuthService` is never driven by `SETTERFI_META_DRIVER` --
+ * it is wired directly wherever the caller has already confirmed, from `tenants.is_demo`, that the
+ * acting tenant is the demo tenant. See `metaConnectAvailability` for the read a non-OAuth caller
+ * (Setup) uses to answer the same question.
+ */
+export function createDemoMockMetaOAuthService(dependencies: MetaOAuthDependencies) {
+  const configuration = demoMockConfiguration();
+  return createMetaOAuthService(configuration, {
+    ...dependencies,
+    fetch: demoMockFetch(configuration),
+  });
+}
+
 export function selectMetaOAuthService({
   environment = process.env,
   dependencies,
@@ -531,4 +664,20 @@ export function metaOAuthStartAvailable(environment: EnvironmentSource = process
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether Setup may offer a "Connect" control, for a caller that already knows the tenant.
+ *
+ * The demo tenant reads `"ready"` unconditionally -- it never depends on `SETTERFI_META_DRIVER`
+ * or the Meta credential env, because `POST /api/channels/meta/connect` selects the demo mock
+ * service for a demo tenant regardless of either. A real tenant falls through to the existing
+ * env-only answer, so this changes nothing for it.
+ */
+export function metaConnectAvailability(
+  tenant: { isDemo: boolean },
+  environment: EnvironmentSource = process.env,
+): "ready" | "awaiting_meta" {
+  if (tenant.isDemo) return "ready";
+  return metaOAuthStartAvailable(environment) ? "ready" : "awaiting_meta";
 }

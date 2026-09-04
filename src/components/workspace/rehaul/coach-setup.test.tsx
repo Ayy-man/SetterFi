@@ -2,16 +2,28 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { STEP_LABELS } from "@/components/onboarding/view-models";
+import type { ProvisioningStep } from "@/lib/onboarding/contracts";
 import {
   CoachSetup,
   coachSetupAccentRow,
+  coachSetupBlockedNames,
   coachSetupChannels,
   coachSetupSteps,
   type CoachSetupChannelRead,
   type CoachSetupRead,
 } from "@/components/workspace/rehaul/coach-setup";
+
+/*
+ * The connect button opens its sheet through the app router's `refresh`, and the test renderer
+ * mounts no router. The mock is the same shape `coach-inbox.test.tsx` uses.
+ */
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
+}));
 
 const NOW = new Date("2026-09-04T15:00:00.000Z");
 
@@ -34,6 +46,7 @@ function channel(overrides: Partial<CoachSetupChannelRead> = {}): CoachSetupChan
  */
 function read(overrides: Partial<CoachSetupRead> = {}): CoachSetupRead {
   return {
+    blocked: { checked: true, steps: [] },
     business: { checked: true, completedAt: "2026-08-28T14:00:00.000Z" },
     calendar: { checked: true, connected: false, name: null, needsReconnect: false },
     carrier: { kind: "in-review", submittedAt: "2026-08-21T14:00:00.000Z" },
@@ -285,6 +298,78 @@ describe("CoachSetup, what the page says and what it no longer carries", () => {
     const sizes = [...source.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/gu)].map((m) => Number(m[1]));
     expect(sizes.length).toBeGreaterThan(4);
     expect(sizes.filter((size) => size < 14)).toEqual([]);
+  });
+});
+
+describe("a step the runner stopped, which is what Home links here to show", () => {
+  /*
+   * The defect this covers, found 2026-09-04: Home's status line said "1 step is waiting on you"
+   * and drew an "Opt-in pages / Blocked / Fix this step" rung linking to `/coach/get-started`,
+   * while Setup's header said nothing was waiting and carried no such row anywhere. A coach was
+   * sent to fix a step the destination did not show. Both surfaces read `provisioning_steps` now,
+   * and the names come from the same `STEP_LABELS` map Home names its rung from.
+   */
+  const blocked = (key: ProvisioningStep, stoppedAt: string | null = "2026-09-03T17:34:30.000Z") =>
+    read({ blocked: { checked: true, steps: [{ key, stoppedAt }] } });
+
+  it("shows the stopped step as a row, under the name Home gives it", () => {
+    render(<CoachSetup now={NOW} read={blocked("optin_artifact")} />);
+    const row = screen.getByText("Opt-in pages").closest("li");
+    expect(row).toBeTruthy();
+    expect(row?.textContent).toContain("Blocked");
+    expect(row?.textContent).toContain("Stopped September 3");
+    expect(STEP_LABELS.optin_artifact).toBe("Opt-in pages");
+  });
+
+  it("names the stopped step in the header sentence instead of saying nothing is waiting", () => {
+    render(
+      <CoachSetup
+        now={NOW}
+        read={{
+          ...blocked("optin_artifact"),
+          calendar: { checked: true, connected: true, name: "Reid", needsReconnect: false },
+          instagram: channel({ liveSince: "2026-08-29T14:00:00.000Z", state: "live" }),
+        }}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "Opt-in pages stopped, and it is ours to fix, not yours. Nothing else is waiting on you.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("presses nothing on a stopped step, because a blocked step offers the coach no retry", () => {
+    render(<CoachSetup now={NOW} read={blocked("optin_artifact")} />);
+    const row = screen.getByText("Opt-in pages").closest("li");
+    expect(row?.querySelectorAll("button, a").length).toBe(0);
+  });
+
+  it("changes the row a stopped step already has rather than drawing that step twice", () => {
+    const rows = coachSetupSteps(blocked("business_profile"), NOW);
+    expect(rows.map((row) => row.name)).toEqual([
+      "Business details",
+      "Carrier review",
+      "Safe test",
+      "Go live",
+    ]);
+    expect(rows[0].pill.label).toBe("Blocked");
+    expect(rows[0].done).toBe(false);
+    expect(coachSetupBlockedNames(blocked("business_profile"))).toEqual(["Business details"]);
+  });
+
+  it("says the day it stopped in words when the row carried no timestamp", () => {
+    const rows = coachSetupSteps(blocked("optin_artifact", null), NOW);
+    const stopped = rows.find((row) => row.key === "blocked:optin_artifact");
+    expect(stopped?.receipt).toBe("The day it stopped was not recorded.");
+  });
+
+  it("draws no stopped row and says nothing about one when the table has none", () => {
+    const rows = coachSetupSteps(read(), NOW);
+    expect(rows).toHaveLength(4);
+    expect(coachSetupBlockedNames(read())).toEqual([]);
+    render(<CoachSetup now={NOW} read={read()} />);
+    expect(screen.queryByText("Blocked")).toBeNull();
   });
 });
 

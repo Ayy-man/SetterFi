@@ -335,7 +335,25 @@ function systemLine(
   const stamp = messageStamp(message.createdAt, options.nowIso);
   const takeover = /took over/u.test(body);
   const text = takeover && options.mine ? "You joined the conversation" : body;
-  return stamp ? `${text}, ${stamp}` : text;
+  /*
+   * The stamp is joined with a comma, so a body that already ends its own sentence has to give
+   * up the full stop or the line reads "A person joined this conversation., yesterday 7:04 pm".
+   * The backend writes some of these lines and the trigger writes others, so the sentence can end
+   * either way and the join is the only place that knows a clause is coming after it.
+   */
+  if (!stamp) return text;
+  return `${text.replace(/[.\u2026]+$/u, "")}, ${stamp}`;
+}
+
+/**
+ * Which of the thread's three voices a message is in, or null for anything that is not a bubble.
+ * A system line or a note between two of the lead's messages leaves the run unbroken, which is
+ * why this returns null for them rather than a fourth voice.
+ */
+function voiceOf(message: ConversationMessageRead | undefined) {
+  if (!message || message.direction === "system") return null;
+  if (message.direction !== "out") return "lead";
+  return message.author.startsWith("human") ? "you" : "agent";
 }
 
 function isTakeover(message: ConversationMessageRead) {
@@ -1034,18 +1052,18 @@ export function CoachInbox({
                   composer.
                 */}
                 <div
-                  className="flex min-h-0 flex-1 flex-col gap-[16px] overflow-auto px-[16px] py-[24px] sm:px-[28px]"
+                  className="flex min-h-0 flex-1 flex-col gap-[12px] overflow-auto px-[16px] py-[24px] sm:px-[28px]"
                   ref={transcriptRef}
                 >
-                  {selected.messages.map((message) => {
+                  {selected.messages.map((message, index) => {
                     if (isNote(message)) {
                       return (
                         <div
-                          className="self-center rounded-[12px] border border-dashed border-[var(--line)] bg-[var(--well)] px-[16px] py-[12px] text-[16px] text-[color:var(--body)]"
+                          className="mt-[8px] max-w-[86%] self-center rounded-[14px] border border-dashed border-[var(--thread-you-edge)] bg-[var(--thread-you)] px-[16px] py-[14px] text-[17px] leading-[1.5] text-[color:var(--thread-lead-ink)] sm:max-w-[62%]"
                           key={message.id}
                         >
                           {displayText(message.body)}
-                          <p className="m-0 mt-[8px] text-[14px] text-[color:var(--muted)]">
+                          <p className="m-0 mt-[8px] text-[14px] text-[color:var(--thread-lead-meta)]">
                             Your note, only you see this
                             {messageStamp(message.createdAt, nowIso)
                               ? `, ${messageStamp(message.createdAt, nowIso)}`
@@ -1057,14 +1075,14 @@ export function CoachInbox({
                     if (message.direction === "system") {
                       return (
                         <div className="flex items-center gap-[14px] py-[4px]" key={message.id}>
-                          <span className="h-px flex-1 bg-[var(--line-soft)]" />
-                          <span className="max-w-[62%] text-center text-[15px] text-[color:var(--muted)]">
+                          <span className="h-px flex-1 bg-[var(--line)]" />
+                          <span className="max-w-[74%] text-center text-[15px] leading-[1.5] text-balance text-[color:var(--thread-system)]">
                             {systemLine(message, {
                               mine: heldByViewer && message.id === lastTakeoverId,
                               nowIso,
                             })}
                           </span>
-                          <span className="h-px flex-1 bg-[var(--line-soft)]" />
+                          <span className="h-px flex-1 bg-[var(--line)]" />
                         </div>
                       );
                     }
@@ -1078,20 +1096,55 @@ export function CoachInbox({
                           : "Someone on your team"
                         : "Your agent";
                     const stamp = messageStamp(message.createdAt, nowIso);
+                    /*
+                     * Three treatments, not two, and told apart by colour rather than by side
+                     * alone. A coach scanning a thread has to know who said a line without
+                     * working out which edge it is nearer, and a person's reply is a different
+                     * kind of thing from the agent's: the thread already records that a person
+                     * joined, so their bubbles are outlined rather than given a third fill.
+                     */
+                    const voice = !outbound ? "lead" : byHuman ? "you" : "agent";
+                    /*
+                     * 12px inside a speaker's run and 20px where the speaker changes, which is
+                     * the spacing that lets a run read as one turn rather than as four separate
+                     * ones. The container carries the 12; a bubble that opens a new turn adds
+                     * the other 8 itself, so a system line or a note between two messages keeps
+                     * its own rhythm rather than being counted as a speaker.
+                     */
+                    const opensTurn = voiceOf(selected.messages[index - 1]) !== voice;
                     return (
                       <div
                         className={[
-                          "max-w-[86%] px-[18px] py-[14px] sm:max-w-[62%]",
-                          outbound
-                            ? "self-end rounded-[16px_16px_5px_16px] border border-[var(--accent-edge)] bg-[var(--accent-wash-strong)]"
-                            : "self-start rounded-[16px_16px_16px_5px] border border-[var(--line-input)] bg-[var(--raised)] shadow-[var(--shadow-card)]",
+                          "max-w-[86%] px-[16px] py-[14px] sm:max-w-[62%]",
+                          opensTurn ? "mt-[8px]" : "",
+                          voice === "lead"
+                            ? "self-start rounded-[14px_14px_14px_5px] border border-[var(--thread-lead-edge)] bg-[var(--thread-lead)]"
+                            : voice === "agent"
+                              ? "self-end rounded-[14px_14px_5px_14px] border border-[var(--thread-agent-edge)] bg-[var(--thread-agent)]"
+                              : "self-end rounded-[14px_14px_5px_14px] border-2 border-[var(--thread-you-edge)] bg-[var(--thread-you)]",
                         ].join(" ")}
+                        data-voice={voice}
                         key={message.id}
                       >
-                        <p className="m-0 text-[16px] leading-[1.5] text-[color:var(--ink)]">
+                        <p
+                          className={[
+                            "m-0 text-[17px] leading-[1.5]",
+                            voice === "agent"
+                              ? "text-[color:var(--thread-agent-ink)]"
+                              : "text-[color:var(--thread-lead-ink)]",
+                          ].join(" ")}
+                        >
                           {displayText(message.body)}
                         </p>
-                        <p className="m-0 mt-[8px] text-[14px] text-[color:var(--muted)]">
+                        <p
+                          className={[
+                            "m-0 mt-[8px] text-[14px]",
+                            voice === "agent"
+                              ? "text-[color:var(--thread-agent-meta)]"
+                              : "text-[color:var(--thread-lead-meta)]",
+                          ].join(" ")}
+                          data-slot="inbox-stamp"
+                        >
                           {stamp ? `${sender}, ${stamp}` : sender}
                         </p>
                       </div>
@@ -1104,13 +1157,13 @@ export function CoachInbox({
                   */}
                   {stopped ? (
                     <div className="flex items-center gap-[14px] py-[4px]" data-slot="inbox-stop">
-                      <span className="h-px flex-1 bg-[var(--line-soft)]" />
-                      <span className="max-w-[62%] text-center text-[15px] text-[color:var(--muted)]">
+                      <span className="h-px flex-1 bg-[var(--line)]" />
+                      <span className="max-w-[74%] text-center text-[15px] leading-[1.5] text-balance text-[color:var(--thread-system)]">
                         Your agent stopped here.
                         {" "}
                         {handoff?.behaviour ?? "No reason for the handoff is recorded."}
                       </span>
-                      <span className="h-px flex-1 bg-[var(--line-soft)]" />
+                      <span className="h-px flex-1 bg-[var(--line)]" />
                     </div>
                   ) : null}
                 </div>

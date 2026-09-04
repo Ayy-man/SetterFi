@@ -4,6 +4,7 @@ import { loadRouteActor, type RouteActor } from "@/lib/auth/actors";
 import { hasImpersonationMarker } from "@/lib/auth/claims";
 import { phase4Live } from "@/lib/env-contract";
 import {
+  createDemoMockMetaOAuthService,
   selectMetaOAuthService,
   MetaOAuthError,
   type MetaOAuthRepositories,
@@ -16,6 +17,7 @@ import {
   encryptCredential,
   type CredentialEnvelopeV1,
 } from "@/lib/integrations/credential-envelope";
+import { isDemoTenant } from "@/lib/repositories/tenant-demo-flag";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 const noStoreHeaders = { "Cache-Control": "no-store" };
@@ -62,7 +64,7 @@ function parseStoredSession(value: string): StoredSession | null {
   }
 }
 
-function createMetaOAuthRepositories(): MetaOAuthRepositories & {
+function createMetaOAuthRepositories(options: { isDemo: boolean } = { isDemo: false }): MetaOAuthRepositories & {
   channelForState(
     oauthState: string,
     tenantId: string,
@@ -106,6 +108,7 @@ function createMetaOAuthRepositories(): MetaOAuthRepositories & {
           provider: "meta_direct",
           state: "connecting",
           external_ref: { oauth_state_hash: record.stateHash },
+          is_test: options.isDemo,
         })
         .select("id")
         .single();
@@ -270,10 +273,21 @@ function createMetaOAuthRepositories(): MetaOAuthRepositories & {
   };
 }
 
-export function createLiveMetaOAuth(): LiveMetaOAuth {
-  const repositories = createMetaOAuthRepositories();
+/**
+ * The live Meta OAuth wiring, with one caller-supplied override: `isDemo`.
+ *
+ * A demo tenant never reaches `selectMetaOAuthService` -- which reads `SETTERFI_META_DRIVER` and
+ * the Meta credential env, neither of which the demo path is allowed to depend on -- and instead
+ * always gets `createDemoMockMetaOAuthService`. Every caller resolves `isDemo` the same way,
+ * from `tenants.is_demo` for the acting tenant (`isDemoTenant`), before it calls this.
+ */
+export function createLiveMetaOAuth(options: { isDemo?: boolean } = {}): LiveMetaOAuth {
+  const isDemo = options.isDemo === true;
+  const repositories = createMetaOAuthRepositories({ isDemo });
   return {
-    service: selectMetaOAuthService({ dependencies: { repositories } }),
+    service: isDemo
+      ? createDemoMockMetaOAuthService({ repositories })
+      : selectMetaOAuthService({ dependencies: { repositories } }),
     channelForState: repositories.channelForState,
     loadSession: repositories.loadSession,
   };
@@ -333,7 +347,29 @@ export function createMetaConnectHandler(dependencies: MetaConnectDependencies) 
   };
 }
 
+/**
+ * The relative path the simulated sign-in page lives at. `begin()` still saves a real state row,
+ * PKCE verifier, and expiry -- only the destination the coach's browser is sent to changes, from
+ * `facebook.com` to this in-app page. Relative (no origin) on purpose: the request that follows
+ * -- the coach's browser navigating there -- resolves it against whatever origin served this
+ * response, exactly like the facebook.com URL would have redirected back to this deployment's own
+ * callback route.
+ */
+function demoAuthorizationUrl(channel: "instagram" | "messenger", oauthState: string) {
+  return `/demo/meta-login?channel=${channel}&state=${encodeURIComponent(oauthState)}`;
+}
+
 export const POST = createMetaConnectHandler({
   session: loadRouteActor,
-  begin: async (input) => createLiveMetaOAuth().service.begin(input),
+  begin: async (input) => {
+    const isDemo = await isDemoTenant(input.tenantId);
+    const result = await createLiveMetaOAuth({ isDemo }).service.begin(input);
+    return {
+      authorizationUrl: isDemo
+        ? demoAuthorizationUrl(input.channel, result.oauthState)
+        : result.authorizationUrl,
+      expiresAt: result.expiresAt,
+      state: result.state,
+    };
+  },
 });

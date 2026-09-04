@@ -2,6 +2,8 @@
 
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import Link from "next/link";
+
+import { ConnectChannelButton } from "@/components/workspace/rehaul/connect-channel-button";
 import { useSyncExternalStore } from "react";
 
 import { DayCounter, elapsedWorkspaceDays } from "@/components/kit/day-counter";
@@ -431,9 +433,9 @@ function FirstRun({
   const rungs: Rung[] = [
     {
       action: channelsLive ? undefined : (
-        <Link className={RUNG_ACTION_PRIMARY} href="/coach/integrations">
+        <ConnectChannelButton channels={["instagram", "messenger"]} className={RUNG_ACTION_PRIMARY}>
           Connect Instagram and Messenger
-        </Link>
+        </ConnectChannelButton>
       ),
       done: channelsLive,
       eyebrow: "Your channels",

@@ -4,6 +4,8 @@ import { META_SESSION_COOKIE } from "@/app/api/channels/meta/callback/handler";
 import { createLiveMetaOAuth } from "@/app/api/channels/meta/connect/handler";
 import { phase4Live } from "@/lib/env-contract";
 import type { MetaOAuthSessionRecord } from "@/lib/integrations/meta-oauth";
+import { promoteDemoMetaConnectionToLive } from "@/lib/repositories/meta-demo-promotion";
+import { isDemoTenant } from "@/lib/repositories/tenant-demo-flag";
 
 const noStoreHeaders = { "Cache-Control": "no-store" };
 
@@ -78,11 +80,12 @@ export function createMetaAssetsHandlers(dependencies: MetaAssetsDependencies) {
           });
         }
         return Response.json({
-          items: authorized.oauth.assets.map(({ assetId, channel, label, eligible }) => ({
+          items: authorized.oauth.assets.map(({ assetId, channel, label, eligible, reason }) => ({
             assetId,
             channel,
             label,
             eligible,
+            reason,
           })),
         }, { headers: noStoreHeaders });
       } catch (cause) {
@@ -132,6 +135,29 @@ export function createMetaAssetsHandlers(dependencies: MetaAssetsDependencies) {
           sessionId: authorized.sessionId,
           assetId: body.assetId,
         });
+        /*
+         * Demo only: a real tenant's connection stays at `ready` until an actual inbound and
+         * outbound message clear the webhook. The demo tenant has no such round trip coming, so
+         * it is written here with a synthetic but genuine (is_test) receipt chain -- see
+         * promoteDemoMetaConnectionToLive for why that has to be real rows, not a fabricated id.
+         * A failure here does not undo the subscription: the coach still gets a `ready`
+         * connection, just not yet promoted to `live`.
+         */
+        if (await isDemoTenant(actor.tenantId)) {
+          const selectedAsset = authorized.oauth.assets.find((asset) => asset.assetId === body.assetId);
+          await promoteDemoMetaConnectionToLive({
+            tenantId: actor.tenantId,
+            connectionId: result.connectionId,
+            channel: body.channel,
+            assetId: body.assetId,
+            assetLabel: selectedAsset?.label ?? body.assetId,
+          }).catch((cause) => {
+            console.error(
+              "/api/channels/meta/assets demo promotion failed.",
+              cause instanceof Error ? cause.message : "NON_ERROR_THROWN",
+            );
+          });
+        }
         return Response.json({ connectionId: result.connectionId, state: result.state }, {
           status: 202,
           headers: noStoreHeaders,
@@ -146,12 +172,17 @@ export function createMetaAssetsHandlers(dependencies: MetaAssetsDependencies) {
   };
 }
 
+// loadSession only decrypts and parses the stored session row -- it never calls the Meta
+// service -- so it is demo-agnostic and always uses the default (non-demo) wiring.
 const live = () => createLiveMetaOAuth();
 
 const handlers = createMetaAssetsHandlers({
   session: loadRouteActor,
   loadSession: (sessionId) => live().loadSession(sessionId),
-  subscribe: (input) => live().service.subscribe(input),
+  subscribe: async (input) => {
+    const isDemo = await isDemoTenant(input.tenantId);
+    return createLiveMetaOAuth({ isDemo }).service.subscribe(input);
+  },
 });
 
 export const GET = handlers.GET;

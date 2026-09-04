@@ -18,6 +18,15 @@ import { DEMO_SETUP_OVERRIDE_KEY, DEMO_SETUP_OVERRIDE_MS } from "@/lib/demo-setu
 
 import { CoachDashboard, type CoachDashboardProps } from "./coach-dashboard";
 
+/*
+ * The connect button opens its sheet through the app router's `refresh`, and the test renderer
+ * mounts no router. The mock is the same shape `coach-inbox.test.tsx` uses.
+ */
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
+}));
+
 const NOW = new Date("2026-09-03T12:00:00.000Z");
 
 function metric(key: MetricKey) {

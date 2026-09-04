@@ -5,8 +5,11 @@ import { describe, expect, it } from "vitest";
 import { realArmSkipReason } from "@/lib/env-contract";
 
 import {
+  createDemoMockMetaOAuthService,
   createMetaOAuthService,
   createMockMetaOAuthService,
+  DEMO_META_AUTHORIZATION_CODE,
+  metaConnectAvailability,
   metaOAuthStartAvailable,
   selectMetaOAuthService,
   validateMetaReturnPath,
@@ -86,6 +89,7 @@ describe("Meta OAuth state and asset flow", () => {
         channel: "instagram",
         label: "Demo Instagram",
         eligible: true,
+        reason: null,
       }],
     });
     await expect(service.subscribe({

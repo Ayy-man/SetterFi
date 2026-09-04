@@ -309,6 +309,116 @@ describe("CoachInbox", () => {
     expect(screen.getByText("You joined the conversation, today 7:52 am")).toBeInTheDocument();
   });
 
+  /*
+   * The thread's three voices.
+   *
+   * The user read the dark thread on 2026-09-04 and could not tell the two speakers apart: both
+   * bubbles were dark navy on a darker navy ground, so which side a bubble sat on was the only
+   * signal. The fix is colour, and the rule these two tests pin is that each voice carries its
+   * own named surface rather than a side plus a shared fill -- a regression that goes back to one
+   * fill for both would still place the bubbles correctly and would still be the reported bug.
+   */
+  it("gives the lead, the agent and a person's own reply three different surfaces", () => {
+    renderInbox({
+      rows: [conversation({
+        status: "human",
+        statusReason: null,
+        takenOverBy: "coach-1",
+        messages: [
+          {
+            id: "message-one",
+            direction: "in",
+            author: "lead",
+            body: "Is the credit rebuild included if I sign up?",
+            createdAt: "2026-09-03T11:48:00.000Z",
+            delivered: true,
+          },
+          {
+            id: "message-two",
+            direction: "out",
+            author: "agent",
+            body: "It is, and I can show you the plan.",
+            createdAt: "2026-09-03T11:50:00.000Z",
+            delivered: true,
+          },
+          {
+            id: "message-three",
+            direction: "out",
+            author: "human:coach-1",
+            body: "Reid here, happy to walk you through it.",
+            createdAt: "2026-09-03T11:55:00.000Z",
+            delivered: true,
+          },
+        ],
+      })],
+      viewIds: ["one"],
+    });
+
+    const voices = [...document.querySelectorAll("[data-voice]")].map((element) => ({
+      voice: element.getAttribute("data-voice"),
+      className: element.className,
+    }));
+    expect(voices.map((entry) => entry.voice)).toEqual(["lead", "agent", "you"]);
+
+    const fillOf = (voice: string) => {
+      const found = voices.find((entry) => entry.voice === voice);
+      return (found?.className.match(/bg-\[var\(--[a-z-]+\)\]/u) ?? [])[0];
+    };
+    expect(fillOf("lead")).toBe("bg-[var(--thread-lead)]");
+    expect(fillOf("agent")).toBe("bg-[var(--thread-agent)]");
+    expect(fillOf("you")).toBe("bg-[var(--thread-you)]");
+    // Three surfaces, and no two of them the same, which is the whole of the reported complaint.
+    expect(new Set([fillOf("lead"), fillOf("agent"), fillOf("you")]).size).toBe(3);
+  });
+
+  it("sets the thread at 17px over 1.5 leading and keeps the time line at 14", () => {
+    renderInbox();
+
+    const bubble = document.querySelector("[data-voice]");
+    const body = bubble?.querySelector("p");
+    expect(body?.className).toContain("text-[17px]");
+    expect(body?.className).toContain("leading-[1.5]");
+    expect(
+      bubble?.querySelector('[data-slot="inbox-stamp"]')?.className,
+    ).toContain("text-[14px]");
+  });
+
+  /*
+   * The join, not the sentence. The backend writes some of these lines and a trigger writes
+   * others, so a body can arrive already ending in a full stop; appending ", <time>" to it read
+   * "A person joined this conversation., yesterday 7:04 pm" on the screen the user sent back.
+   */
+  it("joins a system line to its time without leaving the body's own full stop", () => {
+    renderInbox({
+      rows: [conversation({
+        messages: [
+          {
+            id: "message-one",
+            direction: "in",
+            author: "lead",
+            body: "Is the credit rebuild included if I sign up?",
+            createdAt: "2026-09-03T11:48:00.000Z",
+            delivered: true,
+          },
+          {
+            id: "message-two",
+            direction: "system",
+            author: "system",
+            body: "A person joined this conversation.",
+            createdAt: "2026-09-03T11:52:00.000Z",
+            delivered: false,
+          },
+        ],
+      })],
+      viewIds: ["one"],
+    });
+
+    expect(
+      screen.getByText("A person joined this conversation, today 7:52 am"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/conversation\., /u)).not.toBeInTheDocument();
+  });
+
   it("says why the agent stopped, in the words of the rule the run recorded", () => {
     renderInbox();
 

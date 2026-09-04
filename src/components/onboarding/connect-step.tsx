@@ -11,6 +11,7 @@ import {
   nextStepHref,
 } from "@/components/onboarding/step-shell";
 import type { ConnectCard } from "@/components/onboarding/connect-view-models";
+import { ConnectChannelButton } from "@/components/workspace/rehaul/connect-channel-button";
 import { CARRIER_TYPICAL_DAYS } from "@/lib/onboarding/contracts";
 
 /*
@@ -54,7 +55,7 @@ type ChannelRow = {
   icon: ReactNode;
   sentence: string;
   pill: { label: string; tone: Tone } | null;
-  action: { href: string; label: string } | null;
+  action: { href: string; label: string; channel?: "instagram" | "messenger" } | null;
 };
 
 export function ConnectStep({ calendarReady, cards }: ConnectStepProps) {
@@ -123,7 +124,14 @@ export function ConnectStep({ calendarReady, cards }: ConnectStepProps) {
                 </p>
               </div>
 
-              {row.action ? (
+              {row.action?.channel ? (
+                <ConnectChannelButton
+                  channels={[row.action.channel]}
+                  className={`${STEP_SECONDARY_CLASS} w-full sm:w-auto sm:flex-none`}
+                >
+                  {row.action.label}
+                </ConnectChannelButton>
+              ) : row.action ? (
                 <Link
                   className={`${STEP_SECONDARY_CLASS} w-full sm:w-auto sm:flex-none`}
                   href={row.action.href}

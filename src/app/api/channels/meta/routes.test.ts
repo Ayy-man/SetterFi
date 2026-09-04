@@ -168,6 +168,7 @@ describe("Meta OAuth route composition", () => {
         channel: "messenger",
         label: "Demo Page",
         eligible: true,
+        reason: null,
       }],
     });
     expect(JSON.stringify(discovered)).not.toMatch(/token|verifier|secret|ciphertext/i);
