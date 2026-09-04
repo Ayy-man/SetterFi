@@ -469,9 +469,22 @@ async function seedOperationalRows(database) {
  * Idempotent the same way: a `demoSeed` marker on the draft/snapshot payload is looked up first,
  * and nothing here is written twice.
  */
+/**
+ * The platform prompt the demo snapshot carries. Every snapshot needs one: the runtime refuses a
+ * snapshot whose compiled platform is empty (`RUNTIME_BRAIN_COMPILED_PLATFORM_INVALID`), and the
+ * first cut of this seed published without it, which refused every agent turn on the hosted
+ * database from 2026-09-02 until it was republished. Synthetic, like Phase 2's, because the demo
+ * has no real Brain compile; the engine adds its own invariants around it.
+ */
+export const PHASE7_DEMO_COMPILED_PLATFORM =
+  "[SYNTHETIC PLATFORM]\nUse only verified local demo content.";
+
 async function seedBrainObjectionUsage(database) {
   const payload = {
     demoSeed: "phase7-objections",
+    compiledPlatform: PHASE7_DEMO_COMPILED_PLATFORM,
+    platformTokens: 12,
+    knowledgeMode: "inline",
     entities: [
       {
         type: "brain_objection",
@@ -498,7 +511,7 @@ async function seedBrainObjectionUsage(database) {
     ],
   };
   let draft = (await database.query(
-    "select id, content_hash from public.brain_draft_versions where payload ->> 'demoSeed' = 'phase7-objections' order by created_at limit 1",
+    "select id, content_hash from public.brain_draft_versions where payload ->> 'demoSeed' = 'phase7-objections' and nullif(payload ->> 'compiledPlatform', '') is not null order by created_at limit 1",
   )).rows[0];
   if (!draft) {
     const hash = (await database.query(
@@ -521,7 +534,8 @@ async function seedBrainObjectionUsage(database) {
     )).rows[0].id;
   }
   let snapshot = (await database.query(
-    "select id from public.brain_snapshots where payload ->> 'demoSeed' = 'phase7-objections' order by version limit 1",
+    // Only a snapshot with a platform prompt counts as seeded; the empty one is superseded.
+    "select id from public.brain_snapshots where payload ->> 'demoSeed' = 'phase7-objections' and nullif(compiled_platform, '') is not null order by version limit 1",
   )).rows[0];
   if (!snapshot) {
     snapshot = (await database.query(

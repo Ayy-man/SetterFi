@@ -120,6 +120,9 @@ export function createLiveAgentHandler(dependencies: LiveAgentDependencies) {
       }), { headers: NO_STORE_HEADERS });
     } catch (error) {
       if (error instanceof DriverConfigurationError) return configurationResponse(error);
+      // The coach sees one sentence; the cause goes to the server log, because a refusal with no
+      // recorded reason is undiagnosable from the outside.
+      console.error("[test-agent] turn refused", error instanceof Error ? error.message : error);
       return Response.json(
         { error: "The test agent refused that turn.", code: "TEST_AGENT_TURN_REFUSED" },
         { status: 400, headers: NO_STORE_HEADERS },
