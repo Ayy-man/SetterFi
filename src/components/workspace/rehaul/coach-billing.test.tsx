@@ -149,12 +149,12 @@ describe("CoachBillingRehaul, against Billing.dc.html", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
-  it("posts the coach's words as the reason, anchored to the latest billed call", async () => {
+  it("posts the coach's words as a period-level request, with no event and no delta", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => new Response(
       JSON.stringify(
         String(input).includes("/api/billing/checkout")
           ? activeCheckout
-          : { result: { state: "requested", requestId: "req-1", requestAuditId: 7 } },
+          : { result: { requestId: "req-1", auditId: 7 } },
       ),
       { headers: { "Content-Type": "application/json" }, status: 200 },
     ));
@@ -172,21 +172,59 @@ describe("CoachBillingRehaul, against Billing.dc.html", () => {
       .map(([, init]) => init)
       .filter((init): init is RequestInit => Boolean(init?.body))
       .map((init) => JSON.parse(String(init.body)));
+    /*
+     * `request_period_correction` and nothing else. The card used to anchor the request to a
+     * billable event because the route demanded one; the route carries the artboard's shape now,
+     * so an event id or a quantity delta appearing here again is a regression to that workaround.
+     */
     expect(posted).toContainEqual({
-      action: "request_correction",
-      eventId: "event-1",
-      quantityDelta: -1,
+      action: "request_period_correction",
       reason: "Two of these were the same person.",
     });
   });
 
-  it("says there is nothing to correct when no call was billed this period", () => {
-    draw({ correctionCandidates: [] });
+  /*
+   * The right column used to be an 84px stub beside a 300px plan card, which is two thirds of a
+   * column of bare ground. The body is sentences rather than a second figure, because the record
+   * carries no second figure for this column and inventing one is the defect the rebuild is
+   * against.
+   */
+  it("carries a body that earns the row height, with no figure the read does not hold", () => {
+    const { container } = draw();
 
+    const body = container.querySelector('[data-slot="billing-correction-body"]');
+    expect(body?.textContent).toContain("counts once, whether or not the lead turned up");
+    expect(body?.textContent).toContain("belong to an earlier period");
+    expect(body?.textContent).toContain("a person checks it against your conversations");
+    // The plan card owns the count and the reset date. Neither is restated here.
+    expect(body?.textContent).not.toContain("Resets");
+    expect(body?.textContent).not.toContain("of 25");
+  });
+
+  it("states how many notices went out, without reopening the notices list", () => {
+    const notice = {
+      id: "notice-1",
+      kind: "warning",
+      state: "sent",
+      deliveryReceiptId: "receipt-1",
+      billingContactSource: "tenant billing contact",
+    } as const;
+    const { container } = draw({ notices: [notice, { ...notice, id: "notice-2" }] });
+
+    expect(container.querySelector('[data-slot="billing-correction-notices"]')?.textContent)
+      .toContain("2 allowance notices went to your billing contact this period.");
+    // Delivered notices are not outstanding, so the plan card's one line stays away.
+    expect(container.querySelector('[data-slot="billing-notice"]')).toBeNull();
+  });
+
+  it("still offers the correction box on a period with no billed call in it", () => {
+    draw({ bookedCount: 0, correctionCandidates: [] });
+
+    expect(screen.getByRole("heading", { level: 2, name: "Does 0 look wrong?" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "This count looks wrong" }));
 
-    expect(screen.getByText("No billed calls are recorded for this period yet.")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /Send to support/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/What should the count be/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Send to support/ })).toBeVisible();
   });
 
   /* Two large buttons per row and no third one. Skip was the form asking about itself. */

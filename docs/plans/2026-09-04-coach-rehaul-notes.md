@@ -227,8 +227,11 @@ Four things and nothing else, in the artboard's order.
    plan** as the page's one filled button. Body: the allowance as a 62px mono figure with `of 75`
    beside it and the phrase under it ("Booked calls this billing period. Resets October 3."). A
    three-up footer carries the cost with its cadence, the current period, and the overage rate.
-2. **"Does N look wrong?"**, top right. The band holds one secondary button, "This count looks
-   wrong", which opens a labelled text box and a "Send to support" button. Nothing else.
+2. **"Does N look wrong?"**, top right, the same height as the plan card beside it. The band
+   holds one secondary button, "This count looks wrong", which opens a labelled text box and a
+   "Send to support" button. Under it, three sentences saying what goes into the count, which
+   window it covers, and what the button does, plus one more when the period sent any allowance
+   notices.
 3. **"How did these appointments go?"**, full width. One row per unanswered appointment, name over
    the time, with **Showed** and **No-show** at 48px each, then the calls the coach already
    answered this period in the same row shape with the answer where the buttons were, read only.
@@ -308,14 +311,38 @@ card says so in the figure's slot ("No calls are listed here. This is a demo wor
 bookings are marked as test data and never billed.") using `snapshot.isDemo`, and a real workspace
 with nothing waiting gets the plain sentence instead. Nothing was seeded to fill either.
 
+### The right column, and the correction request that stopped needing a workaround
+
+The row shipped with a 300px plan card beside an 84px stub, so two thirds of the right column was
+bare ground. The rule is equal card heights per row, and the honest way to earn the height is
+sentences rather than a second figure: the record carries no second figure for this column, and
+inventing one is the defect the whole rebuild is against. So the card now always carries a body,
+and the grid is `items-stretch` rather than `items-start`.
+
+The three sentences are chosen so none of them is already on the screen. The plan card owns the
+count and the reset date; these say what goes into the count ("Every appointment your agent booked
+counts once, whether or not the lead turned up"), which window it covers, counted off
+`periodStart`, and what pressing the button does. The reset date is deliberately **not** restated
+here even though it is a natural fourth: it is the last clause of the plan card's own phrase, and
+each fact appears once on a screen. When the period sent any allowance notices a fourth sentence
+counts them, which is `SIMPLIFICATION-SPEC` 2.8's one sentence rather than the notices list it
+kills, and a different fact from the plan card's line, which is about one failing to arrive.
+
+The same pass removed the anchoring workaround. `request_correction` demanded an `eventId` and a
+signed `quantityDelta` that a coach describing a problem in words cannot supply, so the card filed
+against the most recent billable call and said so under the box. That was reported as a gap and
+`request_period_correction` now takes the reason and nothing else, so the sentence is gone with the
+field that forced it and the card works on a period with no billable call in it, which is where
+the workaround was at its worst and is exactly the demo tenant.
+
+Two cascade notes from the same pass, both worth not repeating. `coach-panel__body` with `pb-0` does
+nothing: `coach.css` declares the padding unlayered and a utility in `@layer utilities` loses to
+it, so the cleared line writes the card's gutter out instead. And appending a size onto
+`FOOTNOTE_CLASS` spells `font-size` twice in one class list, which resolves by Tailwind's emit
+order rather than by writing order, so the line at body size is its own constant.
+
 ### Backend gaps for Codex round two
 
-- **A period-level correction request.** `/api/billing/corrections` requires an `eventId` and a
-  non-zero `quantityDelta`, but the artboard's design is a coach describing the problem in words
-  and a person reconciling it against the conversations. The page anchors the request to the most
-  recent billable call in the period and says so under the box, which is honest but is not what is
-  being asked. A `request_correction` that takes a period and a reason with no event and no delta
-  would let the card drop that sentence.
 - **The overage rate** is on the tier and not in `coach_billing_projection`. One field would turn
   the third stat from an absence into the number the artboard drew.
 - **The billing interval.** The projection carries no interval, so the cadence is inferred from

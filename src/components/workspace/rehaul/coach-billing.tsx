@@ -69,8 +69,7 @@ import { money } from "@/lib/format/metric";
  * in the eye.
  */
 export const COACH_BILLING_EYE_COPY =
-  "Answering the attendance question feeds your own analytics; it does not change what you are "
-  + "billed. A correction request is read by a person against the conversations, and the saved "
+  "A correction request is read by a person against the conversations, and the saved "
   + "count does not move until it is decided. Plan changes are arranged with SetterFi and always "
   + "take effect at the start of a billing period. Coming back from Stripe does not prove a "
   + "payment: the plan stays unconfirmed here until Stripe confirms the charge to us.";
@@ -457,7 +456,8 @@ function CorrectionCard({
   snapshot: CoachBillingSnapshot;
 }) {
   const [open, setOpen] = useState(false);
-  const anchor = snapshot.correctionCandidates.at(0) ?? null;
+  const from = formatDate(snapshot.periodStart);
+  const noticeCount = snapshot.notices.length;
 
   return (
     <section
@@ -482,55 +482,73 @@ function CorrectionCard({
         </button>
       </div>
 
-      {open ? (
-        <div className="coach-panel__body gap-[12px]">
-          {anchor ? (
-            <form className="flex flex-col gap-[12px]" onSubmit={onSubmit}>
-              <label className={FIELD_LABEL_CLASS} htmlFor="billing-correction-reason">
-                What should the count be? A person checks it against the conversations.
-              </label>
-              <textarea
-                className={TEXTAREA_CLASS}
-                id="billing-correction-reason"
-                name="reason"
-                placeholder="Tell us what looks wrong"
-                required
-              />
-              <input name="eventId" type="hidden" value={anchor.eventId} />
-              <p className={FOOTNOTE_CLASS}>
-                Filed against {anchor.label}, the latest call in this period. Nothing on your bill
-                moves until a person decides it.
-              </p>
-              <div className="flex justify-end">
-                <LoggedButton
-                  actionKey="billing.correction.requested"
-                  disabled={pending}
-                  scale="coach"
-                  type="submit"
-                  wrapperClassName="items-end"
-                >
-                  {pending ? "Sending" : "Send to support"}
-                </LoggedButton>
-              </div>
-              {receipt ? (
-                <Status
-                  label={AUDIT_ACTIONS["billing.correction.requested"].microcopy}
-                  tone="good"
-                />
-              ) : null}
-            </form>
-          ) : (
-            /*
-              Absence, in the slot the form would fill. A workspace with no billable call in the
-              period has nothing to correct, and an empty box over a Send button would invite a
-              request the route refuses.
-            */
-            <p className="m-0 max-w-[var(--measure-caption)] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]">
-              No billed calls are recorded for this period yet.
+      <div className="coach-panel__body gap-[14px]">
+        {/*
+          What the card is about, said in sentences, because the record carries no second figure
+          for this column and inventing one to fill the height is the defect the whole rebuild is
+          against. Each of these is a fact the plan card does not already print: the plan card
+          says what the count is and when it resets, and these say what goes into it, which window
+          it covers, and what pressing the button does.
+        */}
+        <div className="flex flex-col gap-[10px]" data-slot="billing-correction-body">
+          <p className={FIELD_LABEL_CLASS}>
+            Every appointment your agent booked counts once, whether or not the lead turned up.
+          </p>
+          {from ? (
+            <p className={FIELD_LABEL_CLASS}>
+              Calls booked before {from} belong to an earlier period and are not in this count.
             </p>
-          )}
+          ) : null}
+          {/*
+            The period's notices, as the one sentence `SIMPLIFICATION-SPEC` 2.8 leaves room for
+            rather than the list it kills. Whether one failed to arrive is the plan card's line;
+            this is how many were sent at all, which is a different fact and belongs beside the
+            count they were about.
+          */}
+          {noticeCount > 0 ? (
+            <p className={FIELD_LABEL_CLASS} data-slot="billing-correction-notices">
+              {workspaceCountFormat.format(noticeCount)} allowance{" "}
+              {noticeCount === 1 ? "notice" : "notices"} went to your billing contact this period.
+            </p>
+          ) : null}
+          <p className={FIELD_LABEL_CLASS}>
+            If that does not match your calendar, use the button above. Tell us what you saw and a
+            person checks it against your conversations.
+          </p>
         </div>
-      ) : null}
+
+        {open ? (
+          <form className="mt-auto flex flex-col gap-[12px]" onSubmit={onSubmit}>
+            <label className={FIELD_LABEL_CLASS} htmlFor="billing-correction-reason">
+              What should the count be?
+            </label>
+            <textarea
+              className={TEXTAREA_CLASS}
+              id="billing-correction-reason"
+              name="reason"
+              placeholder="Tell us what looks wrong"
+              required
+            />
+            <div className="flex justify-end">
+              <LoggedButton
+                actionKey="billing.correction.requested"
+                disabled={pending}
+                scale="coach"
+                type="submit"
+                wrapperClassName="items-end"
+              >
+                {pending ? "Sending" : "Send to support"}
+              </LoggedButton>
+            </div>
+            {receipt ? (
+              <Status
+                label={AUDIT_ACTIONS["billing.correction.requested"].microcopy}
+                tone="good"
+              />
+            ) : null}
+          </form>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -596,9 +614,13 @@ function AttendanceCard({
         Nothing to answer, but something to read. The queue being empty is not the same fact as
         the card being empty, so when the coach has already answered every call in the period the
         sentence says only that and the record stays on the page under it.
+
+        The card's gutter is written out rather than `coach-panel__body` with `pb-0`, because the
+        sheet declares padding on that class unlayered, so a utility in `@layer utilities` loses
+        to it and the bottom padding would have stayed whatever the class list said.
       */}
       {prompts.length === 0 && settled.length > 0 ? (
-        <div className="coach-panel__body pb-0">
+        <div className="px-[20px] pt-[20px]">
           <p className={CLEARED_CLASS} data-slot="billing-attendance-cleared">
             Nothing is waiting for an answer.
           </p>
@@ -681,8 +703,7 @@ function AttendanceCard({
 
       <div className="border-t border-[var(--line-soft)] px-[20px] py-[14px]">
         <p className={FOOTNOTE_CLASS}>
-          Every answer is logged. It feeds your own analytics and never changes what you are
-          billed.
+          Every answer is logged, and it feeds your own analytics.
         </p>
       </div>
     </section>
@@ -814,28 +835,30 @@ export function CoachBillingRehaul({
     return payload;
   }
 
+  /*
+   * A period-level request: `request_period_correction` takes the coach's words and nothing else.
+   *
+   * This card used to anchor the request to the most recent billable call and say so under the
+   * box, because `request_correction` demanded an `eventId` and a signed `quantityDelta` that a
+   * coach describing a problem in words has no way to supply. That was reported as a gap and the
+   * route now carries the shape the artboard always drew, so the anchoring sentence is gone with
+   * the field that forced it -- and the card works on a workspace with no billable call in it,
+   * which is where the workaround was at its worst.
+   */
   async function requestCorrection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const data = new FormData(form);
-    const eventId = String(data.get("eventId") ?? "");
-    const reason = String(data.get("reason") ?? "").trim();
-    if (!eventId || !reason) return;
+    const reason = String(new FormData(form).get("reason") ?? "").trim();
+    if (!reason) return;
     setCorrectionPending(true);
     setActionError(null);
     setActionReceipt(null);
     try {
-      const payload = await post({
-        action: "request_correction",
-        eventId,
-        quantityDelta: -1,
-        reason,
-      });
+      const payload = await post({ action: "request_period_correction", reason });
       const result = isRecord(payload.result) ? payload.result : null;
       if (
-        result?.state !== "requested"
-        || typeof result.requestId !== "string"
-        || typeof result.requestAuditId !== "number"
+        typeof result?.requestId !== "string"
+        || typeof result.auditId !== "number"
       ) throw new Error("BILLING_CORRECTION_RECEIPT_INVALID");
       form.reset();
       setActionReceipt(AUDIT_ACTIONS["billing.correction.requested"].microcopy);
@@ -943,7 +966,9 @@ export function CoachBillingRehaul({
 
         {snapshot ? (
           <>
-            <div className="grid min-w-0 items-start gap-[24px] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            {/* Not `items-start`: the two cards in a row are the same height, so the column beside a
+                tall plan card is a card rather than a stub over bare ground. */}
+            <div className="grid min-w-0 items-stretch gap-[24px] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
               <PlanCard notice={notice} snapshot={snapshot} />
               <CorrectionCard
                 onSubmit={(event) => void requestCorrection(event)}
