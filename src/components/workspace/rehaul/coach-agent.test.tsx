@@ -1,23 +1,27 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CoachAgent,
-  type RehaulConnectionSurface,
+  type CoachAgentObjections,
 } from "@/components/workspace/rehaul/coach-agent";
-import { rehaulConnectionSurface } from "@/components/workspace/rehaul/coach-agent-connection-view";
-import {
-  coachCadenceExportRows,
-  coachCadenceSchedule,
-  type CoachCadenceChannel,
-} from "@/components/workspace/live/coach-agent";
-import { DURABLE_TOUCHES, WINDOW_BOUND_TOUCHES } from "@/lib/followups/touch-lists";
+import { coachCadenceSchedule } from "@/components/workspace/live/coach-agent";
+import { DURABLE_TOUCHES } from "@/lib/followups/touch-lists";
 import type { PersistedOfferLayer } from "@/lib/offer/types";
 import type { CoachQuestion } from "@/lib/repositories/coach-questions";
 import type { KeywordGoal } from "@/lib/repositories/keyword-goals";
 
-/** A published offer with every rung's storage actually filled, so the ladder has facts to draw. */
+/**
+ * `Agent.dc.html`, pinned.
+ *
+ * Every assertion below names the thing on the artboard it is holding in place, because the two
+ * previous attempts at this screen both drifted from the drawing in ways nobody could point at
+ * afterwards. The rules that carry across the whole coach rebuild -- 14px floor, 44px targets, one
+ * accent fill, no uppercase -- are guarded by the shared tests in `src/app`; what this file pins is
+ * the anatomy, the copy and the write behaviour of this one surface.
+ */
+
 const published: PersistedOfferLayer = {
   id: "offer-1",
   tenantId: "tenant-1",
@@ -26,52 +30,46 @@ const published: PersistedOfferLayer = {
   contentHash: "hash-3",
   programName: "Funding accelerator",
   programDescription: null,
-  creditMin: 700,
+  creditMin: 640,
   fundingGoalMinCents: 2_500_000,
-  fundingGoalMaxCents: 15_000_000,
-  monthlyRevenueMinCents: 1_000_000,
+  fundingGoalMaxCents: 25_000_000,
+  monthlyRevenueMinCents: 800_000,
   businessRevenueRequired: false,
-  creditRepair: "yes_included",
+  creditRepair: "yes_extra_fee",
   products: ["biz CC"],
-  bookingHorizonDays: 3,
+  bookingHorizonDays: 21,
   bookingMode: "direct",
   brandVoice: "neutral",
   resultsTimelineMinDays: null,
   resultsTimelineMaxDays: null,
-  refundPosture: "conditional",
-  voiceStyleAnswer: null,
+  refundPosture: "none",
+  voiceStyleAnswer: "I help business owners get funded without giving up equity.",
   voiceObjectionAnswer: null,
   voiceFollowupAnswer: null,
   offerPrices: [
-    { id: "price-1", label: "Funding accelerator", amountCents: 250_000, billingPeriod: "one_time" },
-    { id: "price-2", label: "Credit rebuild", amountCents: 49_700, billingPeriod: "monthly" },
+    { id: "price-1", label: "Funding Accelerator", amountCents: 450_000, billingPeriod: "one_time" },
+    { id: "price-2", label: "Credit Repair Plan", amountCents: 29_700, billingPeriod: "monthly" },
   ],
   proof: [],
-  assets: [],
+  assets: [
+    {
+      id: "asset-1",
+      slug: "funding-guide",
+      label: "The funding guide link",
+      url: "https://reidfunding.com/funding-guide",
+    },
+  ],
   cadencePurposes: [],
 };
 
 const goals: KeywordGoal[] = [
   {
-    id: "goal-1",
-    keyword: "CCA",
-    normalizedKeyword: "cca",
+    id: "11111111-1111-4111-8111-111111111111",
+    keyword: "Funds",
+    normalizedKeyword: "funds",
     goal: "resource",
     resourceUrl: "https://reidfunding.com/funding-guide",
-    resourceMessage: "Here is the guide I mentioned",
-    postBookingUrl: "https://reidfunding.com/thank-you",
-    postBookingMessage: "Locked in.",
-    active: true,
-    createdAt: "2026-08-01T09:00:00.000Z",
-    updatedAt: "2026-08-01T09:00:00.000Z",
-  },
-  {
-    id: "goal-2",
-    keyword: "COACH",
-    normalizedKeyword: "coach",
-    goal: "book",
-    resourceUrl: null,
-    resourceMessage: null,
+    resourceMessage: "Here is the guide",
     postBookingUrl: null,
     postBookingMessage: null,
     active: true,
@@ -80,566 +78,524 @@ const goals: KeywordGoal[] = [
   },
 ];
 
-/** The merged read step 3 draws: platform wording, this tenant's order and on/off overrides. */
 const questions: CoachQuestion[] = [
-  { id: "q-1", text: "What's the funding for?", tag: "funding purpose", enabled: true, position: 0 },
-  { id: "q-2", text: "Roughly how much?", tag: "funding amount", enabled: true, position: 1 },
-  { id: "q-3", text: "Are you running a business today?", tag: "business stage", enabled: false, position: 2 },
+  {
+    id: "q-1",
+    text: "Roughly what is your credit score right now?",
+    tag: "credit score",
+    enabled: true,
+    position: 0,
+  },
+  {
+    id: "q-2",
+    text: "How much funding are you looking for?",
+    tag: "funding amount",
+    enabled: true,
+    position: 1,
+  },
+  {
+    id: "q-3",
+    text: "Have you been turned down for funding before?",
+    tag: "prior denial",
+    enabled: false,
+    position: 2,
+  },
 ];
 
-const surface: RehaulConnectionSurface = rehaulConnectionSurface({
-  calendar: {
-    name: "Consults",
-    provider: "google",
-    state: "ready",
-    lastSlotFetchAt: "2026-09-02T12:04:00.000Z",
-    lastSlotFetchOk: true,
-  },
-  connections: [
+const objections: CoachAgentObjections = {
+  windowDays: 30,
+  rows: [
+    { objectionId: "o-1", label: "It costs too much", bookedRate: 0.62, conversationCount: 41 },
     {
-      id: "conn-1",
-      channel: "instagram",
-      channelLabel: "Instagram",
-      state: "live",
-      externalAccountLabel: "@reidfunding",
-      capabilities: {} as never,
-      receipts: {
-        oauthCompletedAt: "2026-08-30T09:00:00.000Z",
-        assetVerifiedAt: "2026-08-30T09:05:00.000Z",
-        webhookSubscribedAt: "2026-08-30T09:06:00.000Z",
-        signedRoundTripAt: "2026-09-01T09:07:00.000Z",
-      },
-      error: null,
-      tokenExpiresAt: null,
-      createdAt: "2026-08-30T09:00:00.000Z",
-      updatedAt: "2026-09-01T09:07:00.000Z",
+      objectionId: "o-2",
+      label: "My credit is not good enough",
+      bookedRate: null,
+      conversationCount: 33,
     },
   ],
-  datasets: [],
-  registration: {
-    submittedAt: "2026-08-25T13:41:00.000Z",
-    registrationState: "awaiting_provider",
-    terminalRejection: false,
-    terminalCode: null,
-  },
+};
+
+function renderAgent(overrides: Partial<Parameters<typeof CoachAgent>[0]> = {}) {
+  return render(
+    <CoachAgent
+      initialKeywordGoals={goals}
+      initialState={{ draft: null, published }}
+      objections={objections}
+      questions={questions}
+      supportEnabled
+      testEnabled
+      {...overrides}
+    />,
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
-/** Sentences the old `/coach/agent` printed as help text. None of them may reach the new body. */
-const OLD_EXPLAINERS = [
-  "Your agent quotes these exactly. It will never invent a price or offer a discount.",
-  "Anyone under these numbers is turned away politely, before it reaches you.",
-  "SetterFi decides when to follow up. You decide what each message is for.",
-  "The agent can qualify only against these saved facts.",
-];
+describe("the page states what it is", () => {
+  it("opens with the title and the sentence the artboard writes under it", () => {
+    renderAgent();
 
-describe("rehaul coach agent", () => {
-  it("draws the ladder with the offer layer's own figures", () => {
-    render(
-      <CoachAgent
-        connections={surface}
-        initialKeywordGoals={goals}
-        initialState={{ draft: null, published }}
-        publishedDateLabel="Mon 1 Sept"
-        questions={questions}
-        tab="ladder"
-        testEnabled
-      />,
+    expect(screen.getByRole("heading", { level: 1, name: "Your agent" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Four things are yours. We run everything else."),
+    ).toBeInTheDocument();
+  });
+
+  it("offers a conversation to try, and drops it when the lead test is not live", () => {
+    const { unmount } = renderAgent();
+    expect(screen.getByRole("link", { name: "Try a conversation" })).toHaveAttribute(
+      "href",
+      "/meet-agent",
     );
 
+    unmount();
+    renderAgent({ testEnabled: false });
+    expect(screen.queryByRole("link", { name: "Try a conversation" })).toBeNull();
+  });
+
+  it("carries no tab row, no publish and no progress meter", () => {
+    renderAgent();
+
+    expect(screen.queryByRole("navigation", { name: /agent views/iu })).toBeNull();
+    expect(screen.queryByRole("button", { name: /publish/iu })).toBeNull();
+    expect(screen.queryByText(/draft/iu)).toBeNull();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("names the four cards a coach owns, and no others", () => {
+    renderAgent();
+
+    for (const name of [
+      "Your prices",
+      "Who qualifies",
+      "How you sound",
+      "What each follow-up says",
+    ]) {
+      expect(screen.getByRole("heading", { level: 2, name })).toBeInTheDocument();
+    }
+  });
+});
+
+describe("your prices", () => {
+  it("shows every saved price on its face and can add and remove a row", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    expect(screen.getByDisplayValue("Funding Accelerator")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("4500")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("297")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add a price" }));
+    expect(screen.getByLabelText("Name of price 3")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove Credit Repair Plan" }));
+    expect(screen.queryByDisplayValue("Credit Repair Plan")).toBeNull();
+  });
+
+  it("states the absence in words rather than drawing an empty list", () => {
+    renderAgent({
+      initialState: { draft: null, published: { ...published, offerPrices: [] } },
+    });
+
+    expect(screen.getByText("No price is saved, so your agent quotes none.")).toBeInTheDocument();
+  });
+});
+
+describe("who qualifies", () => {
+  it("draws six rows: four steppers and two two-way choices", () => {
+    renderAgent();
+
+    expect(screen.getByText("640")).toBeInTheDocument();
+    for (const label of [
+      "Credit score at least",
+      "Funding goal at least",
+      "Funding goal at most",
+      "Monthly revenue at least",
+      "Needs credit repair first",
+      "Refunds",
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: "Raise credit score at least" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lower credit score at least" })).toBeInTheDocument();
+  });
+
+  it("steps a bound rather than asking for a typed number", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    await user.click(screen.getByRole("button", { name: "Raise credit score at least" }));
+    expect(screen.getByText("650")).toBeInTheDocument();
+  });
+
+  it("reads an unset bound as words and refuses to lower it", () => {
+    renderAgent({
+      initialState: { draft: null, published: { ...published, creditMin: null } },
+    });
+
+    expect(screen.getByText("Not set")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lower credit score at least" })).toBeDisabled();
+  });
+
+  /**
+   * The reason the two-way is a group of stored values rather than one canonical value: pressing
+   * the side a coach is already on must not rewrite "extra fee" into "included".
+   */
+  it("leaves a stored value inside the pressed side alone", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    const fine = screen.getByRole("button", { name: "Fine" });
+    expect(fine).toHaveAttribute("aria-pressed", "true");
+    await user.click(fine);
+    expect(fine).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+});
+
+describe("how you sound", () => {
+  it("draws three stops and three short answers", () => {
+    renderAgent();
+
+    for (const stop of ["Friendly", "Balanced", "Professional"]) {
+      expect(screen.getByRole("button", { name: stop })).toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: "Balanced" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(
-      screen.getByRole("heading", { level: 1, name: "Your agent" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Live, published Mon 1 Sept")).toBeInTheDocument();
+      screen.getByLabelText("How do you describe what you do, in a sentence?"),
+    ).toHaveValue("I help business owners get funded without giving up equity.");
+    expect(screen.getByLabelText("What do clients usually walk away with?")).toHaveValue("");
+    expect(screen.getByLabelText("What should your agent never promise?")).toHaveValue("");
+  });
+});
 
-    // A figure that came from storage, not from the artboard's demo coach.
-    expect(screen.getByText("$2,500.00 once")).toBeInTheDocument();
-    // Rows are named for the fact they store. The question's wording lives in the platform brain,
-    // so nothing here puts words in the agent's mouth that no payload supplies.
-    expect(screen.getByLabelText("Credit score")).toHaveValue("700");
-    expect(screen.queryByText("Do you know your credit score roughly?")).not.toBeInTheDocument();
+describe("what each follow-up says", () => {
+  /**
+   * The artboard writes three touches at one day, three days and a week. `DURABLE_TOUCHES` fixes
+   * five at two hours, one, three, seven and fourteen days, and the platform owning the timing is
+   * the whole claim of the card, so the card is built from the list rather than from the drawing.
+   */
+  it("draws one dropdown per touch the platform actually schedules", () => {
+    renderAgent();
 
-    // Both keywords, each with its own goal segment.
-    expect(screen.getByRole("button", { name: "CCA" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "COACH" })).toBeInTheDocument();
+    const schedule = coachCadenceSchedule([]);
+    const touches = schedule.reduce((total, group) => total + group.touches.length, 0);
+    expect(touches).toBeGreaterThanOrEqual(DURABLE_TOUCHES.length);
 
-    // The five follow-up touches come off DURABLE_TOUCHES, which runs fourteen days.
-    expect(screen.getByText("5 times over 14 days")).toBeInTheDocument();
-
-    // The keyword segments write on click, so the row carries its own accountability line.
-    expect(screen.getAllByLabelText("Keyword goal change recorded in the audit log").length)
-      .toBeGreaterThan(0);
-
-    for (const sentence of OLD_EXPLAINERS) {
-      expect(screen.queryByText(sentence)).not.toBeInTheDocument();
+    for (const group of schedule) {
+      for (const touch of group.touches) {
+        expect(
+          screen.getByLabelText(
+            `What ${group.channelLabel} follow-up ${touch.touchNo} says`,
+          ),
+        ).toBeInTheDocument();
+      }
     }
   });
 
-  it("states texting registration as a day counter, never a percentage or a date", () => {
-    render(
-      <CoachAgent
-        connections={surface}
-        initialKeywordGoals={goals}
-        initialState={{ draft: null, published }}
-        publishedDateLabel="Mon 1 Sept"
-        questions={questions}
-        tab="connections"
-        testEnabled
-      />,
-    );
-
-    expect(screen.getByRole("heading", { level: 2, name: "Instagram" })).toBeInTheDocument();
-    expect(screen.getByText("Live")).toBeInTheDocument();
-    expect(screen.getByText("Awaiting carrier")).toBeInTheDocument();
-    expect(document.querySelector(".daycount")).not.toBeNull();
-    expect(document.body.textContent).not.toMatch(/registration[^.]*\d+%/i);
-    // The explainer moved to the eye; the day counter above it already states the wait.
-    expect(
-      screen.queryByText("The carrier owns this review, so there is nothing here to test or press yet."),
-    ).not.toBeInTheDocument();
-    // The channel name is indexed, never munged out of the raw key.
-    expect(screen.queryByText("Whatsapp")).not.toBeInTheDocument();
-  });
-
-  it("drops the pending palette once the carrier has answered", () => {
-    const registered = rehaulConnectionSurface({
-      calendar: null,
-      connections: [],
-      datasets: null,
-      registration: {
-        submittedAt: "2026-08-25T13:41:00.000Z",
-        registrationState: "done",
-        terminalRejection: false,
-        terminalCode: null,
-      },
-    });
-    const { unmount } = render(
-      <CoachAgent
-        connections={registered}
-        initialKeywordGoals={goals}
-        initialState={{ draft: null, published }}
-        publishedDateLabel={null}
-        questions={questions}
-        tab="connections"
-        testEnabled={false}
-      />,
-    );
-    // A state the carrier confirmed back is the only thing allowed out of amber.
-    expect(screen.getByText("Registered").className).toContain("--good-wash");
-    unmount();
-
-    const refused = rehaulConnectionSurface({
-      calendar: null,
-      connections: [],
-      datasets: null,
-      registration: {
-        submittedAt: "2026-08-25T13:41:00.000Z",
-        registrationState: "awaiting_provider",
-        terminalRejection: true,
-        terminalCode: "REJECTED",
-      },
-    });
-    render(
-      <CoachAgent
-        connections={refused}
-        initialKeywordGoals={goals}
-        initialState={{ draft: null, published }}
-        publishedDateLabel={null}
-        questions={questions}
-        tab="connections"
-        testEnabled={false}
-      />,
-    );
-    // A refusal is not a wait, so it does not wear the pending colour either.
-    expect(screen.getByText("Registration refused").className).not.toContain("--warning-wash");
-  });
-
-  it("says a connection read did not answer instead of claiming nothing is connected", () => {
-    render(
-      <CoachAgent
-        connections={rehaulConnectionSurface({
-          calendar: null,
-          connections: null,
-          datasets: null,
-          registration: null,
-        })}
-        initialKeywordGoals={goals}
-        initialState={{ draft: null, published }}
-        publishedDateLabel={null}
-        questions={questions}
-        tab="connections"
-        testEnabled={false}
-      />,
-    );
+  it("says nothing is sending when follow-up is not switched on", () => {
+    renderAgent();
 
     expect(
-      screen.getByText("Your connections could not be read just now."),
+      screen.getByText(
+        "Follow-up is not switched on yet, so nothing is being sent. What you set here is kept and used the day it is.",
+      ),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Not connected")).not.toBeInTheDocument();
-  });
-
-  /*
-   * The four offer-layer exports `coach-offer.tsx` carried and the rehaul dropped.
-   *
-   * Each is asserted by opening its own menu, because the thing that regressed was a control
-   * going missing, and a test that only counted triggers would pass with four copies of one
-   * export. The distinct labels are load-bearing for the same reason: four controls all reading
-   * "Export" is the same as none of them being named.
-   */
-  function offerColumn() {
-    return (
-      <CoachAgent
-        connections={surface}
-        initialKeywordGoals={goals}
-        initialState={{
-          draft: null,
-          published: {
-            ...published,
-            assets: [{ id: "asset-1", slug: "guide", label: "Funding guide", url: "https://reidfunding.com/guide" }],
-            proof: [{ id: "proof-1", title: "42 clients funded", detail: "Since January" }],
-          },
-        }}
-        publishedDateLabel={null}
-        questions={questions}
-        tab="ladder"
-        testEnabled={false}
-      />
-    );
-  }
-
-  it.each([
-    ["Export prices", "Prices your agent can quote"],
-    ["Export proof", "Proof your agent can cite"],
-    ["Export links", "Links your agent can send"],
-    ["Export objections", "Objections, last 30 days"],
-  ])("carries %s as a server export beside %s", async (label, panel) => {
-    render(offerColumn());
-
-    expect(screen.getByRole("heading", { level: 2, name: panel })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: label }));
-
-    // Server mode: the whole set the route can see, and the download is recorded.
-    expect(screen.getByText("All matching rows")).toBeInTheDocument();
-    expect(screen.getAllByText("Export start logged")).toHaveLength(2);
-  });
-
-  it("draws the saved proof and links the exports beside them describe", () => {
-    render(offerColumn());
-
-    expect(screen.getByText("42 clients funded")).toBeInTheDocument();
-    expect(screen.getByText("Funding guide")).toBeInTheDocument();
-    expect(screen.getByText("https://reidfunding.com/guide")).toBeInTheDocument();
-  });
-
-  it("says what the objection file holds rather than drawing a rollup it never read", () => {
-    render(offerColumn());
-
-    expect(screen.getByText(/One row per objection a lead raised/u)).toBeInTheDocument();
   });
 });
 
-describe("CoachAgent step 3", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+describe("top objections", () => {
+  it("reads as a share per objection with the sentence that defines the share", () => {
+    renderAgent();
+
+    expect(screen.getByText("“It costs too much”")).toBeInTheDocument();
+    expect(screen.getByText("62%")).toBeInTheDocument();
+    expect(screen.getByText("Said 41 times in the last 30 days.")).toBeInTheDocument();
+    expect(
+      screen.getByText("The share is how many of the leads who said it still booked a call."),
+    ).toBeInTheDocument();
   });
 
-  function ladder(rows: readonly CoachQuestion[] | null) {
-    return (
-      <CoachAgent
-        connections={surface}
-        initialKeywordGoals={goals}
-        initialState={{ draft: null, published }}
-        publishedDateLabel={null}
-        questions={rows}
-        tab="ladder"
-        testEnabled={false}
-      />
-    );
-  }
+  /** A rate with no approved definition is a different fact from a zero share, so no bar is drawn. */
+  it("draws no bar and no percentage for a row whose share is undefined", () => {
+    renderAgent();
 
-  it("draws the stored questions in their stored order with a switch and move controls", () => {
-    render(ladder(questions));
-
-    const asked = screen.getAllByRole("switch").map((control) => control.getAttribute("aria-label"));
-    expect(asked).toEqual([
-      'Ask "What\'s the funding for?"',
-      'Ask "Roughly how much?"',
-      'Ask "Are you running a business today?"',
-    ]);
-    // The disabled row is drawn off, not hidden, and the enabled ones are not drawn off.
-    expect(screen.getAllByRole("switch").map((control) => control.getAttribute("aria-checked")))
-      .toEqual(["true", "true", "false"]);
-    expect(screen.getByText("funding purpose")).toBeInTheDocument();
-
-    // The ends of the list cannot move past themselves.
-    expect(screen.getByRole("button", { name: 'Move "What\'s the funding for?" earlier' }))
-      .toBeDisabled();
-    expect(screen.getByRole("button", { name: 'Move "Are you running a business today?" later' }))
-      .toBeDisabled();
-    /*
-     * Two notes, not one joined string: the arrows write `coach.question_order.saved` and the
-     * switch writes `coach.question.enabled.changed`, and both labels come from the registry
-     * entries mirroring `20261009000004_tenant_question_settings.sql`, so a caption that drifted
-     * from the row it describes fails here.
-     */
-    expect(screen.getByLabelText(
-      "Qualification-question order recorded in the audit log",
-    )).toHaveTextContent("Question order logged");
-    expect(screen.getByLabelText(
-      "Qualification-question setting recorded in the audit log",
-    )).toHaveTextContent("Question setting logged");
+    const row = document.querySelector('[data-objection="o-2"]')!;
+    expect(within(row as HTMLElement).queryByText(/%$/u)).toBeNull();
+    expect(
+      within(row as HTMLElement).getByText(
+        "Said 33 times in the last 30 days. No booking share is defined for it yet.",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("says the question read did not answer instead of drawing an empty library", () => {
-    render(ladder(null));
-    expect(screen.getByText("Your agent's questions could not be read just now."))
-      .toBeInTheDocument();
-    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-  });
+  it("says the read refused rather than drawing an empty rail", () => {
+    renderAgent({ objections: null });
 
-  it("sends the full order to the route and redraws from the list it reads back", async () => {
-    const reordered = [
-      { ...questions[1], position: 0 },
-      { ...questions[0], position: 1 },
-      questions[2],
-    ];
-    const fetchMock = vi.fn(async () =>
-      Response.json({
-        questions: reordered,
-        audit: { auditId: "91", actionKey: "coach.question_order.saved" },
-      }));
-    vi.stubGlobal("fetch", fetchMock);
-    render(ladder(questions));
-
-    await userEvent.click(
-      screen.getByRole("button", { name: 'Move "Roughly how much?" earlier' }),
-    );
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/coach/questions");
-    expect(init.method).toBe("PUT");
-    expect(JSON.parse(String(init.body))).toEqual({ questionIds: ["q-2", "q-1", "q-3"] });
-    await waitFor(() =>
-      expect(screen.getAllByRole("switch")[0]).toHaveAttribute(
-        "aria-label",
-        'Ask "Roughly how much?"',
-      ));
-    expect(screen.getByText("Saved and logged.")).toBeInTheDocument();
-  });
-
-  it("toggles through the route and leaves the row alone when the write is refused", async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({ code: "COACH_QUESTION_TOGGLE_REFUSED" }, { status: 409 }));
-    vi.stubGlobal("fetch", fetchMock);
-    render(ladder(questions));
-
-    await userEvent.click(screen.getByRole("switch", { name: 'Ask "Roughly how much?"' }));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/coach/questions");
-    expect(init.method).toBe("PATCH");
-    expect(JSON.parse(String(init.body))).toEqual({ questionId: "q-2", enabled: false });
-    await waitFor(() =>
-      expect(screen.getByText("This question was not changed. Try again.")).toBeInTheDocument());
-    expect(screen.getByRole("switch", { name: 'Ask "Roughly how much?"' }))
-      .toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Your objections could not be read just now.")).toBeInTheDocument();
   });
 });
 
-/*
- * Step 7 is the cadence editor `coach-offer.tsx` carried before the rehaul deleted that file.
- * The claim it has to keep making is a split one: SetterFi owns when a touch fires, the coach owns
- * what it is for, and a purpose the coach never chose is drawn as ours rather than as theirs.
- */
-describe("CoachAgent step 7", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+describe("keywords and questions", () => {
+  it("reads as a sentence with the fields inside it", () => {
+    renderAgent();
+
+    expect(screen.getByText("When someone DMs you with")).toBeInTheDocument();
+    expect(screen.getByText("your agent replies with")).toBeInTheDocument();
+    expect(
+      screen.getByText("and then asks these questions, in this order."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Which keyword")).toHaveTextContent("Funds");
+    expect(screen.getByLabelText("What your agent replies with")).toHaveTextContent(
+      "The funding guide link",
+    );
   });
 
-  const channels: readonly CoachCadenceChannel[] = [
-    {
-      channel: "sms",
-      channelLabel: "SMS",
-      capability: { postWindow: "freeform", templateSend: false },
-    },
-    {
-      channel: "instagram",
-      channelLabel: "Instagram",
-      capability: { postWindow: "human_agent_only", templateSend: false },
-    },
-  ];
+  it("carries up and down arrows and an asked or skipped switch per question", () => {
+    renderAgent();
 
-  function ladder(
-    offer: PersistedOfferLayer,
-    cadence: { enabled: boolean; channels: readonly CoachCadenceChannel[] },
-  ) {
-    render(
-      <CoachAgent
-        cadence={cadence}
-        connections={surface}
-        initialKeywordGoals={goals}
-        initialState={{ draft: null, published: offer }}
-        publishedDateLabel={null}
-        questions={questions}
-        tab="ladder"
-        testEnabled={false}
-      />,
+    expect(
+      screen.getByRole("button", { name: 'Ask "Roughly what is your credit score right now?" earlier' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: 'Ask "How much funding are you looking for?" earlier' }),
+    ).toBeEnabled();
+
+    const skipped = screen.getByRole("switch", {
+      name: 'Ask "Have you been turned down for funding before?"',
+    });
+    expect(skipped).toHaveAttribute("aria-checked", "false");
+    expect(skipped).toHaveTextContent("Skipped");
+  });
+
+  it("says the read refused rather than drawing no questions", () => {
+    renderAgent({ questions: null });
+
+    expect(screen.getByText("Your questions could not be read just now.")).toBeInTheDocument();
+  });
+
+  it("adds a keyword into the pending edit rather than writing on the press", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    renderAgent();
+
+    await user.click(screen.getByRole("button", { name: "Add another keyword" }));
+    await user.type(screen.getByRole("textbox", { name: /new keyword/iu }), "Grants");
+    await user.click(screen.getByRole("button", { name: "Add it" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Which keyword")).toHaveTextContent("Grants");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+});
+
+describe("what SetterFi handles for you", () => {
+  it("states each thing as a sentence, with a change request only where one is possible", () => {
+    renderAgent();
+
+    expect(
+      screen.getByText(/does not text anyone between 9 pm and 8 am/u),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Request a change" })).toHaveLength(3);
+  });
+
+  it("drops the request link when there is no support thread to open", () => {
+    renderAgent({ supportEnabled: false });
+
+    expect(screen.queryByRole("button", { name: "Request a change" })).toBeNull();
+  });
+
+  it("opens a support thread naming the section, and reports what happened", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ thread: { id: "t-1" } }), { status: 200 }),
     );
-    /*
-     * Step 4 prints "set by you" against its own saved facts, so every assertion about who chose a
-     * purpose is scoped to this panel. A page-wide count would pass on the wrong rows.
-     */
-    const panel = screen.getByRole("heading", { name: "If they go quiet" }).closest("section");
-    if (!panel) throw new Error("step 7 panel did not render");
-    return within(panel);
-  }
+    renderAgent();
+
+    await user.click(screen.getAllByRole("button", { name: "Request a change" })[0]);
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/support/threads");
+    expect(JSON.parse(String(init.body)).subject).toBe(
+      "Change request: Handing a lead to you",
+    );
+    expect(
+      await screen.findByText("Asked. Your success team will reply in Help."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("the save bar", () => {
+  it("says what saving does and offers exactly Undo and Save", () => {
+    renderAgent();
+
+    expect(screen.getByText("Changes go live when you save.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Undo my changes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
+  it("stays inert until something has actually changed", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Undo my changes" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Raise credit score at least" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("puts every pending edit back when the coach undoes", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    await user.click(screen.getByRole("button", { name: "Raise credit score at least" }));
+    await user.click(
+      screen.getByRole("switch", { name: 'Ask "How much funding are you looking for?"' }),
+    );
+    await user.click(screen.getByRole("button", { name: "Undo my changes" }));
+
+    expect(screen.getByText("640")).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: 'Ask "How much funding are you looking for?"' }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
 
   /**
-   * The shared `Select` opens a portalled listbox rather than answering `selectOptions`, and it
-   * mounts on an effect, so the option is awaited rather than read straight after the click.
+   * The coach never meets the word publish, so Save has to do the publishing. A save that stopped
+   * at the draft would leave the bar's own sentence false.
    */
-  async function choose(
-    user: ReturnType<typeof userEvent.setup>,
-    trigger: HTMLElement,
-    option: string,
-  ) {
-    await user.click(trigger);
-    await user.click(await screen.findByRole("option", { name: option }));
-  }
-
-  it("draws every platform touch with its timing and the purpose that owns it", () => {
-    const panel = ladder(published, { enabled: true, channels });
-
-    expect(panel.getAllByRole("combobox")).toHaveLength(
-      WINDOW_BOUND_TOUCHES.length + DURABLE_TOUCHES.length,
-    );
-
-    // Timing is the platform's, read off the touch lists rather than typed into the panel.
-    expect(panel.getByText("2 hours after the lead goes quiet")).toBeInTheDocument();
-    expect(panel.getByText("14 days after the lead goes quiet")).toBeInTheDocument();
-    expect(panel.getByText("22 hours before the reply window closes")).toBeInTheDocument();
-
-    // Nothing is saved on this offer, so every touch says the purpose is still ours.
-    expect(panel.getAllByText("our default")).toHaveLength(
-      WINDOW_BOUND_TOUCHES.length + DURABLE_TOUCHES.length,
-    );
-    expect(panel.queryByText("set by you")).not.toBeInTheDocument();
-
-    // A channel whose capability ends at the reply window says so rather than implying we go on.
-    expect(
-      panel.getByText("After the reply window, follow-up stays human-only."),
-    ).toBeInTheDocument();
-  });
-
-  it("marks only a saved purpose as the coach's and leaves the rest ours", () => {
-    const panel = ladder(
-      {
-        ...published,
-        cadencePurposes: [
-          { channelClass: "durable", touchNo: 2, purpose: "training", assetId: null },
-        ],
-      },
-      { enabled: true, channels },
-    );
-
-    expect(panel.getByLabelText("SMS touch 2 purpose")).toHaveTextContent("Free training");
-    expect(panel.getAllByText("set by you")).toHaveLength(1);
-  });
-
-  it("saves a purpose through the same draft write as the rest of the offer", async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({
-        saved: true,
-        draft: { ...published, id: "draft-1", status: "draft", contentHash: "hash-4" },
-      }));
-    vi.stubGlobal("fetch", fetchMock);
+  it("saves the draft and publishes it in one press", async () => {
     const user = userEvent.setup();
-    const panel = ladder(published, { enabled: true, channels });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/coach/offer") {
+        return new Response(
+          JSON.stringify({
+            state: "draft",
+            draft: {
+              ...published,
+              id: "draft-9",
+              status: "draft",
+              version: 4,
+              contentHash: "hash-9",
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      const live = { ...published, id: "offer-9", version: 4, contentHash: "hash-9" };
+      return new Response(
+        JSON.stringify({
+          state: "published",
+          offer: live,
+          receipt: {
+            auditId: "audit-9",
+            actionKey: "offer.published",
+            offerId: live.id,
+            offerVersion: live.version,
+            contentHash: live.contentHash,
+          },
+        }),
+        { status: 200 },
+      );
+    });
+    renderAgent();
 
-    await choose(user, panel.getByRole("combobox", { name: "SMS touch 1 purpose" }), "Approved proof point");
-    expect(panel.getAllByText("set by you")).toHaveLength(1);
-
+    await user.click(screen.getByRole("button", { name: "Raise credit score at least" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/coach/offer");
-    expect(init.method).toBe("PUT");
-    expect(JSON.parse(String(init.body)).offer.cadencePurposes).toEqual([
-      { channelClass: "durable", touchNo: 1, purpose: "proof_point", assetId: null },
-    ]);
-  });
-
-  it("keeps one row per slot when the same touch is edited twice", async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({
-        saved: true,
-        draft: { ...published, id: "draft-1", status: "draft", contentHash: "hash-4" },
-      }));
-    vi.stubGlobal("fetch", fetchMock);
-    const user = userEvent.setup();
-    const panel = ladder(published, { enabled: true, channels });
-
-    await choose(user, panel.getByRole("combobox", { name: "SMS touch 1 purpose" }), "Approved proof point");
-    await choose(user, panel.getByRole("combobox", { name: "SMS touch 1 purpose" }), "A new angle");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(init.body)).offer.cadencePurposes).toEqual([
-      { channelClass: "durable", touchNo: 1, purpose: "new_angle", assetId: null },
-    ]);
-  });
-
-  it("says nothing is sending yet without dropping the editor", () => {
-    const panel = ladder(published, { enabled: false, channels });
-
-    expect(panel.getByText("Not sending yet")).toBeInTheDocument();
-    expect(panel.getByLabelText("SMS touch 1 purpose")).toBeInTheDocument();
-  });
-
-  it("lists a purpose saved outside the schedule and removes it on confirmation", async () => {
-    const panel = ladder(
-      {
-        ...published,
-        cadencePurposes: [
-          { channelClass: "none", touchNo: 9, purpose: "training", assetId: null },
-        ],
-      },
-      { enabled: true, channels },
-    );
-
-    expect(panel.getByText("Saved outside this schedule")).toBeInTheDocument();
-    expect(panel.getByText(/None, touch 9, Free training/)).toBeInTheDocument();
-
-    fireEvent.click(panel.getByRole("button", { name: "Remove None touch 9" }));
-    fireEvent.click(panel.getByRole("button", { name: "Keep" }));
-    expect(panel.getByText(/None, touch 9, Free training/)).toBeInTheDocument();
-
-    fireEvent.click(panel.getByRole("button", { name: "Remove None touch 9" }));
-    fireEvent.click(panel.getByRole("button", { name: "Remove" }));
     await waitFor(() =>
-      expect(panel.queryByText(/None, touch 9, Free training/)).not.toBeInTheDocument());
+      expect(screen.getByText("Saved. Your agent is using this now.")).toBeInTheDocument(),
+    );
+    const called = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(called).toContain("/api/coach/offer");
+    expect(called).toContain("/api/coach/offer/publish");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("carries an export of the rows it drew, naming who chose each purpose", () => {
-    const panel = ladder(
-      {
-        ...published,
-        cadencePurposes: [
-          { channelClass: "durable", touchNo: 2, purpose: "training", assetId: null },
-        ],
-      },
-      { enabled: true, channels },
+  it("writes the question order and the switch through their own route on the same press", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(
+        JSON.stringify({ questions, audit: { auditId: "a-1" } }),
+        { status: 200 },
+      ),
+    );
+    renderAgent();
+
+    await user.click(
+      screen.getByRole("switch", { name: 'Ask "How much funding are you looking for?"' }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const call = fetchMock.mock.calls.find((entry) => String(entry[0]) === "/api/coach/questions");
+    expect(call).toBeDefined();
+    expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({
+      questionId: "q-2",
+      enabled: false,
+    });
+  });
+
+  it("names what did not save rather than claiming the whole press worked", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ code: "OFFER_SAVE_REFUSED" }), { status: 409 }),
+    );
+    renderAgent();
+
+    await user.click(screen.getByRole("button", { name: "Raise credit score at least" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Some of this did not save: your prices, who qualifies/u),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  /**
+   * The offer boundary still requires a program name, and this screen no longer edits one because
+   * the spec demoted it to an intake request. A tenant with no offer at all therefore cannot save,
+   * and the bar says so instead of the coach discovering it on the press.
+   */
+  it("refuses to save when there is no program name to carry through", () => {
+    renderAgent({ initialState: { draft: null, published: null } });
+
+    expect(
+      screen.getByText(
+        "Your program details have not reached us yet, so nothing here can be saved. Ask your success team to add them.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+});
+
+describe("keyword goals load from the route when none is handed in", () => {
+  beforeEach(() => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ goals }), { status: 200 }),
+    );
+  });
+
+  it("reads the tenant-scoped route once", async () => {
+    render(
+      <CoachAgent
+        initialState={{ draft: null, published }}
+        objections={objections}
+        questions={questions}
+        supportEnabled={false}
+        testEnabled={false}
+      />,
     );
 
-    expect(panel.getByRole("button", { name: /Export schedule/ })).toBeInTheDocument();
-
-    const rows = coachCadenceExportRows(coachCadenceSchedule(channels), [
-      { channelClass: "durable", touchNo: 2, purpose: "training" },
-    ]);
-    expect(rows).toHaveLength(WINDOW_BOUND_TOUCHES.length + DURABLE_TOUCHES.length);
-    expect(rows.filter((row) => row.purposeSource === "coach")).toHaveLength(1);
+    expect(await screen.findByLabelText("Which keyword")).toHaveTextContent("Funds");
   });
 });

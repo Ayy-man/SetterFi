@@ -6,37 +6,30 @@ import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
 import type { CoachCadenceChannel } from "@/components/workspace/live/coach-agent";
 import { CoachPageHead } from "@/components/workspace/live/coach-page-head";
-import { CoachAgent } from "@/components/workspace/rehaul/coach-agent";
 import {
-  rehaulConnectionSurface,
-  type RehaulCalendarSnapshot,
-} from "@/components/workspace/rehaul/coach-agent-connection-view";
+  CoachAgent,
+  type CoachAgentObjections,
+} from "@/components/workspace/rehaul/coach-agent";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import type { MessagingChannel } from "@/lib/booking/types";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
 import {
-  capiLive,
   phase1Live,
   phase2Live,
   phase3Live,
-  phase4Live,
   phase7MeetAgentLive,
+  phase8SupportLive,
 } from "@/lib/env-contract";
-import { workspaceDateFormat } from "@/lib/format/datetime";
+import { loadCoachTopObjections } from "@/lib/repositories/analytics";
 import {
   listChannelConnections,
   type ChannelConnectionView,
 } from "@/lib/repositories/channel-connections";
-import { listCapiDatasets } from "@/lib/repositories/capi-datasets";
 import { readCoachQuestions } from "@/lib/repositories/coach-questions";
-import { loadCoachA2pRegistration } from "@/lib/repositories/onboarding-evidence";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
 import { resolveChannelCapability } from "@/lib/sends/channel-capabilities";
-import {
-  createSupabaseServerClient,
-  createSupabaseServiceClient,
-} from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Your agent" };
 export const dynamic = "force-dynamic";
@@ -48,6 +41,7 @@ const CADENCE_CHANNELS = new Set<MessagingChannel>([
   "messenger",
   "whatsapp",
 ]);
+const DAY_MS = 24 * 60 * 60 * 1_000;
 
 function isCadenceChannel(channel: string): channel is MessagingChannel {
   return CADENCE_CHANNELS.has(channel as MessagingChannel);
@@ -71,7 +65,7 @@ function hasReceiptBackedReadiness(connection: ChannelConnectionView) {
   );
 }
 
-/** The connected channels step 7 groups its schedule by, in the shape the schedule reads. */
+/** The connected channels the follow-up card groups its schedule by. */
 function cadenceChannels(
   connections: readonly ChannelConnectionView[] | null,
 ): CoachCadenceChannel[] {
@@ -88,59 +82,42 @@ function cadenceChannels(
       }),
     }));
 }
-async function loadPublishedOfferReceipt(tenantId: string) {
-  const client = createSupabaseServiceClient();
-  const { data, error } = await client
-    .from("offer_layers")
-    .select("id,published_at")
-    .eq("tenant_id", tenantId)
-    .eq("status", "published")
-    .maybeSingle();
-  if (error) throw new Error("OFFER_PUBLICATION_DATE_READ_FAILED");
-  if (!data) return null;
-  return {
-    offerId: String(data.id),
-    publishedAt:
-      typeof data.published_at === "string" ? data.published_at : null,
-  };
-}
-
-function publicationDateLabel(value: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? null : workspaceDateFormat.format(date);
-}
-
 
 /**
- * The primary calendar row, read exactly as `/coach/integrations` reads it.
+ * The objections rollup, reduced to what the rail draws.
  *
- * A copy rather than an import: the loader there is a module-private function inside a page file,
- * and a page cannot export one for another page to call. The columns, the filter and the failure
- * arm are identical on purpose -- a `checked: false` read stays absent on the screen instead of
- * collapsing to "not connected", which would claim a fact the read did not establish.
+ * A hard-gated row never reaches here (`HARD_GATED_ROWS_COACH_VISIBLE` is false in the
+ * repository), and a row whose booked share has no approved definition arrives with a null rate,
+ * which the panel renders as words rather than as a bar. The window length is carried through as
+ * whole days rather than described as "the last month", because the panel should name the window
+ * the read actually returned.
  */
-async function rehaulCalendar(tenantId: string): Promise<RehaulCalendarSnapshot | null> {
-  const service = createSupabaseServiceClient();
-  const { data, error } = await service
-    .from("calendar_connections")
-    .select("calendar_name, provider, state, last_slot_fetch_at, last_slot_fetch_ok")
-    .eq("tenant_id", tenantId)
-    .eq("is_primary", true)
-    .maybeSingle();
-  if (error || !data) return null;
-  return {
-    name: data.calendar_name,
-    provider: data.provider,
-    state: data.state,
-    lastSlotFetchAt: data.last_slot_fetch_at,
-    lastSlotFetchOk: data.last_slot_fetch_ok,
-  };
+async function coachObjections(
+  actorId: string | null,
+  tenantId: string,
+): Promise<CoachAgentObjections | null> {
+  if (!actorId) return null;
+  try {
+    const rollup = await loadCoachTopObjections(actorId, tenantId, new Date().toISOString());
+    const windowDays = Math.max(
+      1,
+      Math.round(
+        (Date.parse(rollup.windowEnd) - Date.parse(rollup.windowStart)) / DAY_MS,
+      ),
+    );
+    return {
+      windowDays,
+      rows: rollup.rows.map((row) => ({
+        objectionId: row.objectionId,
+        label: row.label,
+        bookedRate: row.bookedRate,
+        conversationCount: row.conversationCount,
+      })),
+    };
+  } catch {
+    return null;
+  }
 }
-
-type CoachAgentPageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
 
 function CoachAgentShell({
   children,
@@ -181,17 +158,10 @@ async function liveCoachContext() {
   return { actorId: claims.userId ?? null, tenantId: claims.tenantId };
 }
 
-export default async function CoachAgentPage({ searchParams }: CoachAgentPageProps) {
+export default async function CoachAgentPage() {
   if (!phase2Live()) {
     return (
       <CoachAgentShell>
-        {/*
-          The coach head on the off branch too, because this is still a coach page when the flag is
-          down. `PageHeader` sets `.t-page-title`, which is 30px only under
-          `[data-shell-role="admin"]` and 20px here, and the live path below already opens at the
-          canvas's 46px -- so the flag was moving the title by 26px. Crumbs are dropped with it:
-          `CoachAgentShell` passes the same list to `AppShell`.
-        */}
         <CoachPageHead
           sub="Configure the offer facts and voice your agent may use with leads."
           surface="agent"
@@ -208,46 +178,26 @@ export default async function CoachAgentPage({ searchParams }: CoachAgentPagePro
 
   const { actorId, tenantId } = await liveCoachContext();
   const repository = createOfferLayerRepository();
-  const [draft, published, publicationReceipt] = await Promise.all([
+  const cadenceEnabled = phase1Live() && phase3Live();
+
+  const [draft, published, channelRows, questions, objections] = await Promise.all([
     repository.loadOffer({ tenantId, status: "draft" }),
     repository.loadOffer({ tenantId, status: "published" }),
-    loadPublishedOfferReceipt(tenantId),
-  ]);
-
-  /*
-   * The offer layer, plus the connection surface the ladder's booking rung and the Connections tab
-   * read. Every connection read is an existing repository call behind the same flags
-   * `/coach/integrations` gates it with, and a read that refuses stays null so the screen says it
-   * could not read rather than "not connected".
-   */
-  const params = await searchParams;
-  const tabParam = params.tab;
-  const tab = (Array.isArray(tabParam) ? tabParam[0] : tabParam) === "connections"
-    ? ("connections" as const)
-    : ("ladder" as const);
-  const connectionsEnabled = phase1Live() && phase4Live();
-  const cadenceEnabled = phase1Live() && phase3Live();
-  const [channelRows, registration, calendar, datasets, questions] = await Promise.all([
     /*
-     * One read for two consumers: the Connections tab and step 7's follow-up schedule sit behind
-     * different flags, so the read runs when either is on and each consumer is handed null when
-     * its own flag is down rather than borrowing the other's rows.
+     * The follow-up card groups its touches by connected channel class. A refused read stays null,
+     * so the card falls back to the platform's own schedule rather than claiming no channel is
+     * connected.
      */
-    connectionsEnabled || cadenceEnabled
-      ? listChannelConnections(tenantId).catch(() => null)
-      : Promise.resolve(null),
-    loadCoachA2pRegistration(tenantId).catch(() => null),
-    rehaulCalendar(tenantId).catch(() => null),
-    capiLive() ? listCapiDatasets(tenantId).catch(() => null) : Promise.resolve(null),
+    cadenceEnabled ? listChannelConnections(tenantId).catch(() => null) : Promise.resolve(null),
     /*
-     * Step 3's rows. Read here rather than fetched by the component because the merged list is
-     * tenant-scoped and the browser has no business naming a tenant for it. A refusal stays null
-     * so the panel says it could not read, which is not the same claim as an empty library. The
-     * writes go back through `/api/coach/questions`, which re-derives the actor from the session.
+     * The merged question list, read here rather than fetched by the component because it is
+     * tenant-scoped and the browser has no business naming a tenant for it. A refusal stays null so
+     * the panel says it could not read, which is not the same claim as an empty library.
      */
     actorId
       ? readCoachQuestions({ tenantId, userId: actorId }).catch(() => null)
       : Promise.resolve(null),
+    coachObjections(actorId, tenantId),
   ]);
 
   return (
@@ -257,21 +207,11 @@ export default async function CoachAgentPage({ searchParams }: CoachAgentPagePro
           enabled: cadenceEnabled,
           channels: cadenceEnabled ? cadenceChannels(channelRows) : [],
         }}
-        connections={rehaulConnectionSurface({
-          calendar,
-          connections: connectionsEnabled ? channelRows : null,
-          datasets,
-          registration,
-        })}
         initialState={{ draft, published }}
         key={`${draft?.id ?? "no-draft"}:${published?.id ?? "no-published"}`}
-        publishedDateLabel={
-          published && publicationReceipt?.offerId === published.id
-            ? publicationDateLabel(publicationReceipt.publishedAt)
-            : null
-        }
+        objections={objections}
         questions={questions}
-        tab={tab}
+        supportEnabled={phase8SupportLive()}
         testEnabled={phase7MeetAgentLive()}
       />
     </CoachAgentShell>
