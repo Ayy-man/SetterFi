@@ -696,26 +696,43 @@ function RowTile({
 
 const ROW_CLASS =
   "flex flex-wrap items-start gap-[18px] px-5 py-[22px] border-b border-[var(--line-soft)] last:border-b-0";
+const STEP_ROW_CLASS =
+  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 sm:gap-x-[18px] px-5 py-[22px] border-b border-[var(--line-soft)] last:border-b-0";
 const ROW_NAME_CLASS =
   "m-0 text-[20px] leading-[1.25] font-medium tracking-[-0.015em] text-[var(--ink)]";
 const ROW_BODY_CLASS =
   "m-0 mt-2 max-w-[var(--measure-sentence)] text-[16px] leading-[1.55] text-[var(--muted)]";
 const ROW_RECEIPT_CLASS = "m-0 mt-2 text-[14px] leading-[1.55] text-[var(--muted)]";
 
+/**
+ * A step row: tile, name, state pill, then the two sentences.
+ *
+ * Grid rather than the flex `ROW_CLASS` the channel rows use, because at 390 the flex version put
+ * the pill on a line of its own *under* the sentences, where it read as orphaned from the step it
+ * describes. The grid keeps the pill on the name's line at every width -- right-aligned in its own
+ * column -- and lets the sentences take the width the pill vacates on the row below, which is the
+ * only thing that changes below `sm`. At `sm` and up the sentences stay inside the name's column,
+ * so the 1440 rendering is byte-for-byte what it was.
+ */
 function StepRow({ step }: { step: CoachSetupStepView }) {
   const Icon = STEP_ICON[step.key];
   return (
-    <li className={`${ROW_CLASS} list-none`} data-slot="coach-setup-step" data-step={step.key}>
-      <RowTile round tone={step.done ? "good" : step.pill.tone === "waiting" ? "waiting" : "plain"}>
-        <Icon size={20} strokeWidth={1.75} />
-      </RowTile>
-      <div className="min-w-0 flex-1 basis-[min(100%,24ch)]">
-        <h3 className={ROW_NAME_CLASS}>{step.name}</h3>
+    <li className={`${STEP_ROW_CLASS} list-none`} data-slot="coach-setup-step" data-step={step.key}>
+      <div className="col-start-1 row-start-1 row-span-2">
+        <RowTile
+          round
+          tone={step.done ? "good" : step.pill.tone === "waiting" ? "waiting" : "plain"}
+        >
+          <Icon size={20} strokeWidth={1.75} />
+        </RowTile>
+      </div>
+      <h3 className={`${ROW_NAME_CLASS} col-start-2 row-start-1 min-w-0`}>{step.name}</h3>
+      <div className="col-start-3 row-start-1 justify-self-end pt-[6px]">
+        <Status label={step.pill.label} tone={step.pill.tone} />
+      </div>
+      <div className="col-start-2 col-span-2 row-start-2 min-w-0 sm:col-span-1">
         <p className={ROW_BODY_CLASS}>{step.body}</p>
         <p className={ROW_RECEIPT_CLASS}>{step.receipt}</p>
-      </div>
-      <div className="flex-none pt-[6px]">
-        <Status label={step.pill.label} tone={step.pill.tone} />
       </div>
     </li>
   );
