@@ -26,10 +26,15 @@ import {
  * form panel carries no band because the title already names it, which is also what stops the
  * screen saying the same thing twice within 200px.
  *
- * **One filled button, and one plain way out.** `Continue` is the page's only accent fill;
- * "Save and finish later" is an inline link at a 44px hit box. At 390px the pair becomes a sticky
- * full-width footer, and it is the same DOM node moved by CSS rather than a second copy, so the
- * accent-fill count is one at every width.
+ * **One filled button, and one plain way out.** `Continue` is the page's only accent fill; the
+ * way out is an inline link at a 44px hit box. At 390px the pair becomes a sticky full-width
+ * footer, and it is the same DOM node moved by CSS rather than a second copy, so the accent-fill
+ * count is one at every width.
+ *
+ * The way out says what it does. It lands on the Setup list and saves nothing, so the default
+ * label is "Back to your setup" on every step: a step already done (Google connected, the offer
+ * read back) has nothing to save, and a label that said "Save" on it was a claim about work that
+ * did not exist. The one step whose form can hold unsaved edits passes `exitLabel` to say so.
  *
  * Server-renderable, and directive-free, so the three steps that own a form can import the
  * constants below without dragging a client boundary across the pages that do not.
@@ -127,10 +132,19 @@ export type OnboardingStepShellProps = {
   width?: number;
   /** Overrides the step title as the h1, for a step whose board words differ from its rung. */
   title?: string;
+  /**
+   * The way out's label. Defaults to "Back to your setup". A step with unsaved edits passes a
+   * label that says the edits will be left behind; nothing else should override it.
+   */
+  exitLabel?: string;
 };
+
+export const STEP_EXIT_HREF = "/coach/get-started";
+export const STEP_EXIT_LABEL = "Back to your setup";
 
 export function OnboardingStepShell({
   children,
+  exitLabel = STEP_EXIT_LABEL,
   eyeCopy,
   eyeScreen,
   lead,
@@ -181,8 +195,12 @@ export function OnboardingStepShell({
             data-slot="onboarding-step-footer"
           >
             {primary}
-            <Link className={`${STEP_LINK_CLASS} justify-center sm:justify-start`} href="/onboarding">
-              Save and finish later
+            <Link
+              className={`${STEP_LINK_CLASS} justify-center sm:justify-start`}
+              data-slot="onboarding-step-exit"
+              href={STEP_EXIT_HREF}
+            >
+              {exitLabel}
             </Link>
           </div>
         </div>

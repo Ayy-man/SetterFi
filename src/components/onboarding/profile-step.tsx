@@ -157,6 +157,8 @@ export function ProfileStep() {
   const [profile, setProfile] = useState<Profile>(EMPTY);
   const [status, setStatus] = useState("Loading saved business profile…");
   const [saved, setSaved] = useState(false);
+  /** An edit since the last load or save; the way out says it leaves the edit behind. */
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<{ sentence: string; fields: Problems } | null>(null);
   /* Counts refusals, so a field that was already red shakes again on the next one. */
@@ -176,6 +178,7 @@ export function ProfileStep() {
 
   function change(key: ProfileKey, value: string | boolean) {
     setProfile((current) => ({ ...current, [key]: value }));
+    setDirty(true);
     setFailure((current) => {
       if (!current?.fields[key]) return current;
       const fields = { ...current.fields };
@@ -250,6 +253,7 @@ export function ProfileStep() {
       setProfile(pick(payload.profile as unknown as Record<string, unknown>));
       setSaved(true);
       setStatus("Business profile saved. Logged in your onboarding audit trail.");
+      setDirty(false);
     } catch {
       refuse({}, "The profile could not be sent. Check your connection and try again; nothing changed.");
       setStatus("Nothing was saved.");
@@ -290,6 +294,7 @@ export function ProfileStep() {
 
   return (
     <OnboardingStepShell
+      exitLabel={dirty && !saved ? "Leave without saving" : undefined}
       eyeCopy={PROFILE_STEP_EYE_COPY}
       eyeScreen="onboarding-profile"
       lead="Your agent says these words to your leads, so write them the way you would say them."

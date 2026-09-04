@@ -883,6 +883,23 @@ export function coachSetupOpenRow(rows: readonly CoachSetupRow[]): CoachSetupRow
 }
 
 /**
+ * Where setup resumes: the open row's own screen.
+ *
+ * The setup root sends a returning coach here rather than to the list, so coming back after
+ * "Back to your setup" or a fresh sign-in lands on the first thing still theirs to do and never on
+ * step one again. The channels row's button opens the Meta sheet rather than a page, so its
+ * resume is the connect step, which draws the same two channels. Null when nothing is theirs,
+ * and the caller falls back to the list, which is the honest place to stand when there is
+ * nothing to press.
+ */
+export function coachSetupResumeHref(rows: readonly CoachSetupRow[]): string | null {
+  const key = coachSetupOpenRow(rows);
+  const row = key === null ? null : rows.find((candidate) => candidate.key === key) ?? null;
+  if (!row?.action) return null;
+  return row.action.kind === "link" ? row.action.href : "/onboarding/connect";
+}
+
+/**
  * The status sentence, which both surfaces print from the same rows.
  *
  * Three clauses at most: how much is the coach's, in words; where the carriers are; and what

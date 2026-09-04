@@ -11,6 +11,7 @@ import {
   coachSetupBlockedNames,
   coachSetupChannels,
   coachSetupOpenRow,
+  coachSetupResumeHref,
   coachSetupRows,
   coachSetupSentence,
   coachSetupSteps,
@@ -145,6 +146,24 @@ describe("coachSetupRows, one list in journey order", () => {
     const carrier = rows.find((row) => row.key === "carrier")!;
     expect(carrier.pill.label).toBe("In review");
     expect(carrier.receipt).toContain("not recorded");
+  });
+
+  it("resumes at the open row's screen, the connect step for the channels sheet, and nowhere when nothing is theirs", () => {
+    expect(coachSetupResumeHref(coachSetupRows(read(), NOW))).toBe("/onboarding/calendar");
+
+    const readyRead = finished();
+    readyRead.goLive = { checked: true, completedAt: null };
+    expect(coachSetupResumeHref(coachSetupRows(readyRead, NOW))).toBe("/onboarding/go-live");
+
+    const channelsOpen = coachSetupRows(read(), NOW).map((row) =>
+      row.key === "channels"
+        ? { ...row, done: false, action: { channels: ["instagram" as const], kind: "meta" as const, label: "Connect" } }
+        : row,
+    );
+    expect(coachSetupResumeHref(channelsOpen)).toBe("/onboarding/connect");
+
+    const nothing = coachSetupRows(read(), NOW).map((row) => ({ ...row, action: null }));
+    expect(coachSetupResumeHref(nothing)).toBeNull();
   });
 
   it("offers go live only once every row above it is done, and says what it waits on until then", () => {
