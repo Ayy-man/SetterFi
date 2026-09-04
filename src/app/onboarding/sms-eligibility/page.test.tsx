@@ -1,52 +1,63 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CARRIER_TYPICAL_DAYS } from "@/lib/onboarding/contracts";
 import SmsEligibilityPage from "./page";
 
-function json(value: unknown) { return new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } }); }
+function json(value: unknown) {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 // Both instants land mid-afternoon in America/New_York, the workspace display timezone, so the
-// civil-day arithmetic `DayCounter` does is exactly two days and cannot straddle a midnight.
+// civil-day arithmetic `elapsedWorkspaceDays` does is exactly two days and cannot straddle a
+// midnight.
 const NOW = new Date("2026-08-31T18:00:00.000Z");
 const SUBMITTED_AT = "2026-08-29T18:00:00.000Z";
 
+/** The carrier-review panel, which is where the clock lives and the only place it may. */
+function reviewPanel() {
+  return screen.getByRole("region", { name: "Carrier review" });
+}
+
 describe("SmsEligibilityPage", () => {
   /**
-   * The honest-states claim this page has to keep, re-pointed at the shared counter rather than
-   * relaxed.
+   * The honest-states claim this page exists to keep: the wait is a real elapsed day count, never
+   * a percentage and never a predicted decision date.
    *
-   * The page used to count its own days off `Date.now()` with a `+1`, so a registration filed an
-   * hour ago read "day 1" here while every other surface read "Day 0" for the same row, and it
-   * named no typical range at all. It now renders `DayCounter`, which five surfaces share. What
-   * the original test guarded -- a real elapsed count, and no percentage -- is still asserted; the
-   * range and the absence of a predicted decision date are asserted too, because those are the
-   * other halves of the same rule and the old markup could not have carried them.
+   * The count comes from `elapsedWorkspaceDays`, the same function coach Home and the setup rail
+   * count with, rather than from this page's own clock. That matters historically: this screen
+   * once counted off `Date.now()` with a `+1`, so a registration filed an hour ago read "day 1"
+   * here while every other surface read day 0 for the same row.
    */
   it("counts real elapsed days against the shared carrier range, with no percentage and no predicted date", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(NOW);
-    const fetcher = vi.fn().mockImplementation(() => json({ screen: { screenId: "screen-1", state: "flagged", matches: [{ phrase: "credit repair" }], coachAcknowledgedAt: null, adminConfirmedAt: null }, registration: { submittedAt: SUBMITTED_AT, state: "awaiting_provider" } }));
+    const fetcher = vi.fn().mockImplementation(() => json({
+      screen: { screenId: "screen-1", state: "flagged", matches: [{ phrase: "credit repair" }], coachAcknowledgedAt: null, adminConfirmedAt: null },
+      registration: { submittedAt: SUBMITTED_AT, state: "awaiting_provider" },
+    }));
     vi.stubGlobal("fetch", fetcher);
     const user = userEvent.setup();
     render(<SmsEligibilityPage />);
 
-    const panel = (await screen.findByText("day 2")).closest("[data-slot='rehaul-sms-review']");
-    expect(panel).not.toBeNull();
-    const text = panel!.textContent ?? "";
-    expect(text).toContain(`typically ${CARRIER_TYPICAL_DAYS[0]} to ${CARRIER_TYPICAL_DAYS[1]} days once filed`);
+    await screen.findByText("With the carriers");
+    const panel = reviewPanel();
+    const text = panel.textContent ?? "";
+
+    expect(within(panel).getByText("2")).toBeVisible();
+    expect(text).toContain(`of about ${CARRIER_TYPICAL_DAYS[1]} days`);
     // No percentage, and no date beyond the one that already happened: a decision date would be a
     // prediction about a carrier that publishes no schedule.
     expect(text).not.toContain("%");
-    // No word boundary in front: the panel's rows concatenate, so the filing date follows its
-    // label with no separator in `textContent`.
     const MONTH_DAY = /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}\b/gu;
     expect(text.match(MONTH_DAY) ?? []).toEqual(["Aug 29"]);
 
     // The wait is never dressed as completion, and nothing on the page claims approval.
-    expect(screen.getByText("With the carriers")).toBeVisible();
     expect(document.body.textContent ?? "").not.toMatch(/all set|100%|approved/i);
 
     await user.click(screen.getByLabelText("I understand this is an acknowledgement, not carrier approval"));
@@ -60,8 +71,9 @@ describe("SmsEligibilityPage", () => {
   });
 
   /**
-   * With nothing filed, there is no elapsed review to count. The screen prints `day 0` and says
-   * so in its own words rather than starting a clock on a filing that has not happened.
+   * With nothing filed there is no elapsed review to count, so the screen states that in words
+   * where the figure would be rather than starting a clock on a filing that has not happened.
+   * A day zero would read as a review under way on its first day, which is a different fact.
    */
   it("starts no running clock before anything has been filed with the carriers", async () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(() => json({
@@ -70,32 +82,26 @@ describe("SmsEligibilityPage", () => {
     })));
     render(<SmsEligibilityPage />);
 
-    await screen.findByText("Screen cleared");
-    expect(screen.getByText("day 0")).toBeVisible();
-    expect(screen.queryByText(/^day [1-9]/u)).toBeNull();
-    expect(screen.getByText("Nothing is with the carriers yet")).toBeVisible();
-    expect(screen.getByText("Not filed")).toBeVisible();
+    await screen.findByText("Nothing in your words looks like a problem");
+    expect(screen.getByText("Not filed yet")).toBeVisible();
+    expect(within(reviewPanel()).getByText(/carriers' clock starts on the day it does/u)).toBeVisible();
+    expect(reviewPanel().querySelector("[class*='text-[62px]']")).toBeNull();
   });
 
   /**
-   * The three states this page had no arm for, and the reason its fixtures could not see them.
+   * The three states this page once had no arm for.
    *
-   * Every branch here keyed off `submittedAt` while `registration.state` sat unread on the payload
-   * the handler already sends. A filing date is never cleared, so a registration that finished,
-   * failed or was permanently declined still rendered "With the carriers" over a day counter that
-   * climbed forever -- day 47 of a review that ended on day 19.
-   *
-   * The fixtures above could not catch it: one uses `awaiting_provider` and one uses `null`, the
-   * two states for which counting off `submittedAt` alone gives the right answer. They pass the
-   * field, so its presence was known; the assertions just never reached a state where reading it
-   * mattered. Each case below therefore asserts the counter is *absent* as well as asserting the
-   * new sentence, because the sentence appearing beside a still-running clock would be a pass on
-   * the half of the bug that shows a coach a wrong number.
+   * Every branch keyed off `submittedAt` while `registration.state` sat unread on the payload the
+   * handler already sends. A filing date is never cleared, so a registration that finished, failed
+   * or was permanently declined still rendered "With the carriers" over a day counter that climbed
+   * forever: day 47 of a review that ended on day 19. Each case asserts the counter is absent as
+   * well as asserting the new sentence, because the sentence appearing beside a still-running
+   * clock would pass on the half of the bug that shows a coach a wrong number.
    */
   it.each([
-    ["done", "Carrier review complete", /Carrier registration is complete/],
-    ["failed", "Setup needs review", /Text messaging setup did not complete/],
-    ["blocked", "Blocked", /Carrier registration was permanently declined/],
+    ["done", "Registered", /The carriers finished/],
+    ["failed", "Setup needs review", /Texting setup did not complete/],
+    ["blocked", "Refused by the carriers", /The carriers refused this registration/],
   ])("stops the carrier clock once registration reaches %s", async (state, label, prose) => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(NOW);
@@ -106,9 +112,9 @@ describe("SmsEligibilityPage", () => {
     render(<SmsEligibilityPage />);
 
     expect(await screen.findByText(label)).toBeVisible();
-    expect(screen.getByText(prose)).toBeVisible();
-    expect(screen.queryByText(/^day \d+$/u)).toBeNull();
+    expect(within(reviewPanel()).getByText(prose)).toBeVisible();
     expect(screen.queryByText("With the carriers")).toBeNull();
+    expect(reviewPanel().querySelector("[class*='text-[62px]']")).toBeNull();
     // The wait being over is not the same as the channel being approved to send.
     expect(document.body.textContent ?? "").not.toMatch(/all set|100%|approved/i);
   });
@@ -126,8 +132,25 @@ describe("SmsEligibilityPage", () => {
     render(<SmsEligibilityPage />);
 
     expect(await screen.findByText("We could not check this")).toBeVisible();
-    expect(screen.getByText("The carrier registration check did not run.")).toBeVisible();
-    expect(screen.queryByText("Nothing is with the carriers yet")).toBeNull();
-    expect(screen.queryByText(/^day \d+$/u)).toBeNull();
+    expect(within(reviewPanel()).getByText(/did not run/u)).toBeVisible();
+    expect(screen.queryByText("Not filed yet")).toBeNull();
+    expect(reviewPanel().querySelector("[class*='text-[62px]']")).toBeNull();
+  });
+
+  /**
+   * The rule the audit measured this screen failing hardest: it carried seven drenched elements
+   * against a canvas budget of two, and the drench is the loudest object the coach language has.
+   * Nothing on this step is drenched now, and the step's one accent fill is the forward action.
+   */
+  it("spends no drench, and exactly one accent fill", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => json({
+      screen: { screenId: "screen-1", state: "clean", matches: [], coachAcknowledgedAt: null, adminConfirmedAt: null },
+      registration: { submittedAt: null, state: null },
+    })));
+    render(<SmsEligibilityPage />);
+    await screen.findByText("Not filed yet");
+
+    expect(document.querySelectorAll("[data-drench]")).toHaveLength(0);
+    expect(document.querySelectorAll("[class*='var(--accent-fill)']")).toHaveLength(1);
   });
 });

@@ -1,180 +1,228 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { READINESS_KEYS, type ReadinessKey } from "@/lib/onboarding/contracts";
 
 import OnboardingPage from "./page";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: "a" }));
 
 /**
- * The readiness the page reads, as the go-live endpoint would judge it. A live channel and a
- * published offer, the safe test and the subscription still to do: two strip boxes ticked, and
- * two checks the button would still refuse on, one of which has no box in the strip at all.
+ * The three reads the page makes, mutable per test.
+ *
+ * They are the same three coach Home makes: the channel connection list, the A2P registration, and
+ * `provisioning_steps`. That is the whole point of the rebuild, so the fixture is shaped like the
+ * real reads rather than like a view model.
  */
-const UNMET: ReadinessKey[] = ["test_passed", "subscription_ready"];
-/** Mutable per test: the code the unmet checks carry, and whether the go-live flow is on. */
-const scenario = { unmetCode: "READINESS_CHECK_MISSING", phase5Live: true };
-vi.mock("@/lib/env-contract", () => ({
-  phase5Live: () => scenario.phase5Live,
-  phase7MeetAgentLive: () => false,
-}));
-// The body is the client component's business; this file is about the strip and the heading.
-vi.mock("@/components/onboarding/coach-onboarding", () => ({ CoachOnboarding: () => null }));
+const reads = {
+  businessProfiles: [] as unknown[],
+  calendarConnections: [] as { state: string }[],
+  connections: [] as unknown[],
+  connectionsThrow: false,
+  phase5Live: true,
+  provisioningSteps: [] as { state: string }[],
+  publishedOffer: null as unknown,
+  registration: null as Record<string, unknown> | null,
+  tableError: null as string | null,
+};
+
+beforeEach(() => {
+  reads.businessProfiles = [];
+  reads.calendarConnections = [];
+  reads.connections = [];
+  reads.connectionsThrow = false;
+  reads.phase5Live = true;
+  reads.provisioningSteps = [];
+  reads.publishedOffer = null;
+  reads.registration = null;
+  reads.tableError = null;
+});
+
+/**
+ * The service client, shaped like the four reads the page makes rather than like one generic
+ * chain: each rung reads the table its own step screen reads, and the point of the fixture is that
+ * those are four different tables.
+ */
+function tableRows(table: string): unknown[] {
+  if (table === "business_profiles") return reads.businessProfiles;
+  if (table === "calendar_connections") return reads.calendarConnections;
+  if (table === "provisioning_steps") return reads.provisioningSteps;
+  return [];
+}
+
+vi.mock("@/lib/env-contract", () => ({ phase5Live: () => reads.phase5Live }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({
     auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } }, error: null }) },
   }),
-}));
-vi.mock("@/lib/auth/claims", () => ({ parseAppClaims: () => ({ tenantId: "tenant-1" }) }));
-vi.mock("@/app/api/onboarding/readiness/handler", () => ({ createReadinessEvidence: () => ({}) }));
-vi.mock("@/lib/onboarding/readiness", () => ({
-  evaluateReadiness: async () => ({
-    ready: false,
-    checks: READINESS_KEYS.map((key) => ({
-      key,
-      ready: !UNMET.includes(key),
-      code: UNMET.includes(key) ? scenario.unmetCode : "ok",
-      evidenceAt: null,
-      blamingParty: "coach",
-    })),
+  createSupabaseServiceClient: () => ({
+    from: (table: string) => {
+      const result = reads.tableError === table
+        ? { data: null, error: new Error("unreadable") }
+        : { data: tableRows(table), error: null };
+      const chain = {
+        eq: () => chain,
+        limit: () => Promise.resolve(result),
+        select: () => chain,
+        then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve),
+      };
+      return chain;
+    },
   }),
 }));
+vi.mock("@/lib/auth/claims", () => ({
+  canAccessWorkspace: () => true,
+  parseAppClaims: () => ({ role: "coach", tenantId: "tenant-1" }),
+  workspaceForRole: () => "coach",
+}));
+vi.mock("@/lib/repositories/channel-connections", () => ({
+  listChannelConnections: async () => {
+    if (reads.connectionsThrow) throw new Error("unreadable");
+    return reads.connections;
+  },
+}));
+vi.mock("@/lib/repositories/offer-layer", () => ({
+  createOfferLayerRepository: () => ({
+    loadOffer: async () => {
+      if (reads.tableError === "offers") throw new Error("unreadable");
+      return reads.publishedOffer;
+    },
+  }),
+}));
+vi.mock("@/lib/repositories/onboarding-evidence", () => ({
+  loadCoachA2pRegistration: async () => {
+    if (reads.tableError === "a2p") throw new Error("unreadable");
+    return reads.registration;
+  },
+}));
 
-/**
- * The go-live headline against the strip standing directly above it.
- *
- * The page shipped the artboard's "You are one button away from your agent answering" as an
- * unconditional string while the first three boxes of its own setup strip read "(still to do)".
- * Two statements about the same fact, on the same screen, disagreeing -- which is the honest-states
- * rule in `CLAUDE.md` broken at the exact moment a coach is most inclined to believe the flattering
- * half. `artboard-conformance.test.ts` beside this file could not have caught it: it compares the
- * page to the drawing, and the drawing is where the sentence came from.
- *
- * So this reads the rendered DOM rather than the source, and asserts the pairing rather than the
- * string: while any step box renders as still to do, the heading must not be the drawing's
- * readiness sentence. Rewording the headline to something softer does not satisfy it, because the
- * check below also refuses the other ways a heading can claim to be finished.
- */
-
-const READINESS_CLAIM = /one button away|ready to go|all set|you are live|you're live|100%/iu;
-
-/**
- * The `<h1>` the drawing gives this page. Recorded from the OnboardingGoLive artboard as drawn on
- * 2026-09-02; the artboards are not part of this repository, so a redraw has to be carried here
- * by hand.
- */
-function drawnReadinessTitle() {
-  return "You are one button away from your agent answering";
+async function renderPage() {
+  render(await OnboardingPage());
 }
 
-describe("the go-live headline against its own setup strip", () => {
-  beforeEach(() => {
-    scenario.unmetCode = "READINESS_CHECK_MISSING";
-    scenario.phase5Live = true;
-  });
+/** The counter in the rail's own header band. */
+function counter() {
+  return screen.getByRole("heading", { level: 2, name: /of 6 done$/u });
+}
 
-  it("does not claim the agent is one press away while any setup step is still to do", async () => {
-    render(await OnboardingPage());
+function rungs() {
+  return [...document.querySelectorAll("[data-slot='onboarding-step-rung']")] as HTMLElement[];
+}
 
-    const outstanding = document.querySelectorAll(
-      '[data-slot="setup-step"][data-state="upcoming"]',
-    );
-    // The positive control. With no outstanding step the assertions below would hold on a page
-    // that was entitled to the readiness sentence, and would report agreement on nothing.
-    expect(
-      outstanding.length,
-      "no setup step rendered as still to do, so this render cannot test the disagreement",
-    ).toBeGreaterThan(0);
+const LIVE_INSTAGRAM = {
+  channel: "instagram",
+  state: "live",
+  receipts: { signedRoundTripAt: "2026-08-29T00:00:00.000Z" },
+};
 
-    const heading = screen.getByRole("heading", { level: 1 }).textContent ?? "";
-    expect(heading.length, "the page rendered no heading text").toBeGreaterThan(0);
-
-    const drawn = drawnReadinessTitle();
-    expect(drawn.length, "the drawing's title came back empty").toBeGreaterThan(0);
-    expect(heading).not.toBe(drawn);
-    expect(heading).not.toMatch(READINESS_CLAIM);
-  });
-
+describe("the setup root", () => {
   /**
-   * The other half: the strip and the heading are drawn from one evidence set, so the words a
-   * screen reader gets out of the strip agree with the heading by construction rather than by two
-   * authors happening to say the same thing.
+   * The defect Note 3 recorded, asserted as a property rather than as a number.
+   *
+   * `/onboarding` said 3 of 7 while `/coach/home` said 0 of 3 for one account. Fixing the constant
+   * would have left the two expressions of the count still maintained by hand, so what is pinned
+   * here is that the denominator equals the number of rungs drawn and the numerator equals the
+   * number of them in the done state. Neither can be edited into disagreement.
    */
-  it("says the same thing in the strip that it says in the heading", async () => {
-    render(await OnboardingPage());
+  it("counts the rungs it draws, on both halves of the fraction", async () => {
+    reads.connections = [LIVE_INSTAGRAM];
+    reads.businessProfiles = [{ id: "profile-1" }];
+    await renderPage();
 
-    const steps = Array.from(document.querySelectorAll('[data-slot="setup-step"]'));
-    expect(steps.length, "the strip did not render, so there was nothing to compare").toBe(4);
-    expect(steps.some((step) => (step.textContent ?? "").includes("still to do"))).toBe(true);
-    // The two checks the readiness above proves are the two boxes the strip ticks, and no other.
-    const done = steps.filter((step) => step.getAttribute("data-state") === "done");
-    expect(done.map((step) => step.getAttribute("data-key") ?? step.textContent)).toHaveLength(2);
-  });
-
-  /**
-   * The rail's other half. It read `current="go_live"` from the route rather than from the
-   * evidence, so step four said "you are here" while steps one to three said "still to do" -- the
-   * strip reporting the coach at the end of a path it was simultaneously saying they had not
-   * walked.
-   */
-  it("stands the reader on the first step nobody has proved, not on the last one", async () => {
-    render(await OnboardingPage());
-
-    const steps = Array.from(document.querySelectorAll('[data-slot="setup-step"]'));
-    expect(steps.length, "the strip did not render, so there was nothing to place").toBe(4);
-    const current = steps.filter((step) => step.getAttribute("data-state") === "current");
-    expect(current, "exactly one step is the reader's position").toHaveLength(1);
-    // The step standing as current must be the earliest one carrying no tick.
-    const firstUnticked = steps.find((step) => step.getAttribute("data-state") !== "done");
-    expect(current[0]).toBe(firstUnticked);
-    expect(current[0]?.textContent).toContain("you are here");
-  });
-
-  /**
-   * The count. "Your agent is not answering yet" was true and told a coach nothing: three steps out
-   * and one step out read the same line, so the headline stopped being a position readout the
-   * moment it stopped claiming readiness.
-   */
-  it("counts every check the button would refuse on, not only the boxes the strip has", async () => {
-    render(await OnboardingPage());
-
-    const steps = Array.from(document.querySelectorAll('[data-slot="setup-step"]'));
-    const unticked = steps.slice(0, 3).filter((step) => step.getAttribute("data-state") !== "done");
-    // One box is unticked (Meet your agent), but two checks are outstanding, because the
-    // subscription has no box. The headline must say two, or it is the undercount that shipped.
-    expect(unticked).toHaveLength(1);
-    expect(screen.getByRole("heading", { level: 1 }).textContent)
-      .toBe("Two things left before your agent answers");
-  });
-
-  /**
-   * A check the evaluator could not read is reported as not ready so the button stays refused,
-   * but it is not one more thing for the coach to do. Counting it printed "One thing left" over a
-   * database timeout; the honest headline over evidence the page does not have makes no count.
-   */
-  it("makes no count when any readiness check could not be read", async () => {
-    scenario.unmetCode = "subscription_contract_unavailable";
-    render(await OnboardingPage());
-
-    const heading = screen.getByRole("heading", { level: 1 }).textContent ?? "";
-    expect(heading).toBe("Your agent is not answering yet");
-    expect(heading).not.toMatch(/\bone\b|\btwo\b|\d/iu);
-    // The strip still ticks only what was positively proved.
-    const done = document.querySelectorAll('[data-slot="setup-step"][data-state="done"]');
+    const rows = rungs();
+    expect(rows).toHaveLength(6);
+    const done = rows.filter((row) => row.dataset.state === "done");
     expect(done).toHaveLength(2);
+    expect(counter()).toHaveTextContent("2 of 6 done");
   });
 
   /**
-   * With the go-live flow off the body offers no button, so a headline counting the coach down
-   * towards one would be counting towards nothing. The page then reads no readiness at all.
+   * The channel fact this page and coach Home both state comes from one read of one table, so the
+   * two surfaces cannot disagree about whether a coach's agent is answering. Only `live` counts:
+   * `ready` is an OAuth that finished, not a channel a lead can reach.
    */
-  it("makes no count while the go-live flow is off", async () => {
-    scenario.phase5Live = false;
-    render(await OnboardingPage());
+  it("calls the channel rung done only for a connection whose row says live", async () => {
+    reads.connections = [{ channel: "instagram", state: "ready", receipts: {} }];
+    await renderPage();
 
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Your agent is not answering yet");
-    expect(document.querySelectorAll('[data-slot="setup-step"][data-state="done"]')).toHaveLength(0);
+    const connect = rungs()[1];
+    expect(connect).toHaveTextContent("Connect Instagram and Messenger");
+    expect(connect.dataset.state).not.toBe("done");
+    expect(counter()).toHaveTextContent("0 of 6 done");
+  });
+
+  /**
+   * A failed read is an absence, not a zero. Saying "you have not connected anything" on the
+   * strength of a query that never ran is the confident wrong answer the honest-states rule exists
+   * to stop, and it would be said to a coach whose Instagram is live.
+   */
+  it("says a step could not be read rather than drawing it as not done", async () => {
+    reads.connectionsThrow = true;
+    await renderPage();
+
+    const connect = rungs()[1];
+    expect(connect.dataset.state).toBe("unknown");
+    expect(within(connect).getByText("We could not check this")).toBeVisible();
+    expect(screen.getByText(/Some of your setup could not be read just now/u)).toBeVisible();
+  });
+
+  /**
+   * The resume button is the page's one filled action, and it names the step it goes to so the
+   * reader knows the destination before pressing it. The audit's defect 3 was the accent spent on
+   * a panel of prose while the real action sat grey beneath it.
+   */
+  it("spends its one accent fill on the button that resumes the current step", async () => {
+    reads.businessProfiles = [{ id: "profile-1" }];
+    await renderPage();
+
+    const fills = document.querySelectorAll("[class*='var(--accent-fill)']");
+    expect(fills).toHaveLength(1);
+    expect(fills[0]).toHaveTextContent("Continue with connect instagram and messenger");
+    expect(fills[0].getAttribute("href")).toBe("/onboarding/connect");
+    expect(document.querySelectorAll("[data-drench]")).toHaveLength(0);
+  });
+
+  /**
+   * Later steps carry a plain ring and no state pill, which is what removes the "2, 3, 4, 6"
+   * sequence a reader could find a hole in. Nothing on the rail is numbered.
+   */
+  it("numbers nothing on the rail and gives later steps no pill", async () => {
+    await renderPage();
+
+    const later = rungs().filter((row) => row.dataset.state === "later");
+    expect(later.length).toBeGreaterThan(0);
+    for (const row of later) {
+      expect(row.textContent ?? "").not.toMatch(/\b[1-6]\b/u);
+    }
+  });
+
+  /**
+   * With the setup flow switched off every read would describe a pipeline that is not running, so
+   * the rail says each step could not be read rather than drawing six untouched steps as work the
+   * coach has failed to do.
+   */
+  it("makes no claim about any step while the setup flow is off", async () => {
+    reads.phase5Live = false;
+    await renderPage();
+
+    expect(rungs().every((row) => row.dataset.state === "unknown")).toBe(true);
+    expect(counter()).toHaveTextContent("0 of 6 done");
+  });
+
+  /** Nothing is waiting, so nothing is offered: a resume button here would land on a done screen. */
+  it("offers no resume button once every step is proved", async () => {
+    reads.connections = [LIVE_INSTAGRAM];
+    reads.registration = {
+      registrationState: "done",
+      submittedAt: "2026-08-01T00:00:00.000Z",
+      terminalRejection: false,
+    };
+    reads.businessProfiles = [{ id: "profile-1" }];
+    reads.calendarConnections = [{ state: "ready" }];
+    reads.provisioningSteps = [{ state: "done" }];
+    reads.publishedOffer = { id: "offer-1" };
+    await renderPage();
+
+    expect(counter()).toHaveTextContent("6 of 6 done");
+    expect(screen.getByText("Nothing here is left to finish.")).toBeVisible();
+    expect(document.querySelectorAll("[class*='var(--accent-fill)']")).toHaveLength(0);
   });
 });

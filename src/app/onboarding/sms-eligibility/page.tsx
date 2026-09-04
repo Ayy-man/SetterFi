@@ -1,20 +1,17 @@
-import { CoachScale } from "@/components/coach-scale";
-import { OnboardingSmsRehaul } from "@/components/workspace/rehaul/onboarding-sms";
+import type { Metadata } from "next";
+
+import { SmsStep } from "@/components/onboarding/sms-step";
+
+export const metadata: Metadata = {
+  title: "Can your business send texts",
+  description: "Where your carrier registration stands, counted in real days.",
+  robots: { index: false, follow: false },
+};
 
 /**
- * Step 5 of setup. The screen reads the eligibility payload and reduces it through
- * `carrierReviewFrom`.
- *
- * The route stamps coach density itself rather than leaving it to the screen. `OnboardingShell`
- * already stamps it inside, so this changes nothing a reader sees, and the attribute is the same
- * value at both depths. What it buys is that the density is a property of the *route*, readable
- * from this file, which is how `coach-density.ts` decides which modules the coach-only guards
- * apply to.
+ * Step 3 of setup. The screen reads the eligibility payload and reduces it through
+ * `carrierReviewFrom`, which is the reduction coach Home and the setup rail share.
  */
 export default function SmsEligibilityPage() {
-  return (
-    <CoachScale>
-      <OnboardingSmsRehaul />
-    </CoachScale>
-  );
+  return <SmsStep />;
 }
