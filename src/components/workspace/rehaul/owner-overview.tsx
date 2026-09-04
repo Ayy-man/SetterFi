@@ -114,26 +114,6 @@ function shortDate(value: string) {
   return Number.isNaN(parsed.getTime()) ? "Not recorded" : SHORT_DATE.format(parsed);
 }
 
-/** Money with no cents part, which is how `adminMeasurementView` spells a cents-unit figure. */
-const PERIOD_MONEY = new Intl.NumberFormat("en-US", {
-  currency: "USD",
-  maximumFractionDigits: 0,
-  style: "currency",
-});
-
-/**
- * One period's own reading, in the same spelling the figure above it uses.
- *
- * The revenue series is carried in cents, so a bar labelled through `formatMetric(value, "money")`
- * would read "$2,982.00" directly under a headline figure reading "$2,982". Two spellings of one
- * number on one card is the reader's problem rather than a rounding detail, so the money case is
- * formatted here the way the projection formats it.
- */
-function periodValueText(key: string | null, value: number) {
-  return key === "platform.gross_mrr"
-    ? PERIOD_MONEY.format(value / 100)
-    : formatMetric(value, "count");
-}
 
 /**
  * A KPI card's one comparison line: this period against the one before it.
@@ -479,9 +459,6 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
   const activeByPeriod = measuredSeries(
     windowedHistory(measurement.activeSubscriptionsByPeriod, activeWindow),
   );
-  const revenueByPeriod = measuredSeries(
-    windowedHistory(measurement.revenueByPeriod, activeWindow),
-  );
   const active = activeSubscriptions(measurement);
   const trialing = trialingSubscriptions(measurement);
   const pastDue = pastDueSubscriptions(measurement);
@@ -497,18 +474,6 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
 
   const barsDrawable = history.length >= 2 && history.some((period) => period.value > 0);
   const { measure: measureBars, width: barsWidth } = useMeasuredWidth(640);
-  const { measure: measurePulse, width: pulseWidth } = useMeasuredWidth(420);
-
-  // The pulse draws the series belonging to the figure it leads on, so a role refused revenue is
-  // refused the revenue strip with it rather than being shown a shape it cannot read a value off.
-  //
-  // One measured period is enough for a bar. That was not true of the smoothed line this strip
-  // replaced, which needed a run long enough for the curve to describe rather than invent the
-  // series; a bar makes exactly one claim, "this period read this much", and a single bar with its
-  // own figure printed on it makes that claim honestly.
-  const pulseSeries = pulseKey === "platform.gross_mrr" ? revenueByPeriod : history;
-  const pulseLatest = pulseSeries.at(-1) ?? null;
-  const pulseLabels = pulseSeries.map((period) => periodLabel(period.periodStart));
 
   return (
     <div className="flex min-w-0 flex-col gap-[var(--s-4)]">
@@ -593,33 +558,6 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
                 : "trailing 30 days"
               : absenceText(pulse)}
           </p>
-          <div className="mt-auto pt-[var(--s-4)]" ref={measurePulse}>
-            {pulseLatest ? (
-              <BarChart
-                axisColor="oklch(0.74 0.02 262)"
-                baselineColor="rgba(255,255,255,0.18)"
-                currentValueLabel={periodValueText(pulseKey, pulseLatest.value)}
-                fill="oklch(0.84 0.10 264)"
-                height={72}
-                label={`${pulse?.label ?? "Gross MRR"} by 30-day period: ${pulseSeries
-                  .map(
-                    (period, index) =>
-                      `${pulseLabels[index]} ${periodValueText(pulseKey, period.value)}`,
-                  )
-                  .join(", ")}`}
-                labels={pulseLabels}
-                valueText={(value) => periodValueText(pulseKey, value)}
-                values={pulseSeries.map((period) => period.value)}
-                width={pulseWidth}
-              />
-            ) : (
-              <p className="m-0 font-mono text-[11px]" style={{ color: "oklch(0.70 0.02 262)" }}>
-                {pulseKey === "platform.gross_mrr"
-                  ? "No revenue period recorded yet"
-                  : "No period series recorded"}
-              </p>
-            )}
-          </div>
         </div>
         <dl
           className="m-0 grid min-w-[260px] flex-1 grid-cols-3 content-end gap-[var(--s-5)] pl-[var(--s-6)]"

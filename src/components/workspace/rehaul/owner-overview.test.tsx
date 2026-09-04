@@ -149,10 +149,9 @@ describe("OwnerOverview", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
     expect(screen.getByText("Thursday 3 September 2026")).toBeInTheDocument();
-    // Gross MRR leads the pulse for an owner: 298,200 cents read back as money. It is spelled
-    // three times and identically each time -- the headline figure, the label on the latest bar of
-    // the strip under it, and that period's row in the strip's sr-only table.
-    expect(screen.getAllByText("$2,982")).toHaveLength(3);
+    // Gross MRR leads the pulse for an owner: 298,200 cents read back as money, once, as the
+    // headline figure. The period strip that used to repeat it under the figure is gone.
+    expect(screen.getAllByText("$2,982")).toHaveLength(1);
     // The trialing row has collected nothing, so it is named apart rather than counted active.
     expect(screen.getByText("across 1 active subscription · 1 trialing")).toBeInTheDocument();
   });
@@ -213,32 +212,17 @@ describe("OwnerOverview", () => {
     expect(screen.getByText("Demo and test rows excluded")).toBeInTheDocument();
   });
 
-  it("draws the pulse as a period bar strip that names every period and its reading", () => {
+  it("draws the pulse as the figure alone, with no period strip under it", () => {
     const { container } = render(<OwnerOverview measurement={measurement()} role="owner" />);
 
-    // The strip's accessible name carries each period and its own money reading, so the shape is
-    // never the only thing on offer. It is one line rather than a smoothed curve because two
-    // periods cannot be smoothed into anything honest.
-    expect(
-      screen.getByRole("img", {
-        name: "Gross MRR by 30-day period: Jul 2026 $2,100, Aug 2026 $2,982",
-      }),
-    ).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="sparkline"]')).toBeNull();
-
+    // The strip under the headline figure was removed on 2026-09-04: a row of ten near-invisible
+    // slivers ending in one bar labelled with a figure that disagreed with the headline read as a
+    // broken chart, not a history. The history lives in the signups panel and the KPI dialogs.
     const pulse = container.querySelector('[data-slot="overview-pulse"]') as HTMLElement;
-    // The latest bar is the only solid one and it carries its own figure; the earlier period is
-    // drawn back so the eye lands on the reading the page is opened for.
-    expect(pulse.querySelectorAll('rect[data-slot="bar-current"]')).toHaveLength(1);
-    expect(pulse.querySelectorAll('rect[data-slot="bar"]')).toHaveLength(1);
-    expect(pulse.querySelector('[data-slot="bar-current-value"]')?.textContent).toBe("$2,982");
-    // The two ends are dated underneath, so a bar can be placed in time without a hover.
-    expect(pulse.textContent).toContain("Jul 2026");
-    expect(pulse.textContent).toContain("Aug 2026");
-    // The sr-only table reads money as money rather than as a raw count of cents.
-    expect(pulse.querySelector("table")?.textContent).toContain("$2,100");
-
-    expect(screen.queryByText("No revenue period recorded yet")).toBeNull();
+    expect(pulse.querySelector('[data-slot="bar-current"]')).toBeNull();
+    expect(pulse.querySelector("table")).toBeNull();
+    expect(screen.queryByRole("img", { name: /by 30-day period/u })).toBeNull();
+    expect(pulse.textContent).toContain("$2,982");
   });
 
   it("replaces the KPI trend slot with a comparison against the prior period", () => {
@@ -308,7 +292,7 @@ describe("OwnerOverview", () => {
       />,
     );
 
-    expect(screen.getByText("No revenue period recorded yet")).toBeInTheDocument();
+    expect(screen.queryByText("No revenue period recorded yet")).toBeNull();
     expect(
       screen.queryByRole("img", { name: /^Gross MRR by 30-day period/u }),
     ).toBeNull();
