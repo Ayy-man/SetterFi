@@ -153,12 +153,6 @@ const WEEKDAY_FORMAT = new Intl.DateTimeFormat("en-US", {
   timeZone: WORKSPACE_DISPLAY_TIMEZONE,
 });
 
-const MONTH_DAY_FORMAT = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  timeZone: WORKSPACE_DISPLAY_TIMEZONE,
-});
-
 /** The calendar day an instant falls on in the reporting zone, as a sortable key. */
 const DAY_KEY_FORMAT = new Intl.DateTimeFormat("en-CA", {
   year: "numeric",
@@ -192,24 +186,56 @@ function daysBetween(then: number, now: number) {
 }
 
 /**
- * The stamp under a bubble: "today 11:48 am", "Monday 4:12 pm", "Aug 17 4:12 pm". Null whenever
+ * The stamp under a bubble: "4:12 pm", the time alone. The day is said once, by the day line
+ * above the first message of each day, rather than forty times under forty bubbles. Null whenever
  * the clock is unavailable, so an unreadable instant is left out rather than printed as an epoch.
  */
-function messageStamp(iso: string, nowIso: string | null) {
+function messageStamp(iso: string) {
   const then = Date.parse(iso);
-  const now = nowIso ? Date.parse(nowIso) : Number.NaN;
   if (!Number.isFinite(then)) return null;
-  if (!Number.isFinite(now)) return clockLabel(then);
+  return clockLabel(then);
+}
 
-  const days = daysBetween(then, now);
-  const day = days <= 0
-    ? "today"
-    : days === 1
-      ? "yesterday"
-      : days < 7
-        ? WEEKDAY_FORMAT.format(new Date(then))
-        : MONTH_DAY_FORMAT.format(new Date(then));
-  return `${day} ${clockLabel(then)}`;
+/** "Tuesday, August 26", with the year only when it is not this one. */
+const DAY_HEADING_FORMAT = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "long",
+  timeZone: WORKSPACE_DISPLAY_TIMEZONE,
+  weekday: "long",
+});
+const DAY_HEADING_YEAR_FORMAT = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "long",
+  timeZone: WORKSPACE_DISPLAY_TIMEZONE,
+  weekday: "long",
+  year: "numeric",
+});
+const YEAR_FORMAT = new Intl.DateTimeFormat("en-US", { timeZone: WORKSPACE_DISPLAY_TIMEZONE, year: "numeric" });
+
+/**
+ * The line that opens a day's run of messages: "Today", "Yesterday", "Tuesday" inside the week,
+ * the full date beyond it. Null between two messages on the same day, so the day is said once.
+ * A thread of forty messages was printing "Aug 26" forty times under the bubbles; the reader
+ * needs the day once and the time under each line.
+ */
+function dayHeading(iso: string, previousIso: string | null, nowIso: string | null) {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return null;
+  const previous = previousIso ? Date.parse(previousIso) : Number.NaN;
+  if (Number.isFinite(previous) && DAY_KEY_FORMAT.format(new Date(previous)) === DAY_KEY_FORMAT.format(new Date(then))) {
+    return null;
+  }
+  const now = nowIso ? Date.parse(nowIso) : Number.NaN;
+  if (Number.isFinite(now)) {
+    const days = daysBetween(then, now);
+    if (days <= 0) return "Today";
+    if (days === 1) return "Yesterday";
+    if (days < 7) return WEEKDAY_FORMAT.format(new Date(then));
+    if (YEAR_FORMAT.format(new Date(then)) === YEAR_FORMAT.format(new Date(now))) {
+      return DAY_HEADING_FORMAT.format(new Date(then));
+    }
+  }
+  return DAY_HEADING_YEAR_FORMAT.format(new Date(then));
 }
 
 /**
@@ -332,7 +358,7 @@ function systemLine(
   options: { mine: boolean; nowIso: string | null },
 ) {
   const body = displayText(message.body).trim();
-  const stamp = messageStamp(message.createdAt, options.nowIso);
+  const stamp = messageStamp(message.createdAt);
   const takeover = /took over/u.test(body);
   const text = takeover && options.mine ? "You joined the conversation" : body;
   /*
@@ -1055,25 +1081,47 @@ export function CoachInbox({
                   className="flex min-h-0 flex-1 flex-col gap-[12px] overflow-auto px-[16px] py-[24px] sm:px-[28px]"
                   ref={transcriptRef}
                 >
-                  {selected.messages.map((message, index) => {
+                  {selected.messages.flatMap((message, index) => {
+                    /*
+                     * The day, said once above the first message of each day. Every stamp under
+                     * a bubble then carries the time alone.
+                     */
+                    const heading = dayHeading(
+                      message.createdAt,
+                      selected.messages[index - 1]?.createdAt ?? null,
+                      nowIso,
+                    );
+                    const dayLine = heading ? (
+                      <div
+                        className="mt-[16px] mb-[4px] flex items-center gap-[14px] first:mt-0"
+                        data-slot="inbox-day"
+                        key={`${message.id}-day`}
+                      >
+                        <span className="h-px flex-1 bg-[var(--line)]" />
+                        <span className="text-[14px] font-semibold tracking-[0.01em] text-[color:var(--thread-system)]">
+                          {heading}
+                        </span>
+                        <span className="h-px flex-1 bg-[var(--line)]" />
+                      </div>
+                    ) : null;
                     if (isNote(message)) {
-                      return (
+                      return [dayLine, (
                         <div
-                          className="mt-[8px] max-w-[86%] self-center rounded-[14px] border border-dashed border-[var(--thread-you-edge)] bg-[var(--thread-you)] px-[16px] py-[14px] text-[17px] leading-[1.5] text-[color:var(--thread-lead-ink)] sm:max-w-[62%]"
+                          className="mt-[12px] max-w-[88%] self-center rounded-[14px] border border-dashed border-[var(--thread-you-edge)] bg-[var(--thread-you)] px-[18px] py-[16px] text-[18px] leading-[1.6] text-[color:var(--thread-lead-ink)] sm:max-w-[min(64%,60ch)]"
                           key={message.id}
                         >
                           {displayText(message.body)}
                           <p className="m-0 mt-[8px] text-[14px] text-[color:var(--thread-lead-meta)]">
                             Your note, only you see this
-                            {messageStamp(message.createdAt, nowIso)
-                              ? `, ${messageStamp(message.createdAt, nowIso)}`
+                            {messageStamp(message.createdAt)
+                              ? `, ${messageStamp(message.createdAt)}`
                               : ""}
                           </p>
                         </div>
-                      );
+                      )];
                     }
                     if (message.direction === "system") {
-                      return (
+                      return [dayLine, (
                         <div className="flex items-center gap-[14px] py-[4px]" key={message.id}>
                           <span className="h-px flex-1 bg-[var(--line)]" />
                           <span className="max-w-[74%] text-center text-[15px] leading-[1.5] text-balance text-[color:var(--thread-system)]">
@@ -1084,7 +1132,7 @@ export function CoachInbox({
                           </span>
                           <span className="h-px flex-1 bg-[var(--line)]" />
                         </div>
-                      );
+                      )];
                     }
                     const outbound = message.direction === "out";
                     const byHuman = outbound && message.author.startsWith("human");
@@ -1095,7 +1143,7 @@ export function CoachInbox({
                           ? coachName
                           : "Someone on your team"
                         : "Your agent";
-                    const stamp = messageStamp(message.createdAt, nowIso);
+                    const stamp = messageStamp(message.createdAt);
                     /*
                      * Three treatments, not two, and told apart by colour rather than by side
                      * alone. A coach scanning a thread has to know who said a line without
@@ -1112,11 +1160,11 @@ export function CoachInbox({
                      * its own rhythm rather than being counted as a speaker.
                      */
                     const opensTurn = voiceOf(selected.messages[index - 1]) !== voice;
-                    return (
+                    return [dayLine, (
                       <div
                         className={[
-                          "max-w-[86%] px-[16px] py-[14px] sm:max-w-[62%]",
-                          opensTurn ? "mt-[8px]" : "",
+                          "max-w-[88%] px-[18px] py-[16px] sm:max-w-[min(64%,60ch)]",
+                          opensTurn ? "mt-[12px]" : "",
                           voice === "lead"
                             ? "self-start rounded-[14px_14px_14px_5px] border border-[var(--thread-lead-edge)] bg-[var(--thread-lead)]"
                             : voice === "agent"
@@ -1128,7 +1176,7 @@ export function CoachInbox({
                       >
                         <p
                           className={[
-                            "m-0 text-[17px] leading-[1.5]",
+                            "m-0 text-[18px] leading-[1.6]",
                             voice === "agent"
                               ? "text-[color:var(--thread-agent-ink)]"
                               : "text-[color:var(--thread-lead-ink)]",
@@ -1138,7 +1186,7 @@ export function CoachInbox({
                         </p>
                         <p
                           className={[
-                            "m-0 mt-[8px] text-[14px]",
+                            "m-0 mt-[8px] text-[14px] leading-[1.4]",
                             voice === "agent"
                               ? "text-[color:var(--thread-agent-meta)]"
                               : "text-[color:var(--thread-lead-meta)]",
@@ -1148,7 +1196,7 @@ export function CoachInbox({
                           {stamp ? `${sender}, ${stamp}` : sender}
                         </p>
                       </div>
-                    );
+                    )];
                   })}
                   {/*
                     Why the agent stopped, in the thread and in its own words. It names the rule

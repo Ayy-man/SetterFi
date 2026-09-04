@@ -274,8 +274,8 @@ describe("CoachInbox", () => {
     });
 
     const thread = screen.getByRole("region", { name: "Thread" });
-    expect(within(thread).getByText("Jasmine, today 7:48 am")).toBeInTheDocument();
-    expect(within(thread).getByText("Your agent, today 7:50 am")).toBeInTheDocument();
+    expect(within(thread).getByText("Jasmine, 7:48 am")).toBeInTheDocument();
+    expect(within(thread).getByText("Your agent, 7:50 am")).toBeInTheDocument();
   });
 
   it("draws the handover the backend wrote as a centred line, in the second person when it is the viewer's", () => {
@@ -306,7 +306,7 @@ describe("CoachInbox", () => {
       viewIds: ["one"],
     });
 
-    expect(screen.getByText("You joined the conversation, today 7:52 am")).toBeInTheDocument();
+    expect(screen.getByText("You joined the conversation, 7:52 am")).toBeInTheDocument();
   });
 
   /*
@@ -371,16 +371,39 @@ describe("CoachInbox", () => {
     expect(new Set([fillOf("lead"), fillOf("agent"), fillOf("you")]).size).toBe(3);
   });
 
-  it("sets the thread at 17px over 1.5 leading and keeps the time line at 14", () => {
+  it("sets the thread at 18px over 1.6 leading, caps the measure, and keeps the time line at 14", () => {
     renderInbox();
 
     const bubble = document.querySelector("[data-voice]");
     const body = bubble?.querySelector("p");
-    expect(body?.className).toContain("text-[17px]");
-    expect(body?.className).toContain("leading-[1.5]");
+    expect(body?.className).toContain("text-[18px]");
+    expect(body?.className).toContain("leading-[1.6]");
+    // A wide pane was giving a bubble 90-character lines; the measure is capped as well as the width.
+    expect(bubble?.className).toContain("60ch");
     expect(
       bubble?.querySelector('[data-slot="inbox-stamp"]')?.className,
     ).toContain("text-[14px]");
+  });
+
+  /*
+   * The day is said once, above the first message of each day, and every stamp under a bubble is
+   * then the time alone. A seeded thread was printing "Aug 26" under every one of its bubbles.
+   */
+  it("opens each day's run with one day line and keeps the stamps to the time", () => {
+    renderInbox({
+      rows: [conversation({
+        messages: [
+          { author: "contact", body: "First", createdAt: "2026-09-01T14:00:00.000Z", delivered: true, direction: "in", id: "m1" },
+          { author: "agent", body: "Second", createdAt: "2026-09-01T14:05:00.000Z", delivered: true, direction: "out", id: "m2" },
+          { author: "contact", body: "Third", createdAt: "2026-09-03T11:48:00.000Z", delivered: true, direction: "in", id: "m3" },
+        ],
+      })],
+    });
+
+    const days = [...document.querySelectorAll("[data-slot='inbox-day']")].map((node) => node.textContent);
+    expect(days).toEqual(["Tuesday", "Today"]);
+    const stamps = [...document.querySelectorAll("[data-slot='inbox-stamp']")].map((node) => node.textContent);
+    expect(stamps).toEqual(["Jasmine, 10:00 am", "Your agent, 10:05 am", "Jasmine, 7:48 am"]);
   });
 
   /*
@@ -414,7 +437,7 @@ describe("CoachInbox", () => {
     });
 
     expect(
-      screen.getByText("A person joined this conversation, today 7:52 am"),
+      screen.getByText("A person joined this conversation, 7:52 am"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/conversation\., /u)).not.toBeInTheDocument();
   });

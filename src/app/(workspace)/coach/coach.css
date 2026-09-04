@@ -147,8 +147,8 @@
 /* Dark by system preference, unless the page explicitly chose light. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) [data-shell-role="coach"] {
-    --thread-lead: oklch(0.335 0.021 264);
-    --thread-lead-edge: oklch(0.405 0.024 264);
+    --thread-lead: oklch(0.375 0.022 264);
+    --thread-lead-edge: oklch(0.45 0.026 264);
     --thread-lead-ink: var(--ink);
     --thread-lead-meta: oklch(0.8 0.02 264);
     --thread-agent: oklch(0.478 0.118 264);
@@ -163,8 +163,8 @@
 
 /* Dark by the toggle, so it wins in both directions the way the page palette's blocks do. */
 [data-theme="dark"] [data-shell-role="coach"] {
-  --thread-lead: oklch(0.335 0.021 264);
-  --thread-lead-edge: oklch(0.405 0.024 264);
+  --thread-lead: oklch(0.375 0.022 264);
+  --thread-lead-edge: oklch(0.45 0.026 264);
   --thread-lead-ink: var(--ink);
   --thread-lead-meta: oklch(0.8 0.02 264);
   --thread-agent: oklch(0.478 0.118 264);
