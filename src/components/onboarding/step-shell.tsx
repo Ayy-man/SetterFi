@@ -62,8 +62,8 @@ export const STEP_PANEL_CLASS =
 export const STEP_PRIMARY_CLASS =
   "inline-flex h-[48px] w-full items-center justify-center gap-[10px] rounded-[9px] "
   + "border border-[var(--accent-line)] bg-[image:var(--accent-fill)] px-[24px] text-[16px] "
-  + "font-[600] text-[color:var(--on-accent)] shadow-[var(--primary-shadow)] no-underline "
-  + "disabled:opacity-60 sm:w-auto";
+  + "font-[600] whitespace-nowrap text-[color:var(--on-accent)] shadow-[var(--primary-shadow)] "
+  + "no-underline disabled:opacity-60 sm:w-auto";
 
 /** The secondary face, for a step's own in-panel action. Never the page's forward action. */
 export const STEP_SECONDARY_CLASS =

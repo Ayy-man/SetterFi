@@ -168,6 +168,10 @@ describe("the setup root", () => {
    * The resume button is the page's one filled action, and it names the step it goes to so the
    * reader knows the destination before pressing it. The audit's defect 3 was the accent spent on
    * a panel of prose while the real action sat grey beneath it.
+   *
+   * The step name is the accessible name rather than the face. Spelling it out on the face wrapped
+   * the button onto two lines inside its 48px box, and the visible word is a prefix of the full
+   * phrase, so a reader hearing one and a reader seeing the other are told the same thing.
    */
   it("spends its one accent fill on the button that resumes the current step", async () => {
     reads.businessProfiles = [{ id: "profile-1" }];
@@ -175,7 +179,11 @@ describe("the setup root", () => {
 
     const fills = document.querySelectorAll("[class*='var(--accent-fill)']");
     expect(fills).toHaveLength(1);
-    expect(fills[0]).toHaveTextContent("Continue with connect instagram and messenger");
+    expect(fills[0].textContent?.trim()).toBe("Continue");
+    expect(fills[0].getAttribute("aria-label")).toBe(
+      "Continue with connect instagram and messenger",
+    );
+    expect(fills[0].className).toContain("whitespace-nowrap");
     expect(fills[0].getAttribute("href")).toBe("/onboarding/connect");
     expect(document.querySelectorAll("[data-drench]")).toHaveLength(0);
   });

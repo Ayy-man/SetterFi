@@ -105,7 +105,15 @@ export function SetupOverview({ steps }: SetupOverviewProps) {
 
             {/*
               The board's foot: one sentence about coming back, and the page's only filled button.
-              It names the step it resumes to, so the reader knows where it goes before pressing it.
+
+              The label is the bare verb and the step name lives in the accessible name instead.
+              Spelling the step out on the face broke the button onto two lines inside its 48px box:
+              the longest of the six, "Continue with connect instagram and messenger", measures
+              358px against the 276px a phone button has to give, and no shortening of the prefix
+              gets it under. The destination is not lost by dropping it, because the one filled rung
+              directly above is the step this goes to, and a reader on a screen reader still hears
+              the whole phrase. Their visible text is a prefix of it, so the two do not disagree.
+
               With every step proved there is nothing to resume, and the row says so rather than
               offering a button whose only outcome is landing back on a finished screen.
             */}
@@ -114,8 +122,12 @@ export function SetupOverview({ steps }: SetupOverviewProps) {
                 You can leave and come back. Every answer is saved as you go.
               </p>
               {resume ? (
-                <Link className={STEP_PRIMARY_CLASS} href={resume.href}>
-                  {`Continue with ${resume.title.toLowerCase()}`}
+                <Link
+                  aria-label={`Continue with ${resume.title.toLowerCase()}`}
+                  className={`${STEP_PRIMARY_CLASS} sm:flex-none`}
+                  href={resume.href}
+                >
+                  Continue
                 </Link>
               ) : (
                 <p className="m-0 text-[16px] leading-[1.55] font-[500] text-[color:var(--ink)]">
