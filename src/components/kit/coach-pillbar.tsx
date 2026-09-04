@@ -107,12 +107,12 @@ export function CoachPillbar({
               // scrolled to.
               "max-sm:h-[56px] max-sm:min-h-[56px]!",
               "max-sm:gap-[3px]! max-sm:px-[4px]! max-sm:rounded-[12px]!",
-              // 13px rather than the artboard's 12.5, and the reason is the reader: this surface
-              // exists because coaches over 55 could not read the console, and half a pixel of
-              // label width is a poor trade against that. The kit's icon doctrine says the nav is
-              // text-only, so the label is the whole affordance and it gets the room the icon
-              // would have taken.
-              "max-sm:text-[13px]! max-sm:leading-[1.2]!",
+              // 14px rather than the artboard's 12.5, and the reason is the reader: this surface
+              // exists because coaches over 55 could not read the console, and 14px is the coach
+              // floor no label is allowed under. The kit's icon doctrine says the nav is text-only,
+              // so the label is the whole affordance and it gets the room the icon would have
+              // taken; the widest label, "Overview", is 62px at 14px inside a 67px tab at 390.
+              "max-sm:text-[14px]! max-sm:leading-[1.2]!",
               // The wash, not the desktop bar's solid fill. A filled 56px block at the bottom of a
               // phone screen reads as a button somebody pressed rather than as where you are, and
               // the accent is already spent once on this screen's hero panel.

@@ -407,10 +407,15 @@ export function CoachLeads({
             </p>
           ) : null}
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-[12px]">
+        {/* Below sm the three controls reflow rather than wrap where they happen to run out of
+            room, which stranded the eye alone on a second line with a gap beside it. `order`
+            puts the eye next to the switch and pushes Export to a line of its own, where its
+            full width is a deliberate row rather than a leftover. Above sm the order and the
+            width both drop away and the row reads switch, Export, eye as the artboard draws it. */}
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-[12px] max-sm:justify-between sm:w-auto">
           <div
             aria-label="Leads view"
-            className="flex shrink-0 gap-[4px] rounded-[12px] border border-[var(--line)] bg-[var(--well)] p-[4px]"
+            className="flex shrink-0 gap-[4px] rounded-[12px] border border-[var(--line)] bg-[var(--well)] p-[4px] max-sm:order-1"
             role="group"
           >
             {([
@@ -437,18 +442,26 @@ export function CoachLeads({
             })}
           </div>
           <ExportMenu
-            className={CONTROL_CLASS}
+            className={`${CONTROL_CLASS} max-sm:order-3 max-sm:w-full`}
             filename="setterfi-coach-leads"
             label="Export"
             mode="local"
             rows={exportRows}
           />
-          <ContextEye copy={LEADS_EYE_COPY} placement="header" scale="coach" screen="coach-leads" />
+          <ContextEye
+            className="max-sm:order-2"
+            copy={LEADS_EYE_COPY}
+            placement="header"
+            scale="coach"
+            screen="coach-leads"
+          />
         </div>
       </div>
 
       <div className="flex min-w-0 flex-wrap items-center gap-[16px]">
-        <div className="flex h-[48px] min-w-0 flex-grow basis-[260px] items-center gap-[10px] rounded-[9px] border border-[var(--line-input)] bg-[var(--well)] px-[16px] sm:max-w-[460px]">
+        {/* `basis-full` rather than `w-full`: this is a flex item, so the basis decides the main
+            axis and a width of 100% beside a 260px basis is simply ignored. */}
+        <div className="flex h-[48px] min-w-0 flex-grow basis-full items-center gap-[10px] rounded-[9px] border border-[var(--line-input)] bg-[var(--well)] px-[16px] sm:basis-[260px] sm:max-w-[460px]">
           <svg aria-hidden className="size-[18px] shrink-0 text-[color:var(--faint)]" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.75" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" />
@@ -474,7 +487,7 @@ export function CoachLeads({
         >
           <SelectTrigger
             aria-label="Stage"
-            className="h-[48px] shrink-0 gap-[12px] rounded-[9px] border-[var(--line-input)] bg-[var(--well)] px-[16px] text-[16px] text-[color:var(--ink)]"
+            className="h-[48px] shrink-0 gap-[12px] rounded-[9px] border-[var(--line-input)] bg-[var(--well)] px-[16px] text-[16px] text-[color:var(--ink)] max-sm:min-w-0 max-sm:flex-1"
           >
             <span className="text-[color:var(--muted)]">Stage</span>
             <SelectValue />

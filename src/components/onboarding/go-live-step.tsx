@@ -23,9 +23,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { TONE_MARK, type Tone } from "@/components/kit/atomics";
+import { ShieldCheck } from "@/components/kit/icons";
 import { DataState } from "@/components/kit/data-state";
 import { elapsedWorkspaceDays } from "@/components/kit/day-counter";
-import { LoggedButton } from "@/components/kit/logged-button";
+import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { COUNT_IN_WORDS } from "@/components/onboarding/setup-status";
 import {
   OnboardingStepShell,
@@ -77,7 +78,46 @@ const CHECK_READY: Record<ReadinessKey, string> = {
 };
 
 /** The sentences this screen used to print as a drenched panel, handed to the eye instead. */
-export const GO_LIVE_STEP_EYE_COPY =
+export /**
+ * The refused face of the one button on this step.
+ *
+ * It keeps the border, the fill and the 48px box of a button, because a refused action still has to
+ * read as the thing the sentence above it is talking about. Dropping to bare grey text, which is
+ * what the shared logged button did at its secondary variant on this surface, left a coach with a
+ * paragraph naming "the button below" above no button at all.
+ *
+ * It is deliberately not the accent face at reduced opacity. The accent on this page means "this is
+ * the press that turns your agent on", and wearing it while the press is refused would say the
+ * work is finished when the panel beside it lists what is not.
+ */
+const STEP_REFUSED_CLASS =
+  "inline-flex h-[48px] w-full cursor-not-allowed items-center justify-center gap-[10px] "
+  + "rounded-[9px] border border-[var(--line)] bg-[var(--control-fill)] px-[24px] text-[16px] "
+  + "font-[600] text-[color:var(--muted)] sm:w-auto";
+
+/**
+ * The audit line, in the page's own words.
+ *
+ * The shared `LoggedButton` prints this caption through the `text-over` utility, which is
+ * `text-transform: uppercase` at 11px. Both halves of that are refused on a coach surface: nothing
+ * here goes below 14px and nothing is set in capitals. The fact itself is worth keeping and the
+ * wording is already sentence case in `AUDIT_ACTIONS`, so the caption is drawn here at body size
+ * instead, the same shape the agent screen uses beside its own save.
+ */
+function LoggedNote() {
+  const accountability = AUDIT_ACTIONS["tenant.went_live"];
+  return (
+    <span
+      aria-label={accountability.ariaLabel}
+      className="inline-flex items-center justify-center gap-[8px] text-[15px] leading-[1.4] text-[color:var(--muted)] sm:justify-start"
+    >
+      <ShieldCheck aria-hidden className="size-[16px] flex-none" />
+      {accountability.microcopy}
+    </span>
+  );
+}
+
+const GO_LIVE_STEP_EYE_COPY =
   "Pressing the button turns your agent on for Instagram and Facebook page messages. The next "
   + "person who messages you gets an answer from your agent, day or night. Anyone who clears your "
   + "rules is offered the times your calendar actually has open and books one of them. Anything "
@@ -206,17 +246,17 @@ export function GoLiveStep() {
       </Link>
     )
     : (
-      <LoggedButton
-        actionKey="tenant.went_live"
-        className="h-[48px] w-full justify-center px-[24px] text-[16px] sm:w-auto"
-        scale="coach"
-        disabled={!canGoLive || working}
-        onClick={() => void goLive()}
-        type="button"
-        variant={canGoLive ? "primary" : "secondary"}
-      >
-        {working ? "Checking" : "Turn my agent on"}
-      </LoggedButton>
+      <span className="flex w-full flex-col items-stretch gap-[10px] sm:w-auto sm:items-start">
+        <button
+          className={canGoLive && !working ? STEP_PRIMARY_CLASS : STEP_REFUSED_CLASS}
+          disabled={!canGoLive || working}
+          onClick={() => void goLive()}
+          type="button"
+        >
+          {working ? "Checking" : "Turn my agent on"}
+        </button>
+        <LoggedNote />
+      </span>
     );
 
   return (

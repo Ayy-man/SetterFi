@@ -120,8 +120,8 @@ async function seedA2pMidReview(database) {
     `insert into public.provisioning_steps
        (tenant_id, step_key, state, awaiting_party, attempts, started_at, last_attempt_at,
         external_ref, next_attempt_at, last_transition_at, idempotency_key)
-     values ($1, 'a2p_campaign', 'awaiting_provider', 'carrier', 1, $2, $2,
-       $3::jsonb, null, $2, $1::text || ':a2p_campaign')
+     values ($1::uuid, 'a2p_campaign', 'awaiting_provider', 'carrier', 1, $2::timestamptz,
+       $2::timestamptz, $3::jsonb, $2::timestamptz, $2::timestamptz, $1::text || ':a2p_campaign')
      on conflict (tenant_id, step_key) do update set state = excluded.state,
        awaiting_party = excluded.awaiting_party, external_ref = excluded.external_ref,
        last_transition_at = excluded.last_transition_at`,
@@ -131,8 +131,8 @@ async function seedA2pMidReview(database) {
     `insert into public.provisioning_steps
        (tenant_id, step_key, state, awaiting_party, attempts, started_at, last_attempt_at,
         next_attempt_at, last_transition_at, idempotency_key)
-     values ($1, 'sms_live', 'awaiting_provider', 'carrier', 1, $2, $2,
-       null, $2, $1::text || ':sms_live')
+     values ($1::uuid, 'sms_live', 'awaiting_provider', 'carrier', 1, $2::timestamptz,
+       $2::timestamptz, $2::timestamptz, $2::timestamptz, $1::text || ':sms_live')
      on conflict (tenant_id, step_key) do update set state = excluded.state,
        awaiting_party = excluded.awaiting_party, last_transition_at = excluded.last_transition_at`,
     [PHASE7_DEMO_IDS.tenant, submittedAt],
@@ -143,9 +143,12 @@ async function seedExpiredInstagramConnection(database) {
   await database.query(
     `insert into public.channel_connections
        (id, tenant_id, channel, provider, state, external_ref, token_expires_at)
-     values ($1, $2, 'instagram', 'meta_direct', 'expired',
-       jsonb_build_object('pageId', 'SETTERFI_DEMO_PLACEHOLDER_REBUILD_IG_PAGE'), $3)
-     on conflict (tenant_id, channel) do update set state = 'expired',
+     values ($1::uuid, $2::uuid, 'instagram', 'meta_direct', 'expired',
+       jsonb_build_object('pageId', 'SETTERFI_DEMO_PLACEHOLDER_REBUILD_IG_PAGE'), $3::timestamptz)
+     -- The plain unique(tenant_id, channel) constraint this table had in init.sql was dropped by
+     -- 20260817000001_phase1_demo_path.sql in favor of unique(tenant_id, channel, provider), so
+     -- that triple is the idempotency key here.
+     on conflict (tenant_id, channel, provider) do update set state = 'expired',
        token_expires_at = excluded.token_expires_at, external_ref = excluded.external_ref`,
     [REBUILD_DEMO_IDS.instagramConnection, PHASE7_DEMO_IDS.tenant, daysAgoIso(5)],
   );
@@ -185,8 +188,9 @@ async function seedKeywordGoalsAndConversations(database) {
     const createdAt = daysAgoIso(fixture.daysAgo);
     await database.query(
       `insert into public.contacts
-         (id, tenant_id, channel, name, business_context, is_test, created_at)
-       values ($1, $2, 'sms', $3, 'Plausible demo lead for the keyword table.', true, $4)
+         (id, tenant_id, last_channel, name, business_context, is_test, created_at)
+       values ($1::uuid, $2::uuid, 'sms', $3, 'Plausible demo lead for the keyword table.', true,
+         $4::timestamptz)
        on conflict (id) do update set name = excluded.name, is_test = true`,
       [
         REBUILD_DEMO_IDS.contacts[fixture.index],

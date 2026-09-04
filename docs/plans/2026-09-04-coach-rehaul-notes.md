@@ -1100,6 +1100,20 @@ Screenshots: `pillbadge-1440-light.png`, `pillbadge-1440-dark.png`, `pillbadge-3
   and touching none of the three spellings of a staff-only note.
 - **`utility-collision`, `coach-page-head` and `coach-surface-fills`** name no row of this lane's
   and pass unchanged.
+
+**The Settings choice row is a grid, not a flex line.** As one flex row it seats a 48px tile, the
+name over its sentence, a 28px radio and a "Not ready yet" pill, which fits at 1440 and does not at
+390: the four fixed parts and their gaps took about 240 of the 346 usable pixels, leaving the
+sentence roughly 100, and "Opens the day your number clears carrier review" came out one word per
+line. Wrapping alone does not fix it, because the pill has to leave the first line and flex has no
+way to say that without ordering the nodes differently at each width. So the placement is explicit
+and the DOM is not duplicated: four columns on one row above `sm`, three columns over three rows
+below it, with the name and the radio on the first line and the sentence and the pill each spanning
+the full width beneath. One element per thing at both widths, which is what keeps the accessible
+name and the counted "Not ready yet" honest. Re-measured at 390: the sentence has 312px and wraps
+to two lines, the rows are 122, 186 and 162px tall, nothing is under 44px, and `scrollWidth` still
+equals `clientWidth`. Unchanged at 1440, where all three rows stay 97px with the sentence on one
+line.
 - **The sign-out menu item now declares `nativeButton`.** Base UI's menu item renders a `<div>` and
   synthesises the button behaviour it needs; handed a real `<button>` through `render` without
   being told, it warns in the dev overlay and applies both sets. Sign-out stays a form submit,

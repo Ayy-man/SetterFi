@@ -127,10 +127,37 @@ const ALREADY_SENT: readonly { id: string; statement: string; icon: typeof Bell 
 ];
 
 /* The coach scale, restated locally the way `coach-billing.tsx` does it. */
+/*
+ * A grid rather than a flex row, and the breakpoint is the reason.
+ *
+ * As one flex line the row seats a 48px tile, the name over its sentence, a 28px radio and a
+ * "Not ready yet" pill. At 1440 there is room for all four. At 390 the tile, the radio, the pill
+ * and three gaps take about 240 of the 346 usable pixels, leaving the sentence roughly 100px:
+ * "Opens the day your number clears carrier review" came out one word per line, measured
+ * 2026-09-04. Wrapping alone does not fix it, because the pill has to leave the first line and
+ * flex has no way to say that without ordering the nodes differently at each width.
+ *
+ * So the placement is explicit and the DOM is not duplicated: four columns on one row above `sm`,
+ * three columns over three rows below it, with the name and the radio on the first line and the
+ * sentence and the pill each spanning the full width beneath. One element per thing, at both
+ * widths, which is what keeps the accessible name and the "Not ready yet" count honest.
+ */
 const CHOICE_ROW_CLASS =
-  "flex min-h-[96px] w-full min-w-0 cursor-pointer items-center gap-[18px] rounded-[17px] border "
-  + "px-[22px] py-[20px] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--focus-ring)] "
+  "grid min-h-[96px] w-full min-w-0 cursor-pointer items-center gap-x-[18px] gap-y-[8px] "
+  + "grid-cols-[48px_minmax(0,1fr)_28px] sm:grid-cols-[48px_minmax(0,1fr)_28px_auto] "
+  + "rounded-[17px] border px-[22px] py-[20px] "
+  + "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--focus-ring)] "
   + "has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-[var(--canvas)]";
+/* Row 1 on a phone, and the left of the single row above `sm`, where it spans both text rows. */
+const CHOICE_CELL_TILE = "col-start-1 row-start-1 self-center sm:row-span-2";
+const CHOICE_CELL_NAME = "col-start-2 row-start-1 self-center";
+const CHOICE_CELL_MARK = "col-start-3 row-start-1 self-center sm:row-span-2";
+/* Full width under the name on a phone; back beside it, in the text column, above `sm`. */
+const CHOICE_CELL_SENTENCE =
+  "col-start-1 col-end-[-1] row-start-2 sm:col-start-2 sm:col-end-3";
+const CHOICE_CELL_PILL =
+  "col-start-1 col-end-[-1] row-start-3 justify-self-start "
+  + "sm:col-start-4 sm:col-end-5 sm:row-start-1 sm:row-span-2 sm:self-center sm:justify-self-end";
 const CHOICE_ON_CLASS = "border-[var(--accent-edge)] bg-[var(--accent-wash)]";
 const CHOICE_OFF_CLASS = "border-[var(--line)] bg-[var(--well)]";
 const CHOICE_TILE_CLASS =
@@ -330,35 +357,39 @@ export function CoachSettingsNotifications({
                   type="radio"
                   value={choice.value}
                 />
-                <span aria-hidden className={CHOICE_TILE_CLASS}>
+                <span aria-hidden className={`${CHOICE_TILE_CLASS} ${CHOICE_CELL_TILE}`}>
                   <Icon size={24} strokeWidth={1.75} />
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
-                  <span className="text-[17px] leading-[1.35] font-medium text-[color:var(--ink)]">
-                    {choice.label}
-                  </span>
-                  <span className="text-[16px] leading-[1.5] text-[color:var(--muted)]">
-                    {choice.sentence}
-                  </span>
+                {/*
+                  The name and its sentence are two grid children rather than one stacked column,
+                  because below `sm` they belong on different rows with the radio between them.
+                  DOM order is still name, sentence, pill, so the row reads in that order however
+                  the two layouts place them.
+                */}
+                <span className={`${CHOICE_CELL_NAME} text-[17px] leading-[1.35] font-medium text-[color:var(--ink)]`}>
+                  {choice.label}
                 </span>
+                <span className={`${CHOICE_CELL_SENTENCE} min-w-0 text-[16px] leading-[1.5] text-[color:var(--muted)]`}>
+                  {choice.sentence}
+                </span>
+                {choice.ready ? null : (
+                  <span className={`${CHOICE_CELL_PILL} ${PILL_CLASS} border-[var(--line)] bg-[var(--control-fill)] text-[color:var(--muted)]`}>
+                    <span aria-hidden className="size-[8px] flex-none rounded-full bg-[var(--faint)]" />
+                    Not ready yet
+                  </span>
+                )}
                 {on ? (
                   <span
                     aria-hidden
-                    className="grid size-[28px] flex-none place-items-center rounded-full border border-[var(--accent-edge)] bg-[var(--accent-wash-strong)] text-[color:var(--accent-text)]"
+                    className={`${CHOICE_CELL_MARK} grid size-[28px] flex-none place-items-center rounded-full border border-[var(--accent-edge)] bg-[var(--accent-wash-strong)] text-[color:var(--accent-text)]`}
                   >
                     <Check size={16} strokeWidth={2.4} />
                   </span>
                 ) : (
                   <span
                     aria-hidden
-                    className="size-[28px] flex-none rounded-full border border-[var(--line-input)] bg-[var(--card-top)]"
+                    className={`${CHOICE_CELL_MARK} size-[28px] flex-none rounded-full border border-[var(--line-input)] bg-[var(--card-top)]`}
                   />
-                )}
-                {choice.ready ? null : (
-                  <span className={`${PILL_CLASS} border-[var(--line)] bg-[var(--control-fill)] text-[color:var(--muted)]`}>
-                    <span aria-hidden className="size-[8px] flex-none rounded-full bg-[var(--faint)]" />
-                    Not ready yet
-                  </span>
                 )}
               </label>
             );
