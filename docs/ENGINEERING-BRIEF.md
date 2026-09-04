@@ -95,7 +95,8 @@ pin the code to them; read the test before changing the rule.
 ## One environment
 
 There is one deployed environment: work ships to `main` and deploys to the single `setter-fi`
-Vercel project, backed by one Supabase project. Safety comes from discipline rather than a staging
+Vercel project, served at `app.setterfi.com` and backed by one Supabase project. The marketing site
+at `www.setterfi.com` is a separate Vercel project and never shares the app's origin. Safety comes from discipline rather than a staging
 split:
 
 - New backend behaviour lands behind env flags, so nothing changes for the client until a flag is

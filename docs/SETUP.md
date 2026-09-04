@@ -127,7 +127,7 @@ Nothing here carries a value, and nothing should be added here that does.
 | `SUPABASE_DB_PASSWORD` | Direct Postgres password used by migration tooling |
 | `SETTERFI_ACCESS_PASSWORD` | The shared access gate wrapping the deployment before real auth |
 | `SETTERFI_AUTH_MODE` | Which authentication mode the app runs in |
-| `APP_BASE_URL` | Absolute base URL used when building links in notifications and checkout |
+| `APP_BASE_URL` | Absolute base URL used when building links in notifications, recovery emails, consent links, checkout returns and OAuth redirects. Production holds `https://app.setterfi.com` since 2026-09-04; it is stored as a Vercel *sensitive* variable, so `vercel env pull` shows it empty and the value can only be overwritten, never read back |
 | `CRON_SECRET` | Authenticates scheduled job routes |
 
 **The demo sign-in exception.** `SETTERFI_DEMO_LOGINS`, `SETTERFI_DEMO_LOGIN_PASSWORD`, and
@@ -246,6 +246,36 @@ variable re-arms the gate.
 Vercel: **`setter-fi`, one project.** Supabase: project `setterfi` under the client's organisation,
 one project, no branch environment. All third-party accounts are under client ownership per the
 contract and are operated via the project email address.
+
+**Hosts, decided 2026-09-04.** The console lives at `https://app.setterfi.com`; the marketing site
+owns `setterfi.com` and `www.setterfi.com` from its own Vercel project, and `setter-fi.vercel.app`
+stays as the project's fallback host. The split keeps marketing scripts off the origin that holds
+the session cookie and lets the marketing site deploy without running the app's build. Nothing in
+the code reads the request's `Host` header to build a link; every outbound URL comes from
+`APP_BASE_URL`, so a host change is configuration only.
+
+What was set on 2026-09-04:
+
+| Where | Setting | Value |
+|---|---|---|
+| Vercel `setter-fi`, production | `APP_BASE_URL` | `https://app.setterfi.com` |
+| Vercel `setter-fi`, domains | `app.setterfi.com` | CNAME to the project's `vercel-dns` target at GoDaddy |
+| Supabase Auth | Site URL | `https://app.setterfi.com` (was `http://localhost:3000`) |
+| Supabase Auth | Redirect allowlist | `https://app.setterfi.com/**`, `https://setter-fi.vercel.app/**`, `http://localhost:3000/**` (was empty) |
+
+Still owed after the DNS change, in this order, because each provider refuses a callback on an
+unregistered host:
+
+1. `www.setterfi.com` and the apex were added to `setter-fi` as well; they belong on the marketing
+   project, and while they sit on `setter-fi` the console answers on `www`. Remove them from
+   `setter-fi` and add them to the marketing project. A domain verifies under one Vercel team only,
+   so if the marketing project lives in another team, this team releases the domain first.
+2. GoHighLevel: re-register both redirect URIs and the webhook receiver on the app host (section 2.5).
+3. Meta: add the app host to the Facebook Login valid OAuth redirect URIs and the webhook callback.
+4. Google Cloud: add the app host to the calendar client's authorised redirect URIs.
+5. Stripe: repoint the webhook endpoint to `https://app.setterfi.com/api/webhooks/stripe`, same
+   signing secret.
+6. Twilio: any inbound or status callback registered on `setter-fi.vercel.app` moves to the app host.
 
 ### 1.6 Credential discipline for contractors
 
@@ -469,6 +499,11 @@ App 2 carries no webhook URL. **One receiver, on app 1.**
 | App 1 redirect | `https://setter-fi.vercel.app/api/channels/messaging/callback` |
 | App 2 redirect | `https://setter-fi.vercel.app/api/channels/messaging/agency-callback` |
 | Webhook receiver (app 1 only) | `https://setter-fi.vercel.app/api/webhooks/ghl` |
+
+Those are the values as registered on 2026-08-19. Since 2026-09-04 the console's host is
+`app.setterfi.com` (section 1.5), so each of the three has to be re-registered on that host before
+the install call; the `setter-fi.vercel.app` values keep working only for as long as that fallback
+host is left on the project.
 
 Redirect URLs must be HTTPS, on a verified domain, and production-stable. Both callback routes exist
 in the repository and return 404 until both Phase 9 flags are exactly `true`.
