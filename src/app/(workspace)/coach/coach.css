@@ -1840,3 +1840,28 @@ body.is-kanban-pointer-dragging * {
   flex: 0 0 auto;
   height: var(--coach-bubble-reserve);
 }
+
+/* --------------------------------------------------------------------------------------------
+ * A field that stopped a save. The shell already goes to the failure line and wash; here it
+ * also takes a 3px failure ring so red is unmistakable beside the accent focus ring, and it
+ * shakes once when the refusal lands. The field remounts on every refusal, so the shake fires
+ * again for a field that was already red.
+ * ------------------------------------------------------------------------------------------ */
+[data-shell-role="coach"] [data-slot="onboarding-field"][data-invalid="true"] [data-slot="field-shell"],
+[data-shell-role="coach"] [data-slot="onboarding-field"][data-invalid="true"] [aria-invalid="true"] {
+  border-color: var(--failure);
+  box-shadow: 0 0 0 3px var(--failure-wash);
+  animation: kit-shake var(--shake-dur) cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+[data-shell-role="coach"] [data-slot="onboarding-refusal"] {
+  animation: kit-shake var(--shake-dur) cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-shell-role="coach"] [data-slot="onboarding-field"][data-invalid="true"] [data-slot="field-shell"],
+  [data-shell-role="coach"] [data-slot="onboarding-field"][data-invalid="true"] [aria-invalid="true"],
+  [data-shell-role="coach"] [data-slot="onboarding-refusal"] {
+    animation: none;
+  }
+}

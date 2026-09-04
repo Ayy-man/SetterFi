@@ -56,19 +56,27 @@ export type OnboardingStatusItem = {
 /** One label per field, so every control on these screens is named by something visible. */
 export function OnboardingField({
   children,
+  error,
   id,
   label,
 }: {
   children: ReactNode;
+  /** The sentence under the control when it stopped a save; the control is red while it stands. */
+  error?: string | null;
   id: string;
   label: string;
 }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" data-invalid={error ? "true" : undefined} data-slot="onboarding-field">
       <label className={ONBOARDING_LABEL_CLASS} htmlFor={id}>
         {label}
       </label>
       {children}
+      {error ? (
+        <p className="m-0 mt-[6px] text-[14px] leading-[1.4] font-medium text-[color:var(--failure-text)]" id={`${id}-error`}>
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

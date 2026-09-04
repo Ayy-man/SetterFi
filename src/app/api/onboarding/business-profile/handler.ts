@@ -49,33 +49,49 @@ function string(value: unknown) {
   return typeof value === "string" ? value.trim() : null;
 }
 
-function parseBody(value: unknown): SaveInput | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+const REQUIRED = ["legalName", "websiteUrl", "addressLine1", "city", "region", "postalCode", "countryCode"] as const;
+/** The read-only keys a loaded profile carries; a form that edits what it loaded sends them back. */
+const READ_ONLY = ["id", "updatedAt"];
+
+/**
+ * Either the input, or the field names that stopped it. The names are the client's own keys so a
+ * form can put the refusal on the field rather than under the panel.
+ */
+function parseBody(value: unknown): { input: SaveInput } | { fields: string[] } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { fields: ["body"] };
   const body = value as Record<string, unknown>;
-  const allowed = [
+  const allowed: readonly string[] = [
+    ...REQUIRED, "entityType", "hasEin", "addressLine2", ...READ_ONLY,
+  ];
+  const unknown = Object.keys(body).filter((key) => !allowed.includes(key));
+  if (unknown.length > 0) return { fields: unknown };
+  const fields: string[] = [];
+  const entityType = string(body.entityType)?.toLowerCase();
+  if (!entityType || !ENTITY_TYPES.includes(entityType as typeof ENTITY_TYPES[number])) fields.push("entityType");
+  if (typeof body.hasEin !== "boolean") fields.push("hasEin");
+  const required = REQUIRED.map((key) => string(body[key]));
+  REQUIRED.forEach((key, index) => { if (!required[index]) fields.push(key); });
+  if (required[1] && !/^https?:\/\/\S+\.\S+$/u.test(required[1])) fields.push("websiteUrl");
+  if (required[6] && !/^[A-Za-z]{2}$/u.test(required[6])) fields.push("countryCode");
+  const addressLine2 = body.addressLine2 === null || body.addressLine2 === undefined ? null : string(body.addressLine2);
+  if (body.addressLine2 !== null && body.addressLine2 !== undefined && addressLine2 === null) fields.push("addressLine2");
+  const order: readonly string[] = [
     "legalName", "entityType", "hasEin", "websiteUrl", "addressLine1", "addressLine2",
     "city", "region", "postalCode", "countryCode",
   ];
-  if (Object.keys(body).some((key) => !allowed.includes(key))) return null;
-  const entityType = string(body.entityType)?.toLowerCase();
-  const required = ["legalName", "websiteUrl", "addressLine1", "city", "region", "postalCode", "countryCode"]
-    .map((key) => string(body[key]));
-  if (!entityType || !ENTITY_TYPES.includes(entityType as typeof ENTITY_TYPES[number])
-    || typeof body.hasEin !== "boolean" || required.some((item) => !item)) return null;
-  const addressLine2 = body.addressLine2 === null || body.addressLine2 === undefined ? null : string(body.addressLine2);
-  if (body.addressLine2 !== null && body.addressLine2 !== undefined && addressLine2 === null) return null;
-  return {
+  if (fields.length > 0) return { fields: order.filter((key) => fields.includes(key)) };
+  return { input: {
     legalName: required[0]!,
     entityType: entityType as typeof ENTITY_TYPES[number],
-    hasEin: body.hasEin,
+    hasEin: body.hasEin as boolean,
     websiteUrl: required[1]!,
     addressLine1: required[2]!,
-    addressLine2,
+    addressLine2: addressLine2 || null,
     city: required[3]!,
     region: required[4]!,
     postalCode: required[5]!,
     countryCode: required[6]!.toUpperCase(),
-  };
+  } };
 }
 
 function refuse(actor: RouteActor | null) {
@@ -109,10 +125,12 @@ export function createBusinessProfileHandlers(dependencies: BusinessProfileDepen
       const actor = await dependencies.session();
       const rejected = refuse(actor);
       if (rejected || !actor) return rejected!;
-      const body = parseBody(await request.json().catch(() => null));
-      if (!body) return Response.json({ error: "Invalid business profile." }, { status: 400, headers: NO_STORE });
+      const parsed = parseBody(await request.json().catch(() => null));
+      if ("fields" in parsed) {
+        return Response.json({ error: "Invalid business profile.", fields: parsed.fields }, { status: 400, headers: NO_STORE });
+      }
       try {
-        return Response.json(await dependencies.save({ ...body, tenantId: actor.tenantId, actorId: actor.userId }), {
+        return Response.json(await dependencies.save({ ...parsed.input, tenantId: actor.tenantId, actorId: actor.userId }), {
           headers: NO_STORE,
         });
       } catch {

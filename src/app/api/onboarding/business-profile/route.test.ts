@@ -33,5 +33,24 @@ describe("onboarding business-profile route", () => {
     const deps = dependencies();
     const response = await createBusinessProfileHandlers(deps).POST(new Request("https://setterfi.test", { method: "POST", body: JSON.stringify({ ...body, tenantId: "forged" }) }));
     expect(response.status).toBe(400); expect(deps.save).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({ error: "Invalid business profile.", fields: ["tenantId"] });
+  });
+
+  it("names every field that stopped the save, so the form can mark them", async () => {
+    const deps = dependencies();
+    const response = await createBusinessProfileHandlers(deps).POST(new Request("https://setterfi.test", {
+      method: "POST", body: JSON.stringify({ ...body, city: "  ", websiteUrl: "reidcapital", countryCode: "USA" }),
+    }));
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Invalid business profile.", fields: ["websiteUrl", "city", "countryCode"] });
+  });
+
+  it("accepts the read-only keys a loaded profile carries, since the form edits what it loaded", async () => {
+    const deps = dependencies();
+    const response = await createBusinessProfileHandlers(deps).POST(new Request("https://setterfi.test", {
+      method: "POST", body: JSON.stringify({ id: "profile-1", updatedAt: "2026-09-04T00:00:00Z", ...body }),
+    }));
+    expect(response.status).toBe(200);
+    expect(deps.save).toHaveBeenCalledWith({ ...body, tenantId: "tenant-1", actorId: "coach-1" });
   });
 });

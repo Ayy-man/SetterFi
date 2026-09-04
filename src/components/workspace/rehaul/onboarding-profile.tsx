@@ -12,7 +12,7 @@
  * heading, ten labelled controls and one action.
  */
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { KitButton, KitInput } from "@/components/kit/atomics";
 import { DeckPanel } from "@/components/kit/deck-panel";
@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ShieldCheck } from "@/components/kit/icons";
+import { OctagonAlert, ShieldCheck } from "@/components/kit/icons";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import {
   ONBOARDING_FIELD_CLASS,
@@ -43,6 +43,69 @@ const EMPTY: Profile = {
   legalName: "", entityType: "sole_proprietor", hasEin: false, websiteUrl: "", addressLine1: "",
   addressLine2: "", city: "", region: "", postalCode: "", countryCode: "US",
 };
+
+type ProfileKey = keyof Profile;
+
+const PROFILE_KEYS: readonly ProfileKey[] = [
+  "legalName", "entityType", "hasEin", "websiteUrl", "addressLine1", "addressLine2",
+  "city", "region", "postalCode", "countryCode",
+];
+
+/**
+ * Only the ten fields the API accepts. A loaded profile also carries its id and timestamp, and
+ * sending those back is what used to make every re-save of a saved profile fail.
+ */
+function pick(source: Record<string, unknown>): Profile {
+  const next: Record<string, unknown> = { ...EMPTY };
+  for (const key of PROFILE_KEYS) if (key in source) next[key] = source[key];
+  next.addressLine2 = typeof next.addressLine2 === "string" ? next.addressLine2 : "";
+  return next as Profile;
+}
+
+/** What each field says under itself when it stops the save. */
+const FIELD_LABEL: Record<ProfileKey, string> = {
+  legalName: "Legal business name", entityType: "Entity type", hasEin: "EIN", websiteUrl: "Website URL",
+  addressLine1: "Address line 1", addressLine2: "Address line 2", city: "City", region: "State / region",
+  postalCode: "Postal code", countryCode: "Country",
+};
+
+const FIELD_ID: Record<ProfileKey, string> = {
+  legalName: "legal-name", entityType: "entity-type", hasEin: "has-ein", websiteUrl: "website-url",
+  addressLine1: "address-1", addressLine2: "address-2", city: "city", region: "region",
+  postalCode: "postal-code", countryCode: "country-code",
+};
+
+function fieldProblem(key: ProfileKey, profile: Profile): string | null {
+  const value = profile[key];
+  const text = typeof value === "string" ? value.trim() : "";
+  switch (key) {
+    case "websiteUrl":
+      if (!text) return "Required.";
+      return /^https?:\/\/\S+\.\S+$/u.test(text) ? null : "A full web address, like https://example.com.";
+    case "countryCode":
+      if (!text) return "Required.";
+      return /^[A-Za-z]{2}$/u.test(text) ? null : "The two-letter code, like US.";
+    case "legalName": case "addressLine1": case "city": case "region": case "postalCode":
+      return text ? null : "Required.";
+    default:
+      return null;
+  }
+}
+
+/** The problems the form can see before asking the server. Same rules as the API's. */
+function problems(profile: Profile): Partial<Record<ProfileKey, string>> {
+  const found: Partial<Record<ProfileKey, string>> = {};
+  for (const key of PROFILE_KEYS) {
+    const problem = fieldProblem(key, profile);
+    if (problem) found[key] = problem;
+  }
+  return found;
+}
+
+function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
 
 const ENTITY_TYPES = [
   { value: "sole_proprietor", label: "Sole proprietor" },
@@ -69,40 +132,104 @@ export function OnboardingProfileRehaul() {
   const [status, setStatus] = useState("Loading saved business profile…");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<{ sentence: string; fields: Partial<Record<ProfileKey, string>> } | null>(null);
+  /* Counts refusals so a field that was already red shakes again on the next one. */
+  const [attempt, setAttempt] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     void fetch("/api/onboarding/business-profile", { cache: "no-store" }).then(async (response) => {
       const payload = await response.json() as { profile?: Profile | null };
       if (!response.ok) throw new Error();
-      if (payload.profile) setProfile({ ...payload.profile, addressLine2: payload.profile.addressLine2 ?? "" });
+      if (payload.profile) setProfile(pick(payload.profile as unknown as Record<string, unknown>));
       setStatus(payload.profile ? "Saved business profile loaded." : "Nothing is filed with a carrier yet.");
     }).catch(() => setStatus("Your saved business profile could not be loaded."));
   }, []);
 
-  function change(key: keyof Profile, value: string | boolean) {
+  function change(key: ProfileKey, value: string | boolean) {
     setProfile((current) => ({ ...current, [key]: value }));
+    setFailure((current) => {
+      if (!current?.fields[key]) return current;
+      const fields = { ...current.fields };
+      delete fields[key];
+      return { ...current, fields };
+    });
   }
+
+  function refuse(fields: Partial<Record<ProfileKey, string>>, sentence?: string) {
+    const names = PROFILE_KEYS.filter((key) => fields[key]).map((key) => FIELD_LABEL[key]);
+    setSaved(false);
+    setFailure({
+      fields,
+      sentence: sentence ?? (names.length === 1
+        ? `${names[0]} needs a look before this can be saved.`
+        : `${names.length} fields need a look before this can be saved: ${nameList(names)}.`),
+    });
+    setAttempt((count) => count + 1);
+  }
+
+  /* After the refusal has drawn: the red fields remount to restart their shake, so the focus has
+     to land on the new element, not the one the submit handler could see. */
+  useEffect(() => {
+    if (attempt === 0 || !failure) return;
+    const first = PROFILE_KEYS.find((key) => failure.fields[key]);
+    const target = first
+      ? formRef.current?.querySelector<HTMLElement>(`#${FIELD_ID[first]}`)
+      : formRef.current?.querySelector<HTMLElement>('[data-slot="onboarding-refusal"]');
+    if (target && !first) target.tabIndex = -1;
+    target?.focus({ preventScroll: false });
+    // Only the refusal count should re-run this; the fields clear as the coach types.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const local = problems(profile);
+    if (Object.keys(local).length > 0) {
+      refuse(local);
+      return;
+    }
     setSaving(true);
+    setFailure(null);
     setStatus("Saving your business profile…");
     try {
       const response = await fetch("/api/onboarding/business-profile", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(profile),
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(pick(profile)),
       });
-      const payload = await response.json() as { profile?: Profile; audit?: { id: string } };
-      if (!response.ok || !payload.profile || !payload.audit?.id) throw new Error();
-      setProfile({ ...payload.profile, addressLine2: payload.profile.addressLine2 ?? "" });
+      const payload = await response.json().catch(() => ({})) as {
+        profile?: Profile; audit?: { id: string }; error?: string; fields?: string[];
+      };
+      if (response.status === 400 && Array.isArray(payload.fields)) {
+        const fields: Partial<Record<ProfileKey, string>> = {};
+        for (const key of payload.fields) {
+          if ((PROFILE_KEYS as readonly string[]).includes(key)) {
+            fields[key as ProfileKey] = fieldProblem(key as ProfileKey, profile) ?? "Check this field.";
+          }
+        }
+        refuse(fields, Object.keys(fields).length === 0 ? "The server refused this profile. Nothing changed." : undefined);
+        setStatus("Nothing was saved.");
+        return;
+      }
+      if (!response.ok || !payload.profile || !payload.audit?.id) {
+        refuse({}, response.status === 403
+          ? "This session cannot change the business profile. Nothing changed."
+          : "The profile could not be saved just now. Nothing changed, so you can try again.");
+        setStatus("Nothing was saved.");
+        return;
+      }
+      setProfile(pick(payload.profile as unknown as Record<string, unknown>));
       setSaved(true);
       setStatus("Business profile saved. Logged in your onboarding audit trail.");
     } catch {
-      setSaved(false);
-      setStatus("Business profile could not be saved. Check the required fields and try again.");
+      refuse({}, "The profile could not be sent. Check your connection and try again; nothing changed.");
+      setStatus("Nothing was saved.");
     } finally {
       setSaving(false);
     }
   }
+
+  const invalid = (key: ProfileKey) => Boolean(failure?.fields[key]);
+  const describedBy = (key: ProfileKey) => (failure?.fields[key] ? `${FIELD_ID[key]}-error` : undefined);
 
   const requiresEin = profile.entityType === "llc" || profile.entityType === "corporation";
   const blockedByEin = requiresEin && !profile.hasEin;
@@ -122,23 +249,41 @@ export function OnboardingProfileRehaul() {
       title="Your business details"
       width={1080}
     >
-      <form className="flex flex-col gap-[24px]" onSubmit={(event) => void submit(event)}>
+      <form className="flex flex-col gap-[24px]" noValidate onSubmit={(event) => void submit(event)} ref={formRef}>
         <DeckPanel
           eyebrow="What the carriers check"
           headingId="onboarding-profile-legal"
           meta={<span className="text-[14px] text-[color:var(--muted)]">{profile.legalName || "Not named yet"}</span>}
           name="Legal details"
         >
-          <p aria-live="polite" className="m-0 mb-[20px] text-[15px] leading-[1.4] text-[color:var(--muted)]">
-            {status}
-          </p>
+          {failure ? (
+            /*
+             * The refusal is a callout in the failure family, not the muted status line: it is the
+             * one thing on the panel the coach has to act on, so it takes the panel's loudest face.
+             */
+            <div
+              className="mb-[20px] flex items-start gap-[12px] rounded-[10px] border border-[var(--failure-line)] bg-[var(--failure-wash)] px-[16px] py-[14px] text-[16px] leading-[1.5] text-[color:var(--failure-text)]"
+              data-slot="onboarding-refusal"
+              key={attempt}
+              role="alert"
+            >
+              <OctagonAlert aria-hidden className="mt-[3px] size-[18px] shrink-0" />
+              <span>{failure.sentence}</span>
+            </div>
+          ) : (
+            <p aria-live="polite" className="m-0 mb-[20px] text-[15px] leading-[1.4] text-[color:var(--muted)]">
+              {status}
+            </p>
+          )}
 
           <div className="flex flex-col gap-[20px]">
             <div className="grid gap-[20px] @min-[720px]/onboarding:grid-cols-2">
-              <OnboardingField id="legal-name" label="Legal business name">
+              <OnboardingField error={failure?.fields.legalName} id="legal-name" key={`legal-name-${attempt}`} label="Legal business name">
                 <KitInput
                   className="text-[16px]"
+                  aria-describedby={describedBy("legalName")}
                   id="legal-name"
+                  invalid={invalid("legalName")}
                   onChange={(event) => change("legalName", event.target.value)}
                   required
                   shellClassName={ONBOARDING_FIELD_CLASS}
@@ -146,12 +291,12 @@ export function OnboardingProfileRehaul() {
                 />
               </OnboardingField>
 
-              <OnboardingField id="entity-type" label="Entity type">
+              <OnboardingField error={failure?.fields.entityType} id="entity-type" key={`entity-type-${attempt}`} label="Entity type">
                 <Select
                   onValueChange={(value) => change("entityType", value ?? profile.entityType)}
                   value={profile.entityType}
                 >
-                  <SelectTrigger className={ONBOARDING_FIELD_CLASS} id="entity-type">
+                  <SelectTrigger aria-invalid={invalid("entityType") || undefined} className={ONBOARDING_FIELD_CLASS} id="entity-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="start" alignItemWithTrigger={false}>
@@ -164,10 +309,12 @@ export function OnboardingProfileRehaul() {
             </div>
 
             <div className="grid items-end gap-[20px] @min-[720px]/onboarding:grid-cols-2">
-              <OnboardingField id="website-url" label="Website URL">
+              <OnboardingField error={failure?.fields.websiteUrl} id="website-url" key={`website-url-${attempt}`} label="Website URL">
                 <KitInput
                   className={`text-[16px] ${ONBOARDING_MONO_CLASS}`}
+                  aria-describedby={describedBy("websiteUrl")}
                   id="website-url"
+                  invalid={invalid("websiteUrl")}
                   onChange={(event) => change("websiteUrl", event.target.value)}
                   placeholder="https://example.com"
                   required
@@ -208,10 +355,12 @@ export function OnboardingProfileRehaul() {
             ) : null}
 
             <div className="grid gap-[20px] @min-[720px]/onboarding:grid-cols-2">
-              <OnboardingField id="address-1" label="Address line 1">
+              <OnboardingField error={failure?.fields.addressLine1} id="address-1" key={`address-1-${attempt}`} label="Address line 1">
                 <KitInput
                   className="text-[16px]"
+                  aria-describedby={describedBy("addressLine1")}
                   id="address-1"
+                  invalid={invalid("addressLine1")}
                   onChange={(event) => change("addressLine1", event.target.value)}
                   required
                   shellClassName={ONBOARDING_FIELD_CLASS}
@@ -219,10 +368,12 @@ export function OnboardingProfileRehaul() {
                 />
               </OnboardingField>
 
-              <OnboardingField id="address-2" label="Address line 2 (optional)">
+              <OnboardingField error={failure?.fields.addressLine2} id="address-2" key={`address-2-${attempt}`} label="Address line 2 (optional)">
                 <KitInput
                   className="text-[16px]"
+                  aria-describedby={describedBy("addressLine2")}
                   id="address-2"
+                  invalid={invalid("addressLine2")}
                   onChange={(event) => change("addressLine2", event.target.value)}
                   placeholder="Suite, floor, unit"
                   shellClassName={ONBOARDING_FIELD_CLASS}
@@ -232,10 +383,12 @@ export function OnboardingProfileRehaul() {
             </div>
 
             <div className="grid gap-[20px] @min-[720px]/onboarding:grid-cols-[1.4fr_1fr_0.9fr_0.7fr]">
-              <OnboardingField id="city" label="City">
+              <OnboardingField error={failure?.fields.city} id="city" key={`city-${attempt}`} label="City">
                 <KitInput
                   className="text-[16px]"
+                  aria-describedby={describedBy("city")}
                   id="city"
+                  invalid={invalid("city")}
                   onChange={(event) => change("city", event.target.value)}
                   required
                   shellClassName={ONBOARDING_FIELD_CLASS}
@@ -243,10 +396,12 @@ export function OnboardingProfileRehaul() {
                 />
               </OnboardingField>
 
-              <OnboardingField id="region" label="State / region">
+              <OnboardingField error={failure?.fields.region} id="region" key={`region-${attempt}`} label="State / region">
                 <KitInput
                   className="text-[16px]"
+                  aria-describedby={describedBy("region")}
                   id="region"
+                  invalid={invalid("region")}
                   onChange={(event) => change("region", event.target.value)}
                   required
                   shellClassName={ONBOARDING_FIELD_CLASS}
@@ -254,10 +409,12 @@ export function OnboardingProfileRehaul() {
                 />
               </OnboardingField>
 
-              <OnboardingField id="postal-code" label="Postal code">
+              <OnboardingField error={failure?.fields.postalCode} id="postal-code" key={`postal-code-${attempt}`} label="Postal code">
                 <KitInput
                   className={`text-[16px] ${ONBOARDING_MONO_CLASS}`}
+                  aria-describedby={describedBy("postalCode")}
                   id="postal-code"
+                  invalid={invalid("postalCode")}
                   onChange={(event) => change("postalCode", event.target.value)}
                   required
                   shellClassName={ONBOARDING_FIELD_CLASS}
@@ -265,10 +422,12 @@ export function OnboardingProfileRehaul() {
                 />
               </OnboardingField>
 
-              <OnboardingField id="country-code" label="Country">
+              <OnboardingField error={failure?.fields.countryCode} id="country-code" key={`country-code-${attempt}`} label="Country">
                 <KitInput
                   className={`text-[16px] ${ONBOARDING_MONO_CLASS}`}
+                  aria-describedby={describedBy("countryCode")}
                   id="country-code"
+                  invalid={invalid("countryCode")}
                   maxLength={2}
                   onChange={(event) => change("countryCode", event.target.value.toUpperCase())}
                   required
