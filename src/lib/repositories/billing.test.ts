@@ -19,7 +19,8 @@ function dependencies(overrides: Partial<BillingRepositoryDependencies> = {}): B
     readAttendance: vi.fn(), projectCorrections: vi.fn(), projectOwnBilling: vi.fn(),
     readSubscription: vi.fn(), readMovementSources: vi.fn(), readMoneyBilling: vi.fn().mockResolvedValue(moneyBillingFixture()),
     readCheckoutTenant: vi.fn(), readCheckoutTierPrices: vi.fn(), readAllowedPrices: vi.fn(),
-    readCheckoutSession: vi.fn(), readSubscriptionRows: vi.fn(), ...overrides,
+    readCheckoutSession: vi.fn(), readSubscriptionRows: vi.fn(), readCostRollupRows: vi.fn(),
+    ...overrides,
   };
 }
 
@@ -95,6 +96,81 @@ describe("billing repository", () => {
 
       await expect(repository.loadSubscriptionRows())
         .rejects.toThrow("BILLING_SUBSCRIPTION_ROWS_READ_INVALID");
+    });
+  });
+
+  describe("cost rollup rows", () => {
+    const rollup = (overrides: Record<string, unknown> = {}) => ({
+      id: "rollup-august",
+      tenant_id: "tenant-reid",
+      window_start: "2026-08-01T00:00:00.000Z",
+      window_end: "2026-09-01T00:00:00.000Z",
+      recognized_subscription_cents: 149_700,
+      model_cents: 4_210,
+      messaging_cents: 1_980,
+      embedding_cents: 640,
+      complete: true,
+      missing_sources: [],
+      computed_at: "2026-09-01T02:00:00.000Z",
+      tenant: { name: "Reid Funding Group (demo)", is_demo: true },
+      ...overrides,
+    });
+
+    it("projects the row the Costs table reads, without going through the export route", async () => {
+      const repository = createBillingRepository(dependencies({
+        readCostRollupRows: vi.fn().mockResolvedValue([rollup()]),
+      }));
+
+      expect(await repository.loadCostRollupRows()).toEqual([{
+        rollupId: "rollup-august",
+        tenantId: "tenant-reid",
+        businessName: "Reid Funding Group (demo)",
+        windowStart: "2026-08-01T00:00:00.000Z",
+        windowEnd: "2026-09-01T00:00:00.000Z",
+        revenueCents: 149_700,
+        modelCostCents: 4_210,
+        messagingCostCents: 1_980,
+        embeddingCostCents: 640,
+        complete: true,
+        // A period missing nothing carries no string, because "" would read on screen as a value.
+        missingSources: null,
+        sourceEvidenceAt: "2026-09-01T02:00:00.000Z",
+        dataLabel: "Demo",
+      }]);
+    });
+
+    it("keeps an absent cost source absent and joins the missing ones the way the screen prints them", async () => {
+      const repository = createBillingRepository(dependencies({
+        readCostRollupRows: vi.fn().mockResolvedValue([rollup({
+          complete: false,
+          embedding_cents: null,
+          messaging_cents: null,
+          missing_sources: ["messaging", "embedding"],
+          recognized_subscription_cents: null,
+          tenant: { name: "Cedar Ridge Credit Coaching", is_demo: false },
+        })]),
+      }));
+
+      const [row] = await repository.loadCostRollupRows();
+      expect(row).toMatchObject({
+        businessName: "Cedar Ridge Credit Coaching",
+        // Absent, never zero: a source that was never recorded is not a cost of nothing.
+        revenueCents: null,
+        messagingCostCents: null,
+        embeddingCostCents: null,
+        complete: false,
+        missingSources: "messaging; embedding",
+        dataLabel: null,
+      });
+    });
+
+    it("refuses a rollup whose tenant carries no name rather than drawing a nameless period", async () => {
+      const repository = createBillingRepository(dependencies({
+        readCostRollupRows: vi.fn().mockResolvedValue([rollup({ tenant: null })]),
+      }));
+
+      await expect(repository.loadCostRollupRows())
+        .rejects.toThrow("BILLING_COST_ROLLUP_ROWS_READ_INVALID");
     });
   });
 

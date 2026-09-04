@@ -95,6 +95,24 @@ const BILLING: MoneyBillingRead = {
   ],
 };
 
+const COST_ROWS = [
+  {
+    businessName: "Reid Funding Group",
+    complete: true,
+    dataLabel: null,
+    embeddingCostCents: 640,
+    messagingCostCents: 1_980,
+    missingSources: null,
+    modelCostCents: 4_210,
+    revenueCents: 149_700,
+    rollupId: "rollup-august",
+    sourceEvidenceAt: "2026-09-01T02:00:00.000Z",
+    tenantId: "tenant-reid",
+    windowEnd: "2026-09-01T00:00:00.000Z",
+    windowStart: "2026-08-01T00:00:00.000Z",
+  },
+];
+
 function renderBilling() {
   return render(
     <OwnerMoney
@@ -328,6 +346,54 @@ describe("OwnerMoney, honest states", () => {
       // The cost read is a different fetch, on a different route, and nothing on screen waits for it.
       expect(fetchSpy.mock.calls.some(([input]) =>
         String(input).includes("/api/exports/platform-billing"))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("draws the Costs tab from the server's rollups without asking the export route for them", async () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => new Response(String(input), { status: 500 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      render(
+        <OwnerMoney
+          actorRole="owner"
+          authorized
+          enabled
+          initialCostRows={COST_ROWS}
+          tab="costs"
+        />,
+      );
+
+      expect(await screen.findByText("Reid Funding Group")).toBeTruthy();
+      // The whole point of the change: the rows a reader sees no longer travel through
+      // /api/exports/..., so opening Money files no export receipt for a download nobody asked for.
+      expect(fetchSpy.mock.calls.some(([input]) =>
+        String(input).includes("/api/exports/billing-cost-rollups"))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("takes the record sheet's costs from the server too, so the Billing tab fetches nothing", () => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => new Response(String(input), { status: 500 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      render(
+        <OwnerMoney
+          actorRole="owner"
+          authorized
+          billing={BILLING}
+          enabled
+          initialCostRows={COST_ROWS}
+          initialRows={ROWS}
+          movement={MOVEMENT}
+          tab="billing"
+        />,
+      );
+
+      expect(fetchSpy.mock.calls.some(([input]) =>
+        String(input).includes("/api/exports/"))).toBe(false);
     } finally {
       vi.unstubAllGlobals();
     }

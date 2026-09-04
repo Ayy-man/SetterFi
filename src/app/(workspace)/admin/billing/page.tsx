@@ -26,6 +26,7 @@ import { phase6AffiliatesLive, phase6Live } from "@/lib/env-contract";
 import {
   createBillingRepository,
   type MoneyBillingRead,
+  type MoneyCostRollupRow,
   type MoneySubscriptionRow,
   type MrrMovementRead,
 } from "@/lib/repositories/billing";
@@ -148,21 +149,30 @@ export default async function AdminBillingPage({ searchParams }: PageProps) {
   // The page loads the active tab's data and nothing else: four of the five reads are somebody
   // else's tab, and a tab nobody opened is a query nobody asked for.
   if (tab === "billing") {
-    // Three reads, caught apart: the movement projection, the priced month-end series and the
-    // subscription rows fail for different reasons, and a failure in one is no reason to blank the
-    // card or the table the others draw.
+    // Four reads, caught apart: the movement projection, the priced month-end series, the
+    // subscription rows and the cost rollups fail for different reasons, and a failure in one is
+    // no reason to blank the card, the table or the record sheet the others draw.
     //
     // The rows are read here rather than fetched by the table after hydration. The table used to
     // call `/api/exports/platform-billing` from an effect, which put a whole client round trip --
     // an audit write, the row query, a second audit write, all serial -- between the page painting
     // and the Subscriptions table appearing, about a second of it. Reading them alongside the other
     // two costs nothing, because they run in parallel and this is not the slowest of the three.
+    //
+    // The cost rollups joined them for the same reason and one more. On this tab they only fill the
+    // Cost tab of a client's record sheet, so nothing on the first paint waited for them, but the
+    // effect that fetched them spent that same export round trip and filed the same two audit
+    // receipts on every single view of the default Money screen, for a download nobody requested.
+    // Read here it is a fourth parallel query against a database whose statements cost single-digit
+    // milliseconds next to a 300 ms trip, so it does not move the wall clock, and the record sheet
+    // opens already holding its costs.
     const repository = createBillingRepository();
     const asOf = new Date().toISOString();
-    const [movementResult, billingResult, subscriptionResult] = await Promise.allSettled([
+    const [movementResult, billingResult, subscriptionResult, costResult] = await Promise.allSettled([
       repository.loadMrrMovement(asOf),
       repository.loadMoneyBilling(asOf),
       repository.loadSubscriptionRows(),
+      repository.loadCostRollupRows(),
     ]);
     const movement: MrrMovementRead | null =
       movementResult.status === "fulfilled" ? movementResult.value : null;
@@ -173,14 +183,36 @@ export default async function AdminBillingPage({ searchParams }: PageProps) {
     // its own words if that fails too. An empty book is a real answer and is passed as one.
     const rows: readonly MoneySubscriptionRow[] | undefined =
       subscriptionResult.status === "fulfilled" ? subscriptionResult.value : undefined;
+    // Same rule for the costs: handing the screen no rows at all is what keeps the old client
+    // fetch as the fallback, and an empty ledger is a real answer that is passed as one.
+    const costRows: readonly MoneyCostRollupRow[] | undefined =
+      costResult.status === "fulfilled" ? costResult.value : undefined;
     return (
       <OwnerMoney
         actorRole={actorRole}
         authorized
         billing={billing}
         enabled
+        initialCostRows={costRows}
         initialRows={rows}
         movement={movement}
+        tab={tab}
+      />
+    );
+  }
+
+  // Costs is the one tab whose whole table is cost rollups, and it is reached by a link, so this
+  // read runs only on a view that actually asked for it. A reader who never opens Costs never pays
+  // for it, and the ones who do pay a single server query rather than an export round trip with two
+  // audit writes bracketing it.
+  if (tab === "costs") {
+    const costRows = await createBillingRepository().loadCostRollupRows().catch(() => undefined);
+    return (
+      <OwnerMoney
+        actorRole={actorRole}
+        authorized
+        enabled
+        initialCostRows={costRows}
         tab={tab}
       />
     );

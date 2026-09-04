@@ -170,6 +170,31 @@ export type MoneySubscriptionRow = {
   dataLabel: string | null;
 };
 
+/**
+ * One cost rollup, in the shape `normalizeCostRows` on the Costs surface already reads.
+ *
+ * Same reasoning as `MoneySubscriptionRow` one level down: the Costs table and the per-client Cost
+ * tab both used to call `/api/exports/billing-cost-rollups` from an effect, which spent a client
+ * round trip and filed a `start_platform_export` and a `finish_export` receipt for a download
+ * nobody had asked for. The export route keeps its own copy of this projection for the file a
+ * reader actually downloads; this one exists so the server can hand the rows to the page.
+ */
+export type MoneyCostRollupRow = {
+  rollupId: string;
+  tenantId: string;
+  businessName: string;
+  windowStart: string | null;
+  windowEnd: string | null;
+  revenueCents: number | null;
+  modelCostCents: number | null;
+  messagingCostCents: number | null;
+  embeddingCostCents: number | null;
+  complete: boolean;
+  missingSources: string | null;
+  sourceEvidenceAt: string | null;
+  dataLabel: string | null;
+};
+
 export type BillingRepository = {
   updateTier(input: {
     actorId: string;
@@ -234,6 +259,7 @@ export type BillingRepository = {
   loadMrrMovement(asOf: string): Promise<MrrMovementRead>;
   loadMoneyBilling(asOf: string): Promise<MoneyBillingRead>;
   loadSubscriptionRows(): Promise<readonly MoneySubscriptionRow[]>;
+  loadCostRollupRows(): Promise<readonly MoneyCostRollupRow[]>;
   loadSubscription(tenantId: string): Promise<BillingSubscriptionReadback>;
   loadCheckoutTenant(tenantId: string): Promise<CheckoutTenant | null>;
   loadCheckoutTierPrices(tierId: string): Promise<readonly CheckoutTierPrice[]>;
@@ -291,6 +317,7 @@ export type BillingRepositoryDependencies = {
   }>;
   readMoneyBilling(asOf: string): Promise<unknown>;
   readSubscriptionRows(): Promise<unknown>;
+  readCostRollupRows(): Promise<unknown>;
   readSubscription(tenantId: string): Promise<Record<string, unknown> | null>;
   readCheckoutTenant(tenantId: string): Promise<Record<string, unknown> | null>;
   readCheckoutTierPrices(tierId: string): Promise<unknown>;
@@ -887,6 +914,50 @@ function parseSubscriptionRows(value: unknown): MoneySubscriptionRow[] {
   });
 }
 
+/**
+ * Every cost rollup the Costs surface draws, newest period first.
+ *
+ * The cap is the same guard `SUBSCRIPTION_ROW_CAP` is: the table paginates in the browser over the
+ * whole set, so a page boundary in the query would hide periods rather than defer them.
+ */
+const COST_ROLLUP_ROW_CAP = 2_000;
+
+const COST_ROLLUP_ROW_SELECT = [
+  "id,tenant_id,window_start,window_end",
+  "recognized_subscription_cents,model_cents,messaging_cents,embedding_cents",
+  "complete,missing_sources,computed_at",
+  "tenant:tenants(name,is_demo)",
+].join(",");
+
+function parseCostRollupRows(value: unknown): MoneyCostRollupRow[] {
+  const code = "BILLING_COST_ROLLUP_ROWS_READ_INVALID";
+  return array(value, code).map((candidate) => {
+    const rollup = row(candidate, code);
+    const tenant = embedded(rollup.tenant);
+    // The screen joins the missing sources with "; " and prints the string, so the join happens
+    // here rather than in the component, exactly as the export spec does it. A rollup that is
+    // missing nothing carries no string at all, because "" would read on screen as a value.
+    const missing = Array.isArray(rollup.missing_sources)
+      ? rollup.missing_sources.filter((source): source is string => typeof source === "string")
+      : [];
+    return {
+      rollupId: string(rollup.id, code),
+      tenantId: string(rollup.tenant_id, code),
+      businessName: string(tenant?.name, code),
+      windowStart: nullableString(rollup.window_start ?? null, code),
+      windowEnd: nullableString(rollup.window_end ?? null, code),
+      revenueCents: nullableInteger(rollup.recognized_subscription_cents ?? null, code),
+      modelCostCents: nullableInteger(rollup.model_cents ?? null, code),
+      messagingCostCents: nullableInteger(rollup.messaging_cents ?? null, code),
+      embeddingCostCents: nullableInteger(rollup.embedding_cents ?? null, code),
+      complete: rollup.complete === true,
+      missingSources: missing.length > 0 ? missing.join("; ") : null,
+      sourceEvidenceAt: nullableString(rollup.computed_at ?? null, code),
+      dataLabel: tenant?.is_demo === true ? "Demo" : null,
+    };
+  });
+}
+
 async function liveDependencies(): Promise<BillingRepositoryDependencies> {
   const service = createSupabaseServiceClient();
   const user = await createSupabaseServerClient();
@@ -1075,6 +1146,14 @@ async function liveDependencies(): Promise<BillingRepositoryDependencies> {
         .order("updated_at", { ascending: false })
         .limit(SUBSCRIPTION_ROW_CAP);
       if (error) throw new BillingRepositoryError("BILLING_SUBSCRIPTION_ROWS_READ_FAILED");
+      return data ?? [];
+    },
+    readCostRollupRows: async () => {
+      const { data, error } = await service.from("tenant_cost_rollups")
+        .select(COST_ROLLUP_ROW_SELECT)
+        .order("window_end", { ascending: false })
+        .limit(COST_ROLLUP_ROW_CAP);
+      if (error) throw new BillingRepositoryError("BILLING_COST_ROLLUP_ROWS_READ_FAILED");
       return data ?? [];
     },
     readSubscription: async (tenantId) => {
@@ -1345,6 +1424,8 @@ export function createBillingRepository(
     },
     loadSubscriptionRows: async () =>
       parseSubscriptionRows(await (await dependencies()).readSubscriptionRows()),
+    loadCostRollupRows: async () =>
+      parseCostRollupRows(await (await dependencies()).readCostRollupRows()),
     loadSubscription: async (tenantId) => {
       const deps = await dependencies();
       const persisted = await deps.readSubscription(tenantId);

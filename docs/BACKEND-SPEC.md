@@ -812,10 +812,25 @@ unchanged. **No Suspense skeleton**, deliberately: the delay was a removable rou
 an irreducible cost, and a skeleton would have hidden something we could delete instead. Real
 exports through the Export menu still audit normally, and access is unchanged.
 
-**Still outstanding.** `fetchCostRows` reads `/api/exports/billing-cost-rollups` the same way, for
-another trip and two more audit writes per Money page view. Nothing on screen waits for it, since
-those rows only fill a tab behind a click, so it was left alone rather than swept in; the open
-question is whether that read should become lazy on the click.
+**The cost rollups followed, on the same rule (fixed 2026-09-04).** `fetchCostRows` read
+`/api/exports/billing-cost-rollups` from an effect for another trip and two more audit writes per
+Money page view. `loadCostRollupRows` on the billing repository now projects the shape
+`normalizeCostRows` already consumes, and `/admin/billing` reads it on the server for the two tabs
+that draw it and for no others.
+
+The read is placed per tab rather than once for the page, because the page already loads the active
+tab's data and nothing else. On Billing it joins the existing `Promise.allSettled` as a fourth
+parallel read, which does not move the wall clock for the reason above and lets a client's record
+sheet open already holding its Cost tab. On Costs it is the tab's own read, and since the tab row is
+a set of links, a reader who never opens Costs never pays for it. A failed read still hands the
+screen no rows, which is the one case that keeps the old client fetch as a fallback and as the
+table's retry.
+
+Measured on 2026-09-04 against the dev server as the owner, driving a real browser: `/admin/billing`
+and `/admin/billing?tab=costs` both render their rows with **zero** requests to `/api/exports/`, and
+the `platform_export.*` audit count for `billing-cost-rollups` is unchanged across both views. Real
+exports through the Export menu audit normally, and access is unchanged: both reads sit behind the
+same billing check, which admits owner and admin only.
 
 ## 10. Security section (the bar the client's next technical hire will retest)
 

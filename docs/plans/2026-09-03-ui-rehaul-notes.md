@@ -465,3 +465,10 @@ first HTML. `fetchCostRows` still does exactly the same thing against
 view. It was left alone because nothing on screen waits for it, since those rows only fill a tab
 behind a click, so it is not the reported bug. The open question is whether that read should become
 lazy on the click rather than eager on page load.
+
+**Closed 2026-09-04.** `loadCostRollupRows` on the billing repository replaced that fetch, and the
+page reads it per tab rather than once for the page: as a fourth parallel read on Billing, where it
+fills the record sheet's Cost tab and costs no wall clock, and as its own read on Costs, which the
+tab links reach as a fresh server render, so a view that never opens Costs pays nothing. Driving
+both tabs in a browser as the owner made no `/api/exports/` request at all, and the export audit
+count for the resource did not move. The Export menu still audits its real downloads.

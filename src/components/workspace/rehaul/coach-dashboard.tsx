@@ -25,7 +25,8 @@ import {
 import { useWorkspaceEnv } from "@/components/workspace/workspace-env";
 import { formatMetric } from "@/lib/format/metric";
 import { workspaceCountFormat } from "@/lib/format/datetime";
-import { CARRIER_TYPICAL_DAYS } from "@/lib/onboarding/contracts";
+import { STEP_LABELS } from "@/components/onboarding/view-models";
+import { CARRIER_TYPICAL_DAYS, type ProvisioningStep } from "@/lib/onboarding/contracts";
 import type {
   CoachLeadComposition,
   CoachMeasurement,
@@ -96,6 +97,12 @@ export type CoachDashboardProps = {
     threadsNeedingHuman: number;
     leadsToCallBack: number;
     blockedSetupSteps: number;
+    /*
+     * The oldest blocked step's own key, so the rail's blocked rung can name the step instead of
+     * counting the blocked ones a second time under a header that already counted them. The page
+     * has read it beside the count since this surface shipped; only the type was missing.
+     */
+    blockedStepKey?: ProvisioningStep | null;
     openConversations?: number;
   };
   billingPeriod?: { periodStart: string; periodEnd: string } | null | "unavailable";
@@ -584,6 +591,25 @@ const RUNG_FACE: Record<"good" | "amber" | "wait" | "grey", string> = {
   wait: "border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[var(--accent-text)]",
 };
 
+/**
+ * The two action faces the rail spends, declared once.
+ *
+ * They were four inline class strings, two of them identical, which is how the rail ended up
+ * offering "See setup" twice against two different destinations without anybody noticing the pair
+ * was a pair. One face per weight, named, makes a second copy of an action visible in the diff.
+ */
+const RUNG_ACTION_PRIMARY = [
+  "inline-flex h-11 items-center rounded-xl border border-transparent",
+  "[background:var(--accent-fill)] px-5 text-[16px] font-medium text-[var(--on-accent)]",
+  "no-underline hover:no-underline",
+].join(" ");
+
+const RUNG_ACTION_SECONDARY = [
+  "inline-flex h-11 items-center rounded-xl border border-[var(--line-input)]",
+  "bg-[var(--card)] px-5 text-[16px] font-medium text-[var(--ink)]",
+  "no-underline hover:no-underline",
+].join(" ");
+
 /** A 24px stroke glyph, the artboard's own paths. Decorative: the row beside it carries the word. */
 function StepGlyph({ children }: { children: React.ReactNode }) {
   return (
@@ -603,63 +629,114 @@ function StepGlyph({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * One rung, and the only anatomy a rung has.
+ *
+ * A spine node, then a panel whose header band carries the eyebrow, the row's name, the row's
+ * state and at most one action at the band's right. `docs/REDESIGN-CANVAS.md` makes that band the
+ * panel's only control, so no rung draws a footer action bar: the rail used to give three of its
+ * rows one and the fourth none, which read as four different components stacked in one column.
+ * A rung with nothing to do simply carries no action and keeps the same 78px band.
+ *
+ * `body` is the canvas's optional footer widget, and it is the one thing a rung may add: a reading
+ * too wide for the band. Only the carrier row has one.
+ *
+ * The connector is drawn by the rung rather than by the list. A single absolutely positioned line
+ * behind the whole list has to guess where the last node sits, and it guessed wrong the moment a
+ * row grew a footer, which is what left the spine hanging past the bottom icon. Each rung owns the
+ * segment between its own node and the next one, so the spine cannot outlast the rows again.
+ */
 function StepRow({
   action,
-  children,
+  body,
   eyebrow,
   icon,
+  last,
   name,
   status,
   tone,
 }: {
   action?: React.ReactNode;
-  children?: React.ReactNode;
+  body?: React.ReactNode;
   eyebrow: string;
   icon: React.ReactNode;
+  last: boolean;
   name: string;
   status: React.ReactNode;
   tone: "good" | "amber" | "wait" | "grey";
 }) {
   return (
-    <li className="flex list-none items-start gap-5">
+    <li className="relative flex list-none items-start gap-5">
+      {last ? null : (
+        <span
+          aria-hidden="true"
+          className="absolute top-16 -bottom-4 left-[31px] w-0.5 bg-[var(--line)]"
+          data-slot="rung-spine"
+        />
+      )}
       <span
         aria-hidden="true"
         className={`relative z-[1] mt-0 flex size-16 flex-[0_0_64px] items-center justify-center rounded-2xl border ${RUNG_FACE[tone]}`}
+        data-slot="rung-node"
       >
         {icon}
       </span>
       <div className={`${PANEL_CLASS} flex-1`}>
         <Band eyebrow={eyebrow} name={name}>
-          {status}
+          <>
+            {status}
+            {action}
+          </>
         </Band>
-        {children || action ? (
-          <div className="flex flex-wrap items-center gap-6 px-5 py-[18px]">
-            {children}
-            {action ? <div className="ml-auto">{action}</div> : null}
-          </div>
-        ) : null}
+        {body ? <div className="px-5 py-[18px]">{body}</div> : null}
       </div>
     </li>
   );
 }
 
+/** One row of the rail: what it is called, what state it is in, and whether that state is done. */
+type Rung = {
+  action?: React.ReactNode;
+  body?: React.ReactNode;
+  /** Counted by the numerator. A rung with no state to be done in is not a rung. */
+  done: boolean;
+  eyebrow: string;
+  icon: React.ReactNode;
+  key: string;
+  name: string;
+  status: React.ReactNode;
+  tone: "good" | "amber" | "wait" | "grey";
+};
+
 /**
  * The setup journey, built only from state this page already reads.
  *
- * The artboard draws five steps with a state on each. This page loads two of them -- the channel
- * connections and the A2P registration -- and one count of blocked steps; the per-step states for
- * the calendar, the offer and the safe test live behind the Get started page's own reads, and
- * adding a query here is the one thing this screen may not do. So three rows carry a state
- * because a row was read for them, and the rest is one row that names no state and links to the
- * page that has them. A checklist that guessed at three step states would be worse than one that
- * is honest about only having two.
+ * The artboard draws five steps with a state on each. This page loads two of them, the channel
+ * connections and the A2P registration, plus the blocked-step read; the per-step states for the
+ * calendar, the offer and the safe test live behind the Get started page's own reads, and adding a
+ * query here is the one thing this screen may not do.
+ *
+ * So the rail is exactly the rows whose state was read, and the counter denominates over that same
+ * array rather than over a number derived beside it. Four cards over "0 of 3 done" was an honest
+ * number that read as a bug, and it was honest only by accident: the count and the rows were two
+ * expressions of the same idea maintained by hand. `rungs.length` cannot disagree with what
+ * `rungs.map` drew.
+ *
+ * "The rest of your setup" names no state, so it is not a rung and is not drawn as one. It leaves
+ * the list entirely and becomes the line under it, which is what it always was: a link to the page
+ * that holds the three steps this one cannot see.
+ *
+ * Nothing is numbered. The rail's length changes with the blocked read, so "Step 2" would mean a
+ * different row on two accounts, and two of the four rows were never steps in a sequence anyway.
  */
 function FirstRun({
   blockedSetupSteps,
+  blockedStepKey,
   now,
   status,
 }: {
   blockedSetupSteps: number;
+  blockedStepKey?: ProvisioningStep | null;
   now?: Date;
   status: CoachChannelStatus;
 }) {
@@ -669,144 +746,153 @@ function FirstRun({
     : null;
   const channelsLive = status.liveChannels.length > 0;
 
-  /*
-   * The counter the artboard prints beside "Your setup". It counts only the rungs whose state this
-   * page actually read -- the channel row, the registration row, and the blocked-step row when
-   * there is one. "The rest of your setup" is excluded from both halves because it names no state,
-   * and a denominator that counted it would be a five-step promise off a two-step read.
-   *
-   * The channel row counts toward `done` from the status it was handed rather than being pinned to
-   * zero. On a real first run that is the same number it always was, because this composition only
-   * renders when nothing is live. It stops being the same number when the demo override hands this
-   * function a complete status, which is the case the counter has to agree with the rows in.
-   */
-  const known = 2 + (blockedSetupSteps > 0 ? 1 : 0);
-  const done = (channelsLive ? 1 : 0) + (carrier.kind === "live" ? 1 : 0);
+  const rungs: Rung[] = [
+    {
+      action: channelsLive ? undefined : (
+        <Link className={RUNG_ACTION_PRIMARY} href="/coach/integrations">
+          Connect Instagram and Messenger
+        </Link>
+      ),
+      done: channelsLive,
+      eyebrow: "Your channels",
+      icon: (
+        <StepGlyph>
+          <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.1A8.4 8.4 0 0 1 3.6 12a8.4 8.4 0 0 1 8.4-8.4 8.4 8.4 0 0 1 9 7.9Z" />
+        </StepGlyph>
+      ),
+      key: "channels",
+      name: "Instagram and Messenger",
+      /*
+       * `FirstRun` renders on "the read succeeded and nothing is live", which covers `ready`,
+       * `pending_review` and `error` as well as no row at all. "Not connected" would claim one of
+       * those; "not live yet" is exactly what the read established and nothing more.
+       */
+      status: channelsLive
+        ? (
+          <Pill className="text-[14px]" tone="good">
+            <StatusDot tone="good" />
+            Live
+          </Pill>
+        )
+        : <Pill className="text-[14px]" tone="neutral">Not live yet</Pill>,
+      tone: channelsLive ? "good" : "grey",
+    },
+    {
+      /*
+       * The one footer widget on the rail. The pill says which day the wait is on; the counter
+       * says the same day against the range it is measured in and the date it started, which is
+       * the fact the band cannot hold and the reason the widget survives the anatomy pass. The
+       * reassurance that used to trail it lives in the eye with the rest of the prose.
+       */
+      body: carrier.kind === "in-review" && carrier.submittedAt
+        ? <DayCounter now={now} since={carrier.submittedAt} typicalDays={CARRIER_TYPICAL_DAYS} />
+        : undefined,
+      done: carrier.kind === "live",
+      eyebrow: "With the carrier",
+      icon: (
+        <StepGlyph>
+          <rect height="19" rx="3" width="12" x="6" y="2.5" />
+          <path d="M11 18.5h2" />
+        </StepGlyph>
+      ),
+      key: "carrier",
+      name: "Texting registration",
+      status: carrier.kind === "in-review"
+        ? (
+          <Pill className="text-[14px]" tone="amber">
+            <StatusDot tone="amber" />
+            {carrierDay === null ? "In review" : `Day ${carrierDay}`}
+          </Pill>
+        )
+        : carrier.kind === "live"
+        ? (
+          <Pill className="text-[14px]" tone="good">
+            <StatusDot tone="good" />
+            Registered
+          </Pill>
+        )
+        : <Pill className="text-[14px]" tone="neutral">Not filed</Pill>,
+      tone: carrier.kind === "in-review" ? "amber" : carrier.kind === "live" ? "good" : "grey",
+    },
+    /*
+     * The blocked rung names the step rather than counting the blocked ones.
+     *
+     * The status line above already prints that count, and printing it again eleven hundred pixels
+     * lower said one fact twice and added nothing. `provisioning_steps.step_key` for the oldest
+     * blocked row is read by the page beside the count, and `STEP_LABELS` is the coach-facing name
+     * of that key, so the row can say which step it is: the header says how many are waiting, the
+     * row says which one to open first, and neither repeats the other.
+     *
+     * `blocked_reason` stays unrendered, for the reason the page's own read states: it is
+     * operator-authored free text with no contract about audience.
+     */
+    ...(blockedSetupSteps > 0
+      ? [{
+        action: (
+          <Link className={RUNG_ACTION_SECONDARY} href="/coach/get-started">
+            Fix this step
+          </Link>
+        ),
+        done: false,
+        eyebrow: "On your setup page",
+        icon: (
+          <StepGlyph>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7.5v5M12 16h.01" />
+          </StepGlyph>
+        ),
+        key: "blocked",
+        name: blockedStepKey ? STEP_LABELS[blockedStepKey] : "A step in your setup",
+        status: <Pill className="text-[14px]" tone="amber">Blocked</Pill>,
+        tone: "amber" as const,
+      }]
+      : []),
+  ];
+
+  const done = rungs.filter((rung) => rung.done).length;
 
   return (
     <>
       <div className="flex items-baseline gap-3">
-        <h2 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">Your setup</h2>
+        <h2
+          className="m-0 text-[17px] font-semibold tracking-[-0.01em]"
+          id="rehaul-setup-heading"
+        >
+          Your setup
+        </h2>
         <span className="ml-auto font-mono text-[14px] text-[var(--faint)]">
-          {workspaceCountFormat.format(done)} of {workspaceCountFormat.format(known)} done
+          {workspaceCountFormat.format(done)} of {workspaceCountFormat.format(rungs.length)} done
         </span>
       </div>
-      <ol className="relative m-0 flex list-none flex-col gap-4 p-0">
-        <span
-          aria-hidden="true"
-          className="absolute top-6 bottom-6 left-[31px] w-0.5 bg-[var(--line)]"
-        />
-      <StepRow
-        action={channelsLive ? undefined : (
-          <Link
-            className="inline-flex h-11 items-center rounded-xl border border-transparent [background:var(--accent-fill)] px-5 text-[16px] font-medium text-[var(--on-accent)] no-underline hover:no-underline"
-            href="/coach/integrations"
-          >
-            Connect Instagram and Messenger
-          </Link>
-        )}
-        eyebrow="Step 1"
-        icon={
-          <StepGlyph>
-            <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.1A8.4 8.4 0 0 1 3.6 12a8.4 8.4 0 0 1 8.4-8.4 8.4 8.4 0 0 1 9 7.9Z" />
-          </StepGlyph>
-        }
-        name="Instagram and Messenger"
-        /*
-         * `FirstRun` renders on "the read succeeded and nothing is live", which covers `ready`,
-         * `pending_review` and `error` as well as no row at all. "Not connected" would claim one
-         * of those; "not live yet" is exactly what the read established and nothing more.
-         */
-        status={channelsLive
-          ? (
-            <Pill className="text-[14px]" tone="good">
-              <StatusDot tone="good" />
-              Live
-            </Pill>
-          )
-          : <Pill className="text-[14px]" tone="neutral">Not live yet</Pill>}
-        tone={channelsLive ? "good" : "grey"}
-      />
-      <StepRow
-        eyebrow="Step 2 · with the carrier"
-        icon={
-          <StepGlyph>
-            <rect height="19" rx="3" width="12" x="6" y="2.5" />
-            <path d="M11 18.5h2" />
-          </StepGlyph>
-        }
-        name="Texting registration"
-        status={
-          carrier.kind === "in-review"
-            ? (
-              <Pill className="text-[14px]" tone="amber">
-                <StatusDot tone="amber" />
-                {carrierDay === null ? "In review" : `Day ${carrierDay}`}
-              </Pill>
-            )
-            : carrier.kind === "live"
-            ? (
-              <Pill className="text-[14px]" tone="good">
-                <StatusDot tone="good" />
-                Registered
-              </Pill>
-            )
-            : <Pill className="text-[14px]" tone="neutral">Not filed</Pill>
-        }
-        tone={carrier.kind === "in-review" ? "amber" : carrier.kind === "live" ? "good" : "grey"}
-      >
-        {/* The day count says itself once in the band's pill and once, with the range it is
-            measured against, in the counter. A third copy as a hero figure said nothing the
-            counter does not already say in words. */}
-        {carrier.kind === "in-review" && carrier.submittedAt ? (
-          <DayCounter now={now} since={carrier.submittedAt} typicalDays={CARRIER_TYPICAL_DAYS} />
-        ) : null}
-      </StepRow>
-      {blockedSetupSteps > 0 ? (
-        <StepRow
-          action={(
-            <Link
-              className="inline-flex h-11 items-center rounded-xl border border-[var(--line-input)] bg-[var(--card)] px-5 text-[16px] font-medium text-[var(--ink)] no-underline hover:no-underline"
-              href="/coach/get-started"
-            >
-              See setup
-            </Link>
-          )}
-          eyebrow="Waiting on you"
-          icon={
-            <StepGlyph>
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7.5v5M12 16h.01" />
-            </StepGlyph>
-          }
-          name={`${workspaceCountFormat.format(blockedSetupSteps)} ${
-            blockedSetupSteps === 1 ? "step is" : "steps are"
-          } blocked`}
-          status={<Pill className="text-[14px]" tone="amber">Blocked</Pill>}
-          tone="amber"
-        />
-      ) : null}
-      <StepRow
-        action={(
-          <Link
-            className="inline-flex h-11 items-center rounded-xl border border-[var(--line-input)] bg-[var(--card)] px-5 text-[16px] font-medium text-[var(--ink)] no-underline hover:no-underline"
-            href="/coach/get-started"
-          >
-            See setup
-          </Link>
-        )}
-        eyebrow="Calendar, offer, and the safe test"
-        name="The rest of your setup"
-        icon={
-          <StepGlyph>
-            <path d="M20.5 13.5 13 21a2 2 0 0 1-2.8 0l-7-7A2 2 0 0 1 2.6 12V4.5A1.5 1.5 0 0 1 4.1 3h7.4a2 2 0 0 1 1.4.6l7.6 7.5a2 2 0 0 1 0 2.4Z" />
-            <path d="M7 7.5h.01" />
-          </StepGlyph>
-        }
-        status={null}
-        tone="grey"
-      />
+      <ol aria-labelledby="rehaul-setup-heading" className="m-0 flex list-none flex-col gap-4 p-0">
+        {rungs.map((rung, index) => (
+          <StepRow
+            action={rung.action}
+            body={rung.body}
+            eyebrow={rung.eyebrow}
+            icon={rung.icon}
+            key={rung.key}
+            last={index === rungs.length - 1}
+            name={rung.name}
+            status={rung.status}
+            tone={rung.tone}
+          />
+        ))}
       </ol>
+      {/*
+        Not a rung, and drawn as one thing rather than as a card so a reader counting cards gets
+        the denominator. It is indented to the rungs' left edge so it still reads as belonging to
+        the rail, and it carries the one action the rail cannot: the page holding the three steps
+        this one never read.
+      */}
+      <div className="flex flex-wrap items-center gap-4 pl-[84px]">
+        <p className="m-0 max-w-[var(--measure-deck)] text-[14px] text-[var(--muted)]">
+          Your calendar, your offer and the safe test are on your setup page.
+        </p>
+        <Link className={RUNG_ACTION_SECONDARY} href="/coach/get-started">
+          See the rest of your setup
+        </Link>
+      </div>
     </>
   );
 }
@@ -1103,6 +1189,7 @@ export function CoachDashboard({
           <div className="flex min-w-0 flex-col gap-4">
             <FirstRun
               blockedSetupSteps={displayBlockedSteps}
+              blockedStepKey={attention.blockedStepKey}
               now={now}
               status={displayStatus}
             />

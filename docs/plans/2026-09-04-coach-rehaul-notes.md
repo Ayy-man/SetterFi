@@ -136,3 +136,37 @@ Verified on the dev server as the demo coach, in Chrome: off, on, on after a rel
 expiry rather than a restarted clock, and off again. The suite covers the absent control on a real
 tenant, the expiry, an expired stamp, a corrupt stamp, a stamp claiming longer than ten minutes, a
 storage whose every accessor throws, and the three-way agreement while it is on.
+
+## Note 4 (2026-09-04)
+
+> fix whatever small issues you noted and pish to main again
+
+Two of the noted items were small enough to fix without touching the composition, and both landed.
+
+**The setup rail on the coach Overview** now obeys the four rules Note 1 listed. The rail is built
+from one `rungs` array, the counter reads its length, and the rows are drawn from it, so three
+cards sit over "0 of 3 done" and the two numbers cannot drift apart again. "The rest of your setup"
+is no longer a card; it is a muted line and one link under the rail, because it names no state.
+Every row is one panel with a header band carrying eyebrow, name, state pill and at most one
+action; the footer action bars and the step numbering are gone, and the two "See setup" labels
+became "Fix this step" on the blocked row and "See the rest of your setup" on the line below. The
+blocked row names the step, "Opt-in pages" on the demo coach, through the shared step labels, so the
+header's count is stated once. Each row draws its own connector to the next node, which is what
+fixed the spine: the old single line ran to a fixed offset from the bottom of a last row whose
+height changed with its footer.
+
+**The Money cost rows** no longer travel through the export route. The Costs tab reads them
+server-side in its own branch, the default Billing tab reads them in the existing parallel batch
+because the record sheet's Cost tab needs them, and no view files the two spurious audit receipts
+any more. Section 9.1 of `docs/BACKEND-SPEC.md` records the reasoning.
+
+**Margin on the owner Overview is not a small fix**, and is recorded here so nobody spends an hour
+rediscovering it. Traced in the hosted database: every row in the margin projection is complete, but
+the read requires a projection window that starts thirty days before now and ends after now, and the
+newest windows end on 2026-09-01 and 2026-09-03. So the metric was available on the first of the
+month and has read "Unavailable" since the second. That is the phase 6 date drift already in the
+owner backlog, not a formatting or binding defect.
+
+Still open from Note 1: the greeting while the override is on, the first-run composition and its
+dead space, and the mostly empty figure cards. Those belong to the redesign proper, which starts
+tonight.
