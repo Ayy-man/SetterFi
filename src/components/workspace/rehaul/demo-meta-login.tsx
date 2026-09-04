@@ -39,18 +39,16 @@ const PERMISSIONS: Record<DemoLogin["channel"], readonly string[]> = {
   ],
 };
 
-export function DemoMetaLogin({ channel, finished, state }: DemoMetaLoginProps) {
-  const [login, setLogin] = useState<DemoLogin | null | "loading">("loading");
+export function DemoMetaLogin({ finished, state }: DemoMetaLoginProps) {
+  const [fetched, setLogin] = useState<DemoLogin | null | "loading">("loading");
+  const login = state ? fetched : null;
 
   useEffect(() => {
     if (finished) {
       const timer = setTimeout(() => window.close(), 600);
       return () => clearTimeout(timer);
     }
-    if (!state) {
-      setLogin(null);
-      return;
-    }
+    if (!state) return;
     let active = true;
     void (async () => {
       try {

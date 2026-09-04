@@ -35,9 +35,14 @@ export function ConnectChannelButton({ availability, channels, children, classNa
     if (value !== RETURN_QUERY.chooseValue && value !== RETURN_QUERY.errorValue) return;
     url.searchParams.delete(RETURN_QUERY.key);
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-    setResume(value === RETURN_QUERY.chooseValue ? "choose" : "error");
-    setMountKey((key) => key + 1);
-    setOpen(true);
+    // The URL is the external system here; the sheet reopens on the next frame so the return
+    // from Meta is not a state write inside the effect body.
+    const frame = window.requestAnimationFrame(() => {
+      setResume(value === RETURN_QUERY.chooseValue ? "choose" : "error");
+      setMountKey((key) => key + 1);
+      setOpen(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   return (
