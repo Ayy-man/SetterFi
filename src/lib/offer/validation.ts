@@ -19,6 +19,12 @@ import {
   type CoachOfferPriceInput,
   type CoachOfferProofInput,
 } from "@/lib/offer/types";
+import {
+  OFFER_RULE_BOUNDS,
+  OFFER_RULE_OPS,
+  ruleTakesValue,
+  type OfferQualificationRule,
+} from "@/lib/offer/rules";
 
 const COACH_KEYS = [
   "programName",
@@ -38,6 +44,8 @@ const COACH_KEYS = [
   "voiceStyleAnswer",
   "voiceObjectionAnswer",
   "voiceFollowupAnswer",
+  "qualificationRules",
+  "voiceGuidelines",
   "prices",
   "proof",
   "assets",
@@ -53,7 +61,7 @@ const CREDIT_REPAIR_VALUES = [
 const BOOKING_MODES = ["direct", "link"] as const;
 const BRAND_VOICES = ["friendly", "neutral", "professional"] as const;
 const REFUND_POSTURES = ["none", "conditional", "published_policy"] as const;
-const BILLING_PERIODS = ["one_time", "monthly", "annual"] as const;
+const BILLING_PERIODS = ["one_time", "monthly", "annual", "weekly", "per_session"] as const;
 const STABLE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 type RecordValue = Record<string, unknown>;
@@ -159,6 +167,27 @@ function validatePrices(value: unknown): CoachOfferPriceInput[] {
         `prices[${index}].billingPeriod`,
       ),
     };
+  });
+}
+
+function validateRules(value: unknown): OfferQualificationRule[] {
+  return array(value, "qualificationRules", OFFER_RULE_BOUNDS.maxRows).map((candidate, index) => {
+    const rule = record(candidate, `qualificationRules[${index}]`);
+    exactKeys(rule, ["subject", "op", "value"], `qualificationRules[${index}]`);
+    const op = enumValue(rule.op, OFFER_RULE_OPS, `qualificationRules[${index}].op`, false);
+    const subject = requiredString(
+      rule.subject,
+      `qualificationRules[${index}].subject`,
+      OFFER_RULE_BOUNDS.subjectMax,
+    );
+    if (typeof rule.value !== "string" || rule.value.length > OFFER_RULE_BOUNDS.valueMax) {
+      throw new OfferValidationError("OFFER_STRING_INVALID", `qualificationRules[${index}].value`);
+    }
+    const trimmed = rule.value.trim();
+    if (ruleTakesValue(op) && !trimmed) {
+      throw new OfferValidationError("OFFER_RULE_VALUE_REQUIRED", `qualificationRules[${index}].value`);
+    }
+    return { subject, op, value: ruleTakesValue(op) ? trimmed : "" };
   });
 }
 
@@ -307,6 +336,12 @@ export function validateCoachOfferDraft(
       offer.voiceFollowupAnswer,
       "voiceFollowupAnswer",
       OFFER_BOUNDS.voiceAnswerMax,
+    ),
+    qualificationRules: validateRules(offer.qualificationRules),
+    voiceGuidelines: optionalString(
+      offer.voiceGuidelines,
+      "voiceGuidelines",
+      OFFER_BOUNDS.voiceGuidelinesMax,
     ),
     prices: validatePrices(offer.prices),
     proof: validateProof(offer.proof),

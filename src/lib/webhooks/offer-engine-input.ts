@@ -1,4 +1,5 @@
 import type { CoachOffer } from "@/lib/engine/types";
+import { OFFER_RULE_OPS, ruleSentences, type OfferRuleOp } from "@/lib/offer/rules";
 import { offerLayerEngineInputLive } from "@/lib/env-contract";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -29,6 +30,8 @@ const OFFER_LAYER_COLUMNS = [
   "voice_style_answer",
   "voice_objection_answer",
   "voice_followup_answer",
+  "qualification_rules",
+  "voice_guidelines",
   "credit_min",
   "funding_goal_min_cents",
   "booking_horizon_days",
@@ -89,8 +92,27 @@ function stringList(value: unknown, error: string): string[] {
  * read from: nothing. Kept as an explicit, named state rather than left implicit, so the gate-off
  * path is a decision someone can see rather than the accident it was until tonight.
  */
+/** The stored jsonb rules as sentences; a row that is not a rule is a corrupted read. */
+function storedRuleSentences(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("PUBLISHED_OFFER_RULES_INVALID");
+  return ruleSentences(value.map((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("PUBLISHED_OFFER_RULES_INVALID");
+    const rule = row as Record<string, unknown>;
+    if (
+      typeof rule.subject !== "string" ||
+      typeof rule.op !== "string" ||
+      !OFFER_RULE_OPS.includes(rule.op as OfferRuleOp) ||
+      typeof rule.value !== "string"
+    ) throw new Error("PUBLISHED_OFFER_RULES_INVALID");
+    return { subject: rule.subject, op: rule.op as OfferRuleOp, value: rule.value };
+  }));
+}
+
 const UNLOADED_OFFER_LAYER = {
   voiceAnswers: [] as string[],
+  qualificationRules: [] as string[],
+  voiceGuidelines: null as string | null,
   proof: [] as string[],
   assets: [] as { slug: string; url: string }[],
 };
@@ -150,6 +172,10 @@ export async function loadLegacyOfferEngineInput(
     products: stringList(offer.products, "PUBLISHED_OFFER_INPUT_INVALID"),
     brandVoice: nullableString(offer.brand_voice, "PUBLISHED_OFFER_INPUT_INVALID") ?? "",
     voiceAnswers: loaded ? voiceAnswers : UNLOADED_OFFER_LAYER.voiceAnswers,
+    qualificationRules: loaded ? storedRuleSentences(offer.qualification_rules) : UNLOADED_OFFER_LAYER.qualificationRules,
+    voiceGuidelines: loaded
+      ? nullableString(offer.voice_guidelines ?? null, "PUBLISHED_OFFER_INPUT_INVALID")
+      : UNLOADED_OFFER_LAYER.voiceGuidelines,
     proof: loaded
       ? rows(proofResult.data, "PUBLISHED_OFFER_PROOF_INVALID").map((entry) =>
         `${requiredString(entry.title, "PUBLISHED_OFFER_PROOF_INVALID")}: ${requiredString(entry.detail, "PUBLISHED_OFFER_PROOF_INVALID")}`,

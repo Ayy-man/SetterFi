@@ -46,6 +46,8 @@ const published: PersistedOfferLayer = {
   voiceStyleAnswer: "I help business owners get funded without giving up equity.",
   voiceObjectionAnswer: null,
   voiceFollowupAnswer: null,
+  qualificationRules: [],
+  voiceGuidelines: null,
   offerPrices: [
     { id: "price-1", label: "Funding Accelerator", amountCents: 450_000, billingPeriod: "one_time" },
     { id: "price-2", label: "Credit Repair Plan", amountCents: 29_700, billingPeriod: "monthly" },
@@ -255,7 +257,84 @@ describe("who qualifies", () => {
   });
 });
 
+describe("the coach's own rules", () => {
+  it("starts with the absence stated and a way to add a rule", () => {
+    renderAgent();
+
+    expect(
+      screen.getByText("No rules of your own yet, so your agent judges fit by the bounds above alone."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a rule" })).toBeInTheDocument();
+  });
+
+  it("adds a rule, reads it back as a sentence with the list as chips, and removes it", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    await user.click(screen.getByRole("button", { name: "Add a rule" }));
+    expect(
+      screen.getByText("Name it and give it a value, and your agent reads it as a sentence."),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Subject of rule 1"), "Location");
+    await user.click(screen.getByRole("combobox", { name: "Condition of Location" }));
+    await user.click(await screen.findByRole("option", { name: "is not one of" }));
+    await user.type(screen.getByLabelText("Value of Location"), "India, Bangladesh");
+
+    const sentence = document.querySelector('[data-slot="rehaul-rule-sentence"]');
+    expect(sentence).toHaveTextContent("Location is not one of");
+    expect(within(sentence as HTMLElement).getByText("India")).toBeInTheDocument();
+    expect(within(sentence as HTMLElement).getByText("Bangladesh")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Remove Location" }));
+    expect(screen.queryByLabelText("Subject of rule 1")).not.toBeInTheDocument();
+  });
+
+  it("drops the value field for a condition that takes none", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    await user.click(screen.getByRole("button", { name: "Add a rule" }));
+    await user.type(screen.getByLabelText("Subject of rule 1"), "Open bankruptcy");
+    await user.click(screen.getByRole("combobox", { name: "Condition of Open bankruptcy" }));
+    await user.click(await screen.findByRole("option", { name: "rules them out" }));
+
+    expect(screen.queryByLabelText("Value of Open bankruptcy")).not.toBeInTheDocument();
+    expect(screen.getByText("Open bankruptcy rules them out")).toBeInTheDocument();
+  });
+
+  it("reads saved rules back into the rows", () => {
+    renderAgent({
+      initialState: {
+        draft: null,
+        published: {
+          ...published,
+          qualificationRules: [{ subject: "Time in business", op: "at_least", value: "2 years" }],
+        },
+      },
+    });
+
+    expect(screen.getByLabelText("Subject of rule 1")).toHaveValue("Time in business");
+    expect(screen.getByLabelText("Value of Time in business")).toHaveValue("2 years");
+    expect(screen.getByText("Time in business is at least 2 years")).toBeInTheDocument();
+  });
+});
+
 describe("how you sound", () => {
+  it("takes voice guidelines as a paragraph and reads them back", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    const guidelines = screen.getByLabelText("Voice guidelines");
+    expect(guidelines.tagName).toBe("TEXTAREA");
+    expect(guidelines).toHaveValue("");
+    await user.type(guidelines, "Warm, never pushy.");
+    expect(guidelines).toHaveValue("Warm, never pushy.");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+
   it("draws three stops and three short answers", () => {
     renderAgent();
 

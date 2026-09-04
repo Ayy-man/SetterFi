@@ -71,6 +71,8 @@ function offer({ version = 4, hash = HASH_C } = {}): PublishedCoachOffer {
     voiceStyleAnswer: null,
     voiceObjectionAnswer: null,
     voiceFollowupAnswer: null,
+    qualificationRules: [],
+    voiceGuidelines: null,
     offerPrices: [],
     proof: [],
     assets: [{ id: "asset-1", slug: "readiness-guide", label: "Guide", url: "https://example.invalid/guide" }],

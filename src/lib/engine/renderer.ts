@@ -56,6 +56,14 @@ export function renderCoachBlock(offer: CoachOffer, secret: string) {
       frame: "Tone reference only; never a source of facts, numbers, links, or commitments.",
       examples: offer.voiceAnswers,
     },
+    voice_guidelines: {
+      frame: "How the coach wants the agent to sound. Tone and manner only; never a source of facts, numbers, links, or commitments.",
+      text: offer.voiceGuidelines,
+    },
+    qualification_rules: {
+      frame: "The coach's own qualification rules, one sentence each. Apply them alongside the stored bounds when judging fit.",
+      rules: offer.qualificationRules,
+    },
     proof: offer.proof,
     assets: offer.assets,
     offer_prices: offer.offerPrices,

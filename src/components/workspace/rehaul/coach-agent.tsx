@@ -70,6 +70,18 @@ import {
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { humanError } from "@/lib/copy/errors";
 import { money } from "@/lib/format/metric";
+import { OFFER_BOUNDS } from "@/lib/brain/contracts";
+import {
+  OFFER_RULE_BOUNDS,
+  OFFER_RULE_OP_LABELS,
+  OFFER_RULE_OPS,
+  ruleIsList,
+  ruleListItems,
+  ruleSentence,
+  ruleTakesValue,
+  type OfferQualificationRule,
+  type OfferRuleOp,
+} from "@/lib/offer/rules";
 import {
   OFFER_CADENCE_PURPOSE_LABELS,
   OFFER_CADENCE_PURPOSES,
@@ -372,6 +384,8 @@ function editableOffer(offer: PersistedOfferLayer | null): CoachOfferDraftInput 
       voiceStyleAnswer: null,
       voiceObjectionAnswer: null,
       voiceFollowupAnswer: null,
+      qualificationRules: [],
+      voiceGuidelines: null,
       prices: [],
       proof: [],
       assets: [],
@@ -396,6 +410,8 @@ function editableOffer(offer: PersistedOfferLayer | null): CoachOfferDraftInput 
     voiceStyleAnswer: offer.voiceStyleAnswer,
     voiceObjectionAnswer: offer.voiceObjectionAnswer,
     voiceFollowupAnswer: offer.voiceFollowupAnswer,
+    qualificationRules: offer.qualificationRules.map((rule) => ({ ...rule })),
+    voiceGuidelines: offer.voiceGuidelines,
     prices: offer.offerPrices.map(({ label, amountCents, billingPeriod }) => ({
       label,
       amountCents,
@@ -409,9 +425,28 @@ function editableOffer(offer: PersistedOfferLayer | null): CoachOfferDraftInput 
 
 const BILLING_OPTIONS = [
   { value: "one_time", label: "one time" },
+  { value: "weekly", label: "a week" },
   { value: "monthly", label: "a month" },
   { value: "annual", label: "a year" },
+  { value: "per_session", label: "a session" },
 ] as const;
+
+/**
+ * The condition dropdown, in the order a coach reads it: equality first, then bounds, then the
+ * text and list forms, then the two that need no value at all.
+ */
+const RULE_OP_OPTIONS = OFFER_RULE_OPS.map((value) => ({ value, label: OFFER_RULE_OP_LABELS[value] }));
+
+/** What the value field suggests for each condition, so a coach knows what shape to type. */
+function ruleValueHint(op: OfferRuleOp) {
+  if (ruleIsList(op)) return "India, Bangladesh";
+  if (op === "between") return "2 and 5 years";
+  if (op === "at_least" || op === "at_most") return "2 years";
+  return "United States";
+}
+
+/** A rule the coach has just added: nothing filled, the first condition picked. */
+const BLANK_RULE: OfferQualificationRule = { subject: "", op: "is", value: "" };
 
 /**
  * The four numeric bounds, as steppers.
@@ -762,6 +797,19 @@ export function CoachAgent({
     [cadence.channels],
   );
 
+  function updateRule(index: number, patch: Partial<OfferQualificationRule>) {
+    updateForm(
+      "qualificationRules",
+      form.qualificationRules.map((rule, at) => {
+        if (at !== index) return rule;
+        const next = { ...rule, ...patch };
+        // A condition that takes no value drops whatever was typed for the previous one, so the
+        // stored rule never carries a value the sentence does not read.
+        return ruleTakesValue(next.op) ? next : { ...next, value: "" };
+      }),
+    );
+  }
+
   function setCadencePurpose(
     channelClass: CoachCadenceScheduleClass,
     touchNo: number,
@@ -1069,8 +1117,10 @@ export function CoachAgent({
   }
 
   const pricesSet = form.prices.length > 0;
-  const qualifiesSet = BOUND_ROWS.some((row) => typeof form[row.key] === "number");
-  const voiceSet = Boolean(form.brandVoice);
+  const qualifiesSet =
+    BOUND_ROWS.some((row) => typeof form[row.key] === "number") ||
+    form.qualificationRules.some((rule) => ruleSentence(rule) !== null);
+  const voiceSet = Boolean(form.brandVoice) || Boolean(form.voiceGuidelines);
 
   return (
     <div className="relative flex min-w-0 flex-col gap-[24px] pb-[var(--coach-bubble-reserve)]">
@@ -1161,7 +1211,7 @@ export function CoachAgent({
                     <Select
                       onValueChange={(next) =>
                         updatePrice(index, {
-                          billingPeriod: next as "one_time" | "monthly" | "annual",
+                          billingPeriod: next as CoachOfferDraftInput["prices"][number]["billingPeriod"],
                         })
                       }
                       value={price.billingPeriod ?? "one_time"}
@@ -1267,6 +1317,26 @@ export function CoachAgent({
                     />
                   </label>
                 ))}
+                <label className="block">
+                  <span className={`mb-[6px] block ${COACH_READING_CLASS} text-[color:var(--muted)]`}>
+                    Voice guidelines
+                  </span>
+                  <textarea
+                    className={`${FIELD_SHELL_CLASS} ${COACH_READING_CLASS} h-auto min-h-[120px] w-full resize-y py-[12px] placeholder:text-[color:var(--muted)]`}
+                    data-slot="rehaul-voice-guidelines"
+                    maxLength={OFFER_BOUNDS.voiceGuidelinesMax}
+                    onChange={(event) =>
+                      updateForm("voiceGuidelines", event.target.value.trim() ? event.target.value : null)
+                    }
+                    placeholder="Anything else about how your agent should come across: phrases to use or avoid, how formal to be, how to handle a lead who is hesitant."
+                    rows={4}
+                    value={form.voiceGuidelines ?? ""}
+                  />
+                </label>
+                <p className="m-0 -mt-[8px] text-[14px] leading-[1.4] text-[color:var(--muted)]">
+                  Read into every reply alongside the tone above. Tone and manner only: your agent
+                  still cannot quote a number or make a promise from here.
+                </p>
               </div>
             </DeckPanel>
           </div>
@@ -1297,7 +1367,7 @@ export function CoachAgent({
                       </button>
                       {text === null ? (
                         <span
-                          className={`${MONO_CLASS} text-center text-[16px] text-[color:var(--muted)]`}
+                          className="text-center text-[16px] text-[color:var(--muted)]"
                           style={{ minWidth: boundWidth }}
                         >
                           Not set
@@ -1377,6 +1447,115 @@ export function CoachAgent({
                     }
                   />
                 </div>
+
+                {/*
+                  * The coach's own rules. A subject in their words, one condition from a fixed
+                  * set, and a free value; the sentence under each row is exactly what the agent's
+                  * prompt reads, so a coach sees the rule the way the agent will.
+                  */}
+                <p className={`m-0 mt-[8px] ${COACH_READING_CLASS} font-medium text-[color:var(--muted)]`}>
+                  Your own rules
+                </p>
+                {form.qualificationRules.map((rule, index) => {
+                  const name = rule.subject.trim() || `rule ${index + 1}`;
+                  const sentence = ruleSentence(rule);
+                  const items = ruleIsList(rule.op) ? ruleListItems(rule.value) : [];
+                  return (
+                    <div className="flex flex-col gap-[8px]" data-slot="rehaul-rule" key={`rule-${index}`}>
+                      <div className={WELL_ROW_CLASS}>
+                        <Input
+                          aria-label={`Subject of rule ${index + 1}`}
+                          className={`${FIELD_CLASS} flex-1 basis-[150px]`}
+                          maxLength={OFFER_RULE_BOUNDS.subjectMax}
+                          onChange={(event) => updateRule(index, { subject: event.target.value })}
+                          placeholder="Location"
+                          value={rule.subject}
+                        />
+                        <Select
+                          onValueChange={(next) => updateRule(index, { op: next as OfferRuleOp })}
+                          value={rule.op}
+                        >
+                          <SelectTrigger
+                            aria-label={`Condition of ${name}`}
+                            className={SELECT_TRIGGER_CLASS}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent align="start" alignItemWithTrigger={false}>
+                            {RULE_OP_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {ruleTakesValue(rule.op) ? (
+                          <Input
+                            aria-label={`Value of ${name}`}
+                            className={`${FIELD_CLASS} flex-1 basis-[170px]`}
+                            maxLength={OFFER_RULE_BOUNDS.valueMax}
+                            onChange={(event) => updateRule(index, { value: event.target.value })}
+                            placeholder={ruleValueHint(rule.op)}
+                            value={rule.value}
+                          />
+                        ) : null}
+                        <button
+                          aria-label={`Remove ${name}`}
+                          className={`${ICON_BUTTON_CLASS} ml-auto`}
+                          onClick={() =>
+                            updateForm(
+                              "qualificationRules",
+                              form.qualificationRules.filter((_, at) => at !== index),
+                            )
+                          }
+                          type="button"
+                        >
+                          <X aria-hidden className="size-[20px]" />
+                        </button>
+                      </div>
+                      <p
+                        className={`m-0 flex flex-wrap items-center gap-x-[6px] gap-y-[4px] px-[16px] text-[15px] leading-[1.4] ${sentence ? "text-[color:var(--body)]" : "text-[color:var(--muted)]"}`}
+                        data-slot="rehaul-rule-sentence"
+                      >
+                        {sentence === null ? (
+                          ruleIsList(rule.op)
+                            ? "Name it and list the values with commas, and your agent reads it as a sentence."
+                            : "Name it and give it a value, and your agent reads it as a sentence."
+                        ) : items.length > 1 ? (
+                          <>
+                            <span>{`${rule.subject.trim()} ${OFFER_RULE_OP_LABELS[rule.op]}`}</span>
+                            {items.map((item) => (
+                              <span
+                                className="rounded-full border border-[var(--line)] bg-[var(--card)] px-[10px] py-[2px] text-[14px] font-medium text-[color:var(--ink)]"
+                                key={item}
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </>
+                        ) : (
+                          sentence
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+                {form.qualificationRules.length === 0 ? (
+                  <p className="m-0 max-w-[var(--measure-caption)] px-[4px] text-[15px] leading-[1.4] text-[color:var(--muted)]">
+                    No rules of your own yet, so your agent judges fit by the bounds above alone.
+                  </p>
+                ) : null}
+                <button
+                  className={DASHED_ADD_CLASS}
+                  disabled={form.qualificationRules.length >= OFFER_RULE_BOUNDS.maxRows}
+                  onClick={() =>
+                    updateForm("qualificationRules", [...form.qualificationRules, { ...BLANK_RULE }])
+                  }
+                  type="button"
+                >
+                  <Sign />
+                  Add a rule
+                </button>
               </div>
             </DeckPanel>
 

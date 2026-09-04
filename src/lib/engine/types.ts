@@ -76,6 +76,10 @@ export type CoachOffer = Pick<
   products: readonly string[];
   brandVoice: string;
   voiceAnswers: readonly string[];
+  /** The coach's own rules, each already one sentence; see `@/lib/offer/rules`. */
+  qualificationRules: readonly string[];
+  /** The coach's paragraph on how the agent should sound, or null when none was written. */
+  voiceGuidelines: string | null;
   proof: readonly string[];
   assets: readonly Pick<PublishedOfferAsset, "slug" | "url">[];
   offerPrices: readonly Pick<PublishedOfferPrice, "id" | "label" | "amountCents">[];

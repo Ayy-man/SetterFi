@@ -15,10 +15,12 @@ export const COACH_OFFER_KEYS = [
   "programDescription",
   "programName",
   "proof",
+  "qualificationRules",
   "refundPosture",
   "resultsTimelineMaxDays",
   "resultsTimelineMinDays",
   "voiceFollowupAnswer",
+  "voiceGuidelines",
   "voiceObjectionAnswer",
   "voiceStyleAnswer",
 ] as const;

@@ -1,6 +1,7 @@
 /** Shared Phase 2 contracts. Later plans import these shapes instead of restating them. */
 
 import type { QualificationRule as DomainQualificationRule } from "@/lib/domain/qualification";
+import type { OfferQualificationRule } from "@/lib/offer/rules";
 
 export const OFFER_PRODUCTS = [
   "personal CC",
@@ -17,6 +18,7 @@ export const OFFER_BOUNDS = {
   proof: { maxRows: 12, titleMax: 90, detailMax: 280 },
   asset: { maxRows: 12, slugMax: 64, labelMax: 90, urlMax: 500 },
   voiceAnswerMax: 180,
+  voiceGuidelinesMax: 1200,
   productsMax: 12,
 } as const;
 
@@ -45,7 +47,7 @@ export type PublishedOfferPrice = {
   id: string;
   label: string;
   amountCents: number;
-  billingPeriod: "one_time" | "monthly" | "annual" | null;
+  billingPeriod: "one_time" | "monthly" | "annual" | "weekly" | "per_session" | null;
 };
 
 export type PublishedOfferProof = {
@@ -85,6 +87,10 @@ export type PublishedCoachOffer = {
   voiceStyleAnswer: string | null;
   voiceObjectionAnswer: string | null;
   voiceFollowupAnswer: string | null;
+  /** The coach's own rules past the stored bounds; see `@/lib/offer/rules`. */
+  qualificationRules: readonly OfferQualificationRule[];
+  /** Free paragraph on how the agent should sound; ingested into the prompt as tone guidance. */
+  voiceGuidelines: string | null;
   offerPrices: readonly PublishedOfferPrice[];
   proof: readonly PublishedOfferProof[];
   assets: readonly PublishedOfferAsset[];

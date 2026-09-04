@@ -35,6 +35,8 @@ const OFFER: PublishedCoachOffer = {
   voiceStyleAnswer: null,
   voiceObjectionAnswer: null,
   voiceFollowupAnswer: null,
+  qualificationRules: [],
+  voiceGuidelines: null,
   offerPrices: [],
   proof: [],
   assets: [],

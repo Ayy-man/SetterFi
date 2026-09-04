@@ -30,6 +30,8 @@ function offer(overrides: Partial<PersistedOfferLayer> = {}): PersistedOfferLaye
     tenantId: "tenant-1",
     version: 1,
     voiceFollowupAnswer: null,
+    qualificationRules: [],
+    voiceGuidelines: null,
     voiceObjectionAnswer: null,
     voiceStyleAnswer: null,
     ...overrides,
@@ -65,6 +67,33 @@ describe("offerReview", () => {
       expect(entry.value).toEqual({ kind: "absent", text: "No minimum" });
       expect(entry.value.text).not.toContain("0");
     }
+  });
+
+  it("reads the coach's own rules back as sentences after the three bounds", () => {
+    const qualifiers = row(
+      offerReview(
+        offer({
+          qualificationRules: [
+            { subject: "Location", op: "not_one_of", value: "India, Bangladesh" },
+            { subject: "", op: "is", value: "" },
+          ],
+        }),
+        "published",
+      ),
+      "qualifiers",
+    );
+    expect(qualifiers.values.slice(3)).toEqual([
+      { label: "Rule 1", value: { kind: "value", text: "Location is not one of India or Bangladesh" } },
+    ]);
+  });
+
+  it("reads the voice guidelines back, and states their absence in words", () => {
+    const voice = row(offerReview(offer({ voiceGuidelines: "Warm, never pushy." }), "published"), "voice");
+    expect(voice.values[1]).toEqual({
+      label: "Voice guidelines",
+      value: { kind: "value", text: "Warm, never pushy." },
+    });
+    expect(row(offerReview(offer(), "published"), "voice").values[1].value.kind).toBe("absent");
   });
 
   it("keeps a real zero minimum distinguishable from an unset one", () => {

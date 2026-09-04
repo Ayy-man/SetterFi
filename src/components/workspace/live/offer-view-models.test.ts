@@ -37,6 +37,8 @@ function offer(status: PersistedOfferLayer["status"], version: number): Persiste
     voiceStyleAnswer: null,
     voiceObjectionAnswer: null,
     voiceFollowupAnswer: null,
+    qualificationRules: [],
+    voiceGuidelines: null,
     offerPrices: [],
     proof: [],
     assets: [],

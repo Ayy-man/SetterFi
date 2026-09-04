@@ -29,6 +29,8 @@ const offerInput = {
   voiceStyleAnswer: null,
   voiceObjectionAnswer: null,
   voiceFollowupAnswer: null,
+  qualificationRules: [],
+  voiceGuidelines: null,
   prices: [],
   proof: [],
   assets: [],

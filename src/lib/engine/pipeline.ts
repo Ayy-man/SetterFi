@@ -6,6 +6,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { ruleSentences } from "@/lib/offer/rules";
 
 import type { PublishedRuntimeBundle } from "@/lib/brain/contracts";
 import {
@@ -116,6 +117,8 @@ export function engineOfferFromRuntimeBundle(bundle: PublishedRuntimeBundle): Co
       offer.voiceObjectionAnswer,
       offer.voiceFollowupAnswer,
     ].filter((value): value is string => Boolean(value)),
+    qualificationRules: ruleSentences(offer.qualificationRules),
+    voiceGuidelines: offer.voiceGuidelines,
     proof: offer.proof.map((entry) => `${entry.title}: ${entry.detail}`),
     assets: offer.assets.map(({ slug, url }) => ({ slug, url })),
     offerPrices: offer.offerPrices.map(({ id, label, amountCents }) => ({ id, label, amountCents })),

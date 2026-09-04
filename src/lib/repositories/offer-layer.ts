@@ -6,6 +6,7 @@
  */
 
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { OFFER_RULE_OPS, type OfferQualificationRule, type OfferRuleOp } from "@/lib/offer/rules";
 import {
   parseOfferChangeTrail,
   type OfferChangeTrailEntry,
@@ -85,6 +86,8 @@ const OFFER_LAYER_SELECT = [
   "voice_style_answer",
   "voice_objection_answer",
   "voice_followup_answer",
+  "qualification_rules",
+  "voice_guidelines",
 ].join(",");
 
 function asRecord(value: unknown, error: string) {
@@ -95,6 +98,25 @@ function asRecord(value: unknown, error: string) {
 function asRows(value: unknown, error: string) {
   if (!Array.isArray(value)) throw new Error(error);
   return value.map((row) => asRecord(row, error));
+}
+
+/**
+ * The rules column is jsonb the database only shapes as "an array of at most twelve"; the row
+ * content was validated on the way in, so a malformed row here is a corrupted read, not input.
+ */
+function parseStoredRules(value: unknown): OfferQualificationRule[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("OFFER_RULES_READBACK_INVALID");
+  return value.map((row) => {
+    const rule = asRecord(row, "OFFER_RULES_READBACK_INVALID");
+    if (
+      typeof rule.subject !== "string" ||
+      typeof rule.op !== "string" ||
+      !OFFER_RULE_OPS.includes(rule.op as OfferRuleOp) ||
+      typeof rule.value !== "string"
+    ) throw new Error("OFFER_RULES_READBACK_INVALID");
+    return { subject: rule.subject, op: rule.op as OfferRuleOp, value: rule.value };
+  });
 }
 
 function nullableNumber(value: unknown) {
@@ -154,6 +176,8 @@ async function loadOfferWithChildren(
     voiceStyleAnswer: offer.voice_style_answer === null ? null : String(offer.voice_style_answer),
     voiceObjectionAnswer: offer.voice_objection_answer === null ? null : String(offer.voice_objection_answer),
     voiceFollowupAnswer: offer.voice_followup_answer === null ? null : String(offer.voice_followup_answer),
+    qualificationRules: parseStoredRules(offer.qualification_rules),
+    voiceGuidelines: offer.voice_guidelines === null || offer.voice_guidelines === undefined ? null : String(offer.voice_guidelines),
     offerPrices: asRows(priceResult.data, "OFFER_PRICE_READBACK_INVALID").map((row) => ({
       id: String(row.id),
       label: String(row.label),

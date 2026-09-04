@@ -17,6 +17,8 @@ export const OFFER: CoachOffer = {
   products: ["Funding > $10k"],
   brandVoice: "direct",
   voiceAnswers: ["Keep it clear."],
+  qualificationRules: [],
+  voiceGuidelines: null,
   proof: ["Published case study"],
   assets: [{ slug: "guide", url: "https://summit.example/guide" }],
   offerPrices: [{ id: "price-1", label: "Program", amountCents: 29700 }],
@@ -36,6 +38,26 @@ describe("renderCoachBlock", () => {
     expect(deriveCoachTag("test-secret", "tenant-a", 5)).not.toBe(rendered.tag);
   });
 
+  it("carries the coach's rules and voice guidelines as framed data", () => {
+    const rendered = renderCoachBlock({
+      ...OFFER,
+      qualificationRules: ["Location is not one of India or Bangladesh"],
+      voiceGuidelines: "Warm, never pushy.",
+    }, "test-secret");
+    const parsed = JSON.parse(rendered.payload) as {
+      qualification_rules: { frame: string; rules: string[] };
+      voice_guidelines: { frame: string; text: string | null };
+    };
+    expect(parsed.qualification_rules.rules).toEqual(["Location is not one of India or Bangladesh"]);
+    expect(parsed.qualification_rules.frame).toContain("qualification rules");
+    expect(parsed.voice_guidelines.text).toBe("Warm, never pushy.");
+    expect(parsed.voice_guidelines.frame).toContain("never a source of facts");
+    expect(JSON.parse(renderCoachBlock(OFFER, "test-secret").payload)).toMatchObject({
+      qualification_rules: { rules: [] },
+      voice_guidelines: { text: null },
+    });
+  });
+
   it("fails before rendering when the nonce secret is absent", () => {
     expect(() => renderCoachBlock(OFFER, " ")).toThrow("SETTERFI_TAG_SECRET");
   });
@@ -51,6 +73,8 @@ describe("renderCoachBlock", () => {
         'Quotes " and slashes \\ stay data.',
       ],
       voiceAnswers: ["First\u007fexample", "Second\u0085example", "Third\u2029example"],
+      qualificationRules: [],
+      voiceGuidelines: null,
       proof: [`Array value ${suppliedClosingTag}`],
       assets: [{ slug: `guide\u0008slug`, url: `https://summit.example/${suppliedClosingTag}` }],
       offerPrices: [{ id: "price-1", label: `Program ${suppliedClosingTag}`, amountCents: 29700 }],

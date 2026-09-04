@@ -78,6 +78,8 @@ describe("loadLegacyOfferEngineInput", () => {
       products: ["biz CC"],
       brandVoice: "Direct and warm",
       voiceAnswers: ["Keep it concise.", "Answer objections with proof.", "Follow up tomorrow."],
+      qualificationRules: [],
+      voiceGuidelines: null,
       proof: ["Client result: Approved in 30 days"],
       assets: [{ slug: "guide", url: "https://cdn.example/guide" }],
       offerPrices: [{ id: "price-1", label: "Core program", amountCents: 297000 }],
@@ -88,7 +90,7 @@ describe("loadLegacyOfferEngineInput", () => {
 
     expect(selections).toEqual({
       offer_layers: [
-        "id, tenant_id, version, program_name, products, brand_voice, voice_style_answer, voice_objection_answer, voice_followup_answer, credit_min, funding_goal_min_cents, booking_horizon_days",
+        "id, tenant_id, version, program_name, products, brand_voice, voice_style_answer, voice_objection_answer, voice_followup_answer, qualification_rules, voice_guidelines, credit_min, funding_goal_min_cents, booking_horizon_days",
       ],
       offer_prices: ["id, label, amount_cents"],
       offer_proof_entries: ["id, title, detail"],
@@ -122,6 +124,8 @@ describe("loadLegacyOfferEngineInput", () => {
       ...emptyChildren,
     }).client, "tenant-1")).resolves.toMatchObject({
       voiceAnswers: [],
+      qualificationRules: [],
+      voiceGuidelines: null,
       proof: [],
       assets: [],
       offerPrices: [],
@@ -199,8 +203,8 @@ describe("the offer-layer rollout gate", () => {
     const on = await loadLegacyOfferEngineInput(loadedClient().client, "tenant-1", () => true);
     // The gate must move three fields and nothing else; a rollout that quietly changed pricing or
     // the booking horizon would be a different change wearing this one's name.
-    expect({ ...off, voiceAnswers: [], proof: [], assets: [] })
-      .toEqual({ ...on, voiceAnswers: [], proof: [], assets: [] });
+    expect({ ...off, voiceAnswers: [], proof: [], assets: [], qualificationRules: [], voiceGuidelines: null })
+      .toEqual({ ...on, voiceAnswers: [], proof: [], assets: [], qualificationRules: [], voiceGuidelines: null });
     expect(on.voiceAnswers.length).toBe(3);
     expect(on.proof.length).toBe(1);
     expect(on.assets.length).toBe(1);

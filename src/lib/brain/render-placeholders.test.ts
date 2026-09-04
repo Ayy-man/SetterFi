@@ -30,6 +30,8 @@ function offer(overrides: Partial<PublishedCoachOffer> = {}): PublishedCoachOffe
     voiceStyleAnswer: null,
     voiceObjectionAnswer: null,
     voiceFollowupAnswer: null,
+    qualificationRules: [],
+    voiceGuidelines: null,
     offerPrices: [],
     proof: [],
     assets: [],

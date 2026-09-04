@@ -60,6 +60,8 @@ const OFFER: CoachOffer = {
   products: [],
   brandVoice: "professional",
   voiceAnswers: [],
+  qualificationRules: [],
+  voiceGuidelines: null,
   proof: [],
   assets: [],
   offerPrices: [],

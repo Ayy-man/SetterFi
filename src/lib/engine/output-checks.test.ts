@@ -16,6 +16,8 @@ const OFFER: CoachOffer = {
   products: [],
   brandVoice: "direct",
   voiceAnswers: [],
+  qualificationRules: [],
+  voiceGuidelines: null,
   proof: [],
   assets: [],
   offerPrices: [{ id: "price", label: "Program", amountCents: 29700 }],

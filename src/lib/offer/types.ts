@@ -76,6 +76,8 @@ type CoachOwnedScalarFields = Pick<
   | "voiceStyleAnswer"
   | "voiceObjectionAnswer"
   | "voiceFollowupAnswer"
+  | "qualificationRules"
+  | "voiceGuidelines"
 >;
 
 export type CoachOfferDraftInput = CoachOwnedScalarFields & {

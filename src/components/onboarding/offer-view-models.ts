@@ -24,6 +24,7 @@
  */
 
 import type { PersistedOfferLayer } from "@/lib/offer/types";
+import { ruleSentences } from "@/lib/offer/rules";
 
 export type OfferReviewValue =
   | { kind: "value"; text: string }
@@ -56,6 +57,8 @@ const BILLING_PERIOD_LABELS = {
   annual: "a year",
   monthly: "a month",
   one_time: "one time",
+  per_session: "a session",
+  weekly: "a week",
 } as const;
 
 const BRAND_VOICE_LABELS = {
@@ -137,6 +140,10 @@ export function offerReview(offer: PersistedOfferLayer | null, source: OfferRevi
             label: "Business revenue at least",
             value: money(offer?.monthlyRevenueMinCents ?? null, "No minimum"),
           },
+          ...ruleSentences(offer?.qualificationRules ?? []).map((sentence, index) => ({
+            label: `Rule ${index + 1}`,
+            value: present(sentence),
+          })),
         ],
       },
       {
@@ -150,6 +157,12 @@ export function offerReview(offer: PersistedOfferLayer | null, source: OfferRevi
             value: offer?.brandVoice
               ? present(BRAND_VOICE_LABELS[offer.brandVoice])
               : absent("No tone picked, so your agent uses the central brain's default"),
+          },
+          {
+            label: "Voice guidelines",
+            value: offer?.voiceGuidelines
+              ? present(offer.voiceGuidelines)
+              : absent("No guidelines written, so the tone above is all your agent goes on"),
           },
         ],
       },
