@@ -537,7 +537,7 @@ export function MeetYourAgent({
   }
 
   async function copyReplay() {
-    const origin = typeof window === "undefined" ? "https://setterfi.app" : window.location.origin;
+    const origin = window.location.origin;
     try {
       await navigator.clipboard.writeText(`${origin}/meet-agent#replay-preview`);
       setCopied(true);
