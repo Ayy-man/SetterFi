@@ -97,26 +97,64 @@ const PANEL_CLASS = [
   "shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_1px_2px_rgba(28,42,82,0.04),0_8px_20px_-14px_rgba(28,42,82,0.16)]",
 ].join(" ");
 
+/**
+ * The band, in two arrangements, with nothing drawn twice.
+ *
+ * The desk arrangement is one line: the eyebrow and the name stacked at the left, then the state,
+ * then at most one action, both pushed to the right. A phone gives the panel about 300px of inner
+ * width, and that one line put a 20px name, a state pill and a filled button into it: the pill
+ * landed on top of "Instagram and Messenger", the name broke over three lines around it, and the
+ * button truncated to "Instagram and". Three readings competing for one line is not a narrow
+ * version of that band, it is an unreadable one.
+ *
+ * So under `sm` the band is a two column grid and the pieces take their own rows: the eyebrow with
+ * the state pill at its right, the name across the full width under it, and the action across the
+ * full width under that. Each child is placed explicitly rather than by source order, because the
+ * eyebrow and the name have to be one stacked block at the desk and two separate cells on the
+ * phone. `contents` is what lets a single wrapper be both: it dissolves into the grid below `sm`,
+ * where the placement classes apply, and becomes an ordinary block at `sm`, where they are inert
+ * because there is no grid to place into.
+ *
+ * `status` and `action` are separate props rather than one `children` for the same reason. A
+ * fragment can only be positioned as a unit, and the phone needs the pill on the eyebrow's line
+ * and the button two rows below it. The alternative was rendering each twice under `sm:hidden` and
+ * `hidden sm:flex`, which puts the same sentence in the document twice and makes every test that
+ * asks for a state by its text ambiguous.
+ */
 function Band({
-  children,
+  action,
   eyebrow,
   name,
+  status,
   titleId,
 }: {
-  children?: React.ReactNode;
+  action?: React.ReactNode;
   eyebrow: string;
   name: string;
+  status?: React.ReactNode;
   titleId?: string;
 }) {
   return (
-    <div className="flex min-h-[78px] items-center gap-3 border-b border-[var(--line)] px-5 py-[19px]">
-      <div className="min-w-0">
-        <div className="text-[14px] text-[var(--muted)]">{eyebrow}</div>
-        <h2 className="m-0 text-[20px] font-medium tracking-[-0.015em]" id={titleId}>
+    <div className="grid min-h-[78px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 border-b border-[var(--line)] px-5 py-[19px] sm:flex sm:gap-3">
+      <div className="contents sm:block sm:min-w-0">
+        <div className="col-start-1 row-start-1 text-[14px] text-[var(--muted)]">{eyebrow}</div>
+        <h2
+          className="col-span-2 col-start-1 row-start-2 m-0 text-[20px] font-medium tracking-[-0.015em]"
+          id={titleId}
+        >
           {name}
         </h2>
       </div>
-      {children ? <div className="ml-auto flex items-center gap-3">{children}</div> : null}
+      {status ? (
+        <div className="col-start-2 row-start-1 flex-none justify-self-end sm:ml-auto">
+          {status}
+        </div>
+      ) : null}
+      {action ? (
+        <div className="col-span-2 col-start-1 row-start-3 flex-none sm:col-auto sm:row-auto">
+          {action}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -230,13 +268,25 @@ const RUNG_FACE: Record<"good" | "amber" | "wait" | "grey", string> = {
  * was a pair. One face per weight, named, makes a second copy of an action visible in the diff.
  */
 const RUNG_ACTION_PRIMARY = [
-  "inline-flex h-11 items-center rounded-xl border border-transparent",
+  // Full width and at least 48px tall on a phone, where it is its own row and the only thing on
+  // it, and back to a 44px chip beside the state at the desk. A minimum rather than a fixed
+  // height, because "Connect Instagram and Messenger" is two lines at 300px and a fixed 48px box
+  // held them with no room to breathe.
+  "inline-flex min-h-12 w-full items-center justify-center py-2.5 text-center",
+  "sm:h-11 sm:min-h-0 sm:w-auto sm:justify-start sm:py-0 sm:text-left",
+  "rounded-xl border border-transparent",
   "[background:var(--accent-fill)] px-5 text-[16px] font-medium text-[var(--on-accent)]",
   "no-underline hover:no-underline",
 ].join(" ");
 
 const RUNG_ACTION_SECONDARY = [
-  "inline-flex h-11 items-center rounded-xl border border-[var(--line-input)]",
+  // Full width and at least 48px tall on a phone, where it is its own row and the only thing on
+  // it, and back to a 44px chip beside the state at the desk. A minimum rather than a fixed
+  // height, because "Connect Instagram and Messenger" is two lines at 300px and a fixed 48px box
+  // held them with no room to breathe.
+  "inline-flex min-h-12 w-full items-center justify-center py-2.5 text-center",
+  "sm:h-11 sm:min-h-0 sm:w-auto sm:justify-start sm:py-0 sm:text-left",
+  "rounded-xl border border-[var(--line-input)]",
   "bg-[var(--card)] px-5 text-[16px] font-medium text-[var(--ink)]",
   "no-underline hover:no-underline",
 ].join(" ");
@@ -297,28 +347,29 @@ function StepRow({
   tone: "good" | "amber" | "wait" | "grey";
 }) {
   return (
-    <li className="relative flex list-none items-start gap-5">
+    /*
+     * The node is 44px on a phone and 64px at the desk. A 64px column plus its 20px gap took 84px
+     * of a 358px card, which is most of the room the name needed, and the node is a decoration:
+     * it repeats the eyebrow the band already prints in words. It is still a real target's worth
+     * of space at 44px, and the spine and the gap move with it so the rail stays one column.
+     */
+    <li className="relative flex list-none items-start gap-3 sm:gap-5">
       {last ? null : (
         <span
           aria-hidden="true"
-          className="absolute top-16 -bottom-4 left-[31px] w-0.5 bg-[var(--line)]"
+          className="absolute top-11 -bottom-4 left-[21px] w-0.5 bg-[var(--line)] sm:top-16 sm:left-[31px]"
           data-slot="rung-spine"
         />
       )}
       <span
         aria-hidden="true"
-        className={`relative z-[1] mt-0 flex size-16 flex-[0_0_64px] items-center justify-center rounded-2xl border ${RUNG_FACE[tone]}`}
+        className={`relative z-[1] mt-0 flex size-11 flex-[0_0_44px] items-center justify-center rounded-2xl border sm:size-16 sm:flex-[0_0_64px] ${RUNG_FACE[tone]}`}
         data-slot="rung-node"
       >
         {icon}
       </span>
       <div className={`${PANEL_CLASS} flex-1`}>
-        <Band eyebrow={eyebrow} name={name}>
-          <>
-            {status}
-            {action}
-          </>
-        </Band>
+        <Band action={action} eyebrow={eyebrow} name={name} status={status} />
         {body ? <div className="px-5 py-[18px]">{body}</div> : null}
       </div>
     </li>
