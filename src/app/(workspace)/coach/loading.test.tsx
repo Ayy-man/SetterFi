@@ -120,31 +120,30 @@ describe("coach loading boundary", () => {
 });
 
 /*
- * The window picker's bones, and the reason they are on Home's boundary rather than the segment's.
+ * The range control's bones, and the reason they are on Home's boundary rather than the segment's.
  *
- * `WindowPills` is declared in `coach-dashboard.tsx` and referenced nowhere else, so the
- * control exists on Home and on none of the other seven `/coach/*` routes. Drawing it in the
- * shared boundary would hold Home's shape by inserting a block that never arrives on Inbox, Leads,
- * Billing or Setup -- moving the layout jump onto seven pages to remove it from one.
+ * `CoachHomeRange` is mounted by `coach-dashboard.tsx` and nowhere else, so the control exists on
+ * Home and on none of the other seven `/coach/*` routes. Drawing it in the shared boundary would
+ * hold Home's shape by inserting a block that never arrives on Inbox, Leads, Billing or Setup --
+ * moving the layout jump onto seven pages to remove it from one.
  */
 describe("coach Home's own loading boundary", () => {
   it("reserves the window picker's space, which the shared boundary must not", () => {
     const home = render(<CoachHomeLoading />);
-    const bones = home.container.querySelector('[data-slot="home-window-bones"]');
+    const bones = home.container.querySelector('[data-slot="home-range-bones"]');
     expect(bones).not.toBeNull();
-    // Five stops: 1D, 1W, 1M, 3M, All. `custom` has no pill; it stays a URL the page reads. A
-    // picker drawn as one block would hold the wrong width, which is the whole thing this
-    // boundary exists to hold.
-    expect(bones!.querySelectorAll('[class*="rounded-[10px]"]')).toHaveLength(5);
+    // Six stops: 1 day, 1 week, 1 month, 3 months, All, Custom. A strip drawn as one block would
+    // hold the wrong width, which is the whole thing this boundary exists to hold.
+    expect(bones!.querySelectorAll('[class*="rounded-[9px]"]')).toHaveLength(6);
     home.unmount();
 
     const segment = render(<CoachLoading />);
-    expect(segment.container.querySelector('[data-slot="home-window-bones"]')).toBeNull();
+    expect(segment.container.querySelector('[data-slot="home-range-bones"]')).toBeNull();
   });
 
   it("draws the picker as bones, never as a control that could navigate a half-loaded page", () => {
     const { container } = render(<CoachHomeLoading />);
-    const bones = container.querySelector('[data-slot="home-window-bones"]')!;
+    const bones = container.querySelector('[data-slot="home-range-bones"]')!;
 
     expect(bones.querySelectorAll("button")).toHaveLength(0);
     expect(container.querySelectorAll("form")).toHaveLength(0);
@@ -158,20 +157,20 @@ describe("coach Home's own loading boundary", () => {
     expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
   });
 
-  // The rehaul picker draws `1D / 1W / 1M / 3M / All` in 14px mono inside `min-w-14 px-3.5`, and
-  // no label is long enough to push a pill past that floor, so every stop is the same 56px. The
-  // widths are still listed one by one in the boundary, because the next label added there is
-  // likelier to be a word than another abbreviation -- which is a fact about the labels and not a
-  // rule: the keys are positional either way, and the console-warning test at the bottom of this
-  // file is what actually guards that.
-  it("draws one bone per window stop, each at the width its own pill will be", () => {
+  // The control draws six word labels of different lengths in 16px inside `px-[18px]`, so unlike
+  // the abbreviations it replaced no two stops are the same width. The widths are hand-measured
+  // and listed one by one in the boundary; the keys are positional either way, and the
+  // console-warning test at the bottom of this file is what actually guards that.
+  it("draws one bone per range stop, each at the width its own label will be", () => {
     const { container } = render(<CoachHomeLoading />);
-    const bones = container.querySelector('[data-slot="home-window-bones"]')!;
+    const bones = container.querySelector('[data-slot="home-range-bones"]')!;
     const stops = [...bones.querySelectorAll<HTMLElement>('[style*="width"]')];
 
-    expect(stops).toHaveLength(5);
-    // The pill's `min-w-14` floor, which is what every stop comes out at today.
-    expect(stops.map((stop) => stop.style.width)).toEqual(Array(5).fill("56px"));
+    expect(stops).toHaveLength(6);
+    // Every stop carries a width, and they are not all one number: a strip of six identical bones
+    // under six labels of different lengths is the jump this file exists to prevent.
+    expect(stops.every((stop) => /^\d+px$/u.test(stop.style.width))).toBe(true);
+    expect(new Set(stops.map((stop) => stop.style.width)).size).toBeGreaterThan(1);
   });
 
   /*
@@ -183,7 +182,7 @@ describe("coach Home's own loading boundary", () => {
    * pixels shorter. The floor is read out of the stylesheet rather than typed here, because typing
    * 44 twice is how the two drift apart.
    */
-  it("holds the picker at the coach target height, read from the stylesheet", () => {
+  it("holds the strip at the coach target height, read from the stylesheet", () => {
     const css = read("app/(workspace)/coach/coach.css");
     const target = /--coach-target:\s*(\d+px)/u.exec(css)![1];
     expect(target).toMatch(/^\d+px$/u);
@@ -192,10 +191,10 @@ describe("coach Home's own loading boundary", () => {
     expect(floor).toContain("button");
 
     const { container } = render(<CoachHomeLoading />);
-    const bones = container.querySelector('[data-slot="home-window-bones"]')!;
+    const bones = container.querySelector('[data-slot="home-range-bones"]')!;
     const stops = [...bones.querySelectorAll<HTMLElement>('[style*="width"]')];
 
-    expect(stops).toHaveLength(5);
+    expect(stops).toHaveLength(6);
     for (const stop of stops) {
       expect(stop.className).toContain(`h-[${target}]`);
     }
@@ -204,18 +203,18 @@ describe("coach Home's own loading boundary", () => {
   /*
    * The stops are keyed by position, and counting the bones cannot tell you that.
    *
-   * All five widths are 56px, so keying the list by its width gives every child the key `56px`.
-   * React is then free to omit or duplicate one, which would draw a four-segment picker that the
-   * real control replaces with five — the flicker a loading state exists to prevent. The obvious
-   * guard is to count the bones, and it does not work: reinstating `key={width}` leaves all five
-   * on the first mount, so the count stays at five and the test stays green while React prints the
+   * Two of the six widths repeat, so keying the list by its width gives two children one key.
+   * React is then free to omit or duplicate one, which would draw a five-segment strip that the
+   * real control replaces with six, the flicker a loading state exists to prevent. The obvious
+   * guard is to count the bones, and it does not work: reinstating `key={width}` leaves all six on
+   * the first mount, so the count stays at six and the test stays green while React prints the
    * warning. Verified by breaking it, which is the only reason this test is written against the
    * console instead.
    *
    * Reading `console.error` is reading React's own detection rather than re-deriving it here, and
    * it fails on any duplicate key this page grows later, not only on the equal-width stops.
    */
-  it("gives every window stop its own key, which React says out loud when it does not", () => {
+  it("gives every range stop its own key, which React says out loud when it does not", () => {
     const warnings: string[] = [];
     const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
       warnings.push(args.map(String).join(" "));

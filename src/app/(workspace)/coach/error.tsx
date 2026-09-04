@@ -1,13 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { ACCENT_FILL_SHADOW_CLASS } from "@/components/kit/atomics/button-class";
 import { DeckPanel } from "@/components/kit/deck-panel";
 import { Refresh, TriangleAlert } from "@/components/kit/icons";
-import { COACH_FOOTNOTE_CLASS } from "@/components/workspace/live/coach-type";
 
 /**
  * What a coach sees when a coach route fails to render.
@@ -35,7 +33,7 @@ import { COACH_FOOTNOTE_CLASS } from "@/components/workspace/live/coach-type";
  */
 
 /*
- * The two actions, at the coach's 52px rather than the kit's 34px. `Button` is sized for the owner
+ * The one action, at the coach's 52px rather than the kit's 34px. `Button` is sized for the owner
  * console and `coach.css` only raises the floor to 44px, which is the minimum rather than the size
  * the canvas draws a primary action at. These two strings are local for the same reason
  * `coach-billing.tsx` keeps its own: the recipe is one screen's, and a shared one would have to be
@@ -44,8 +42,6 @@ import { COACH_FOOTNOTE_CLASS } from "@/components/workspace/live/coach-type";
 const RETRY_CLASS =
   "inline-flex h-[52px] items-center justify-center gap-[12px] rounded-[12px] border border-[var(--accent-line)] [background:var(--accent-fill)] px-[26px] text-[18px] leading-none font-semibold text-[color:var(--on-accent)]" +
   ` ${ACCENT_FILL_SHADOW_CLASS}`;
-const LEAVE_CLASS =
-  "inline-flex h-[52px] items-center justify-center rounded-[12px] border border-[var(--line)] bg-[var(--well)] px-[22px] text-[16px] leading-none font-medium text-[color:var(--body)] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)]";
 
 export default function CoachError({
   error,
@@ -147,8 +143,8 @@ export default function CoachError({
           nameSize="page"
         >
           <p className="max-w-[var(--measure-prose)] text-[18px] leading-[1.55] text-[color:var(--body)]">
-            Your agent is still answering leads. This is only the dashboard, and we already know it
-            went down.
+            We could not read your numbers just now. Your agent is still answering leads, nothing
+            you were doing was changed, and we already know this page went down.
           </p>
 
           {/*
@@ -165,22 +161,23 @@ export default function CoachError({
             </code>
           </div>
 
+          {/*
+            One action, which is what `ErrorState.dc.html:125` draws and what the screen is for.
+            It shipped with a second, "Go to your inbox", beside it. That was a real destination and
+            it was still wrong here: a page whose entire message is "this one view failed, try it
+            again" was offering two things to press, and `docs/REDESIGN-CANVAS.md`'s one-action rule
+            is exactly about a moment like this one. The pill bar above is how a coach leaves, and
+            it is still rendered.
+          */}
           <div className="flex flex-wrap items-center gap-[14px]">
             <button className={RETRY_CLASS} onClick={reset} type="button">
               {/* The glyph the artboard draws on this button, and the one place on the page where
-                  an icon earns its room: "Try again" is the only control here that does something
+                  an icon earns its room: "Retry" is the only control here that does something
                   rather than going somewhere, and the arrows say re-run before the word is read. */}
               <Refresh aria-hidden size={20} strokeWidth={1.75} />
-              Try again
+              Retry
             </button>
-            <Link className={LEAVE_CLASS} href="/coach/conversations">
-              Go to your inbox
-            </Link>
           </div>
-
-          <p className={`max-w-[var(--measure-prose)] ${COACH_FOOTNOTE_CLASS}`}>
-            Nothing you were doing was saved or changed by this.
-          </p>
         </DeckPanel>
       </div>
     </AppShell>

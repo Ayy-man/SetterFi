@@ -1,77 +1,163 @@
-import CoachLoading from "@/app/(workspace)/coach/loading";
+"use client";
+
+import type { CSSProperties } from "react";
+
+import { AppShell } from "@/components/kit/app-shell";
+import { Surface, SurfaceHeader } from "@/components/kit/atomics/surface";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HOME_BUBBLES } from "@/components/workspace/rehaul/coach-home-figures";
+import { useWorkspaceEnv } from "@/components/workspace/workspace-env";
 
 /**
- * Home's own loading boundary, which exists for exactly one element the segment's does not have.
+ * Home's own loading boundary, drawn as `Loading.dc.html` draws it.
  *
- * `CoachLoading` one level up covers all eight `/coach/*` routes, and it draws three generic deck
- * panels rather than Home's six because the panel is the shape every coach screen is made of. That
- * argument is right and it is also why the performance-window picker could not go in it:
- * `WindowPills` is declared in `coach-dashboard.tsx` and referenced nowhere else in the tree, so
- * the control exists on Home and on none of the other seven. Drawing it in the shared boundary
- * would have held Home's shape by inserting a block that never arrives on Inbox, Leads, Billing or
- * Setup -- moving the jump onto seven pages to remove it from one.
+ * The artboard's note is the whole design brief: "The greeting and the chrome are real: they come
+ * from the session, not from the read in flight. Only the figures are skeletons, and each one is
+ * the size of the number that lands in it."
  *
- * Next resolves the nearest `loading.tsx` to the route, so this file takes Home and leaves the
- * other seven exactly as they were.
+ * That is why this file is a client component rather than the server one it used to be. The
+ * greeting is the coach's first name, and the workspace layout publishes it through
+ * `WorkspaceEnvProvider` above this boundary, so it is available before the page's own read has
+ * started. It is real text, not a bone, and it does not move when the page arrives.
  *
- * **Bones rather than a live control.** The picker is five links whose value is a server read:
- * pressing "3M" here would navigate the page that has not finished loading, and pre-selecting a
- * stop would show a window the coach has not chosen and the page may not agree with -- `window`
- * comes from the URL, and it defaults to `1m` only when the URL says nothing. The point of this
- * file is the space the control occupies, and bones hold that without asserting which stop is
- * picked.
+ * **What stays a bone, and why each one does.** The status sentence names live channels and a
+ * carrier day, which are page reads. The window eyebrow on each panel names the range, which comes
+ * from the URL the page parses. The provenance line names whether this tenant's rows are seeded,
+ * which is the one on-screen label the test-data segregation rule turns on and may not be guessed.
+ * Every figure. Everything else on this screen is either chrome or a constant, so it is drawn.
+ *
+ * `CoachLoading` one level up still covers the other coach routes and is untouched: it draws three
+ * generic deck panels because the panel is the shape every coach screen is made of, and Home's own
+ * six-panel composition would be wrong on the other seven.
  */
 
 /**
- * One stop per pill, at the width the real pill will be.
+ * One bone per stop the range control renders, at the width its label will be.
  *
- * The rehaul picker draws `1D / 1W / 1M / 3M / All` in 14px mono inside `min-w-14 px-3.5`, and no
- * label is long enough to push a pill past that floor, so every stop is 56px. The widths are still
- * written out one by one rather than repeated from a count, because the next label added here is
- * likelier to be a word than another two-character abbreviation, and a list of widths takes that
- * change where a count would hide it.
- *
- * The comment is not what keeps the two in step, though: this file promises a shape it does not
- * render, so a sixth pill would land in the picker and nowhere here, and the picker would change
- * width at the moment the page settles -- the same twenty-pixel jump the height note below
- * describes being fixed once already. `loading.test.tsx` imports both arrays and asserts the
- * lengths match, which is why this is exported.
+ * The widths are written out one by one rather than derived from the labels, because a bone is a
+ * measurement of rendered text and a character count is not one. `loading.test.tsx` asserts this
+ * list is exactly as long as the control's own, which is what keeps a stop added there from
+ * landing nowhere here and changing the strip's width at the moment the page settles.
  */
-export const STOP_WIDTHS = ["56px", "56px", "56px", "56px", "56px"] as const;
+export const STOP_WIDTHS = ["78px", "88px", "96px", "108px", "58px", "88px"] as const;
+
+function Bone({
+  className,
+  on = "card",
+  style,
+}: {
+  className: string;
+  on?: "card" | "pane";
+  style?: CSSProperties;
+}) {
+  return (
+    <Skeleton
+      aria-hidden
+      className={`block ${on === "pane" ? "bg-[var(--band)]" : "bg-[var(--well)]"} ${className}`}
+      style={style}
+    />
+  );
+}
+
+/** A panel drawn to the bubble's anatomy, with a bone exactly where the figure lands. */
+function BubbleBones({ name, sentence }: { name: string; sentence: string }) {
+  return (
+    <section className="coach-panel">
+      <header className="coach-panel__header">
+        <div className="min-w-0">
+          <Bone className="mb-1 h-[15px] w-[92px] rounded-[6px]" />
+          <h2 className="coach-panel__name">{name}</h2>
+        </div>
+        <Bone className="h-11 w-11 flex-none rounded-[10px]" />
+      </header>
+      <div className="coach-panel__body">
+        {/*
+          The figure's own box: 62px of mono at `--coach-figure`'s leading is what lands here, and
+          a bone drawn at a comfortable height rather than that one is how a deck grows twenty
+          pixels the moment it settles.
+        */}
+        <Bone className="h-[58px] w-[132px] rounded-[12px]" />
+        <p className="coach-panel__sentence min-h-[48px]">{sentence}</p>
+      </div>
+    </section>
+  );
+}
 
 export default function CoachHomeLoading() {
+  const workspace = useWorkspaceEnv();
+  const greeting = workspace.account?.firstName ?? null;
+
   return (
-    <CoachLoading>
-      <div
-        // The picker's own gap and alignment, so the row is the size the control will be. The real
-        // control is `aria-label="Performance window"`; these bones are `aria-hidden` and the
-        // segment boundary above already owns the page's one live region, so nothing here is
-        // announced twice.
-        aria-hidden
-        className="mt-[34px] flex min-w-0 justify-end gap-1.5"
-        data-slot="home-window-bones"
-      >
+    <AppShell
+      activePath="/coach/home"
+      crumbs={[{ label: "Coach" }, { label: "Home" }]}
+      role="coach"
+    >
+      {/*
+        One live region for the whole page rather than one per bone: a deck of six panels labelling
+        every block would announce "Loading content" a dozen times.
+      */}
+      <div aria-busy="true" className="flex min-w-0 flex-col gap-6" role="status">
+        <span className="sr-only">Loading your numbers.</span>
+
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div className="min-w-0">
+            <h1 className="coach-page-title m-0">
+              {greeting ? `Welcome back, ${greeting}` : "Dashboard"}
+            </h1>
+            {/* The status sentence is two page reads, so it holds its line without asserting one. */}
+            <Bone className="mt-3 h-[26px] w-[min(100%,520px)] rounded-[8px]" on="pane" />
+            <Bone className="mt-[10px] h-[19px] w-[min(100%,320px)] rounded-[7px]" on="pane" />
+          </div>
+          <div
+            aria-hidden
+            className="flex gap-1 rounded-xl border border-[var(--line)] bg-[var(--well)] p-1"
+            data-slot="home-range-bones"
+          >
+            {STOP_WIDTHS.map((width, index) => (
+              <Bone
+                // Keyed by position. Every stop is a fixed placeholder that never reorders, which
+                // is the case where the index is the correct identity rather than the lazy one,
+                // and two stops share a width so the width itself is not a key.
+                className="h-[44px] rounded-[9px]"
+                key={index}
+                style={{ width }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {HOME_BUBBLES.map((bubble) => (
+            <BubbleBones key={bubble.key} name={bubble.name} sentence={bubble.sentence} />
+          ))}
+        </div>
+
         {/*
-          Keyed by position, not by the width. Every stop is 56px, so keying by width would give
-          all five children the key `56px` -- with duplicate keys React is free to omit or
-          duplicate a child, and the picker could come back four bones wide. The list is a fixed
-          set of placeholders that never reorders, which is exactly the case where the index is the
-          correct identity rather than the lazy one.
+          A sentence where the chart lands rather than a chart-shaped bone. A block the size of six
+          bars is a picture of a chart, and the artboard prints a line instead for the same reason
+          the page prints one when the series is too short: nothing on this screen may draw a shape
+          the data has not arrived to support.
         */}
-        {STOP_WIDTHS.map((width, index) => (
-          <Skeleton
-            // 44px, which is the height the real pill is, not the height a bone looks right at.
-            // The pills are `h-11`, and `coach.css`'s target floor raises every control on a coach
-            // surface to `--coach-target`, the same 44px. Bones drawn at a control's unfloored
-            // height came out ~30px against a control that arrives ~52px, and the picker grew by
-            // twenty pixels at the moment the page settled.
-            className="block h-[44px] rounded-[10px] bg-[var(--band)]"
-            key={index}
-            style={{ width }}
+        <Surface
+          aria-labelledby="home-months-bones-heading"
+          className="flex min-w-0 flex-col"
+          variant="panel"
+        >
+          <SurfaceHeader
+            overline="Six months"
+            scale="coach-data"
+            title="Leads by month"
+            titleAs="h2"
+            titleId="home-months-bones-heading"
           />
-        ))}
+          <div className="px-[26px] py-8">
+            <p className="text-[16px] leading-[1.5] text-[color:var(--muted)]">
+              Loading six months of leads.
+            </p>
+          </div>
+        </Surface>
       </div>
-    </CoachLoading>
+    </AppShell>
   );
 }

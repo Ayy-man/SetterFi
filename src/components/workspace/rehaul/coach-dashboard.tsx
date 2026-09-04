@@ -2,28 +2,21 @@
 
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import Link from "next/link";
-import { useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 import { DayCounter, elapsedWorkspaceDays } from "@/components/kit/day-counter";
-import { SegmentedControl } from "@/components/kit/segmented-control";
-import { BarSparkline } from "@/components/kit/atomics";
-import { Sparkline, SPARKLINE_MIN_POINTS } from "@/components/kit/sparkline";
-import { LineChart } from "@/components/kit/line-chart";
-import { ExportMenu } from "@/components/kit/export-menu";
-import { Figure, Pill, StatusDot } from "@/components/workspace/rehaul/_primitives";
-import {
-  availableMetric,
-  metricDefinition,
-  type MetricEvidence,
-  type MetricKey,
-} from "@/lib/analytics/metric-definitions";
+import { Pill, StatusDot } from "@/components/workspace/rehaul/_primitives";
+import { CoachHomeBubbles } from "@/components/workspace/rehaul/coach-home-figures";
+import { CoachHomeKeywords } from "@/components/workspace/rehaul/coach-home-keywords";
+import { CoachHomeMonths } from "@/components/workspace/rehaul/coach-home-months";
+import { CoachHomeRange } from "@/components/workspace/rehaul/coach-home-range";
+import { DeckPanel } from "@/components/kit/deck-panel";
 import {
   clearDemoSetupOverride,
   readDemoSetupOverride,
   startDemoSetupOverride,
 } from "@/lib/demo-setup-override";
 import { useWorkspaceEnv } from "@/components/workspace/workspace-env";
-import { formatMetric } from "@/lib/format/metric";
 import { workspaceCountFormat } from "@/lib/format/datetime";
 import { STEP_LABELS } from "@/components/onboarding/view-models";
 import { CARRIER_TYPICAL_DAYS, type ProvisioningStep } from "@/lib/onboarding/contracts";
@@ -51,38 +44,6 @@ const EYE_COPY = [
   "Percent view uses each keyword's share of all keyword opt-ins; qualified and booked use that keyword's opt-ins.",
   "Carriers take about three weeks to approve a new business for texting. Nothing is broken and there is nothing for you to do.",
 ].join(" ");
-
-/**
- * How a panel sentence names the window it is counting over.
- *
- * A fixed "this month" is false on five of the six settings, so the phrase follows the control.
- * Same table as the live surface's `WINDOW_PHRASE`, for the same reason.
- */
-const WINDOW_PHRASE: Record<CoachMeasurementWindow, string> = {
-  "1d": "today",
-  "1w": "this week",
-  "1m": "this month",
-  "3m": "in the last three months",
-  all: "since you started",
-  custom: "in the window you picked",
-};
-
-/**
- * The five pills the artboard draws. `custom` has no pill; it stays a URL the page still reads.
- *
- * Exported because `coach/home/loading.tsx` reserves one bone per pill and imports nothing from
- * this file otherwise: a sixth pill added here would land in the control and nowhere in the
- * skeleton, and the picker would change width at the moment the page settles. The list used to
- * live in `coach-measurement.tsx` under the name `WINDOW_OPTIONS`; that surface is gone, and this
- * is the only window control the coach now sees.
- */
-export const WINDOW_PILLS = [
-  { value: "1d", label: "1D" },
-  { value: "1w", label: "1W" },
-  { value: "1m", label: "1M" },
-  { value: "3m", label: "3M" },
-  { value: "all", label: "All" },
-] as const satisfies ReadonlyArray<{ value: CoachMeasurementWindow; label: string }>;
 
 const COACH_CHANNEL_NAMES: Readonly<Record<MessagingChannel, string>> = {
   instagram: "Instagram",
@@ -118,54 +79,17 @@ export type CoachDashboardProps = {
 };
 
 /* --------------------------------------------------------------------------------------------
- * Readings
+ * The setup rail's own faces
  * ------------------------------------------------------------------------------------------ */
-
-type Reading =
-  | { kind: "value"; text: string }
-  | { kind: "absent"; note: string };
-
-function metricFormat(evidence: MetricEvidence) {
-  const unit = metricDefinition(evidence.metricKey).unit;
-  if (unit === "percent") return "percent" as const;
-  if (unit === "seconds" || unit === "days") return "duration" as const;
-  return "count" as const;
-}
 
 /**
- * One figure, or the reason there is not one.
+ * The rail's card face, spelled here rather than taken from `DeckPanel`.
  *
- * The five ways a figure can be absent are this page's whole honest-states story, so an absent
- * reading carries its own words rather than falling back to a zero or to a dash with no cause.
- * The arms are the same ones `coach-measurement.tsx` derives, read off the same evidence rows.
+ * A rung's band carries a state pill and a labelled action, and `DeckPanel`'s band offers a 44px
+ * square link and nothing else. The six bubbles below use the component; the rail keeps the same
+ * face by class so the two shapes are visibly one family without the rail pretending to be a card
+ * it is not shaped like.
  */
-function readMetric(measurement: CoachMeasurement, key: MetricKey): Reading {
-  const evidence = measurement.metrics.find((metric) => metric.metricKey === key);
-  if (!evidence) return { kind: "absent", note: "No sourced reading is available for this window." };
-
-  const definition = metricDefinition(evidence.metricKey);
-  if (
-    definition.requiresPositiveDenominator
-    && (evidence.denominator === null
-      || !Number.isFinite(evidence.denominator)
-      || evidence.denominator <= 0)
-  ) {
-    return { kind: "absent", note: "There is no eligible activity for this calculation." };
-  }
-
-  const value = availableMetric(evidence);
-  if (value !== null) return { kind: "value", text: formatMetric(value, metricFormat(evidence)) };
-
-  if (evidence.state === "still_filling" || evidence.state === "needs_more_history") {
-    return { kind: "absent", note: "This window is still filling." };
-  }
-  return { kind: "absent", note: "This window has no sourced reading yet." };
-}
-
-/* --------------------------------------------------------------------------------------------
- * Faces
- * ------------------------------------------------------------------------------------------ */
-
 const PANEL_CLASS = [
   "flex min-w-0 flex-col overflow-hidden rounded-[24px_24px_17px_17px]",
   "border border-[var(--line)]",
@@ -173,74 +97,27 @@ const PANEL_CLASS = [
   "shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_1px_2px_rgba(28,42,82,0.04),0_8px_20px_-14px_rgba(28,42,82,0.16)]",
 ].join(" ");
 
-const PANEL_DARK_CLASS = [
-  "flex min-w-0 flex-col overflow-hidden rounded-[24px_24px_17px_17px]",
-  "border border-[oklch(0.22_0.04_262)]",
-  "bg-[linear-gradient(160deg,oklch(0.30_0.07_262),oklch(0.19_0.045_262)_70%)]",
-  "text-[oklch(0.97_0.004_262)]",
-].join(" ");
-
 function Band({
   children,
-  dark,
   eyebrow,
   name,
   titleId,
 }: {
   children?: React.ReactNode;
-  dark?: boolean;
   eyebrow: string;
   name: string;
   titleId?: string;
 }) {
   return (
-    <div
-      className={`flex min-h-[78px] items-center gap-3 border-b px-5 py-[19px] ${
-        dark ? "border-[rgba(255,255,255,0.12)]" : "border-[var(--line)]"
-      }`}
-    >
+    <div className="flex min-h-[78px] items-center gap-3 border-b border-[var(--line)] px-5 py-[19px]">
       <div className="min-w-0">
-        <div className={`text-[14px] ${dark ? "text-[oklch(0.78_0.02_262)]" : "text-[var(--muted)]"}`}>
-          {eyebrow}
-        </div>
-        <h2
-          className="m-0 text-[17px] font-semibold tracking-[-0.01em]"
-          id={titleId}
-        >
+        <div className="text-[14px] text-[var(--muted)]">{eyebrow}</div>
+        <h2 className="m-0 text-[20px] font-medium tracking-[-0.015em]" id={titleId}>
           {name}
         </h2>
       </div>
       {children ? <div className="ml-auto flex items-center gap-3">{children}</div> : null}
     </div>
-  );
-}
-
-/** The one sentence a coach panel is allowed. Absent readings say why instead. */
-function Sentence({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
-  return (
-    <p
-      className={`m-0 mt-[10px] max-w-[var(--measure-deck)] text-[14px] ${
-        dark ? "text-[oklch(0.78_0.02_262)]" : "text-[var(--muted)]"
-      }`}
-    >
-      {children}
-    </p>
-  );
-}
-
-function HeroFigure({ reading, tone }: { reading: Reading; tone?: string }) {
-  if (reading.kind === "value") {
-    return (
-      <Figure className={tone} size="hero">
-        {reading.text}
-      </Figure>
-    );
-  }
-  return (
-    <Figure className="text-[var(--faint)]" size="hero">
-      <span aria-hidden="true">&mdash;</span>
-      <span className="sr-only">{reading.note}</span>
-    </Figure>
   );
 }
 
@@ -255,11 +132,18 @@ function nameList(names: readonly string[]) {
 }
 
 /**
- * The two-dot line under the greeting.
+ * The one status sentence under the greeting.
  *
- * The green half is drawn only from connection rows that say `live`, so a coach mid-onboarding is
- * never told their agent is answering. The amber half is a day count and never a percentage or a
- * predicted date, because A2P vetting is a wait on a third party who publishes no schedule.
+ * `Main.dc.html:111` draws prose, not a row of dotted chips: "Your agent is live on Instagram and
+ * Messenger. Text messages are on day 14 of about 21." The chips were three coloured statements
+ * competing with the 46px greeting above them, and two of the three were only ever one clause
+ * long.
+ *
+ * Every clause is a read. The live half is drawn only from connection rows that say `live`, so a
+ * coach mid-onboarding is never told their agent is answering. The texting half is a day count and
+ * never a percentage or a predicted date, because A2P vetting is a wait on a third party who
+ * publishes no schedule, and it is said only while the wait is running: a registration that is
+ * finished puts its channel in the live list, where it is already named.
  */
 function StatusLine({
   blockedSetupSteps,
@@ -276,290 +160,37 @@ function StatusLine({
   const carrierDay = carrier.kind === "in-review" && carrier.submittedAt
     ? elapsedWorkspaceDays(carrier.submittedAt, now)
     : null;
-  const carrierWaiting = carrier.kind === "in-review";
-  if (liveNames.length === 0 && !carrierWaiting && blockedSetupSteps < 1) return null;
 
-  return (
-    <p className="m-0 mt-[10px] flex flex-wrap items-center gap-5 text-[15px] text-[var(--muted)]">
-      {liveNames.length > 0 ? (
-        <span className="flex items-center gap-2">
-          <StatusDot tone="good" />
-          Your agent is live on {nameList(liveNames)}
-        </span>
-      ) : null}
-      {carrierWaiting ? (
-        <span className="flex items-center gap-2">
-          <StatusDot tone="amber" />
-          {carrierDay === null
-            ? "Texting is with the carrier"
-            : (
-              <>
-                Texting is with the carrier, day{" "}
-                <span className="font-mono">{carrierDay}</span>
-              </>
-            )}
-        </span>
-      ) : null}
-      {/*
-        The third dot on the first-run artboard, and a count rather than a phrase: it is
-        `provisioning_steps` rows in state `blocked`, which is the one number this page reads about
-        the rest of the setup.
-      */}
-      {blockedSetupSteps > 0 ? (
-        <span className="flex items-center gap-2">
-          <StatusDot tone="wait" />
-          <span className="font-mono">{workspaceCountFormat.format(blockedSetupSteps)}</span>{" "}
-          {blockedSetupSteps === 1 ? "step is" : "steps are"} waiting on you
-        </span>
-      ) : null}
-    </p>
-  );
-}
-
-/* --------------------------------------------------------------------------------------------
- * Window pills
- * ------------------------------------------------------------------------------------------ */
-
-/**
- * The window control, as links.
- *
- * The window is a server read: the URL is what the page renders from, so a control that changed
- * the view without changing the URL would leave a coach unable to reload or share what they are
- * looking at. Each pill is the current URL with `window` rewritten; the custom-range keys are
- * dropped, because a preset window is not a custom one and carrying `from`/`to` onto it would
- * hand the page a pair it refuses.
- */
-function WindowPills({ window }: { window: CoachMeasurementWindow }) {
-  return (
-    <nav aria-label="Performance window" className="ml-auto flex gap-1.5">
-      {WINDOW_PILLS.map((pill) => {
-        const active = pill.value === window;
-        return (
-          <Link
-            aria-current={active ? "page" : undefined}
-            className={`flex h-11 min-w-14 items-center justify-center rounded-[10px] border px-3.5 font-mono text-[14px] no-underline hover:no-underline ${
-              active
-                ? "border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[var(--accent-text)]"
-                : "border-[var(--line)] bg-[var(--card)] text-[var(--muted)]"
-            }`}
-            href={`/coach/home?window=${pill.value}`}
-            key={pill.value}
-          >
-            {pill.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-/* --------------------------------------------------------------------------------------------
- * Six-month chart
- * ------------------------------------------------------------------------------------------ */
-
-/**
- * Leads and booked calls over six months, through the kit's `LineChart`, which owns the scale,
- * the legend, the axis ends, the crosshair and the sr-only table so this file owns none of them.
- *
- * Both series come from one read. `loadCoachLeadComposition` returns `bookedByPeriod` zero-filled
- * to the same six months as `months` and refuses a snapshot whose two arrays disagree, so the two
- * lines are one query's answer about one span rather than two windows compared by eye. The booked
- * series is still matched by month here rather than by position: the repository's guarantee is
- * about what it returns, and a caller that builds a snapshot by hand -- every unit fixture -- has
- * made no such promise. A month with no booked row drops the whole second line, because a zero we
- * invented would read as a month with no bookings.
- *
- * The legend carries each series' total, which is the artboard's "Leads · 214" wording, and the
- * partial-month flag is the one fact `LineChart`'s own table cannot know: a month still filling
- * reads low, and a chart that does not say which one invites the wrong conclusion.
- */
-function LeadsTrend({ composition }: { composition: CoachLeadComposition }) {
-  const months = composition.months;
-  if (months.length < 2) {
-    return (
-      <p className="m-0 text-[14px] text-[var(--muted)]">
-        Two months of history are needed before a trend can be drawn.
-      </p>
+  const clauses: string[] = [];
+  if (liveNames.length > 0) clauses.push(`Your agent is live on ${nameList(liveNames)}.`);
+  if (carrier.kind === "in-review") {
+    clauses.push(
+      carrierDay === null
+        ? "Text messages are still with the carrier."
+        // The typical range is a pair, `[14, 21]`, and the artboard prints its upper bound: the
+        // carriers publish no schedule, so the sentence gives the outer edge of what we have seen
+        // rather than a midpoint that would read as a prediction.
+        : `Text messages are on day ${carrierDay} of about ${
+          CARRIER_TYPICAL_DAYS[CARRIER_TYPICAL_DAYS.length - 1]
+        }.`,
     );
   }
-
-  const totals = months.map((month) => month.total);
-  const bookedByMonth = new Map(composition.bookedByPeriod.map((row) => [row.month, row.booked]));
-  const booked = months.map((month) => bookedByMonth.get(month.month));
-  const bookedComplete = booked.every((value): value is number => typeof value === "number");
-  const sum = (values: readonly number[]) => values.reduce((total, value) => total + value, 0);
-  const partial = months.filter((month) => month.partial).map((month) => month.label);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <LineChart
-        className="w-full"
-        height={220}
-        label="Leads and booked calls by month"
-        labels={months.map((month) => month.label)}
-        series={[
-          { name: `Leads · ${workspaceCountFormat.format(sum(totals))}`, values: totals },
-          ...(bookedComplete
-            ? [{
-              name: `Booked · ${workspaceCountFormat.format(sum(booked))}`,
-              values: booked,
-            }]
-            : []),
-        ]}
-        width={440}
-      />
-      {partial.length > 0 ? (
-        <p className="m-0 text-[14px] text-[var(--muted)]">
-          {partial.join(" and ")} {partial.length === 1 ? "is" : "are"} still filling.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------------------------------------
- * Keyword table
- * ------------------------------------------------------------------------------------------ */
-
-type KeywordRow = CoachMeasurement["keywords"][number];
-
-/**
- * The per-row shape, which is a funnel and is labelled as one.
- *
- * The artboard draws a time sparkline beside each keyword. There is no per-keyword time series on
- * this page -- `read_coach_measurement_for_actor` returns one aggregate row per keyword over the
- * chosen window -- so a trend line here would be four made-up points. What the row does carry is
- * its own four stages, and those descend, which is the shape the artboard draws. The label says
- * "funnel", never "trend", so nothing claims a direction over time.
- *
- * Four bars rather than a smoothed line, and for the reason `SPARKLINE_MIN_POINTS` now encodes: a
- * spline through four readings draws a curve between stages that has no meaning, because there is
- * nothing between "replied" and "qualified" for the line to pass through. Four bars are four
- * countable stages and claim nothing in the gaps. Every bar is emphasised because none of these is
- * more recent than another; they are stages of one window.
- */
-function KeywordShape({ row }: { row: KeywordRow }) {
-  return (
-    <BarSparkline
-      className="w-[100px]"
-      emphasisCount={4}
-      height={24}
-      label={`${row.keyword} funnel: ${row.conversations} opt-ins, ${row.respondedConversations} replied, ${row.qualifiedContacts} qualified, ${row.bookedContacts} booked`}
-      points={[
-        row.conversations,
-        row.respondedConversations,
-        row.qualifiedContacts,
-        row.bookedContacts,
-      ]}
-    />
-  );
-}
-
-function keywordCell(count: number, denominator: number, mode: "count" | "percent") {
-  if (mode === "count") return workspaceCountFormat.format(count);
-  if (denominator === 0) return "not yet";
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(
-    (count * 100) / denominator,
-  )}%`;
-}
-
-function KeywordPanel({
-  customFrom,
-  customTo,
-  keywords,
-  window,
-}: {
-  customFrom?: string | null;
-  customTo?: string | null;
-  keywords: CoachMeasurement["keywords"];
-  window: CoachMeasurementWindow;
-}) {
-  const [mode, setMode] = useState<"count" | "percent">("count");
-  // Opt-ins are a share of every keyword's opt-ins; the three stages after it are a share of the
-  // row's own opt-ins. Same denominators the live surface uses, so the two cannot disagree.
-  const optInDenominator = keywords.reduce((total, row) => total + row.conversations, 0);
+  if (blockedSetupSteps > 0) {
+    clauses.push(
+      `${workspaceCountFormat.format(blockedSetupSteps)} ${
+        blockedSetupSteps === 1 ? "step is" : "steps are"
+      } waiting on you.`,
+    );
+  }
+  if (clauses.length === 0) return null;
 
   return (
-    <section aria-labelledby="rehaul-keywords-heading" className={PANEL_CLASS}>
-      <Band
-        eyebrow="By keyword"
-        name="Which keyword brings the best leads"
-        titleId="rehaul-keywords-heading"
-      >
-        <SegmentedControl
-          ariaLabel="Keyword figures"
-          onValueChange={(value) => setMode(value as "count" | "percent")}
-          scale="coach"
-          segments={[{ key: "count", label: "Count" }, { key: "percent", label: "Percent" }]}
-          value={mode}
-        />
-        <ExportMenu
-          filename="setterfi-coach-measurement-keywords"
-          mode="server"
-          query={{
-            window,
-            ...(window === "custom" && customFrom && customTo
-              ? { from: customFrom, to: customTo }
-              : {}),
-          }}
-          resource="coach-measurement-keywords"
-        />
-      </Band>
-      {keywords.length === 0 ? (
-        <p className="m-0 px-[26px] py-6 text-[14px] text-[var(--muted)]">
-          No keyword rows yet.
-        </p>
-      ) : (
-        <table className="w-full border-collapse text-[16px]">
-          <thead>
-            <tr>
-              <th className="border-b border-[var(--line)] px-[26px] py-3.5 text-left text-[14px] font-medium text-[var(--faint)]">
-                Keyword
-              </th>
-              {["Opt-ins", "Replied", "Qualified", "Booked"].map((header) => (
-                <th
-                  className="border-b border-[var(--line)] px-[26px] py-3.5 text-right text-[14px] font-medium text-[var(--faint)]"
-                  key={header}
-                  scope="col"
-                >
-                  {header}
-                </th>
-              ))}
-              <th className="w-[120px] border-b border-[var(--line)] px-[26px] py-3.5">
-                <span className="sr-only">Funnel shape</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {keywords.map((row) => (
-              <tr key={row.keyword}>
-                <td className="border-b border-[var(--line-soft)] px-[26px] py-[19px] font-medium">
-                  {row.keyword}
-                </td>
-                {[
-                  keywordCell(row.conversations, optInDenominator, mode),
-                  keywordCell(row.respondedConversations, row.conversations, mode),
-                  keywordCell(row.qualifiedContacts, row.conversations, mode),
-                  keywordCell(row.bookedContacts, row.conversations, mode),
-                ].map((cell, index) => (
-                  <td
-                    className="border-b border-[var(--line-soft)] px-[26px] py-[19px] text-right font-mono tabular-nums"
-                    // The four cells are positional stages of one row, so the index is the
-                    // identity here rather than a stand-in for one.
-                    key={["optins", "replied", "qualified", "booked"][index]}
-                  >
-                    {cell}
-                  </td>
-                ))}
-                <td className="border-b border-[var(--line-soft)] px-[26px] py-[19px]">
-                  <KeywordShape row={row} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+    <p
+      className="m-0 mt-3 max-w-[var(--measure-wide)] text-[17px] leading-[1.5] text-[color:var(--body)]"
+      data-slot="home-status"
+    >
+      {clauses.join(" ")}
+    </p>
   );
 }
 
@@ -860,8 +491,15 @@ function FirstRun({
         >
           Your setup
         </h2>
-        <span className="ml-auto font-mono text-[14px] text-[var(--faint)]">
-          {workspaceCountFormat.format(done)} of {workspaceCountFormat.format(rungs.length)} done
+        {/*
+          The count is mono; the words are not. The 2026-09-04 audit's eighth defect on this screen
+          was "0 of 3 done" set entirely in a monospace face, which `docs/SIMPLIFICATION-SPEC.md`
+          reserves for figures. `design/coach/VOCABULARY.md` spells the fix out on this exact
+          shape: the number sits in the glyph run and the sentence around it does not.
+        */}
+        <span className="ml-auto text-[14px] text-[var(--faint)]">
+          <span className="font-mono">{workspaceCountFormat.format(done)}</span>{" "}
+          of {workspaceCountFormat.format(rungs.length)} done
         </span>
       </div>
       <ol aria-labelledby="rehaul-setup-heading" className="m-0 flex list-none flex-col gap-4 p-0">
@@ -1065,8 +703,63 @@ function DemoSetupControl({
 }
 
 /* --------------------------------------------------------------------------------------------
- * Eye
+ * The first run's right-hand column
  * ------------------------------------------------------------------------------------------ */
+
+/**
+ * What the first-run screen puts where the figures will be, per `HomeFirstRun.dc.html:...`.
+ *
+ * The previous build drew three figure cards here with a dash in each and a dashed rule under it,
+ * which is the shape `docs/COACH-REDESIGN-PLAYBOOK.md` rule 1 exists to forbid: three empty charts
+ * are a picture of nothing, drawn at the size of something. The artboard replaces all three with
+ * one drenched panel that says what will appear and when, and one card offering the single thing a
+ * coach with no leads can actually do.
+ *
+ * Neither panel reads a metric, deliberately. A first-run screen is the state where every figure
+ * is absent by definition, so a figure here could only ever be a zero standing in for "not yet".
+ *
+ * The artboard's hero line reads "answers within a minute of a DM". That is a latency promise
+ * nothing on this page has a receipt for, and `README.md`'s release boundary is explicit about
+ * presenting a capability without one, so the sentence keeps the claim the setup rail above it
+ * already makes from the connection rows and drops the number.
+ */
+function FirstRunHero() {
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <DeckPanel
+        dataSlot="home-first-run-hero"
+        drench="live"
+        eyebrow="Once you are live"
+        headingId="home-first-run-hero-heading"
+        hero
+        name="Your leads"
+      >
+        <p className="max-w-[var(--measure-caption)] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]">
+          Your first leads will appear here.
+        </p>
+        <p className="coach-panel__sentence">
+          Your agent answers a DM the moment it arrives, asks your qualifying questions and books
+          the good ones onto your calendar.
+        </p>
+        <p className="coach-panel__stat-note">
+          Your numbers will show here once leads start arriving.
+        </p>
+      </DeckPanel>
+
+      <DeckPanel
+        action={{ href: "/coach/agent", label: "Open your agent" }}
+        dataSlot="home-first-run-try"
+        eyebrow="Before a lead does"
+        headingId="home-first-run-try-heading"
+        name="Try a conversation"
+      >
+        <p className="coach-panel__sentence">
+          Message your agent the way a lead would. Test conversations never count as leads.
+        </p>
+      </DeckPanel>
+    </div>
+  );
+}
 
 /* --------------------------------------------------------------------------------------------
  * The screen
@@ -1112,21 +805,17 @@ export function CoachDashboard({
    */
   const displayStatus = demoOverride.active ? DEMO_COMPLETE_STATUS : channelStatus;
   const displayBlockedSteps = demoOverride.active ? 0 : attention.blockedSetupSteps;
-  const when = WINDOW_PHRASE[measurement.window];
-  const leads = readMetric(measurement, "coach.new_leads");
-  const booked = readMetric(measurement, "coach.booked_contacts");
-  const timeToBook = readMetric(measurement, "coach.average_time_to_book");
-  const { allowance } = measurement;
-  const remaining = allowance.state === "available"
-    ? Math.max(0, allowance.limit - allowance.used)
-    : null;
-  const monthTotals = composition.months.map((month) => month.total);
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <div className="flex flex-wrap items-end gap-6">
+      {/*
+        The head: the greeting, one status sentence, the provenance line, and the row of controls
+        the artboard puts beside the title. It wraps on a narrow pane rather than squeezing,
+        because the range control is six stops wide and a 46px title is not something to shrink.
+      */}
+      <div className="flex flex-wrap items-end justify-between gap-6">
         <div className="min-w-0">
-          <h1 className="m-0 text-[46px] leading-[1.05] font-semibold tracking-[-0.025em]">
+          <h1 className="coach-page-title m-0">
             {greeting
               ? `${firstRun ? "Welcome" : "Welcome back"}, ${greeting}`
               : "Dashboard"}
@@ -1134,11 +823,8 @@ export function CoachDashboard({
           <StatusLine blockedSetupSteps={displayBlockedSteps} now={now} status={displayStatus} />
           {/*
             The provenance line, which is a hard rule rather than a decoration: demo and test rows
-            are labelled on screen wherever they are shown. `coach-measurement.tsx` carried it
-            through `CoachPageHead`; this surface draws its own head, so it prints the same
-            sentence from the same map rather than inventing a second wording for the same claim.
-            `measurement.isDemo` is the flag the repository already resolves, so nothing new is
-            read to say it.
+            are labelled on screen wherever they are shown. `measurement.isDemo` is the flag the
+            repository already resolves, so nothing new is read to say it.
           */}
           <p
             className="m-0 mt-[10px] text-[14px] text-[var(--muted)]"
@@ -1152,20 +838,18 @@ export function CoachDashboard({
           </p>
         </div>
         {/*
-          The header's trailing control row. What sits in it changes with the run (Ask us on the
-          first one, the window pills after), so the row itself is the constant, and the eye docks
-          at its end rather than floating over the panels below.
+          The header's trailing control row. What sits in it changes with the run: a first-run
+          screen has no window to pick, because it has no figures to pick one for.
         */}
-        <div className="ml-auto flex items-center gap-3">
-          {firstRun ? (
-            <Link
-              className="inline-flex h-11 items-center rounded-xl border border-[var(--line-input)] bg-[var(--card)] px-5 text-[16px] font-medium text-[var(--ink)] no-underline hover:no-underline"
-              href="/coach/help"
-            >
-              Ask us
-            </Link>
-          ) : (
-            <WindowPills window={window} />
+        {/*
+          On a phone the strip is the row: six word stops do not fit across 390, so the strip takes
+          the full width and scrolls sideways inside it, which is what `HomeMobile.dc.html` draws.
+          Sharing the line with the eye there clipped it mid-stop and made a scroller look like a
+          truncation.
+        */}
+        <div className="flex w-full min-w-0 flex-wrap items-end gap-3 sm:w-auto sm:flex-nowrap">
+          {firstRun ? null : (
+            <CoachHomeRange customFrom={customFrom} customTo={customTo} window={window} />
           )}
           <ContextEye
             action={overrideAvailable
@@ -1194,148 +878,20 @@ export function CoachDashboard({
               status={displayStatus}
             />
           </div>
-          <div className="flex min-w-0 flex-col gap-5">
-            <div className="flex items-baseline gap-3">
-              <h2 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">Your numbers</h2>
-              {[leads, booked, timeToBook].every((reading) => reading.kind === "absent") ? (
-                <span className="ml-auto font-mono text-[14px] text-[var(--faint)]">nothing yet</span>
-              ) : null}
-            </div>
-            {([
-              { name: "Leads", reading: leads },
-              { name: "Booked calls", reading: booked },
-              { name: "Time to book", reading: timeToBook },
-            ] as const).map((panel) => (
-              <section className={PANEL_CLASS} key={panel.name}>
-                <Band eyebrow={when} name={panel.name} />
-                <div className="flex flex-1 flex-col p-5">
-                  <HeroFigure reading={panel.reading} />
-                  {/* The artboard's dashed rule under an empty tile: a baseline with no series on
-                      it, so the panel reads as waiting rather than as a chart at zero. */}
-                  {panel.reading.kind === "absent" ? (
-                    <div
-                      aria-hidden="true"
-                      className="mt-3.5 h-0 border-t-2 border-dashed border-[var(--line)]"
-                    />
-                  ) : null}
-                </div>
-              </section>
-            ))}
-          </div>
+          <FirstRunHero />
         </div>
       ) : (
         <>
-          <div className="grid gap-6 lg:grid-cols-3">
-            <section aria-labelledby="rehaul-leads-heading" className={PANEL_CLASS}>
-              {/*
-                The artboard puts a drill-in chevron on all three tiles. Only Leads has a screen to
-                drill into -- the nav's own Leads route -- so the other two carry no control rather
-                than a chevron that would go nowhere.
-              */}
-              <Band eyebrow={when} name="Leads" titleId="rehaul-leads-heading">
-                <Link
-                  aria-label="Open your leads"
-                  className="flex size-11 items-center justify-center rounded-[10px] bg-[var(--well)] text-[var(--muted)] no-underline hover:no-underline"
-                  href="/coach/contacts"
-                >
-                  <svg
-                    aria-hidden="true"
-                    fill="none"
-                    height="16"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                    width="16"
-                  >
-                    <path d="m9 6 6 6-6 6" />
-                  </svg>
-                </Link>
-              </Band>
-              <div className="flex flex-1 flex-col p-5">
-                <HeroFigure reading={leads} />
-                {/*
-                  The guard is the component's own floor rather than a looser one of this page's:
-                  `Sparkline` draws nothing under `SPARKLINE_MIN_POINTS`, and a page that thought
-                  two points were enough would reserve the space and paint nothing into it. The
-                  composition read validates that it returns exactly six months, so in practice
-                  this is a floor the series clears rather than a branch a coach sees.
-                */}
-                {monthTotals.length >= SPARKLINE_MIN_POINTS ? (
-                  <Sparkline
-                    className="mt-auto w-full pt-4"
-                    height={44}
-                    label="Leads by month, last six months"
-                    points={monthTotals}
-                    width={300}
-                  />
-                ) : null}
-              </div>
-            </section>
-
-            <section aria-labelledby="rehaul-booked-heading" className={PANEL_DARK_CLASS}>
-              <Band dark eyebrow={when} name="Booked" titleId="rehaul-booked-heading" />
-              <div className="flex flex-1 flex-col p-5">
-                <HeroFigure reading={booked} tone="text-[oklch(0.82_0.13_164)]" />
-                <Sentence dark>
-                  {allowance.state === "available" && remaining !== null
-                    ? `${workspaceCountFormat.format(remaining)} to go on your ${
-                      workspaceCountFormat.format(allowance.limit)
-                    }-call plan.`
-                    : "No plan allowance is recorded to count these against."}
-                </Sentence>
-                {allowance.state === "available" && allowance.limit > 0 ? (
-                  <div className="mt-auto pt-4">
-                    <div className="flex justify-between text-[14px] text-[oklch(0.78_0.02_262)]">
-                      <span className="font-mono">
-                        {workspaceCountFormat.format(allowance.used)} /{" "}
-                        {workspaceCountFormat.format(allowance.limit)}
-                      </span>
-                      <span>Monthly plan</span>
-                    </div>
-                    <div className="mt-2 h-1.5 rounded-full bg-[rgba(255,255,255,0.14)]">
-                      <div
-                        className="h-full rounded-full bg-[oklch(0.82_0.13_164)]"
-                        style={{
-                          width: `${Math.min(100, (allowance.used / allowance.limit) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </section>
-
-            <section aria-labelledby="rehaul-ttb-heading" className={PANEL_CLASS}>
-              <Band eyebrow={when} name="Time to book" titleId="rehaul-ttb-heading" />
-              <div className="flex flex-1 flex-col p-5">
-                <HeroFigure reading={timeToBook} />
-              </div>
-            </section>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-            <KeywordPanel
-              customFrom={customFrom}
-              customTo={customTo}
-              keywords={measurement.keywords}
-              window={window}
-            />
-            <section aria-labelledby="rehaul-trend-heading" className={PANEL_CLASS}>
-              <Band
-                eyebrow="Six months"
-                name="Leads and booked calls"
-                titleId="rehaul-trend-heading"
-              />
-              <div className="flex flex-1 flex-col p-5">
-                <LeadsTrend composition={composition} />
-              </div>
-            </section>
-          </div>
+          <CoachHomeBubbles measurement={measurement} window={window} />
+          <CoachHomeMonths composition={composition} />
+          <CoachHomeKeywords
+            customFrom={customFrom}
+            customTo={customTo}
+            keywords={measurement.keywords}
+            window={window}
+          />
         </>
       )}
-
     </div>
   );
 }

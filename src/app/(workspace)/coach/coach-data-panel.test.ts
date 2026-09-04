@@ -35,11 +35,14 @@ const SHEET = "src/app/(workspace)/coach/coach.css"
  * that stays true.
  */
 const CALLERS: Record<string, string> = {
-  // `coach-measurement.tsx` held the keyword table (Main.dc.html:366-371) until the rehaul took
-  // Home. `coach-dashboard.tsx` draws that table now and does not ask for the arm, so the row came
-  // out rather than being pointed at a file that does not mount it.
+  "src/app/(workspace)/coach/home/loading.tsx":
+    "Loading.dc.html -- the same Leads by month band, drawn over a sentence while the read is in flight, under the coach AppShell",
   "src/components/workspace/live/affiliate-money.tsx":
     "Affiliate.dc.html:163-168 -- the referrals table, under the CoachScale this file wraps its content in",
+  "src/components/workspace/rehaul/coach-home-keywords.tsx":
+    "Main.dc.html:298-345 -- the keyword table on coach Home, mounted by coach-dashboard.tsx under the coach AppShell",
+  "src/components/workspace/rehaul/coach-home-months.tsx":
+    "Main.dc.html:271-296 -- the leads-by-month chart on coach Home, mounted by coach-dashboard.tsx under the coach AppShell",
 }
 
 /** The one file allowed to hold the recipe's numbers. */

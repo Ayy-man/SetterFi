@@ -105,4 +105,22 @@ describe("coach error boundary", () => {
     expect(screen.getByText(/Your agent is still answering leads/u)).toBeInTheDocument();
     expect(screen.getByText("SF-7K42-DQ91")).toBeInTheDocument();
   });
+
+  /**
+   * One action, which is what `ErrorState.dc.html:125` draws.
+   *
+   * The screen shipped with "Go to your inbox" beside Retry. That was a real destination and it
+   * was still wrong here: a page whose whole message is "this one view failed, try it again" was
+   * offering two things to press, and the pill bar above is already how a coach leaves. So the
+   * assertion is the count and not the label, because the failure mode is a second control
+   * arriving rather than this one changing its wording.
+   */
+  it("offers exactly one thing to press, and it is the retry", () => {
+    const { container } = renderBoundary(new Error("segment threw"));
+
+    expect(container.querySelectorAll("section.coach-panel a")).toHaveLength(0);
+    const buttons = [...container.querySelectorAll("section.coach-panel button")];
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent).toBe("Retry");
+  });
 });

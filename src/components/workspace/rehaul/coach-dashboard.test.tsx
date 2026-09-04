@@ -55,11 +55,19 @@ function measurement(): CoachMeasurement {
       },
       {
         bookedContacts: 0,
-        conversations: 0,
+        conversations: 4,
         dataLabel: "Real data",
         keyword: "REFERRAL",
-        qualifiedContacts: 0,
-        respondedConversations: 0,
+        qualifiedContacts: 1,
+        respondedConversations: 2,
+      },
+      {
+        bookedContacts: 3,
+        conversations: 40,
+        dataLabel: "Real data",
+        keyword: "No keyword",
+        qualifiedContacts: 12,
+        respondedConversations: 20,
       },
     ],
     metrics: COACH_METRIC_KEYS.map((key) => metric(key)),
@@ -71,17 +79,32 @@ function measurement(): CoachMeasurement {
   };
 }
 
+/**
+ * Six months, because six is the floor the chart draws at all.
+ *
+ * `SPARKLINE_MIN_POINTS` is 6 and the composition read returns exactly six months, so a two-month
+ * fixture was testing the branch a coach never sees. The last one is partial, which is the state
+ * the chart has to label rather than let read as a collapse.
+ */
+const MONTH_LABELS = ["Apr 2026", "May 2026", "Jun 2026", "Jul 2026", "Aug 2026", "Sep 2026"];
+const MONTH_KEYS = [
+  "2026-04-01", "2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01", "2026-09-01",
+];
+const MONTH_TOTALS = [12, 18, 21, 26, 30, 4];
+
 function composition(): CoachLeadComposition {
   return {
     asOf: "2026-09-03T12:00:00.000Z",
-    bookedByPeriod: [
-      { booked: 4, month: "2026-08-01" },
-      { booked: 7, month: "2026-09-01" },
-    ],
-    months: [
-      { active: 2, disqualified: 1, label: "Aug 2026", month: "2026-08-01", partial: false, qualified: 5, total: 8 },
-      { active: 3, disqualified: 1, label: "Sep 2026", month: "2026-09-01", partial: true, qualified: 6, total: 10 },
-    ],
+    bookedByPeriod: MONTH_KEYS.map((month, index) => ({ booked: index, month })),
+    months: MONTH_KEYS.map((month, index) => ({
+      active: 2,
+      disqualified: 1,
+      label: MONTH_LABELS[index],
+      month,
+      partial: index === MONTH_KEYS.length - 1,
+      qualified: 5,
+      total: MONTH_TOTALS[index],
+    })),
     tenantId: "tenant-synthetic",
     timezone: "America/New_York",
   };
@@ -170,63 +193,268 @@ async function openOverrideToggle() {
 }
 
 describe("CoachDashboard", () => {
-  it("greets the coach, prints the booked figure and its allowance, and keeps the old explainers off the page", () => {
+  it("greets the coach and states what the agent is doing in one sentence, not a row of chips", () => {
     renderDashboard();
 
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Welcome back, Reid");
 
-    const booked = screen.getByRole("region", { name: "Booked" });
-    expect(booked.textContent).toContain("5");
-    expect(booked.textContent).toContain("18 / 25");
-    expect(booked.textContent).toContain("7 to go on your 25-call plan.");
+    const status = document.querySelector("[data-slot='home-status']");
+    expect(status?.textContent).toBe(
+      "Your agent is live on Instagram and Messenger. Text messages are on day 10 of about 21.",
+    );
 
     for (const sentence of OLD_EXPLAINERS) {
       expect(document.body.textContent).not.toContain(sentence);
     }
   });
 
-  it("draws the window pills as links that carry the window", () => {
+  /*
+   * The six bubbles, on one anatomy. The 2026-09-04 audit's third defect on this screen was three
+   * cards where the artboard draws six, and its fifth was that the cards it did draw had three
+   * different shapes.
+   */
+  it("draws six bubbles in the artboard's order, each with a band, a figure and a sentence", () => {
+    renderDashboard();
+
+    const bubbles = [...document.querySelectorAll("[data-slot^='home-bubble-']")];
+    expect(bubbles).toHaveLength(6);
+    expect(bubbles.map((panel) => panel.querySelector("h2")?.textContent)).toEqual([
+      "Booked calls",
+      "Active leads",
+      "New leads",
+      "Disqualified",
+      "Conversion",
+      "Average time to book",
+    ]);
+
+    for (const bubble of bubbles) {
+      // One name, one eyebrow, at most one control in the band.
+      expect(bubble.querySelectorAll("h2")).toHaveLength(1);
+      expect(bubble.querySelectorAll(".coach-panel__eyebrow")).toHaveLength(1);
+      expect(bubble.querySelectorAll("a").length).toBeLessThanOrEqual(1);
+      // A figure, or an absence line where the figure would be. Never both, never neither.
+      const figures = bubble.querySelectorAll(".coach-panel__figure");
+      const absences = bubble.querySelectorAll("[data-slot='bubble-absence']");
+      expect(figures.length + absences.length).toBe(1);
+    }
+  });
+
+  it("counts the window in the eyebrow rather than fixing it to one month", () => {
+    const view = renderDashboard({ window: "1m" });
+    expect(document.body.textContent).toContain("Last month");
+    view.unmount();
+
+    renderDashboard({ window: "3m" });
+    expect(document.body.textContent).toContain("Last three months");
+    expect(document.body.textContent).not.toContain("Last month");
+  });
+
+  /*
+   * The one bubble whose eyebrow is not the window. `coach.active_leads` reads the stored stage at
+   * the moment the page loads, which is what the artboard's "Right now" says.
+   */
+  it("names Active leads as a reading of now and splits it only from the rows that carry the split", () => {
+    const view = renderDashboard();
+
+    const active = () => document.querySelector("[data-slot='home-bubble-active']");
+    expect(active()?.textContent).toContain("Right now");
+    expect(active()?.textContent).toContain("Agent handling");
+    expect(active()?.textContent).toContain("Needs you");
+    expect(active()?.querySelectorAll("[data-slot='bubble-footer-row']")).toHaveLength(2);
+    view.unmount();
+
+    /*
+     * The other arm, and the one that matters. `coach.active_leads_agent_handling` and
+     * `coach.active_leads_needs_you` reached the measurement RPC in
+     * `20261012000006_active_leads_agent_split.sql`; against a database the migration has not
+     * reached, the rows are simply not in the payload. The footer then says so in words rather
+     * than halving the total, which is the only other thing it could do.
+     */
+    const unsplit = measurement();
+    renderDashboard({
+      measurement: {
+        ...unsplit,
+        metrics: unsplit.metrics.filter(
+          (metric) => !(metric.metricKey as string).startsWith("coach.active_leads_"),
+        ),
+      },
+    });
+
+    expect(active()?.textContent).toContain("cannot yet split these");
+    expect(active()?.querySelectorAll("[data-slot='bubble-footer-row']")).toHaveLength(0);
+  });
+
+  it("prints the conversion sentence off the rate's own numerator and denominator", () => {
+    renderDashboard();
+
+    const conversion = document.querySelector("[data-slot='home-bubble-conversion']");
+    expect(conversion?.textContent).toContain("50%");
+    expect(conversion?.textContent).toContain("5 booked calls out of the 10 new leads.");
+  });
+
+  /*
+   * The audit's fourth defect: `72 hr` set the unit at figure size in mono, so "hr" read as part
+   * of the number. The unit stays inside the glyph run, which is the rule VOCABULARY.md states and
+   * the owner console's `5.8d` already follows.
+   */
+  it("keeps a duration's unit inside the figure's own glyph run", () => {
+    renderDashboard();
+
+    const figure = document
+      .querySelector("[data-slot='home-bubble-time-to-book']")
+      ?.querySelector(".coach-panel__figure");
+    expect(figure?.textContent).toBe("5s");
+    expect(document.body.textContent).not.toContain(" hr");
+  });
+
+  it("states an absent reading in words where the figure would be, and ends the card there", () => {
+    const thin = measurement();
+    renderDashboard({
+      measurement: {
+        ...thin,
+        metrics: thin.metrics.map((metric) =>
+          metric.metricKey === "coach.average_time_to_book"
+            ? { ...metric, denominator: 0, numerator: 0, state: "unavailable" as const, value: null }
+            : metric
+        ),
+      },
+    });
+
+    const panel = document.querySelector("[data-slot='home-bubble-time-to-book']");
+    expect(panel?.querySelector("[data-slot='bubble-absence']")?.textContent)
+      .toBe("No call was booked in this window.");
+    expect(panel?.querySelectorAll(".coach-panel__figure")).toHaveLength(0);
+    // No sentence and no footer under an absence: the card ends after the words.
+    expect(panel?.querySelectorAll(".coach-panel__sentence")).toHaveLength(0);
+    expect(panel?.querySelectorAll(".coach-panel__footer")).toHaveLength(0);
+  });
+
+  /* ------------------------------------------------------------------------------------------
+   * The date range control
+   * ---------------------------------------------------------------------------------------- */
+
+  it("draws six range stops, five as links that carry the window and Custom as a form", async () => {
     renderDashboard({ window: "3m" });
 
-    const pills = screen.getByRole("navigation", { name: "Performance window" });
-    expect(pills.textContent).toBe("1D1W1M3MAll");
-    expect(screen.getByRole("link", { name: "3M" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "1W" })).toHaveAttribute("href", "/coach/home?window=1w");
+    const control = screen.getByRole("group", { name: "Date range" });
+    expect(control.textContent).toBe("1 day1 week1 month3 monthsAllCustom");
+    expect(screen.getByRole("link", { name: "3 months" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "1 week" }))
+      .toHaveAttribute("href", "/coach/home?window=1w");
+
+    // Custom cannot be a link: the page needs a pair of dates before it can read a custom window,
+    // and there is no honest default range to send it.
+    expect(screen.queryByRole("link", { name: "Custom" })).toBeNull();
+    expect(document.querySelector("[data-slot='home-range-custom-form']")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Custom" }));
+    const form = document.querySelector("[data-slot='home-range-custom-form']");
+    expect(form?.getAttribute("action")).toBe("/coach/home");
+    expect(form?.getAttribute("method")).toBe("get");
+    expect(form?.querySelector("input[name='window']")).toHaveValue("custom");
   });
 
-  it("draws the six-month chart as leads against booked calls", () => {
-    renderDashboard();
+  it("opens the custom range already showing the dates the figures were read over", () => {
+    renderDashboard({ customFrom: "2026-08-01", customTo: "2026-08-31", window: "custom" });
 
-    const trend = screen.getByRole("region", { name: "Leads and booked calls" });
-    // Both legend totals are sums of the same six months, so the two lines are comparable.
-    expect(trend.textContent).toContain("Leads · 18");
-    expect(trend.textContent).toContain("Booked · 11");
-    expect(trend.textContent).not.toContain("Qualified");
-    // The month still filling reads low, so the chart says which one it is.
-    expect(trend.textContent).toContain("Sep 2026 is still filling.");
+    expect(screen.getByLabelText("From")).toHaveValue("2026-08-01");
+    expect(screen.getByLabelText("To")).toHaveValue("2026-08-31");
+    // No preset is current while a custom range is.
+    expect(document.querySelectorAll("[aria-current='page']")).toHaveLength(0);
   });
 
-  it("shows the keyword row with its counts and a funnel line", () => {
+  /* ------------------------------------------------------------------------------------------
+   * The six-month chart
+   * ---------------------------------------------------------------------------------------- */
+
+  it("draws six bars, marks the partial month solid and says how far into it we are", () => {
     renderDashboard();
 
-    const row = screen.getByRole("row", { name: /CCA/u });
-    for (const count of ["96", "71", "28", "9"]) {
-      expect(row.textContent).toContain(count);
+    /*
+     * One SVG, drawn for the desk. The phone gets the same six readings as HTML rows instead,
+     * because a viewBox scales its own type and the 14px floor does not scale with it. Both
+     * renderings are in the tree at once and CSS picks one, so each is asserted on its own.
+     */
+    const chart = screen.getByRole("img", { name: "Leads by month, the last six months" });
+    expect(chart.querySelectorAll("[data-slot='month-bar']")).toHaveLength(5);
+    expect(chart.querySelectorAll("[data-slot='month-bar-partial']")).toHaveLength(1);
+    for (const label of ["Apr 2026", "May 2026", "Jun 2026", "Jul 2026", "Aug 2026", "Sep 2026"]) {
+      expect(chart.textContent).toContain(label);
     }
-    expect(screen.getByRole("img", { name: /CCA funnel: 96 opt-ins/u })).toBeTruthy();
+    expect(chart.textContent).toContain(" so far");
+
+    // The phone rows carry the same six bars and the same mark on the partial month.
+    const rows = document.querySelectorAll("li [data-slot^='month-bar']");
+    expect(rows).toHaveLength(6);
+    expect(document.querySelectorAll("li [data-slot='month-bar-partial']")).toHaveLength(1);
+    // Counted in the tenant's timezone off the composition's own asOf, not the reader's clock.
+    expect(document.body.textContent).toContain("Sep 2026 has 3 days in it so far.");
+  });
+
+  it("states the shortfall instead of drawing a shorter chart under six months", () => {
+    const short = composition();
+    renderDashboard({ composition: { ...short, months: short.months.slice(0, 3) } });
+
+    expect(screen.queryAllByRole("img", { name: /Leads by month/u })).toHaveLength(0);
+    expect(document.body.textContent)
+      .toContain("Six months of history are needed before the bars can be drawn. You have 3 so far.");
+  });
+
+  /* ------------------------------------------------------------------------------------------
+   * The keyword table
+   * ---------------------------------------------------------------------------------------- */
+
+  it("puts the denominator on every keyword row and names the population of the No keyword row", () => {
+    renderDashboard();
+
+    const cca = screen.getByRole("row", { name: /CCA/u });
+    expect(cca.textContent).toContain("28");
+    expect(cca.textContent).toContain("of 96 leads");
+    // Response and booked rates, each out of that keyword's own senders.
+    expect(cca.textContent).toContain("74%");
+    expect(cca.textContent).toContain("9.4%");
+
+    const none = screen.getByRole("row", { name: /No keyword/u });
+    expect(none.textContent).toContain("of 40 leads who sent none");
+  });
+
+  it("replaces the rates with words under ten senders rather than printing a rate off four people", () => {
+    renderDashboard();
+
+    const thin = screen.getByRole("row", { name: /REFERRAL/u });
+    expect(thin.querySelector("[data-slot='keyword-thin']")?.textContent)
+      .toBe("Rates show after 10 leads have sent it. 4 leads so far.");
+    expect(thin.textContent).not.toContain("%");
+  });
+
+  it("orders by qualified leads and keeps the No keyword row last", () => {
+    renderDashboard();
+
+    const table = document
+      .querySelector("[aria-labelledby='home-keywords-heading']")
+      ?.querySelector("tbody");
+    const names = [...(table?.querySelectorAll("tr th") ?? [])].map((cell) => cell.textContent);
+    // REFERRAL has one qualified lead against No keyword's twelve, so ordering by qualified leads
+    // alone would put No keyword second. It is pinned last instead: the row that means "no keyword
+    // at all" reading as the best keyword is the one misreading this table cannot afford.
+    expect(names).toEqual(["CCA", "REFERRAL", "No keyword"]);
   });
 
   it("names the empty keyword table without explaining the feature", () => {
     const empty = measurement();
     renderDashboard({ measurement: { ...empty, keywords: [] } });
 
-    expect(document.body.textContent).toContain("No keyword rows yet.");
+    expect(document.body.textContent).toContain("No lead has sent a keyword in this window yet.");
     expect(document.body.textContent).not.toContain(
       "Keyword rows appear once a conversation is attributed to a keyword.",
     );
   });
 
-  it("renders the setup checklist with a texting day counter instead of the figures when nothing is live", () => {
+  /* ------------------------------------------------------------------------------------------
+   * First run
+   * ---------------------------------------------------------------------------------------- */
+
+  it("renders the setup rail and a hero that says something, with no figure cards, when nothing is live", () => {
     renderDashboard({
       attention: {
         blockedSetupSteps: 2,
@@ -246,14 +474,22 @@ describe("CoachDashboard", () => {
     // The pill claims only what the read established: nothing is live, not that nothing exists.
     expect(document.body.textContent).toContain("Not live yet");
     expect(document.body.textContent).not.toContain("Not connected");
-    expect(screen.getByRole("link", { name: "Ask us" })).toHaveAttribute("href", "/coach/help");
     expect(screen.getByRole("heading", { name: "Texting registration" })).toBeTruthy();
     // A day counter, never a percentage or a predicted date.
     expect(document.body.textContent).toContain("Day 10");
     expect(document.body.textContent).not.toContain("%");
-    // The figures are absent rather than invented, and the keyword table is not on this state.
-    expect(screen.queryByRole("navigation", { name: "Performance window" })).toBeNull();
+
+    // The hero always has something to say, and it is words rather than an empty chart.
+    expect(document.querySelector("[data-slot='home-first-run-hero']")?.textContent)
+      .toContain("Your first leads will appear here.");
+    expect(screen.getByRole("heading", { name: "Try a conversation" })).toBeTruthy();
+    expect(document.querySelectorAll(".coach-panel__figure")).toHaveLength(0);
+
+    // No window to pick when there are no figures to pick one for, and no keyword table.
+    expect(screen.queryByRole("group", { name: "Date range" })).toBeNull();
     expect(screen.queryByRole("heading", { name: /Which keyword/u })).toBeNull();
+    // One support entry point, not two: "Ask us" left the header for the support bubble.
+    expect(screen.queryByRole("link", { name: "Ask us" })).toBeNull();
   });
 });
 
