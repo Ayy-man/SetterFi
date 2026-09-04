@@ -15,7 +15,8 @@ import {
 } from "./metric-definitions";
 
 const EXPECTED_COACH_KEYS = [
-  "coach.new_leads", "coach.active_leads", "coach.qualified_leads",
+  "coach.new_leads", "coach.active_leads", "coach.active_leads_agent_handling",
+  "coach.active_leads_needs_you", "coach.qualified_leads",
   "coach.disqualified_leads", "coach.booked_contacts", "coach.conversion_rate",
   "coach.average_time_to_book", "coach.pipeline_win_rate", "coach.agent_win_rate",
   "coach.show_rate", "coach.allowance_used", "coach.allowance_limit",
@@ -86,12 +87,12 @@ describe("measurement vocabulary", () => {
   });
 
   it("keeps all 55 keys disjoint, duplicate-free, and backed by one definition", () => {
-    expect(COACH_METRIC_KEYS).toHaveLength(20);
+    expect(COACH_METRIC_KEYS).toHaveLength(22);
     expect(PLATFORM_METRIC_KEYS).toHaveLength(27);
     expect(EVAL_METRIC_KEYS).toHaveLength(6);
     expect(COACH_OBJECTION_METRIC_KEYS).toHaveLength(2);
-    expect(METRIC_KEYS).toHaveLength(55);
-    expect(new Set(METRIC_KEYS).size).toBe(55);
+    expect(METRIC_KEYS).toHaveLength(57);
+    expect(new Set(METRIC_KEYS).size).toBe(57);
     expect(Object.keys(METRIC_DEFINITIONS)).toEqual([...METRIC_KEYS]);
     expect(METRIC_KEYS.map((key) => metricDefinition(key).key)).toEqual([...METRIC_KEYS]);
   });

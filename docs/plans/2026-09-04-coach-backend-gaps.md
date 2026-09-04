@@ -156,3 +156,154 @@ UI consumer already declare it; the coach preference module carries its own loca
   projection so cadence is not inferred from period dates; settled attendance rows so the list can
   show bookings already answered. The login coach's seeded period runs Oct 2025 to Oct 2026, which
   is the seed-demo-history anchoring, not a read defect.
+
+## Round 2 (2026-09-04)
+
+Priority list from the team lead's round-2 brief, in order.
+
+### 1. Active leads split (agent-handling vs needs-you) - GAP CLOSED
+
+`coach.active_leads_agent_handling` and `coach.active_leads_needs_you` added to
+`read_coach_measurement_pre_phase13` in `supabase/migrations/20261012000006_active_leads_agent_split.sql`.
+Both partition the exact active-cohort population `coach.active_leads` already counts (nonterminal
+`pipeline_stage`), bucketed by each contact's most recent `conversations.status`: `needs_human`/
+`human` count as needs-you, `agent`/`nurture`/`closed`/`opted_out` and no conversation at all count
+as agent-handling. `COACH_METRIC_KEYS` is now 22 rows (was 20); `METRIC_DEFINITIONS` documents both
+new keys. `loadCoachMeasurement` (`src/lib/repositories/analytics.ts`) enforces the two counts sum
+to `coach.active_leads` as a conservation check, the same shape as the existing keyword-row check.
+Tests added in `metric-definitions.test.ts` and `analytics.test.ts` (conservation pass and fail
+cases). Documented in `docs/BACKEND-SPEC.md` §9.
+
+### 2. Agent tab line-by-line audit - mostly already complete; one real gap closed
+
+Confirmed a read and a write exist under `src/lib`/`src/app/api` for every field on
+`design/coach/Agent.dc.html`:
+
+- Prices, six qualification bounds (credit score min, funding goal min/max, monthly revenue min,
+  needs-credit-repair, refund posture), voice slider + three voice answers: all on
+  `CoachOfferDraftInput` (`src/lib/offer/types.ts`), already fully covered by
+  `saveCoachOfferDraft`/`publishCoachOfferDraft` (`src/lib/offer/service.ts`).
+- Follow-up purpose per touch: `cadencePurposes` on the same offer draft. Already covered.
+- Question order with per-question enabled/disabled (rendered as Asked/Skipped in the mock):
+  `readCoachQuestions`/`reorderCoachQuestions`/`setCoachQuestionEnabled`
+  (`src/lib/repositories/coach-questions.ts`). Already covered.
+- Keyword-to-reply mapping (keyword, reply link/message, ordered questions):
+  `src/app/api/coach/keyword-goals`. Already covered.
+- Top objections: `loadCoachTopObjections`. Already covered (see round 1).
+
+**GAP, closed:** `docs/SIMPLIFICATION-SPEC.md` Q4's chosen default is one Save with no
+coach-facing draft state - platform review still runs, the coach never takes "publish" as its own
+step. The offer layer's actual API shape was still the explicit two-step `PUT /api/coach/offer`
+(save) then `POST /api/coach/offer/publish` (publish), which is exactly the shape Q4 replaces.
+Added `saveAndPublishCoachOffer` (`src/lib/offer/service.ts`), composing save then publish in one
+call, and `POST /api/coach/offer/save-and-publish` (new route, same body shape as the existing
+`PUT`), so a Save button can do both in one request. The two-step routes are untouched for any
+caller still on the explicit shape. `COACH_OFFER_KEYS` extracted to
+`src/app/api/coach/offer/keys.ts` so both routes validate against the same key list.
+
+**Not done:** a single backend transaction across the offer layer, question order, and
+keyword-goals. These stay three separately audited resources with their own RPCs
+(`save_offer_draft`/`publish_offer_draft`, `reorder_coach_questions`/`set_coach_question_enabled`,
+the keyword-goal CRUD). Whichever UI wires the Agent screen's Save button decides whether to call
+all three in one client-side action; nothing about the backend shape blocks that, and a true
+cross-resource atomic transaction was judged out of scope for this round given the concurrent UI
+work on that screen.
+
+**New finding, not fixed this round:** `read_coach_measurement`'s `keywords` output is not what
+`read_coach_measurement_pre_phase13` computes. The wrapper (`20261007000001_keyword_goals_capi.sql`)
+unconditionally overwrites `keywords` with `app.phase13_keyword_measurement`'s result, which is
+scoped to keyword-goal-attributed conversations only and carries no "No keyword" row. Round 1's
+audit of the keyword table read `read_coach_measurement_pre_phase13` in isolation and concluded the
+"No keyword" row was already complete; that is true of the function in isolation but not of what
+the coach dashboard actually receives. Flagging for a product decision (is the keyword table meant
+to show only keyword-goal campaigns, or every conversation grouped by first-touch keyword) before
+anyone touches it; not fixed here since it needs that decision, not a repository change.
+
+### 3. Rate suppression under ten senders - GAP CLOSED
+
+Added `senderCount` (distinct `contact_id`, not a conversation-row count) to
+`app.phase13_keyword_measurement`'s per-keyword aggregation
+(`supabase/migrations/20261012000007_keyword_sender_count.sql` - this is the function whose output
+actually reaches the coach dashboard, see the finding above). `CoachKeywordRow.senderCount` added
+to `src/lib/repositories/analytics.ts`, validated `<= conversations`. Typed optional
+(`senderCount?: number`) rather than required, for source compatibility with UI-owned fixtures
+written before this field existed (`src/components/workspace/live/measurement-view-models.test.ts`,
+out of this round's write scope) - the repository itself always populates it from the RPC and
+requires it on every row the RPC returns. Tests added in `analytics.test.ts`.
+
+### 4. Advisory objection classification hook - GAP CLOSED (interface + storage only, as scoped)
+
+`unmatched_objections` gets three new nullable columns -
+`suggested_brain_objection_id`/`suggestion_confidence`/`suggestion_model_version`/`suggested_at` -
+in `supabase/migrations/20261012000008_unmatched_objection_suggestion.sql`, written only through
+the new `write_unmatched_objection_suggestion` RPC, which never touches the confirmed
+`brain_objection_id`/`resolved_by`/`resolved_at` fields an admin sets on resolving a row. Every
+objection stat counted anywhere still reads only the confirmed fields.
+`src/lib/brain/objection-classifier.ts` defines the `ObjectionClassifier` interface, a
+`noopObjectionClassifier` default provider that always declines, and `suggestObjectionMatch` to
+run a classifier and write its result through the RPC. Tests in
+`src/lib/brain/objection-classifier.test.ts`.
+
+**Deliberately not done, per the round's own scoping:** no model call, and no caller wired at
+conversation close - there is no conversation-close hook anywhere in this repository to attach to
+(the turn engine described in `BACKEND-SPEC.md` §3 is not implemented here yet). No admin-side
+accept/reject UI either. All three are round-3+ items.
+
+### 5. Round 2 intake
+
+The lead's "Round 2 intake" heading above (from the surface rebuilds) landed while this round was
+already underway; read at the end as instructed. It lists four billing items:
+
+- A period-level correction request that takes a reason with no `eventId` and no `quantityDelta`.
+- The overage rate on the coach billing projection.
+- The billing interval on the projection, so cadence is not inferred from period dates.
+- Settled attendance rows, so the list can show bookings already answered.
+
+**Deferred to round 3, not attempted this round.** `src/lib/repositories/billing.ts` is 1,500
+lines and every write on it goes through named RPCs behind receipt checks (`BillingCorrectionProjection`,
+`CoachBillingRead` and their SQL projections were not read this round). The correction-request item
+in particular changes a write invariant (`billing_correction_requests` currently keys a request to
+one `billableEventId` and one `quantityDelta`; a reason-only request needs to know what that means
+for `offsetEventId` and for how `record_billing_correction_decision` computes the credit) on a
+financial surface the brief calls out for extra care. Doing that correctly needs to start by
+reading the existing correction RPCs and the coach billing projection's SQL in full, which this
+round's remaining time did not have room for after items 1-4 above. Flagging with the specific
+questions rather than a vague "later": what should `record_billing_correction_decision` credit for
+a reason-only request with no event or quantity behind it, and is "overage rate" a stored tier
+field or a projection computed from usage - both need an answer before either read is added
+honestly rather than guessed.
+
+## Files changed this round
+
+- `supabase/migrations/20261012000006_active_leads_agent_split.sql` (new)
+- `supabase/migrations/20261012000007_keyword_sender_count.sql` (new)
+- `supabase/migrations/20261012000008_unmatched_objection_suggestion.sql` (new)
+- `src/lib/analytics/metric-definitions.ts`, `src/lib/analytics/metric-definitions.test.ts`
+- `src/lib/repositories/analytics.ts`, `src/lib/repositories/analytics.test.ts`
+- `src/lib/brain/objection-classifier.ts` (new), `src/lib/brain/objection-classifier.test.ts` (new)
+- `src/lib/offer/service.ts`, `src/lib/offer/service.test.ts`
+- `src/app/api/coach/offer/keys.ts` (new)
+- `src/app/api/coach/offer/handler.ts`
+- `src/app/api/coach/offer/save-and-publish/handler.ts` (new)
+- `src/app/api/coach/offer/save-and-publish/route.ts` (new)
+- `src/app/api/coach/offer/save-and-publish/route.test.ts` (new)
+- `docs/BACKEND-SPEC.md`
+
+## Verification run this round
+
+- `npx vitest run src/lib/analytics/metric-definitions.test.ts src/lib/repositories/analytics.test.ts src/lib/offer/service.test.ts src/app/api/coach/offer src/lib/brain/objection-classifier.test.ts src/app/em-dash.test.ts` - 7 files, 82 tests pass
+- `npx vitest run src/app/api/exports/routes.test.ts src/components/workspace/live/measurement-view-models.test.ts` - 2 files, 214 tests pass (confirms the new optional `senderCount` field and the two new metric keys don't break existing consumers)
+- `npx tsc --noEmit` (whole project) - zero errors traceable to files touched this round; remaining errors are pre-existing, unrelated, in-progress UI work by other agents (`coach-dashboard.tsx`, `coach-agent.test.tsx`, `coach-billing.test.tsx`, `coach-setup.tsx`, `coach-leads.test.tsx`, `coach-tips.test.tsx`, `coach-support-bubble.test.tsx`, `coach-home-months.tsx`, `home/loading.test.tsx`)
+
+## A note on a mid-round git incident
+
+Partway through this round a diagnostic `git stash` (run to compare tsc output against a clean
+tree) stashed every uncommitted change in the shared working tree, not just this agent's own -
+several other agents' concurrent edits were sitting uncommitted at the time. The `git stash pop`
+then conflicted against newer edits four other agents had made to the same files in the interim
+(`get-started/page.tsx`, `integrations/page.tsx`, `coach-billing.tsx`, `coach-billing.test.tsx`)
+and aborted cleanly rather than overwriting anything. Recovered by checking out each non-conflicting
+file from the stash individually (`git checkout stash@{0} -- <path>`), leaving the four newer
+on-disk versions untouched, then dropping the stash once every file was accounted for. No content
+was lost; `git stash`/`pop` without a path scope is unsafe on this shared tree and should not be
+run again without `--` pathspecs limited to files a single agent actually owns.

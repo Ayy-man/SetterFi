@@ -20,6 +20,8 @@
 export const COACH_METRIC_KEYS = [
   "coach.new_leads",
   "coach.active_leads",
+  "coach.active_leads_agent_handling",
+  "coach.active_leads_needs_you",
   "coach.qualified_leads",
   "coach.disqualified_leads",
   "coach.booked_contacts",
@@ -201,6 +203,32 @@ export const METRIC_DEFINITIONS = {
     cohortRule: "Cohort contacts whose stored pipeline_stage is new_lead, qualifying, or long_term_followup at read time.",
     sources: tenantContactSource,
     population: "Distinct selected-cohort contacts in a nonterminal stored pipeline stage.",
+    history: "Current partial cohorts are still filling.", audience: "coach", economics: "none",
+    requiresPositiveDenominator: false,
+  }),
+  "coach.active_leads_agent_handling": defineMetric({
+    key: "coach.active_leads_agent_handling", name: "activeLeadsAgentHandling",
+    label: "Active leads - agent handling", unit: "count",
+    denominator: "coach.active_leads for the same cohort and window.",
+    window: "Selected contact-creation cohort window.", clock: "Tenant IANA timezone.",
+    cohortRule: "Active-cohort contacts (same rule as coach.active_leads) whose most recent "
+      + "conversation status is agent, nurture, closed, opted_out, or absent (no conversation "
+      + "row yet).",
+    sources: tenantContactSource,
+    population: "Distinct active-cohort contacts not currently needing the coach.",
+    history: "Current partial cohorts are still filling.", audience: "coach", economics: "none",
+    requiresPositiveDenominator: false,
+  }),
+  "coach.active_leads_needs_you": defineMetric({
+    key: "coach.active_leads_needs_you", name: "activeLeadsNeedsYou",
+    label: "Active leads - needs you", unit: "count",
+    denominator: "coach.active_leads for the same cohort and window.",
+    window: "Selected contact-creation cohort window.", clock: "Tenant IANA timezone.",
+    cohortRule: "Active-cohort contacts (same rule as coach.active_leads) whose most recent "
+      + "conversation status is needs_human or human.",
+    sources: tenantContactSource,
+    population: "Distinct active-cohort contacts a human is handling or needs to handle. Sums "
+      + "with coach.active_leads_agent_handling to coach.active_leads.",
     history: "Current partial cohorts are still filling.", audience: "coach", economics: "none",
     requiresPositiveDenominator: false,
   }),

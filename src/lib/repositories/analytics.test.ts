@@ -26,6 +26,20 @@ function metric(key: MetricKey) {
   const definition = metricDefinition(key);
   const numerator = 5;
   const denominator = 10;
+  // The active-leads split must sum to coach.active_leads (value 5, the count-metric default
+  // below) for the conservation check in `loadCoachMeasurement` to accept the fixture.
+  if (key === "coach.active_leads_agent_handling") {
+    return {
+      metricKey: key, numerator: 3, denominator: 5, value: 3, state: "available",
+      windowStart: WINDOW_START, windowEnd: WINDOW_END,
+    };
+  }
+  if (key === "coach.active_leads_needs_you") {
+    return {
+      metricKey: key, numerator: 2, denominator: 5, value: 2, state: "available",
+      windowStart: WINDOW_START, windowEnd: WINDOW_END,
+    };
+  }
   return {
     metricKey: key,
     numerator,
@@ -59,6 +73,7 @@ function snapshot() {
     keywords: [{
       keyword: "FUNDING",
       conversations: 5,
+      senderCount: 4,
       qualifiedContacts: 3,
       respondedConversations: 4,
       bookedContacts: 2,
@@ -185,6 +200,23 @@ describe("coach measurement repository", () => {
       window: "1m",
       asOf: "2026-08-18T12:00:00.000Z",
     }, async () => invalidStage)).rejects.toThrow("COACH_MEASUREMENT_PIPELINE_INVALID");
+  });
+
+  it("carries a distinct sender count per keyword row for honest rate suppression", async () => {
+    const result = await loadCoachMeasurement(ACTOR, "tenant-synthetic", {
+      window: "1m",
+      asOf: "2026-08-18T12:00:00.000Z",
+    }, async () => snapshot());
+    expect(result.keywords).toEqual([expect.objectContaining({
+      keyword: "FUNDING", conversations: 5, senderCount: 4,
+    })]);
+
+    const oversized = snapshot();
+    oversized.keywords[0] = { ...oversized.keywords[0], senderCount: 6 };
+    await expect(loadCoachMeasurement(ACTOR, "tenant-synthetic", {
+      window: "1m",
+      asOf: "2026-08-18T12:00:00.000Z",
+    }, async () => oversized)).rejects.toThrow("COACH_MEASUREMENT_KEYWORDS_INVALID");
   });
 
   it("renders a window with no conversations instead of refusing it", async () => {
@@ -561,11 +593,37 @@ describe("coach top objections repository", () => {
     expect(source).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves the coach measurement set at the exact twenty rows the hosted RPC returns", () => {
-    // New coverage rather than red. A 21st expected key would crash every coach dashboard read on
+  it("leaves the coach measurement set at the exact twenty-two rows the hosted RPC returns", () => {
+    // New coverage rather than red. A 23rd expected key would crash every coach dashboard read on
     // hosted while `analytics.test.ts`'s fixture, which maps over the same array, stayed green.
-    expect(COACH_METRIC_KEYS).toHaveLength(20);
+    expect(COACH_METRIC_KEYS).toHaveLength(22);
     expect(COACH_METRIC_KEYS).not.toContain("coach.objection.conversations");
     expect(COACH_METRIC_KEYS).not.toContain("coach.objection.booked_rate");
+  });
+
+  it("rejects an active-leads split that does not sum to coach.active_leads", async () => {
+    const broken = snapshot();
+    broken.metrics = broken.metrics.map((row) => (
+      row.metricKey === "coach.active_leads_needs_you" ? { ...row, value: 999 } : row
+    ));
+    const source = vi.fn(async () => broken);
+    await expect(loadCoachMeasurement(ACTOR, "tenant-synthetic", {
+      window: "1m",
+      asOf: "2026-08-18T12:00:00.000Z",
+    }, source)).rejects.toThrow("COACH_MEASUREMENT_ACTIVE_LEADS_CONSERVATION_FAILED");
+  });
+
+  it("accepts an active-leads split that sums to coach.active_leads", async () => {
+    const source = vi.fn(async () => snapshot());
+    const result = await loadCoachMeasurement(ACTOR, "tenant-synthetic", {
+      window: "1m",
+      asOf: "2026-08-18T12:00:00.000Z",
+    }, source);
+    const activeLeads = result.metrics.find((row) => row.metricKey === "coach.active_leads");
+    const agentHandling = result.metrics.find(
+      (row) => row.metricKey === "coach.active_leads_agent_handling",
+    );
+    const needsYou = result.metrics.find((row) => row.metricKey === "coach.active_leads_needs_you");
+    expect((agentHandling?.value ?? 0) + (needsYou?.value ?? 0)).toBe(activeLeads?.value);
   });
 });

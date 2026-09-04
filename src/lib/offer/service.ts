@@ -139,3 +139,29 @@ export async function publishCoachOfferDraft(
     receipt: completedReceipt,
   };
 }
+
+/**
+ * Saves a draft and immediately publishes it, as one call. `SIMPLIFICATION-SPEC.md` Q4's chosen
+ * default collapses the coach's separate Save-then-Publish steps into one Save button that the
+ * coach never sees the word "publish" behind; platform review still runs on the publish, it is
+ * just no longer a step the coach takes on their own. `saveCoachOfferDraft` and
+ * `publishCoachOfferDraft` stay available and unchanged for any caller that still wants the
+ * explicit two-step shape (the review-only guard in the offer editor and internal tooling do).
+ */
+export async function saveAndPublishCoachOffer(
+  tenantId: string,
+  input: {
+    actorId: string;
+    draftId?: string | null;
+    expectedContentHash?: string | null;
+    offer: unknown;
+  },
+  repository: OfferLayerRepository = createOfferLayerRepository(),
+): Promise<PublishedOfferResult> {
+  const { draft } = await saveCoachOfferDraft(tenantId, input, repository);
+  return publishCoachOfferDraft(tenantId, {
+    actorId: input.actorId,
+    draftId: draft.id,
+    expectedContentHash: draft.contentHash,
+  }, repository);
+}

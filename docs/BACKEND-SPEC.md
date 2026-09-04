@@ -765,6 +765,19 @@ create table commission_ledger ( id uuid pk, referral_id uuid references referra
 
 - **Draft/publish:** brain documents + offer layers + flow configs all carry version +
   published_at. Publish = atomic flip + audit + "publishing updates every agent instantly."
+- **One Save on the coach agent screen (added 2026-09-04):** `docs/SIMPLIFICATION-SPEC.md` Q4's
+  chosen default removes the coach-facing draft/publish split for the offer layer — one Save,
+  platform review still runs behind it, the coach never sees the word "publish".
+  `saveAndPublishCoachOffer` (`src/lib/offer/service.ts`) composes `saveCoachOfferDraft` and
+  `publishCoachOfferDraft` into one call against `POST /api/coach/offer/save-and-publish`, which
+  accepts the same body `PUT /api/coach/offer` does. The two-step `PUT /api/coach/offer` /
+  `POST /api/coach/offer/publish` routes are untouched for any caller still on the explicit shape.
+  This covers the offer layer (prices, the six qualification bounds, voice) specifically — the
+  qualification-question reorder/enable RPCs (`src/lib/repositories/coach-questions.ts`) and the
+  keyword-goal writes (`src/app/api/coach/keyword-goals`) remain separate audited resources with
+  their own RPCs; whichever UI wires the Agent screen's Save button decides whether to call all
+  three in one client-side action or keep them as separate saves per panel — nothing about their
+  backend shape blocks either choice.
 - **Test panel / Meet Your Agent:** same engine, `is_test=true` end-to-end; test rows NEVER join
   production analytics (every rollup filters `is_test=false`); sandbox contact/conversation
   auto-created per session; multi-turn (5–8) then soft-close + "add as eval case".
@@ -778,6 +791,36 @@ create table commission_ledger ( id uuid pk, referral_id uuid references referra
   booked, DQ w/ reasons, conversion %, avg time-to-book, funnel steps, keyword performance
   (keyword attribution captured at conversation create from first-touch trigger), response-rate
   per step. Platform rollup: MRR (Stripe), signups, churn, LTV, retention (Stripe events).
+- **Active leads, split by who is handling them (added 2026-09-04):**
+  `coach.active_leads_agent_handling` and `coach.active_leads_needs_you` partition the same
+  active-cohort population `coach.active_leads` counts (nonterminal `pipeline_stage`), bucketed by
+  each contact's most recent `conversations.status`. `needs_human`/`human` count as needs-you;
+  `agent`/`nurture`/`closed`/`opted_out` and no conversation at all count as agent-handling. The
+  two rows always sum to `coach.active_leads`; `loadCoachMeasurement`
+  (`src/lib/repositories/analytics.ts`) enforces that as a conservation check, the same shape as
+  the keyword-row conservation check below it. Added to `read_coach_measurement_pre_phase13` in
+  `supabase/migrations/20261012000006_active_leads_agent_split.sql` (`COACH_METRIC_KEYS` is now 22
+  rows, not 20).
+- **Keyword table sender count (added 2026-09-04):** each keyword row now carries `senderCount`,
+  the distinct-contact count behind that keyword's conversations (not a row count — one lead who
+  opens the same keyword twice counts once). A surface renders that row's rates only when
+  `senderCount` is at least ten; `conversations` stays the wrong denominator for that gate because
+  it can double-count a sender. Added to `app.phase13_keyword_measurement` in
+  `supabase/migrations/20261012000007_keyword_sender_count.sql` — this is the function whose output
+  `read_coach_measurement`'s `keywords` key actually returns (it overwrites, rather than merges
+  with, `read_coach_measurement_pre_phase13`'s own keyword grouping; see that migration's header
+  comment for the discrepancy this surfaced with the round-1 gap audit).
+- **Advisory objection classification hook (added 2026-09-04, no model wired yet):**
+  `unmatched_objections` carries three new nullable columns —
+  `suggested_brain_objection_id`, `suggestion_confidence`, `suggestion_model_version`,
+  `suggested_at` — written only through `write_unmatched_objection_suggestion`
+  (`supabase/migrations/20261012000008_unmatched_objection_suggestion.sql`) and never touching the
+  confirmed `brain_objection_id`/`resolved_by`/`resolved_at` fields an admin sets on resolving a
+  row. Every objection stat counted anywhere still reads only the confirmed fields, so a
+  suggestion can never move a number. `src/lib/brain/objection-classifier.ts` defines the
+  `ObjectionClassifier` interface, a `noopObjectionClassifier` default that always declines, and
+  `suggestObjectionMatch` to run a classifier and write its result. Nothing calls it yet — no
+  conversation-close hook exists in this repo to call it from.
 - **CSV/JSON export:** every admin/coach table gets `GET /api/export/:resource?format=csv|json`
   scoped by RLS; streams; audit-logged.
 - **The preview fork:** `SETTERFI_PLATFORM_PREVIEW_DATA` does not filter the analytics read, it

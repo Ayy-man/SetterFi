@@ -52,6 +52,17 @@ export type CoachResponseRow = {
 export type CoachKeywordRow = {
   keyword: string;
   conversations: number;
+  /**
+   * Distinct senders (contacts) behind this keyword's conversations, not a row count -- one lead
+   * who opened the keyword twice counts once here even though `conversations` counts twice. This
+   * is the honest denominator for rate suppression under a minimum sample: a surface renders this
+   * row's rates only when senderCount is at least ten, never `conversations`.
+   *
+   * Optional in the type only for source compatibility with fixtures written before this field
+   * existed -- `loadCoachMeasurement` always populates it from the RPC, which requires it on every
+   * row it accepts (see the exact-key check in this file).
+   */
+  senderCount?: number;
   qualifiedContacts: number;
   respondedConversations: number;
   bookedContacts: number;
@@ -246,6 +257,26 @@ export async function loadCoachMeasurement(
     throw new MeasurementEvidenceError("COACH_RESTRICTED_METRIC_RETURNED");
   }
 
+  // Active leads split: the agent-handling and needs-you counts partition the exact same
+  // active-cohort population coach.active_leads counts, so they always sum to it -- the same
+  // conservation shape as the keyword table below, checked here rather than trusted from the RPC.
+  const activeLeadsMetric = metrics.find((metric) => metric.metricKey === "coach.active_leads");
+  const activeAgentHandlingMetric = metrics.find(
+    (metric) => metric.metricKey === "coach.active_leads_agent_handling",
+  );
+  const activeNeedsYouMetric = metrics.find(
+    (metric) => metric.metricKey === "coach.active_leads_needs_you",
+  );
+  if (
+    activeLeadsMetric?.value === null
+    || activeAgentHandlingMetric?.value === null
+    || activeNeedsYouMetric?.value === null
+    || (activeAgentHandlingMetric?.value ?? 0) + (activeNeedsYouMetric?.value ?? 0)
+      !== activeLeadsMetric?.value
+  ) {
+    throw new MeasurementEvidenceError("COACH_MEASUREMENT_ACTIVE_LEADS_CONSERVATION_FAILED");
+  }
+
   const funnel = evidenceArray(raw.funnel, "COACH_MEASUREMENT_FUNNEL_INVALID").map((value) => {
     const row = evidenceObject(value, [
       "stepKey", "stepLabel", "enteredContacts", "completedContacts",
@@ -285,10 +316,14 @@ export async function loadCoachMeasurement(
 
   const keywords = evidenceArray(raw.keywords, "COACH_MEASUREMENT_KEYWORDS_INVALID").map((value) => {
     const row = evidenceObject(value, [
-      "keyword", "conversations", "qualifiedContacts", "respondedConversations",
+      "keyword", "conversations", "senderCount", "qualifiedContacts", "respondedConversations",
       "bookedContacts", "dataLabel",
     ], "COACH_MEASUREMENT_KEYWORDS_INVALID");
     const conversations = coachCount(row.conversations, "COACH_MEASUREMENT_KEYWORDS_INVALID");
+    const senderCount = coachCount(row.senderCount, "COACH_MEASUREMENT_KEYWORDS_INVALID");
+    if (senderCount > conversations) {
+      throw new MeasurementEvidenceError("COACH_MEASUREMENT_KEYWORDS_INVALID");
+    }
     const qualifiedContacts = coachCount(row.qualifiedContacts, "COACH_MEASUREMENT_KEYWORDS_INVALID");
     const respondedConversations = coachCount(
       row.respondedConversations,
@@ -301,6 +336,7 @@ export async function loadCoachMeasurement(
     return {
       keyword: evidenceString(row.keyword, "COACH_MEASUREMENT_KEYWORDS_INVALID"),
       conversations,
+      senderCount,
       qualifiedContacts,
       respondedConversations,
       bookedContacts,

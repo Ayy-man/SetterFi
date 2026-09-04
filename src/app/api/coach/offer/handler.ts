@@ -13,6 +13,7 @@ import {
   isRouteRecord,
   PHASE2_NO_STORE_HEADERS,
 } from "@/app/api/admin/brain/import/handler";
+import { COACH_OFFER_KEYS } from "./keys";
 
 type OfferRouteDependencies = {
   enabled(): boolean;
@@ -31,30 +32,6 @@ type OfferRouteDependencies = {
     },
   ): ReturnType<typeof saveCoachOfferDraft>;
 };
-
-const COACH_OFFER_KEYS = [
-  "assets",
-  "bookingHorizonDays",
-  "bookingMode",
-  "brandVoice",
-  "cadencePurposes",
-  "creditMin",
-  "creditRepair",
-  "fundingGoalMaxCents",
-  "fundingGoalMinCents",
-  "monthlyRevenueMinCents",
-  "prices",
-  "products",
-  "programDescription",
-  "programName",
-  "proof",
-  "refundPosture",
-  "resultsTimelineMaxDays",
-  "resultsTimelineMinDays",
-  "voiceFollowupAnswer",
-  "voiceObjectionAnswer",
-  "voiceStyleAnswer",
-] as const;
 
 function isCoach(actor: RouteActor | null): actor is RouteActor {
   return actor?.role === "coach" || actor?.role === "coach_member";

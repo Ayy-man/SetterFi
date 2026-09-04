@@ -4,6 +4,7 @@ import { OFFER_BOUNDS, OFFER_PRODUCTS } from "@/lib/brain/contracts";
 import {
   hashCoachOffer,
   publishCoachOfferDraft,
+  saveAndPublishCoachOffer,
   saveCoachOfferDraft,
 } from "@/lib/offer/service";
 import type {
@@ -235,6 +236,33 @@ describe("offer service", () => {
     });
     expect(store.offers.filter((offer) => offer.status === "published")).toHaveLength(1);
     expect(store.offers.find((offer) => offer.id === first.offer.id)?.status).toBe("superseded");
+  });
+
+  it("saves and publishes in one call, with no draft left as the coach-visible state", async () => {
+    // Q4's chosen default (docs/SIMPLIFICATION-SPEC.md): one Save, no draft step the coach takes
+    // on their own. This composes saveCoachOfferDraft then publishCoachOfferDraft against the
+    // just-saved draft's own id and hash, so the caller never handles an intermediate draft id.
+    const store = emptyStore();
+    const result = await saveAndPublishCoachOffer(TENANT, {
+      actorId: ACTOR, draftId: null, expectedContentHash: null, offer: validOffer,
+    }, memoryRepository(store));
+
+    expect(result.offer.status).toBe("published");
+    expect(result.receipt.actionKey).toBe("offer.published");
+    expect(store.saves).toBe(1);
+    expect(store.offers.filter((offer) => offer.status === "draft")).toHaveLength(0);
+    expect(store.offers.filter((offer) => offer.status === "published")).toHaveLength(1);
+
+    // A second save-and-publish edits the same published offer's next version, the same way an
+    // explicit save-then-publish already does.
+    const edited = { ...validOffer, programName: "Synthetic growth program v2" };
+    const second = await saveAndPublishCoachOffer(TENANT, {
+      actorId: ACTOR, draftId: null, expectedContentHash: null, offer: edited,
+    }, memoryRepository(store));
+    expect(second.offer.version).toBe(result.offer.version + 1);
+    expect(second.offer.programName).toBe("Synthetic growth program v2");
+    expect(store.offers.filter((offer) => offer.status === "published")).toHaveLength(1);
+    expect(store.offers.find((offer) => offer.id === result.offer.id)?.status).toBe("superseded");
   });
 
   it("hashes canonical content independently of bounded child ordering", () => {
