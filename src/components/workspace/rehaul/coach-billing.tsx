@@ -520,7 +520,7 @@ function CorrectionCard({
               period has nothing to correct, and an empty box over a Send button would invite a
               request the route refuses.
             */
-            <p className="m-0 max-w-[24ch] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]">
+            <p className="m-0 max-w-[var(--measure-caption)] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]">
               No billed calls are recorded for this period yet.
             </p>
           )}
@@ -616,7 +616,7 @@ function AttendanceCard({
       ) : (
         <div className="coach-panel__body">
           <p
-            className="m-0 max-w-[34ch] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]"
+            className="m-0 max-w-[var(--measure-deck)] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]"
             data-slot="billing-attendance-absent"
           >
             {snapshot.isDemo
@@ -828,7 +828,7 @@ export function CoachBillingRehaul({
       <div className="flex flex-wrap items-end gap-[24px]">
         <div className="min-w-0">
           <h1 className={H1_CLASS}>Billing</h1>
-          <p className={`m-0 mt-[12px] max-w-[76ch] ${COACH_LEAD_CLASS}`}>
+          <p className={`m-0 mt-[12px] max-w-[var(--measure-wide)] ${COACH_LEAD_CLASS}`}>
             What you pay, what you have used, and how the calls went.
           </p>
         </div>

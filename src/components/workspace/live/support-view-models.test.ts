@@ -70,9 +70,26 @@ describe("support view models", () => {
     expect(view.assignedLabel).toBe("Unassigned");
     expect(view.dataLabel).toBe("Test");
     expect(view.messages[0]).not.toHaveProperty("internal");
+    /*
+     * The source half of the same rule: the page a coach reads must not be able to reach a
+     * staff-only field, whatever the view model does with the row it is handed.
+     *
+     * The positive control was `resource="coach-support-messages"`, the audited write the page's
+     * composer filed. That export left with the composer: the 2026-09-04 rebuild reduced this
+     * surface to the guides list and a read-only record of past requests, so the page files no
+     * writes at all and there is no audited resource left to name. Re-adding one to keep a control
+     * green would be the guard editing the product.
+     *
+     * The type is the honest control instead, and a stricter one. `CoachSupportThreadRead` has no
+     * internal-note field, so a page that reads it cannot render one by mistake; a page that
+     * reached for `PlatformSupportThreadRead` could, which is why its absence is asserted here
+     * rather than left to the negative above. Together they say the file reads the coach type,
+     * reads only the coach type, and touches none of the three spellings of a staff-only note.
+     */
     const source = readFileSync(new URL("./coach-support.tsx", import.meta.url), "utf8");
     expect(source).not.toMatch(/\.internal\b|internal_note|resource="support-messages"/);
-    expect(source).toContain('resource="coach-support-messages"');
+    expect(source, "the coach page reads the coach type").toContain("CoachSupportThreadRead");
+    expect(source, "and no admin one").not.toContain("PlatformSupportThreadRead");
   });
 
   it("retains staff-only internal evidence only in the platform projection", () => {

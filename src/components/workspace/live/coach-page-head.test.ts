@@ -67,8 +67,16 @@ describe("the coach's page head", () => {
 
     expect(modules.length, "the coach-density walk found nothing, so the rule below is vacuous")
       .toBeGreaterThan(20);
-    expect(modules).toContain("src/components/workspace/live/coach-integrations.tsx");
-    expect(modules).toContain("src/app/onboarding/sms-eligibility/page.tsx");
+    // Repointed from `coach-integrations.tsx`, which fell out of the coach-only set when
+    // `/coach/get-started` and `/coach/integrations` both moved to `rehaul/coach-setup.tsx`: the
+    // old surface is still on disk and no coach route reaches it, so it can no longer stand for
+    // "a file everyone agrees is a coach surface". Its replacement can.
+    expect(modules).toContain("src/components/workspace/rehaul/coach-setup.tsx");
+    // The onboarding half of the walk, repointed from `onboarding/sms-eligibility/page.tsx`. That
+    // route is a four-line wrapper around `SmsStep` now and writes no `<OnboardingStage>`, so it
+    // stopped being a density root and could no longer stand for "the walk reaches onboarding".
+    // The stage component itself is what makes those routes coach-density in the first place.
+    expect(modules).toContain("src/components/onboarding/onboarding-stage.tsx");
 
     // The detector, proved on a file that does import the console head. `page-header.tsx` is
     // reached by the admin routes, so it is not in the coach-only set and cannot be the control.

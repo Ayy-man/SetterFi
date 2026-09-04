@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CoachScale } from "@/components/coach-scale";
 import { kitButtonClass, Prose } from "@/components/kit/atomics";
 import { ChevronRight } from "@/components/kit/icons";
-import { parseAppClaims, type UserRole } from "@/lib/auth/claims";
+import { parseAppClaims, type UserRole, workspaceForRole } from "@/lib/auth/claims";
 import { authMode } from "@/lib/auth/mode";
 import { recoveryLinks } from "@/lib/auth/recovery-links";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -51,13 +51,21 @@ async function sessionRole(): Promise<UserRole | null> {
  * No panel and no fill is spent on the page beyond the single primary action: a dead end is the
  * correct resting state for the One Fill Rule, and boxing an apology in a card was the old page
  * giving weight to the part of the screen that carries none.
+ *
+ * **A coach sees less of it, and that is the 2026-09-04 coach board rather than a preference.**
+ * `NotFound.dc.html` draws one sentence and one button, with no code on the page at all. The two
+ * things it leaves out are aimed at the reader this surface exists for: a coach over 55 who
+ * mistyped a URL does not know what a 404 is, so the figure is at best furniture and at worst the
+ * page's most prominent element saying nothing they can use; and a second way out on a dead end is
+ * a choice to make before they can leave. Both stay for admin and affiliate, where the reader
+ * reads status codes for a living and the second link goes somewhere they use. The role is read
+ * once, here, so the two omissions cannot drift apart or be applied to the wrong audience.
  */
 export default async function NotFound() {
   const mode = authMode();
-  const [primary, ...secondary] = recoveryLinks({
-    mode,
-    role: mode === "supabase" ? await sessionRole() : null,
-  });
+  const role = mode === "supabase" ? await sessionRole() : null;
+  const [primary, ...secondary] = recoveryLinks({ mode, role });
+  const isCoach = workspaceForRole(role) === "coach";
 
   return (
     <CoachScale
@@ -72,12 +80,14 @@ export default async function NotFound() {
         happens to sit near the drawn value is how two screens that must agree drift apart.
       */}
       <div className="flex flex-col items-center gap-[22px] text-center">
-        <span
-          aria-hidden="true"
-          className="font-[family-name:var(--font-mono)] text-[76px] leading-[var(--coach-figure-leading)] font-[500] tracking-[var(--coach-figure-tracking)] text-[color:var(--faint)]"
-        >
-          404
-        </span>
+        {isCoach ? null : (
+          <span
+            aria-hidden="true"
+            className="font-[family-name:var(--font-mono)] text-[76px] leading-[var(--coach-figure-leading)] font-[500] tracking-[var(--coach-figure-tracking)] text-[color:var(--faint)]"
+          >
+            404
+          </span>
+        )}
 
         {/*
           38px, not the coach page title's 46. `NotFound.dc.html` draws it smaller than a page
@@ -130,7 +140,15 @@ export default async function NotFound() {
             */}
             <ChevronRight aria-hidden className="size-[20px] shrink-0" />
           </Link>
-          {secondary.map((link) => (
+          {/*
+            One button for a coach. `recoveryLinks` still returns their inbox as a second way out
+            and it is deliberately not drawn: the board gives this screen one action, and the
+            destination it drops is one pill away from the destination it keeps. The list is
+            filtered here rather than in `recoveryLinks` because that function answers "where can
+            this session go", which is a fact about the session, and this is a decision about how
+            much of the answer one screen should draw.
+          */}
+          {(isCoach ? [] : secondary).map((link) => (
             <Link
               className={kitButtonClass({
                 className: "h-[52px] rounded-[12px] bg-[var(--well)] px-[24px] text-[17px] font-[500] no-underline",

@@ -49,9 +49,15 @@ const STATUS_TONES: Record<SupportStatus, StateTone> = {
   resolved: "good",
 };
 
-/* The absence line the canvas specifies: 20px/500 muted, capped short, and the card ends after it. */
+/*
+ * The absence line the canvas specifies: 20px/500 muted, capped short, and the card ends after it.
+ *
+ * The cap is `--measure-deck` rather than the 34ch literal it was written as. `measures.test.ts`
+ * refuses a hand-rolled `max-w-[Nch]` so the role owns the number and not the file, which is the
+ * same correction the Billing lane recorded. This one is lossless: the token is 34ch today.
+ */
 const ABSENCE_CLASS =
-  "m-0 max-w-[34ch] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]";
+  "m-0 max-w-[var(--measure-deck)] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]";
 const MESSAGE_BODY_CLASS =
   "m-0 mt-[8px] max-w-[var(--measure-prose)] whitespace-pre-wrap text-[16px] leading-[1.6] text-[color:var(--body)]";
 

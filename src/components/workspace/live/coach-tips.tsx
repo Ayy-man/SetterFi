@@ -76,9 +76,16 @@ const ACCENT_FILL_CLASS =
 const WATCH_LINK_CLASS =
   "inline-flex min-h-[44px] items-center gap-[10px] px-[2px] text-[16px] leading-[1.4] font-medium "
   + "text-[color:var(--accent-text)] no-underline hover:underline";
-/* The absence line the canvas specifies: 20px/500 muted, capped short, and the card ends after it. */
+/*
+ * The absence line the canvas specifies: 20px/500 muted, capped short, and the card ends after it.
+ *
+ * The cap is `--measure-caption` rather than the 24ch literal it was written as, which widens it to
+ * the token's 28ch. `measures.test.ts` refuses a hand-rolled `max-w-[Nch]` precisely so a role's
+ * width is decided once rather than per file, and four extra characters on a one-line absence is
+ * the cost of that. Same correction the Billing lane recorded against the same drawing.
+ */
 const ABSENCE_CLASS =
-  "m-0 max-w-[24ch] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]";
+  "m-0 max-w-[var(--measure-caption)] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]";
 
 /* The sentences this screen would otherwise print as help text, handed to the eye instead. */
 const TIPS_EYE_COPY =

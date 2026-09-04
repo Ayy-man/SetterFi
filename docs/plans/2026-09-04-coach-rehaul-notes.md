@@ -258,6 +258,11 @@ Four things and nothing else, in the artboard's order.
   is untouched on the route.
 - **Dates are the product's US formats**, not the artboard's "21 Aug to 20 Sep". A second date
   vocabulary on one screen is worse than a date style nobody drew.
+- **The three measures read their tokens.** `src/app/measures.test.ts` refuses a hand-rolled
+  `max-w-[Nch]`, so the lead sentence, the deck caption and the absence line take
+  `--measure-wide`, `--measure-deck` and `--measure-caption`. Two of the three shift a little off
+  the artboard as a result, 76ch to 72ch and 24ch to 28ch, which is the guard's point: the role
+  owns the number, not the drawing.
 - **The audit caption is one line, not eight.** `LoggedButton` prints a shield caption under every
   button, which on a four-row question is the "Required, sixteen times" defect from note 4 of the
   playbook. The attendance verbs are plain buttons and the card's footer carries the counted
@@ -394,6 +399,20 @@ over the filtered set rather than the visible page.
 So the control that guard file uses to prove it read the coach surface at all wants repointing at
 another kit component the coach side still mounts. That is an integration call, and the two guard
 files were left alone.
+
+### The export inventory, repointed
+
+`rendered-tables.test.ts` held the Leads export guard against `leads-surface.tsx` and
+`coach-contacts.tsx`, and both stayed green while reading markup no coach can reach any more. That
+is the vacuous case the guard exists to prevent, in its quietest form: three passing assertions
+about a retired file, and the export that actually ships checked by nothing. It now reads
+`rehaul/coach-leads.tsx`, asserts the routes mount it and mount neither retired file, and asserts
+the export is bound to `visible`, the complete filtered set, rather than the 25-row slice the table
+draws. Retiring the two files themselves belongs to whoever owns them.
+
+Leads owns no row in `LIVE_RENDERED_TABLE_EXPORTS` and should not: that inventory is the
+server-backed `ExportMenu`s, and this one is `mode="local"` over rows the page already holds. The
+guard now asserts that absence rather than leaving it to chance.
 
 ### Backend, for Codex round two
 
@@ -928,10 +947,15 @@ shows only the newest thread, and a coach with more than one would otherwise los
 - **Not found is served by `src/app/not-found.tsx`, not by a coach segment file.** A nested
   `not-found.tsx` under `(workspace)/coach` only renders when something in that segment calls
   `notFound()`, and nothing does, so the one written for this round was dead code and was deleted.
-  The root file already draws the board's heading and sentence at coach density and is role-aware,
-  but it prints a mono `404` above them and offers two recovery links where the board asks for no
-  code and one button. It serves three roles and is outside this lane's ownership, so the change is
-  left as a decision: gate the figure and the second link on the coach role.
+  The root file already draws the board's heading and sentence at coach density and is role-aware.
+  Ruled on 2026-09-04: it now reads the role once and gives a coach the board exactly, one sentence
+  and one button, while admin and affiliate keep the mono figure and their second recovery link.
+  The two omissions are aimed at the reader this surface exists for. A coach who mistyped a URL
+  does not read status codes, so a 76px `404` is the page's most prominent element saying nothing
+  they can use; and a second way out on a dead end is a choice to make before they can leave, when
+  the destination it drops is one pill away from the destination it keeps. `recoveryLinks` is
+  unchanged and still returns both, because that function answers where a session may go, which is
+  a fact about the session, and how much of the answer to draw is a decision about one screen.
 
 **Backend gaps, for Codex round 2.**
 
@@ -986,6 +1010,100 @@ Screenshots in the round's scratchpad: `chrome-settings-1440.png`, `chrome-setti
 `chrome-tips-1440.png`, `chrome-tips-390.png`, `chrome-help-1440.png`, `chrome-help-390.png`,
 `chrome-notfound-1440.png`, `chrome-notfound-390.png`, `chrome-accountmenu-1440.png`,
 `chrome-accountmenu-390.png`, `chrome-bubble-open-1440.png`, `chrome-bubble-open-390.png`.
+
+### The queue count on the active pill
+
+Reported from the Inbox lane's screenshot: the Inbox count kept its amber tone when its own pill
+went active, and amber does not survive an accent fill.
+
+**Measured, before.** `--warning-wash` is a tenth-opacity film, so on a filled pill the accent shows
+through and the amber number lands on blue. The count on the active pill read **1.02:1** under the
+light palette and **2.42:1** under the dark one. On an idle pill the same chip reads 4.64:1, which
+is the artboard's intent and is untouched.
+
+**What it is now.** The active chip inverts: an `--accent-active` face, a stop below the fill's own
+darkest, carrying the number in `--on-accent`, with an `rgba(255,255,255,0.45)` inset hairline for
+the edge. That measures **8.83:1** light and **7.24:1** dark, confirmed in Chrome as near-white on
+`lab(29.88 12.83 -53.32)` at 1440 and 390 in both themes. The hairline is doing real work: under the
+dark palette `--accent-active` is exactly the fill's bottom stop, so the face alone would draw no
+edge at all.
+
+**Why `--on-accent` and not a dark number on a white chip**, which is the more obvious inversion.
+`tokens-contrast.test.ts` discovers every role used as a text colour anywhere under `src/` and
+requires both drenched stylesheets to redeclare it for the dark ground. Naming `--accent-active` as
+a text colour pulled it into that set and failed ten assertions against two stylesheets that are
+frozen this round. Of the foreground roles both sheets already carry, `--on-accent` is the only one
+that does not flip between the palettes: `--accent-text` is a light blue under the dark palette and
+would have vanished on a white chip.
+
+**The phone bar was filled too, against its own classes, and that is now fixed in the sheet.** The
+chip was going to keep amber below `sm`, on this file's claim that the phone washes its active tab
+at 7% rather than filling it. Chrome disagreed: at 390 the active tab's ground was the accent
+gradient. `coach.css` set `background: var(--accent-fill)` on `a[aria-current="page"]` with no
+media query around it, and that shorthand sets a background *image*, which paints over
+`max-sm:bg-[var(--accent-wash)]!` however important the colour underneath is.
+
+That cost more than the badge. The phone tab's own label takes `--accent-text` with an important
+flag, which does win on `color`, so the active tab drew a dark blue label on the accent gradient at
+**1.45:1**, on the word naming the destination the coach was standing on. Ruled on 2026-09-04: the
+declaration moved inside the sheet's existing `@media (min-width: 640px)` block, which is what every
+class in `coach-pillbar.tsx` already assumed. Re-measured at 390: the active tab's label is
+**6.72:1** light and **11.37:1** dark.
+
+**So the inverted chip is the desktop bar's alone.** On the washed ground it is not a contrast
+failure, the number reads at 8.85:1 there, but a solid navy disc in a 56px tab whose own ground is
+near-white separates from it at 7.6:1 and becomes the heaviest mark in the bar, which is a count
+shouting over the five labels it sits among. `CoachHomeMobile.dc.html:165` draws amber, and the
+artboard is right about it once the tab underneath is the wash it was always meant to be.
+
+**With one token's difference.** The phone's active chip takes `--warning-body` rather than
+`--warning-text`, and that is the only thing on the element that is not simply the idle treatment.
+`--warning-text` is walked to clear 4.5:1 on its own wash over the canvas, which is the worst case
+anywhere else in the product; here that wash sits on the active tab's own 7% accent wash, two films
+deep, and it measured **4.24:1**. `--warning-body` is the darker amber of the same family and
+measures **5.17:1** on the doubled ground, with the dark palette at **7.29:1**.
+
+**The phone count is 14px now**, up from 11.5. The artboard's smaller figure was carried over as a
+metric of the shorter tab bar, but it is the same count read by the same eyes on the surface that
+exists because those eyes could not read the console. It measures 14px inside a 56px tab at 390
+with the five labels intact and the page still at `scrollWidth` 390. That retires one of the two
+sub-floor findings this lane reported; the 13px tab label is the other and is still open.
+
+Screenshots: `pillbadge-1440-light.png`, `pillbadge-1440-dark.png`, `pillbadge-390-light.png`,
+`pillbadge-390-dark.png`.
+
+### Four guards the combined tree caught, and one Base UI warning
+
+- **`measures.test.ts`** refuses a hand-rolled `max-w-[Nch]` so a role's width is decided once
+  rather than per file. The absence line on Guides took `--measure-deck`, which is lossless at
+  34ch, and the one on Tips took `--measure-caption`, which widens it from 24ch to the token's 28.
+  Same correction the Billing lane recorded against the same drawing. The two lines are the same
+  role and now sit on different tokens, which follows the width mapping literally; unifying them on
+  `--measure-caption` is a one-line change if that is wanted.
+- **`accent-fill-spelling.test.ts`** pinned `coach-support.tsx` as a carrier of the fill. Guides has
+  no verb left to spend one on, and re-adding a fill to keep a positive control green would be the
+  guard editing the product, so the row moved to the coach's Settings Save. The launcher's row
+  stayed put: the bubble spends its fill on Send now, same file, same spelling.
+- **`app-shell.test.tsx`** looked for the launcher under its old accessible name in four places and
+  asserted a "Need a hand, Marcus?" greeting the rebuild removed. The board heads the panel with
+  the name of the person answering instead, so asking readers their own name back was the sentence
+  the artboard spent on saying who would reply. The name is still needed and still passed: it
+  attributes the coach's own side of the thread, so the same prop is checked through what it labels
+  now rather than through copy that no longer exists.
+- **`support-view-models.test.ts`** used the composer's audited write, `coach-support-messages`, as
+  the positive control proving the coach page reads something at all. That export left with the
+  composer: the page files no writes now, so there is no audited resource left to name, and adding
+  one back to keep a control green would be the guard editing the product. The type is the honest
+  control and a stricter one. `CoachSupportThreadRead` has no internal-note field, so a page reading
+  it cannot render one by mistake, while a page reaching for `PlatformSupportThreadRead` could. Both
+  are asserted now, so the file is pinned to reading the coach type, reading only the coach type,
+  and touching none of the three spellings of a staff-only note.
+- **`utility-collision`, `coach-page-head` and `coach-surface-fills`** name no row of this lane's
+  and pass unchanged.
+- **The sign-out menu item now declares `nativeButton`.** Base UI's menu item renders a `<div>` and
+  synthesises the button behaviour it needs; handed a real `<button>` through `render` without
+  being told, it warns in the dev overlay and applies both sets. Sign-out stays a form submit,
+  which is the point: it is a POST, not a link. Confirmed with the menu open and the console clean.
 
 ## Home, what shipped
 

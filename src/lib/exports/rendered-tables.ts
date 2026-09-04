@@ -59,22 +59,11 @@ export const LIVE_RENDERED_TABLE_EXPORTS = [
     "businessName", "accountStatus", "commissionEarnedUsd",
   ]),
   renderedTable(`${live}/coach-keyword-goals.tsx#keyword-goals`, "keyword-goals", [], "created_desc"),
-  /*
-   * Six rows left with their files, and every export they carried came back.
-   *
-   * `coach-conversations.tsx`, `coach-measurement.tsx` and `coach-offer.tsx` were deleted in the
-   * rehaul, and for a while only the keyword table returned with its export. The other five are
-   * listed below among the rehaul entries: `conversations` on `rehaul/coach-inbox.tsx`, and
-   * `offer-prices`, `offer-proof`, `offer-assets` and `coach-top-objections` on
-   * `rehaul/coach-agent.tsx`. No server export route in this set is without a control that calls
-   * it.
-   */
   // Phase 8
   renderedTable(`${live}/admin-support.tsx#support-messages`, "support-messages", ["threadId"], "created_desc"),
   renderedTable(`${live}/admin-support.tsx#support-threads`, "support-threads", ["book", "status"], "created_desc"),
   renderedTable(`${live}/admin-audit-log.tsx#audit-log`, "audit-log", ["action"], "created_desc"),
   renderedTable(`${live}/success-client-book.tsx#success-client-book`, "success-client-book", ["book"], "created_desc"),
-  renderedTable(`${live}/coach-support.tsx#coach-support-messages`, "coach-support-messages", ["threadId"], "created_desc"),
   renderedTable(`${live}/alert-settings.tsx#notification-rules`, "notification-rules", [], "event_asc", [
     "event", "scope", "bell", "email", "required",
   ]),
@@ -93,14 +82,20 @@ export const LIVE_RENDERED_TABLE_EXPORTS = [
   renderedTable(`${rehaul}/affiliate-home.tsx#affiliate-referrals`, "affiliate-referrals", [], "created_desc", [
     "businessName", "accountStatus", "commissionEarnedUsd",
   ]),
-  renderedTable(`${rehaul}/coach-agent.tsx#coach-top-objections`, "coach-top-objections", [], "created_desc"),
-  renderedTable(`${rehaul}/coach-agent.tsx#offer-assets`, "offer-assets", [], "created_desc"),
-  renderedTable(`${rehaul}/coach-agent.tsx#offer-prices`, "offer-prices", [], "created_desc"),
-  renderedTable(`${rehaul}/coach-agent.tsx#offer-proof`, "offer-proof", [], "created_desc"),
-  renderedTable(`${rehaul}/coach-dashboard.tsx#coach-measurement-keywords`, "coach-measurement-keywords", ["from", "to", "window"], "created_desc", [
+  /*
+   * The 2026-09-04 coach rebuild left two server exports on the coach side: the keyword table and
+   * the six-month bars on Home, both split out of `coach-dashboard.tsx`. The conversations export
+   * left with the Inbox rebuild (the board draws none), the four offer and objection exports left
+   * with the Agent rebuild (one page, one Save, no tables), and the support-message export left
+   * with the Guides page becoming a read-only record. Leads exports locally over rows the page
+   * already holds, so it has no row here by design; `rendered-tables.test.ts` pins that.
+   */
+  renderedTable(`${rehaul}/coach-home-keywords.tsx#coach-measurement-keywords`, "coach-measurement-keywords", ["from", "to", "window"], "created_desc", [
     "keyword", "conversations", "qualifiedContacts", "respondedConversations", "bookedContacts", "optInDenominator", "qualifiedDenominator", "bookedDenominator", "dataLabel",
   ]),
-  renderedTable(`${rehaul}/coach-inbox.tsx#conversations`, "conversations", ["search"], "last_activity_desc"),
+  renderedTable(`${rehaul}/coach-home-months.tsx#coach-lead-composition`, "coach-lead-composition", [], "created_desc", [
+    "month", "label", "total", "qualified", "active", "disqualified", "partial", "dataLabel",
+  ]),
   renderedTable(`${rehaul}/owner-audit.tsx#audit-log`, "audit-log", ["action", "search"], "created_desc", [
     "action", "actor", "target", "reason", "at", "testData",
   ]),

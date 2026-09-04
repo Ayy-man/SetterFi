@@ -239,8 +239,10 @@ function passedIntoAContainer(sources: Map<string, string>, components: Map<stri
         for (const query of [...value.matchAll(QUERY)]) {
           // Only a query the merged container would *answer* is a collision. A named query
           // resolves past it to the container it names, which is exactly why naming is the fix:
-          // `coach-integrations.tsx` hands `Surface` an `@xl/page:` class and is fine, because
-          // `/page` is declared above it and `Surface`'s own container is anonymous.
+          // `coach-integrations.tsx` handed `Surface` an `@xl/page:` class and was fine, because
+          // `/page` is declared above it and `Surface`'s own container is anonymous. That file was
+          // deleted on 2026-09-04; the example is kept because it is the clearest statement of the
+          // rule, not because the site still exists.
           const name = query[1] ?? query[2] ?? "";
           if (declared.has(name)) found.push(`${file} <${component} className="${query[0]}...">`);
         }
@@ -334,10 +336,21 @@ describe("container queries in the tree", () => {
     hides everything after the first failure.
   */
   it("scanned a tree that actually has container queries in it", () => {
-    // Not a smoke test: every assertion below is over a filtered list, and an empty scan satisfies
-    // all of them. The tree carried ~90 queries when this was written.
+    /*
+      Not a smoke test: every assertion below is over a filtered list, and an empty scan satisfies
+      all of them. The tree carried ~90 queries when this was written.
+
+      The `ok` bound was 30 and is 25, re-measured 2026-09-04. `coach-integrations.tsx` was deleted
+      that day when `/coach/get-started` and `/coach/integrations` both moved to
+      `rehaul/coach-setup.tsx`, and it was a heavy container-query site -- the comment on the
+      collision scan above still cites its `@xl/page:` class as the worked example of a named query
+      resolving past a merged container. Removing one 1936-line surface took the count to exactly
+      30, which is a census moving under a constant rather than the rule weakening: both numbers
+      here are dated readings of the tree's size, and what they protect is that the scan is not
+      empty. The collision and no-container rules below are untouched and still fail on one site.
+    */
     expect(sites.length).toBeGreaterThan(60);
-    expect(sites.filter((site) => site.kind === "ok").length).toBeGreaterThan(30);
+    expect(sites.filter((site) => site.kind === "ok").length).toBeGreaterThan(25);
   });
 
   /**

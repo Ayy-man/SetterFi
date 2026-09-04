@@ -151,9 +151,16 @@ const DASHED_ADD_CLASS =
   "flex h-[48px] w-full items-center justify-center gap-[10px] rounded-[9px] border " +
   "border-dashed border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[16px] font-medium " +
   "text-[color:var(--accent-text)] hover:bg-[var(--accent-wash-strong)]";
-const FIELD_CLASS =
+/*
+ * The field shell carries no font size, so a field that sets its own does not spell `font-size`
+ * twice in one class list and leave the winner to source order. The money input is the one that
+ * does: an amount is a figure and reads at 20px in the mono face, while every other field on the
+ * page is body copy and takes `FIELD_CLASS`. `utility-collision.test.ts` holds this.
+ */
+const FIELD_SHELL_CLASS =
   "h-[48px] min-w-0 rounded-[9px] border border-[var(--line-input)] bg-[var(--card)] px-[14px] " +
-  "text-[length:var(--coach-body)] text-[color:var(--ink)]";
+  "text-[color:var(--ink)]";
+const FIELD_CLASS = `${FIELD_SHELL_CLASS} text-[length:var(--coach-body)]`;
 /**
  * The kit select trigger, re-cut to the coach's control size and sized to its own content.
  *
@@ -165,6 +172,14 @@ const SELECT_TRIGGER_CLASS =
   "h-[48px] w-auto min-w-0 gap-[10px] rounded-[9px] border-[var(--line-input)] " +
   "bg-[var(--well)] px-[16px] text-[length:var(--coach-body)] font-medium text-[color:var(--ink)]";
 const MONO_CLASS = "font-mono [font-variant-numeric:tabular-nums_lining-nums]";
+
+/*
+ * The absence sentence: a missing figure stated in words, in the figure's own slot. Written once
+ * because seven slots on this page say it, and set on `--measure-caption` because it is a caption
+ * beside an empty card, not a paragraph. `measures.test.ts` holds every measure to a token.
+ */
+const ABSENCE_CLASS =
+  "m-0 max-w-[var(--measure-caption)] text-[20px] font-medium text-[color:var(--muted)]";
 
 /** The one state pill this page draws: a card's face saying whether the coach has set it. */
 function StatePill({ set, label }: { set: boolean; label: string }) {
@@ -1050,7 +1065,7 @@ export function CoachAgent({
       <div className="flex flex-wrap items-end justify-between gap-[24px]">
         <div className="min-w-0">
           <h1 className="coach-page-title m-0">Your agent</h1>
-          <p className={`mt-[12px] mb-0 max-w-[76ch] ${COACH_LEAD_CLASS}`}>
+          <p className={`mt-[12px] mb-0 max-w-[var(--measure-wide)] ${COACH_LEAD_CLASS}`}>
             Four things are yours. We run everything else.
           </p>
         </div>
@@ -1122,7 +1137,7 @@ export function CoachAgent({
                       <span className="sr-only">{`Amount of ${price.label || `price ${index + 1}`}`}</span>
                       <Input
                         aria-label={`Amount of ${price.label || `price ${index + 1}`}`}
-                        className={`${FIELD_CLASS} ${MONO_CLASS} w-[110px] text-[20px] font-medium`}
+                        className={`${FIELD_SHELL_CLASS} ${MONO_CLASS} w-[110px] text-[20px] font-medium`}
                         inputMode="numeric"
                         onChange={(event) => {
                           const raw = event.target.value.replace(/[^0-9]/gu, "");
@@ -1169,7 +1184,7 @@ export function CoachAgent({
                   </div>
                 ))}
                 {form.prices.length === 0 ? (
-                  <p className={`m-0 max-w-[24ch] text-[20px] font-medium text-[color:var(--muted)]`}>
+                  <p className={ABSENCE_CLASS}>
                     No price is saved, so your agent quotes none.
                   </p>
                 ) : null}
@@ -1361,7 +1376,7 @@ export function CoachAgent({
               name="What each follow-up says"
             >
               <div className="flex flex-col gap-[14px]">
-                <p className={`m-0 max-w-[46ch] ${COACH_LEAD_CLASS} text-[color:var(--body)]`}>
+                <p className={`m-0 max-w-[var(--measure-tight)] ${COACH_LEAD_CLASS} text-[color:var(--body)]`}>
                   {cadence.enabled
                     ? "When a lead goes quiet, your agent follows up on our schedule and then stops. We pick the timing, you pick what each one is for."
                     : "Follow-up is not switched on yet, so nothing is being sent. What you set here is kept and used the day it is."}
@@ -1445,7 +1460,7 @@ export function CoachAgent({
         >
         <div className="flex flex-1 flex-col gap-[18px]">
           {goalsFailed ? (
-            <p className={`m-0 max-w-[24ch] text-[20px] font-medium text-[color:var(--muted)]`}>
+            <p className={ABSENCE_CLASS}>
               Your keywords could not be read just now.
             </p>
           ) : goalRows === null ? (
@@ -1453,7 +1468,7 @@ export function CoachAgent({
               Reading your keywords.
             </p>
           ) : goalRows.length === 0 ? (
-            <p className={`m-0 max-w-[24ch] text-[20px] font-medium text-[color:var(--muted)]`}>
+            <p className={ABSENCE_CLASS}>
               No keyword is set up yet.
             </p>
           ) : activeGoal ? (
@@ -1684,14 +1699,14 @@ function QuestionRows({
 }) {
   if (rows === null) {
     return (
-      <p className="m-0 max-w-[24ch] text-[20px] font-medium text-[color:var(--muted)]">
+      <p className={ABSENCE_CLASS}>
         Your questions could not be read just now.
       </p>
     );
   }
   if (rows.length === 0) {
     return (
-      <p className="m-0 max-w-[24ch] text-[20px] font-medium text-[color:var(--muted)]">
+      <p className={ABSENCE_CLASS}>
         No question is set up yet.
       </p>
     );
@@ -1761,14 +1776,14 @@ function QuestionRows({
 function ObjectionsBody({ objections }: { objections: CoachAgentObjections | null }) {
   if (objections === null) {
     return (
-      <p className="m-0 max-w-[24ch] text-[20px] font-medium text-[color:var(--muted)]">
+      <p className={ABSENCE_CLASS}>
         Your objections could not be read just now.
       </p>
     );
   }
   if (objections.rows.length === 0) {
     return (
-      <p className="m-0 max-w-[24ch] text-[20px] font-medium text-[color:var(--muted)]">
+      <p className={ABSENCE_CLASS}>
         No lead has pushed back yet in this period.
       </p>
     );

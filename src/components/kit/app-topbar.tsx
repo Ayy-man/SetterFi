@@ -839,7 +839,14 @@ export function AppTopbar({
             <DropdownMenuSeparator />
             {mode === "supabase" ? (
               <form action="/auth/signout?next=%2Flogin" method="post">
-                <DropdownMenuItem render={<button className="w-full" type="submit" />}>
+                {/*
+                  `nativeButton` because this item really does render a `<button>`. Base UI's menu
+                  item renders a `<div>` by default and synthesises the button behaviour it needs;
+                  handed a real button through `render` without being told, it warns in the dev
+                  overlay and applies both sets. The submit stays a submit, which is the whole point
+                  of the form: sign-out is a POST, not a link.
+                */}
+                <DropdownMenuItem nativeButton render={<button className="w-full" type="submit" />}>
                   <ArrowRight aria-hidden strokeWidth={1.75} />
                   Sign out
                 </DropdownMenuItem>

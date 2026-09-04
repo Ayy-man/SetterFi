@@ -162,7 +162,7 @@ export function OnboardingStepShell({
             <h1 className="m-0 mb-[12px] text-[34px] leading-[1.05] font-[600] tracking-[-0.026em] text-[color:var(--ink)] sm:text-[46px]">
               {title ?? STEP_H1[stepKey]}
             </h1>
-            <p className="m-0 max-w-[76ch] text-[16px] leading-[1.5] text-[color:var(--body)] sm:text-[17px]">
+            <p className="m-0 max-w-[var(--measure-wide)] text-[16px] leading-[1.5] text-[color:var(--body)] sm:text-[17px]">
               {lead}
             </p>
           </header>

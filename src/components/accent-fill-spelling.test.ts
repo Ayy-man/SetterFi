@@ -51,9 +51,20 @@ describe("the accent fill is painted as a background, never as a background-colo
     .filter(({ path }) => COLOUR_SPELLING.test(blankComments(readFileSync(path, "utf8"))))
     .map(({ rel }) => rel);
 
-  it("paints the Help page's live action and the help launcher with a spelling that renders", () => {
+  /*
+   * The two carriers this test was written for were the Help page's "Send reply" and the support
+   * launcher, because those are the two that measured invisible on production on 2026-09-02.
+   *
+   * The Help page no longer carries one. The 2026-09-04 rebuild reduced it to the guides list and
+   * a read-only record, so the page has no verb left to spend a fill on, and re-adding one to keep
+   * a positive control would be the guard editing the product. The row moves to the coach's
+   * Settings Save instead, which is the fill that surface does spend, and the launcher's row stays
+   * where it is: the bubble now spends its fill on Send rather than on the launcher, which is the
+   * same file and the same spelling.
+   */
+  it("paints the coach's live actions with a spelling that renders", () => {
     for (const rel of [
-      "components/workspace/live/coach-support.tsx",
+      "components/workspace/rehaul/coach-settings-notifications.tsx",
       "components/workspace/live/coach-support-bubble.tsx",
     ]) {
       const source = blankComments(readFileSync(join(process.cwd(), "src", rel), "utf8"));

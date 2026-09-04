@@ -118,7 +118,7 @@ export function ConnectStep({ calendarReady, cards }: ConnectStepProps) {
                   </h3>
                   {row.pill ? <StatePill label={row.pill.label} tone={row.pill.tone} /> : null}
                 </div>
-                <p className="m-0 mt-[8px] max-w-[58ch] text-[16px] leading-[1.55] text-[color:var(--muted)]">
+                <p className="m-0 mt-[8px] max-w-[var(--measure-sentence)] text-[16px] leading-[1.55] text-[color:var(--muted)]">
                   {row.sentence}
                 </p>
               </div>

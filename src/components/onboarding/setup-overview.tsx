@@ -75,7 +75,7 @@ export function SetupOverview({ steps }: SetupOverviewProps) {
           <h1 className="m-0 mb-[12px] text-[34px] leading-[1.05] font-[600] tracking-[-0.026em] text-[color:var(--ink)] sm:text-[46px]">
             Set up your agent
           </h1>
-          <p className="m-0 max-w-[76ch] text-[16px] leading-[1.5] text-[color:var(--body)] sm:text-[17px]">
+          <p className="m-0 max-w-[var(--measure-wide)] text-[16px] leading-[1.5] text-[color:var(--body)] sm:text-[17px]">
             {`${setupHeadline(steps)}. The rest is with us and the carriers.`}
           </p>
         </header>
@@ -118,7 +118,7 @@ export function SetupOverview({ steps }: SetupOverviewProps) {
               offering a button whose only outcome is landing back on a finished screen.
             */}
             <div className="flex flex-col gap-[16px] border-t border-[var(--line)] bg-[var(--well)] px-[16px] py-[20px] sm:flex-row sm:items-center sm:justify-between sm:px-[20px]">
-              <p className="m-0 max-w-[44ch] text-[16px] leading-[1.55] text-[color:var(--muted)]">
+              <p className="m-0 max-w-[var(--measure-tight)] text-[16px] leading-[1.55] text-[color:var(--muted)]">
                 You can leave and come back. Every answer is saved as you go.
               </p>
               {resume ? (
@@ -176,7 +176,7 @@ function StepRung({ last, step }: { last: boolean; step: OnboardingStepRow }) {
         <h3 className="m-0 text-[18px] leading-[1.2] font-[500] tracking-[-0.015em] text-[color:var(--ink)] sm:text-[20px]">
           {step.title}
         </h3>
-        <p className="m-0 mt-[6px] max-w-[56ch] text-[16px] leading-[1.55] text-[color:var(--muted)]">
+        <p className="m-0 mt-[6px] max-w-[var(--measure-sentence)] text-[16px] leading-[1.55] text-[color:var(--muted)]">
           {step.sentence}
         </p>
       </span>
@@ -347,7 +347,7 @@ function AskPanel() {
       headingId="onboarding-ask-heading"
       name="Ask a person"
     >
-      <p className="m-0 max-w-[34ch] text-[16px] leading-[1.5] text-[color:var(--muted)]">
+      <p className="m-0 max-w-[var(--measure-deck)] text-[16px] leading-[1.5] text-[color:var(--muted)]">
         Message us from the bubble in the corner of your console. Someone answers on weekdays
         between 9 and 6 Eastern.
       </p>

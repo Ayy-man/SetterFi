@@ -213,7 +213,7 @@ export function SmsStep() {
                   Filed, and the filing date did not come back readable. That is an absence, and it
                   is said in words in the figure's own place rather than drawn as a day zero.
                 */
-                <p className="m-0 max-w-[24ch] text-[20px] leading-[1.35] font-[500] text-[color:var(--muted)]">
+                <p className="m-0 max-w-[var(--measure-caption)] text-[20px] leading-[1.35] font-[500] text-[color:var(--muted)]">
                   Your details are with the carriers. The filing date was not recorded, so no day
                   count is shown.
                 </p>
@@ -227,13 +227,13 @@ export function SmsStep() {
                   <p className="m-0 mt-[10px] text-[16px] leading-[1.55] text-[color:var(--muted)]">
                     {`of about ${CARRIER_TYPICAL_DAYS[1]} days`}
                   </p>
-                  <p className="m-0 mt-[16px] max-w-[46ch] text-[16px] leading-[1.5] text-[color:var(--muted)]">
+                  <p className="m-0 mt-[16px] max-w-[var(--measure-tight)] text-[16px] leading-[1.5] text-[color:var(--muted)]">
                     {`Filed on ${submittedAt ? workspaceDateFormat.format(new Date(submittedAt)) : "a date we did not record"}. The carriers decide when this finishes and nobody is told a date, so this counter is the whole of what we know.`}
                   </p>
                 </>
               )
             ) : (
-              <p className="m-0 max-w-[46ch] text-[16px] leading-[1.5] text-[color:var(--muted)]">
+              <p className="m-0 max-w-[var(--measure-tight)] text-[16px] leading-[1.5] text-[color:var(--muted)]">
                 {WAITING_SENTENCE[review.kind]}
               </p>
             )}

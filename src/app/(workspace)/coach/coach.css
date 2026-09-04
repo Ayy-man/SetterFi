@@ -440,14 +440,15 @@
 }
 
 /*
- * The active pill is a solid fill, which is how round 3 drew it. The current console uses a wash,
- * and a wash at this size is genuinely ambiguous about which destination you are on -- the thing
- * a coach most needs the bar to answer.
+ * The active pill is a solid fill above the phone breakpoint, which is how round 3 drew it. The
+ * current console uses a wash, and a wash at this size is genuinely ambiguous about which
+ * destination you are on -- the thing a coach most needs the bar to answer. The fill lives inside
+ * the 640px media query below rather than here: below `sm` the same link is a phone tab whose
+ * Tailwind classes wash it at 7% and set its label to the accent text colour. An unconditional
+ * `background` shorthand here painted the gradient over that wash (a shorthand sets
+ * `background-image`, which `!important` on `background-color` cannot beat) and left the phone's
+ * active label dark blue on blue at 1.45:1, measured 2026-09-04.
  */
-[data-shell-role="coach"] .coach-pillbar a[aria-current="page"] {
-  background: var(--accent-fill);
-  color: var(--on-accent);
-}
 
 /*
  * The bar's own frame, above the phone breakpoint only.
@@ -483,6 +484,8 @@
   }
 
   [data-shell-role="coach"] .coach-pillbar a[aria-current="page"] {
+    background: var(--accent-fill);
+    color: var(--on-accent);
     border-color: var(--accent-line);
     font-weight: 600;
   }

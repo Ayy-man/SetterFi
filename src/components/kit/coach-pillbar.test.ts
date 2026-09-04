@@ -157,8 +157,57 @@ describe("coach pillbar at phone width", () => {
     // And the neutral pair it used to carry is gone, at both sizes rather than only unprefixed.
     expect(count).not.toContain("var(--band)");
     expect(count).not.toContain("text-[color:var(--body)]");
-    // The phone keeps its own metrics, which is the only thing that changes below `sm`.
-    expect(count).toContain("max-sm:text-[12px]");
+    // The phone keeps its own padding and leading below `sm`, and no longer its own type size:
+    // 11.5px was carried over from the artboard as a metric of the shorter tab bar, but it is the
+    // same count read by the same eyes on the surface that exists because those eyes could not
+    // read the console. The floor is 14px and it applies at both widths now.
+    expect(count).toContain("max-sm:px-[6px]");
+    expect(count).toContain("text-[14px]");
+    expect(count).not.toContain("max-sm:text-[12px]");
+  });
+
+  /**
+   * The one place the amber does not survive, and it is a measurement rather than a preference.
+   *
+   * `--warning-wash` is a tenth-opacity film. On the desktop bar's active pill it lets the accent
+   * fill through, so the amber number lands on blue at 1.02:1 under the light palette and 2.42:1
+   * under the dark one, on the count for the one destination the coach is looking at. The active
+   * chip inverts instead: an `--accent-active` face a stop below the fill's own darkest, the
+   * number in `--on-accent` at 8.83:1 and 7.24:1, and a white hairline for the edge, because in
+   * the dark palette that face is exactly the fill's bottom stop.
+   *
+   * The desktop bar only. The phone bar washes its active tab rather than filling it, which was
+   * true of the classes all along and became true of the rendering on 2026-09-04, when the sheet's
+   * unscoped `background: var(--accent-fill)` moved inside its 640px query. On that washed ground
+   * the inverted chip is not a contrast failure, it reads at 8.85:1, but a solid navy disc in a
+   * 56px tab whose ground is near-white separates from it at 7.6:1 and becomes the heaviest mark
+   * in the bar. Amber is what the artboard draws there and what the wash can carry.
+   */
+  it("re-tones the count on the active pill, where amber would sit on the accent fill", () => {
+    const nav = [{
+      label: "",
+      items: [{ label: "Inbox", href: "/coach/conversations", queue: true as const, count: 4 }],
+    }];
+    const html = renderToStaticMarkup(
+      createElement(CoachPillbar, { activePath: "/coach/conversations", nav }),
+    );
+    const count = html.slice(html.indexOf("<span"), html.indexOf("</span>"));
+
+    // The positive control: this is the active pill, not a second copy of the idle case.
+    expect(html).toContain('aria-current="page"');
+    expect(count).toContain("bg-[var(--accent-active)]");
+    expect(count).toContain("text-[color:var(--on-accent)]");
+    expect(count).toContain("shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]");
+    // Unprefixed amber is gone, so the desktop chip cannot fall back to a tone that would land on
+    // the accent fill, while the phone arm keeps the artboard's amber over its wash.
+    expect(count).not.toMatch(/(?<!max-sm:)bg-\[var\(--warning-wash\)\]/u);
+    expect(count).toContain("max-sm:bg-[var(--warning-wash)]");
+    // `--warning-body`, the darker amber of the same family, because the phone's active chip sits
+    // on its own wash over the tab's 7% accent wash. `--warning-text` is walked to clear 4.5:1 on
+    // one film and measured 4.24:1 on two; this measures 5.17:1 light and 7.29:1 dark.
+    expect(count).toContain("max-sm:text-[color:var(--warning-body)]");
+    expect(count).toContain("max-sm:shadow-none");
+    expect(count).toContain("text-[14px]");
   });
 });
 

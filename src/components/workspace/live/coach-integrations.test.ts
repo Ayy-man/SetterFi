@@ -62,38 +62,21 @@ describe("Coach Integrations live reachability", () => {
       .not.toMatch(/GoHighLevel|GHL|Twilio|usually|up to|\d+[–-]\d+\s+(day|week)/i);
   });
 
-  it("renders product labels, receipt prerequisites and Demo beside synthetic approval", () => {
-    const component = source("src/components/workspace/live/coach-integrations.tsx");
-    expect(component).toContain("deriveChannelTruths");
-    expect(component).toContain("coachIntegrationLabel(channel.channel)");
-    // Re-pointed 2026-08-31. This line used to assert the exact JSX -- `<StateBadge kind="tag"
-    // ... />` -- which pinned the shape rather than the claim, and the 2026-08-30 ruling retired
-    // `StateBadge` onto the kit's `Status`. The claim is that seeded data is labelled where it is
-    // read, and that is now asserted against the rendered DOM in `coach-integrations.test.tsx`
-    // ("labels demo template data on screen and leaves real data unlabelled"), on both arms. What
-    // the source contract still owns is the half a render test cannot see: the marker is derived
-    // from the template's own flag, so it cannot be left on a page whose data stopped being demo.
-    expect(component).toContain("candidate.templateIsDemo");
-    expect(component).toContain('label="Demo workspace data"');
-    expect(component).toContain("channel.prerequisites.map");
-    expect(component).toContain("2 to 3 weeks");
-    expect(component).not.toMatch(/GoHighLevel|GHL|Twilio/);
-  });
-
-  it("renders the messaging connection card from the view model, with no coach install control", () => {
-    const component = source("src/components/workspace/live/coach-integrations.tsx");
-    expect(component).toContain("COACH_MESSAGING_CONNECTION_NOTE");
-    expect(component).toContain("messaging.label");
-    expect(component).toContain("messaging.detail");
-    // The install route refuses a coach's role, so this surface may not carry a control that
-    // pretends otherwise - nothing here posts to it, and nothing opens an approval tab.
-    expect(component).not.toContain("install-start");
-    expect(component).not.toContain("startMessagingInstall");
-    expect(component).not.toContain("openInstallPopup");
-    expect(component).toContain('<LoggedButton\n              actionKey="capi.dataset.provisioned"');
-    expect(component).toContain("canSetupConversion");
-    expect(component).not.toContain('"use client"');
-  });
+  /*
+   * Two `it` blocks read `coach-integrations.tsx` here until 2026-09-04 and are gone with it.
+   *
+   * They asserted `deriveChannelTruths`, the demo marker derived from `templateIsDemo`, the
+   * prerequisite list, the "2 to 3 weeks" phrase, the messaging-install card and the conversion
+   * control. Every one of those is machinery spec 2.6 sent to admin, so there is no coach file
+   * left to repoint them at: retargeting them at Setup would mean asserting a surface carries
+   * something it was rebuilt to drop, which is a guard that has stopped describing the product.
+   *
+   * Neither claim goes unwatched. The brand ban they ended on is now `ghl-branding-wall.test.ts`,
+   * which walks the import graph out of every client route rather than naming one file, and was
+   * written precisely so a surface added in a redesign is covered the day it is written. The demo
+   * marker is `coach-setup.test.tsx`'s "names the account on a connected row", which reads the
+   * rendered row and asserts the seeder's marker is off it.
+   */
 
   /**
    * `calendar_connections.last_error` holds `AVAILABILITY_NOT_VERIFIED:<reason>` on the arm where

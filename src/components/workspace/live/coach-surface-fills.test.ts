@@ -29,6 +29,12 @@ const SURFACES = [
   "src/components/workspace/rehaul/coach-agent.tsx",
   "src/components/workspace/rehaul/coach-dashboard.tsx",
   "src/components/workspace/rehaul/coach-inbox.tsx",
+  // Added 2026-09-04 with the surface itself. `coach-integrations.tsx` was never on this list and
+  // was deleted the same day, so Setup is not a replacement for a row here -- it is a coach screen
+  // that paints a panel face, two button faces and four row tiles, which is exactly the shape this
+  // rule exists for, and the list is meant to reach every coach screen rather than the ones that
+  // happened to be written before it.
+  "src/components/workspace/rehaul/coach-setup.tsx",
   "src/components/workspace/live/coach-billing.tsx",
   "src/components/workspace/live/coach-contacts.tsx",
   "src/components/workspace/live/coach-pipeline.tsx",
@@ -39,11 +45,12 @@ const SURFACES = [
 /*
  * White alpha that is correct where it is written, each allowed by its exact string.
  *
- * The rule is about a literal that composites to nothing on the light palette, and both shapes
- * here are outside that: a raised panel's top-edge highlight is white-on-white by design and reads
- * as a bevel, and a panel that brings its own dark ground paints its hairline and its meter track
- * against that ground rather than the page's. `coach-dashboard.tsx` came under this guard when the
- * rehaul replaced the live Home surface, which is when these three arrived.
+ * The rule is about a literal that composites to nothing on the light palette, and the one shape
+ * left here is outside that: a raised panel's top-edge highlight is white-on-white by design and
+ * reads as a bevel. `coach-dashboard.tsx` came under this guard when the rehaul replaced the live
+ * Home surface, which is when three of these arrived; the two that were its dark panel's own
+ * hairline and meter track went when the Home rebuild deleted that panel, and their rows went with
+ * them. The comments below record what each was, so a literal cannot creep back in unnoticed.
  *
  * By exact string rather than by file, for the reason the accent highlight is: a file-level
  * exemption hides the next literal somebody adds to it.
@@ -53,8 +60,13 @@ const ALLOWED_WHITE_ALPHA = [
   // fill's own highlight, sat here until the rehaul deleted the two surfaces that retyped it. It
   // is `ACCENT_FILL_SHADOW_CLASS` in the kit now and no coach surface spells it out.
   "shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_1px_2px_rgba(28,42,82,0.04),0_8px_20px_-14px_rgba(28,42,82,0.16)]",
-  'dark ? "border-[rgba(255,255,255,0.12)]" : "border-[var(--line)]"',
-  'className="mt-2 h-1.5 rounded-full bg-[rgba(255,255,255,0.14)]"',
+  // `dark ? "border-[rgba(255,255,255,0.12)]" : "border-[var(--line)]"` sat here for
+  // `coach-dashboard.tsx`'s own dark panel class, which the Home rebuild deleted: the drenched
+  // panels are `DeckPanel` with a drench variant now, and the variant paints its hairline from
+  // `--line` remapped for the dark subtree rather than from a literal chosen per theme.
+  // `className="mt-2 h-1.5 rounded-full bg-[rgba(255,255,255,0.14)]"` was the same panel's meter
+  // track and went with it in the same rebuild. Nothing draws a meter on Home now: the setup rail
+  // counts its rungs in words, which says the same thing without a bar that has to be read.
 ];
 
 describe("the coach surfaces paint from tokens, not from white alpha", () => {

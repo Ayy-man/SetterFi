@@ -248,17 +248,34 @@ describe("live rendered table export inventory", () => {
    * but the count was doing real work, and dropping it for "renders an ExportMenu" would go vacuous
    * the moment a second export appeared bound to something else, a paginated slice or `contacts`
    * instead of `filteredContacts`. So the count survives as exclusivity: one export control across
-   * all three Leads files, bound to the one expression, which is bound to the complete filtered set.
+   * all the Leads files, bound to the one expression, which is bound to the complete filtered set.
+   *
+   * **Repointed when Leads became one screen.** `leads-surface.tsx` and `coach-contacts.tsx` are
+   * both still on disk and both still render an export, and neither is mounted any more: both coach
+   * routes render `rehaul/coach-leads.tsx`. Reading the two retired files was the vacuous case this
+   * guard exists to prevent, in its quietest form -- three green assertions about markup no coach
+   * can reach, while the export that ships is checked by nothing. The list below is what the routes
+   * mount, and the mount is asserted rather than assumed, so dropping the retired pair cannot be
+   * undone silently by re-mounting one of them. Retiring those files belongs to whoever owns them.
    */
   it("keeps the single Leads export bound to the complete shared filtered rows", () => {
     const files = [
-      "src/components/workspace/live/leads-surface.tsx",
+      "src/components/workspace/rehaul/coach-leads.tsx",
       "src/components/workspace/live/coach-contacts.tsx",
       "src/components/workspace/live/coach-pipeline.tsx",
     ] as const;
     const sources = new Map(
       files.map((file) => [file, readFileSync(path.join(process.cwd(), file), "utf8")]),
     );
+
+    // The premise the drop rests on: the retired surfaces reach no coach route, so their exports
+    // are unreachable rather than merely unchecked. A re-mount fails here before it fails silently.
+    const routes = ["src/app/(workspace)/coach/contacts/page.tsx", "src/app/(workspace)/coach/pipelines/page.tsx"] as const;
+    for (const route of routes) {
+      const page = readFileSync(path.join(process.cwd(), route), "utf8");
+      expect(page, `${route} still mounts a retired Leads surface`).not.toMatch(/leads-surface|coach-contacts/u);
+      expect(page, `${route} does not mount the Leads screen this guard reads`).toMatch(/rehaul\/coach-leads/u);
+    }
 
     // Both spellings of an export control: the standalone menu and the table's own prop.
     const controls = files.flatMap((file) => {
@@ -268,22 +285,29 @@ describe("live rendered table export inventory", () => {
         ...source.matchAll(/\bexportResource=\{/gu),
       ].map(() => file);
     });
-    expect(controls).toEqual(["src/components/workspace/live/leads-surface.tsx"]);
+    expect(controls).toEqual(["src/components/workspace/rehaul/coach-leads.tsx"]);
 
-    const surface = sources.get("src/components/workspace/live/leads-surface.tsx")!;
-    expect(surface).toMatch(/const exportRows = useMemo\(\(\) => leadExportRows\(filteredContacts\)/u);
+    const surface = sources.get("src/components/workspace/rehaul/coach-leads.tsx")!;
+    // `visible` is this screen's spelling of the complete filtered set: every lead the page loaded,
+    // narrowed by the search box and the stage filter, never the 25-row slice the table draws.
+    expect(surface).toMatch(/const exportRows = useMemo\(\(\) => leadExportRows\(visible\)/u);
+    expect(surface).toMatch(/const visible = useMemo\(\s*\(\) => filterLeads\(contacts, \{/u);
     expect(surface).toMatch(/mode="local"/u);
     expect(surface).not.toMatch(/mode="server"/u);
     expect(surface).toMatch(/rows=\{exportRows\}/u);
     // One binding, so there is no second consumer to be bound to something else.
     expect(surface.match(/rows=\{[^}]*\}/gu)).toEqual(["rows={exportRows}"]);
 
-    expect(LIVE_RENDERED_TABLE_EXPORTS.map((entry) => entry.surface)).not.toContain(
+    // A local export is not a rendered server table, so Leads owns no inventory row at all.
+    for (const retired of [
       "src/components/workspace/live/coach-contacts.tsx#contacts",
-    );
-    expect(LIVE_RENDERED_TABLE_EXPORTS.map((entry) => entry.surface)).not.toContain(
       "src/components/workspace/live/coach-pipeline.tsx#coach-pipeline",
-    );
+    ]) {
+      expect(LIVE_RENDERED_TABLE_EXPORTS.map((entry) => entry.surface)).not.toContain(retired);
+    }
+    expect(
+      LIVE_RENDERED_TABLE_EXPORTS.filter((entry) => entry.surface.includes("coach-leads")),
+    ).toEqual([]);
   });
 
   it("has no invented marker contract in either scanned source tree", () => {

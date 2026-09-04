@@ -78,13 +78,6 @@ type StoredEvidence = {
   profileSaved: boolean | null;
 };
 
-const UNREAD: StoredEvidence = {
-  calendarReady: null,
-  live: null,
-  offerPublished: null,
-  profileSaved: null,
-};
-
 async function loadStoredEvidence(tenantId: string): Promise<StoredEvidence> {
   const client = createSupabaseServiceClient();
 
@@ -165,24 +158,44 @@ async function coachContext() {
   return { tenantId: claims.tenantId };
 }
 
+/** Every rung unread, which is what the rail states when the setup flow is switched off. */
+const DISABLED_EVIDENCE: OnboardingSetupEvidence = {
+  calendarReady: null,
+  carrier: carrierReviewFrom({
+    checked: false,
+    registrationState: null,
+    submittedAt: null,
+    terminalRejection: false,
+  }),
+  live: null,
+  metaLive: null,
+  offerPublished: null,
+  profileSaved: null,
+};
+
 export default async function OnboardingPage() {
+  /*
+   * The disabled gate comes first, ahead of every session and role read.
+   *
+   * With the go-live flow off, each of the reads below would describe a pipeline that is not
+   * running, so none of them is worth a round trip and none of them can be worth an identity
+   * either. The rail still draws and every step says the read did not happen, which is the honest
+   * thing for a deployment where setup is switched off, and it is the same shape it takes when the
+   * reads run and fail. Nothing tenant-specific reaches this arm, so there is nothing here for a
+   * session to protect.
+   */
+  if (!phase5Live()) {
+    return <SetupOverview steps={onboardingSteps(DISABLED_EVIDENCE)} />;
+  }
+
   const { tenantId } = await coachContext();
 
-  /*
-   * With the go-live flow off, every one of these reads would describe a pipeline that is not
-   * running. The rail still draws, and every step says the read did not happen, which is the
-   * honest thing for a deployment where setup is switched off.
-   */
-  const live = phase5Live();
-
   const [connections, registration, stored] = await Promise.all([
-    live ? listChannelConnections(tenantId).catch(() => null) : Promise.resolve(null),
-    live
-      ? loadCoachA2pRegistration(tenantId)
-        .then((row) => ({ checked: true, row }))
-        .catch(() => ({ checked: false, row: null }))
-      : Promise.resolve({ checked: false, row: null }),
-    live ? loadStoredEvidence(tenantId) : Promise.resolve(UNREAD),
+    listChannelConnections(tenantId).catch(() => null),
+    loadCoachA2pRegistration(tenantId)
+      .then((row) => ({ checked: true, row }))
+      .catch(() => ({ checked: false, row: null })),
+    loadStoredEvidence(tenantId),
   ]);
 
   const evidence: OnboardingSetupEvidence = {

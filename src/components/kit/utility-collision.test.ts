@@ -139,8 +139,10 @@ const DEBT: Record<string, string> = {
     "PANEL_SUB_CLASS: --muted under --body, and --coach-body under an appended 15px",
   "src/components/workspace/rehaul/affiliate-home.tsx":
     "TD_CLASS: 16px under an appended 14px",
-  "src/components/workspace/rehaul/coach-billing.tsx":
-    "MONO_META_CLASS: --muted under an appended --faint (billing lane)",
+  // `src/components/workspace/rehaul/coach-billing.tsx` held a row here for `MONO_META_CLASS`,
+  // `--muted` under an appended `--faint`. The 2026-09-04 Billing rebuild deleted that constant
+  // along with the standing "Logged" caption it coloured, so the collision is gone rather than
+  // excused and the row came out with it.
 };
 
 describe("no class list spells one CSS property twice", () => {

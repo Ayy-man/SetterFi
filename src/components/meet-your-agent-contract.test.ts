@@ -46,7 +46,30 @@ describe("Meet Your Agent mount contract", () => {
     expect(page).toContain('export const dynamic = "force-dynamic"');
     expect(page.indexOf("if (!phase7MeetAgentLive())")).toBeLessThan(page.indexOf("loadPlatformActor()"));
     expect(page).toContain("Meet Your Agent is not enabled");
-    expect(onboardingPage).toContain("meetAgentEnabled={phase7MeetAgentLive()}");
+
+    /*
+     * The onboarding half of this used to read `meetAgentEnabled={phase7MeetAgentLive()}` on the
+     * setup root, because the root mounted `onboarding-experience.tsx` and that component decides
+     * whether to draw the coach playback. The setup rebuild took the playback off the root: the
+     * root is now the six-rung status list and nothing reachable from `src/app/onboarding` mounts
+     * `<MeetYourAgent>` at all, so the prop had nothing left to pass to. Asserting it anyway would
+     * have meant threading a prop no component receives, which is a dead line that passes a test
+     * and tells a reader something false.
+     *
+     * What the assertion is really for survives the move, though: whichever page under onboarding
+     * carries a flag, it decides on that flag before it touches an identity. So the rule now binds
+     * the flag the setup root actually has. `phase5Live()` is read, and returned on, before the
+     * session and role work in `coachContext()` runs, exactly as the Meet Your Agent page checks
+     * `phase7MeetAgentLive()` before `loadPlatformActor()`. The first test in this file still
+     * enumerates every file holding a mount, so a playback put back under onboarding is caught
+     * there rather than being silently allowed by this one.
+     */
+    expect(onboardingPage).toContain('export const dynamic = "force-dynamic"');
+    expect(onboardingPage.indexOf("if (!phase5Live())"))
+      .toBeLessThan(onboardingPage.indexOf("await coachContext()"));
+    expect(onboardingPage.indexOf("if (!phase5Live())"))
+      .toBeLessThan(onboardingPage.indexOf("loadStoredEvidence(tenantId)"));
+    expect(onboardingPage).not.toContain("meetAgentEnabled");
     expect(component.indexOf("if (!enabled)")).toBeLessThan(component.indexOf("return ("));
     expect(component).toContain("Meet Your Agent is not enabled");
     expect(component).toContain("if (!enabled) return;");

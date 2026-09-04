@@ -149,11 +149,65 @@ export function CoachPillbar({
                  *
                  * An amber zero would say a coach is behind when they are not, and cannot happen
                  * here: `withWorkspaceNavCounts` drops zeroes before a count reaches this bar, so
-                 * every number drawn is work actually waiting. The phone keeps its own metrics --
-                 * a 19px chip at 11.5px rather than 24px at 13px -- because the tab bar is
-                 * shorter, not because the tone changes.
+                 * every number drawn is work actually waiting.
+                 *
+                 * Amber everywhere except one place, and that exception is a measurement rather
+                 * than a preference. `--warning-wash` is a tenth-opacity film, so on the desktop
+                 * bar's *active* pill it lets the accent fill through and the amber number lands
+                 * on blue: 1.02:1 under the light palette and 2.42:1 under the dark one, which is
+                 * a count a coach cannot read on the one destination they are looking at. So the
+                 * active pill inverts the chip instead: the face goes to `--accent-active`, a
+                 * stop below the fill's own darkest, and the number to `--on-accent`, which is
+                 * 8.83:1 under the light palette and 7.24:1 under the dark one. A white hairline
+                 * carries the chip's edge, because in the dark palette `--accent-active` is
+                 * exactly the fill's bottom stop and the face alone would not draw one.
+                 *
+                 * `--on-accent` rather than a dark number on a white face, and that is forced
+                 * rather than chosen: `tokens-contrast.test.ts` discovers every role used as a
+                 * text colour anywhere under `src/` and requires both drenched stylesheets to
+                 * redeclare it, and both sheets are frozen this round. `--on-accent` is the only
+                 * foreground role they already carry that does not flip between the palettes.
+                 *
+                 * The desktop bar only, and that took two passes to get right. The phone bar is
+                 * written to wash its active tab rather than fill it, but `coach.css` set
+                 * `background: var(--accent-fill)` on `a[aria-current="page"]` with no media query
+                 * around it. That is the shorthand, so it sets a background *image*, and an image
+                 * paints over `max-sm:bg-[...]!` however important the colour under it is: the
+                 * phone tab was filled, its own label read 1.45:1 on it, and amber on it was the
+                 * same 1:1 problem the desktop bar had. The declaration moved inside the sheet's
+                 * `640px` query on 2026-09-04, so the phone tab is genuinely washed now and its
+                 * label measures 6.72:1 light and 11.37:1 dark.
+                 *
+                 * On that washed ground amber is right again, and the inverted chip is wrong: it
+                 * reads at 8.85:1 there, so it is not a contrast failure, but a solid navy disc in
+                 * a 56px tab whose own ground is near-white separates from it at 7.6:1 and becomes
+                 * the heaviest mark in the bar, which is a count shouting over the five labels it
+                 * sits among. `CoachHomeMobile.dc.html:165` draws amber, and the artboard is right
+                 * about it once the tab underneath is the wash it was always meant to be.
+                 *
+                 * The phone's active chip takes `--warning-body` rather than `--warning-text`, and
+                 * that one-token difference is the only thing on this element that is not simply
+                 * the idle treatment. `--warning-text` is walked to clear 4.5:1 on its own wash over
+                 * the canvas, which is the worst case anywhere else in the product; here the wash
+                 * sits on the active tab's own 7% accent wash, two films deep, and it measured
+                 * 4.24:1. `--warning-body` is the darker amber of the same family and it measures
+                 * 5.17:1 on that doubled ground, with the dark palette at 7.29:1.
+                 *
+                 * The phone chip is 14px now rather than 11.5. The artboard's smaller figure was
+                 * carried over as a metric of the shorter tab bar, but it is the same count read
+                 * by the same eyes, and this surface exists because those eyes could not read the
+                 * console. It measures 14px within a 56px tab at 390 with the labels intact.
                  */
-                className="rounded-[var(--r-full)] bg-[var(--warning-wash)] px-[var(--s-2)] font-[family-name:var(--font-mono)] text-[14px] leading-[20px] text-[color:var(--warning-text)] max-sm:px-[6px] max-sm:text-[12px] max-sm:leading-[18px]"
+                className={[
+                  "rounded-[var(--r-full)] px-[var(--s-2)] font-[family-name:var(--font-mono)]",
+                  "text-[14px] leading-[20px] max-sm:px-[6px] max-sm:leading-[18px]",
+                  current
+                    ? "bg-[var(--accent-active)] text-[color:var(--on-accent)] "
+                      + "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)] "
+                      + "max-sm:bg-[var(--warning-wash)] max-sm:text-[color:var(--warning-body)] "
+                      + "max-sm:shadow-none"
+                    : "bg-[var(--warning-wash)] text-[color:var(--warning-text)]",
+                ].join(" ")}
                 data-coach-target="exempt"
               >
                 {item.count}

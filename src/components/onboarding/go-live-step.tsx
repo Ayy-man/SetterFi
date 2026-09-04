@@ -281,7 +281,7 @@ export function GoLiveStep() {
             </div>
             <div className="px-[16px] py-[20px] sm:px-[20px]">
               {carrierDay === null ? (
-                <p className="m-0 max-w-[46ch] text-[16px] leading-[1.5] text-[color:var(--muted)]">
+                <p className="m-0 max-w-[var(--measure-tight)] text-[16px] leading-[1.5] text-[color:var(--muted)]">
                   {carrier.kind === "live"
                     ? "The carriers finished, so your agent can text as well as answer messages."
                     : "Texting is not with the carriers yet. It joins on its own once it is filed and they finish, and nothing here needs doing for that."}
@@ -296,7 +296,7 @@ export function GoLiveStep() {
                       {`of about ${CARRIER_TYPICAL_DAYS[1]} days`}
                     </span>
                   </p>
-                  <p className="m-0 mt-[12px] max-w-[46ch] text-[16px] leading-[1.5] text-[color:var(--muted)]">
+                  <p className="m-0 mt-[12px] max-w-[var(--measure-tight)] text-[16px] leading-[1.5] text-[color:var(--muted)]">
                     Your agent starts texting the day the carriers finish, without you coming back.
                     Nobody is told a finish date, so this counter is the whole of what we know.
                   </p>
@@ -349,7 +349,7 @@ function CheckPanel({
       </div>
 
       {checks.length === 0 ? (
-        <p className="m-0 max-w-[24ch] px-[16px] py-[20px] text-[20px] leading-[1.35] font-[500] text-[color:var(--muted)] sm:px-[20px]">
+        <p className="m-0 max-w-[var(--measure-caption)] px-[16px] py-[20px] text-[20px] leading-[1.35] font-[500] text-[color:var(--muted)] sm:px-[20px]">
           {emptyLine}
         </p>
       ) : (
@@ -373,7 +373,7 @@ function CheckPanel({
                 <span className="text-[17px] leading-[1.3] font-[500] text-[color:var(--ink)]">
                   {CHECK_TITLES[check.key]}
                 </span>
-                <span className="mt-[4px] max-w-[54ch] text-[16px] leading-[1.55] text-[color:var(--muted)]">
+                <span className="mt-[4px] max-w-[var(--measure-sentence)] text-[16px] leading-[1.55] text-[color:var(--muted)]">
                   {sentences[check.key]}
                 </span>
               </span>

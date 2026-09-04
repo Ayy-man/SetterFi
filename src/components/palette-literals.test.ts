@@ -74,10 +74,25 @@ const OVER_DRENCH = new Set([
  * default, so each is a real defect and not a style preference.
  */
 const DEBT: Record<string, string> = {
-  "workspace/live/coach-integrations.tsx": "--control-fill",
+  // `workspace/live/coach-integrations.tsx` sat here owing `--control-fill` until 2026-09-04,
+  // when `/coach/get-started` and `/coach/integrations` both moved to `rehaul/coach-setup.tsx` and
+  // the file was deleted unread. The debt was not paid, it was removed, which is the other way a
+  // row leaves this map.
   "workspace/live/account-security-settings.tsx": "--control-fill",
   "kit/meter.tsx": "--line",
 };
+
+/**
+ * The walk's positive control: a coach surface that really is scanned and really is clean.
+ *
+ * Every assertion below is a filter chain ending in "nothing unexpected", so a walk that returned
+ * an empty set would pass while reading nothing -- and this file's walk just lost a directory's
+ * worth of entries to one deletion, which is exactly the event that hides that failure. Naming the
+ * surface that replaced the deleted one keeps the control tied to a file this rule genuinely has
+ * an opinion about: `coach-setup.tsx` paints its panel, its two button faces and its row tiles
+ * entirely from tokens, so it must be present in the walk and absent from the offenders.
+ */
+const CLEAN_COACH_SURFACE = "workspace/rehaul/coach-setup.tsx";
 
 /**
  * Comments blanked, line count preserved.
@@ -137,6 +152,11 @@ describe("components take their colours from the palette", () => {
     }))
     .filter(({ lines }) => lines.length > 0)
     .filter(({ rel }) => !OVER_DRENCH.has(rel));
+
+  it("reads a real coach surface, so an empty walk cannot pass as agreement", () => {
+    expect(sourceFiles().map(({ rel }) => rel)).toContain(CLEAN_COACH_SURFACE);
+    expect(offenders.map(({ rel }) => rel)).not.toContain(CLEAN_COACH_SURFACE);
+  });
 
   it("adds no new hard-coded palette colour", () => {
     const unexpected = offenders

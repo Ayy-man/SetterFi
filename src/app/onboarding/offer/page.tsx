@@ -45,7 +45,7 @@ function OfferAbsence({ body, title }: { body: string; title: string }) {
           <h2 className="m-0 text-[20px] leading-[1.2] font-[500] tracking-[-0.015em] text-[color:var(--ink)]">
             {title}
           </h2>
-          <p className="m-0 mt-[10px] max-w-[56ch] text-[16px] leading-[1.55] text-[color:var(--muted)]">
+          <p className="m-0 mt-[10px] max-w-[var(--measure-sentence)] text-[16px] leading-[1.55] text-[color:var(--muted)]">
             {body}
           </p>
         </div>

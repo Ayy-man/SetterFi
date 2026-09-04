@@ -6,6 +6,7 @@ import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
 import { TITLE_PANEL_TITLE_CLASS } from "@/components/kit/deck-panel";
 import { handoffFor } from "@/components/workspace/live/escalation-queue";
+import { deriveConversationView } from "@/components/workspace/live/view-models";
 import { useWorkspaceEnv } from "@/components/workspace/workspace-env";
 import type { AuditReceipt } from "@/lib/audit";
 import { WORKSPACE_DISPLAY_TIMEZONE, workspaceDateTimeFormat } from "@/lib/format/datetime";
@@ -228,7 +229,8 @@ function ageLabel(iso: string, nowIso: string | null) {
   return `${days} day${days === 1 ? "" : "s"}`;
 }
 
-function latestBody(conversation: ConversationRead) {
+/** Takes the messages alone so it reads a repository row and a `ConversationView` alike. */
+function latestBody(conversation: { messages: readonly ConversationMessageRead[] }) {
   return conversation.messages.at(-1)?.body ?? null;
 }
 
@@ -460,6 +462,21 @@ export function CoachInbox({
     return allowed ? persisted.filter((row) => allowed.has(row.id)) : persisted;
   }, [persisted, viewIds]);
 
+  /*
+   * The amber count on the Inbox pill, which every coach route has to carry so the coach's only
+   * needs-you signal does not vanish when they walk off this screen. Server pages read
+   * `coachNavCounts`; this one is a client component, so it counts the same predicate off the rows
+   * it already holds. Two things make that equal to the helper's read rather than merely close to
+   * it: `initialConversations` is the whole tenant set, filtered to a view here rather than in the
+   * query, and the predicate is `needs_human` alone. It is deliberately not `viewCounts.needsYou`,
+   * which is the Needs you *lane* and also holds `human` and `scope_blocked` threads, so wiring
+   * the pill to it would over-count the queue by every thread someone is already answering.
+   */
+  const needsYou = useMemo(
+    () => persisted.filter((row) => row.status === "needs_human").length,
+    [persisted],
+  );
+
   const query = search.trim().toLocaleLowerCase();
   const visible = inView.filter((conversation) => {
     if (channel !== "all" && conversation.channel !== channel) return false;
@@ -668,7 +685,7 @@ export function CoachInbox({
       activePath="/coach/conversations"
       crumbs={CRUMBS}
       nav={workspaceNavigationFor("coach")}
-      navCounts={{ "/coach/conversations": viewCounts?.needsYou ?? 0 }}
+      navCounts={{ "/coach/conversations": needsYou }}
       role="coach"
     >
       {/*
@@ -825,7 +842,17 @@ export function CoachInbox({
             ].join(" ")}
           >
             <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto p-0">
-              {visible.map((conversation) => {
+              {visible.map((row) => {
+                /*
+                 * The row draws through the shared view model rather than off the repository row,
+                 * so provenance is derived in one place for every surface that shows a thread:
+                 * `deriveConversationView` is what carries the repository's `isTest` to the label
+                 * below, and a second local reading of the flag here is exactly how a test row
+                 * ends up marked on one screen and unmarked on the next. The repository row stays
+                 * the state this component holds, because the view model does not carry
+                 * `proposedSlots`, which the lead details rail reads off the selected thread.
+                 */
+                const conversation = deriveConversationView(row);
                 const active = selected?.id === conversation.id;
                 const age = ageLabel(conversation.lastActivityAt, nowIso);
                 const state = STATE_WORDS[conversation.status];

@@ -698,7 +698,8 @@ const ROW_CLASS =
   "flex flex-wrap items-start gap-[18px] px-5 py-[22px] border-b border-[var(--line-soft)] last:border-b-0";
 const ROW_NAME_CLASS =
   "m-0 text-[20px] leading-[1.25] font-medium tracking-[-0.015em] text-[var(--ink)]";
-const ROW_BODY_CLASS = "m-0 mt-2 max-w-[60ch] text-[16px] leading-[1.55] text-[var(--muted)]";
+const ROW_BODY_CLASS =
+  "m-0 mt-2 max-w-[var(--measure-sentence)] text-[16px] leading-[1.55] text-[var(--muted)]";
 const ROW_RECEIPT_CLASS = "m-0 mt-2 text-[14px] leading-[1.55] text-[var(--muted)]";
 
 function StepRow({ step }: { step: CoachSetupStepView }) {
@@ -743,7 +744,7 @@ function ChannelRow({
           <h3 className={ROW_NAME_CLASS}>{row.name}</h3>
           <Status label={row.pill.label} tone={row.pill.tone} />
         </div>
-        <p className={`${ROW_BODY_CLASS} max-w-[58ch]`}>{row.sentence}</p>
+        <p className={ROW_BODY_CLASS}>{row.sentence}</p>
       </div>
       {row.action ? (
         <div className="flex-none">
@@ -881,7 +882,7 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
           <h1 className="m-0 text-[46px] leading-[1.05] font-semibold tracking-[-0.026em] text-[var(--ink)]">
             Your setup
           </h1>
-          <p className="m-0 mt-3 max-w-[76ch] text-[17px] leading-[1.5] text-[var(--body)]">
+          <p className="m-0 mt-3 max-w-[var(--measure-wide)] text-[17px] leading-[1.5] text-[var(--body)]">
             {statusSentence(waiting, everythingUnchecked)}
           </p>
         </div>
@@ -960,7 +961,7 @@ export function CoachSetup({ now, read }: CoachSetupProps) {
               name="Ask a person"
               titleId="coach-setup-support-heading"
             />
-            <p className="m-0 max-w-[34ch] px-5 pt-[18px] pb-5 text-[16px] leading-[1.5] text-[var(--muted)]">
+            <p className="m-0 max-w-[var(--measure-deck)] px-5 pt-[18px] pb-5 text-[16px] leading-[1.5] text-[var(--muted)]">
               Message us from the bubble in the corner. Someone answers on weekdays between 9 and 6
               Eastern.
             </p>

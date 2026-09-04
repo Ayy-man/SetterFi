@@ -812,17 +812,17 @@ describe("AppShell coach chrome", () => {
 
   it("mounts the support bubble on a coach surface and nowhere else", () => {
     renderCoachShell();
-    expect(screen.getByRole("button", { name: "Get help" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Message support" })).toBeVisible();
   });
 
   it("does not mount it in the owner console, which has its own help route", () => {
     renderShell();
-    expect(screen.queryByRole("button", { name: "Get help" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Message support" })).toBeNull();
   });
 
   it("keeps the bubble outside <main>, so it is not inside the landmark it floats over", () => {
     renderCoachShell();
-    const launcher = screen.getByRole("button", { name: "Get help" });
+    const launcher = screen.getByRole("button", { name: "Message support" });
     expect(document.getElementById("main")?.contains(launcher)).toBe(false);
   });
 
@@ -926,15 +926,54 @@ describe("AppShell account identity", () => {
     expect(within(trigger).queryByText("Marcus")).toBeNull();
   });
 
-  it("greets the support bubble's reader by name when there is one, and nobody when there is not", () => {
+  /**
+   * The shell is the only thing that knows who is reading, so it is the only place the bubble can
+   * get the name from, and this asserts that plumbing rather than the panel's own copy.
+   *
+   * It used to assert a "Need a hand, Marcus?" heading. The 2026-09-04 rebuild took that greeting
+   * off the panel, because `SupportBubble.dc.html` heads it with the name of the person answering
+   * instead, and asking the reader their own name back was the sentence the artboard spent on
+   * saying who would reply. The name did not stop being needed: it now attributes the coach's own
+   * side of the thread, so the same prop is checked through what it labels now.
+   */
+  it("hands the support bubble the reader's name, and copes when there is none", async () => {
+    // A thread with one message from the coach, because the name is what labels their own side of
+    // it: with nothing written yet there is nobody to attribute and the panel says so instead.
+    const threads = [{
+      id: "thread-1",
+      tenantId: "tenant-1",
+      subject: "Message from the dashboard",
+      status: "open",
+      assignedTo: null,
+      isTest: false,
+      createdAt: "2026-08-21T09:12:00.000Z",
+      updatedAt: "2026-08-21T09:12:00.000Z",
+      messages: [{
+        id: "message-1",
+        authorId: "coach-1",
+        authorName: "Marcus Reid",
+        body: "Can a lead still text me before then?",
+        isTest: false,
+        createdAt: "2026-08-21T09:12:00.000Z",
+      }],
+    }];
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ threads }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })));
+
     const named = renderWithAccount(marcus);
-    fireEvent.click(screen.getByRole("button", { name: "Get help" }));
-    expect(screen.getByRole("heading", { name: "Need a hand, Marcus?" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Message support" }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeVisible());
+    expect(screen.getByRole("dialog").textContent).toContain("Marcus");
     named.unmount();
 
     renderWithAccount(undefined);
-    fireEvent.click(screen.getByRole("button", { name: "Get help" }));
-    expect(screen.getByRole("heading", { name: "Need a hand?" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Message support" }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeVisible());
+    expect(screen.getByRole("dialog").textContent).not.toContain("Marcus");
+
+    vi.unstubAllGlobals();
   });
 });
 
