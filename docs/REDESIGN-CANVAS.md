@@ -178,3 +178,25 @@ together — Get started and Connections into the Home setup card, Notifications
 menu, Help into the support bubble — or live pages become unreachable again. The canvas draws all
 four destinations, so the routes exist on paper; the implementation has to make them real in the
 same change.
+
+## The coach canvas, 2026-09-04
+
+**Artifact:** <https://claude.ai/code/artifact/2f6a08eb-6ca9-471f-a02e-052d430976a5>
+**Working files:** `design/coach/*.dc.html`, `design/coach/VOCABULARY.md`, `design/coach/canvas.json`
+
+A second canvas, coach side only, drawn on the light palette and blue accent that `tokens.css`
+carries now, so on colour it supersedes the 2026-09-01 canvas above; on layout, anatomy, copy and
+ordering it inherits from it. Twenty-two artboards on three pages: Console (Home live and first run,
+Inbox, Agent, Leads as list and board, Billing, Home on a phone, and the vocabulary sheet every other
+board copies), Onboarding and setup (the overview, one step, connect, go live, the full setup page,
+and a step on a phone), and Chrome and states (account menu, the one-question notifications page,
+the support bubble open, tips, loading, the failed read, and page not found).
+
+It was drawn from `docs/plans/2026-09-04-coach-visual-audit.md` and
+`docs/plans/2026-09-04-coach-mobbin-research.md` rather than from screenshots, under
+`docs/COACH-REDESIGN-PLAYBOOK.md`. Every board was measured in Chrome before it was placed: nothing
+under 14px, no target under 44px, no uppercase, one filled accent button in view, mono only on
+figures, absence stated in words, and no shape drawn over data that is not there.
+
+Rulings the boards make that the spec left open are listed per board in
+`docs/plans/2026-09-04-coach-rehaul-notes.md`, Note 5.

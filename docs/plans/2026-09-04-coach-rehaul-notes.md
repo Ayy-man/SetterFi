@@ -170,3 +170,42 @@ owner backlog, not a formatting or binding defect.
 Still open from Note 1: the greeting while the override is on, the first-run composition and its
 dead space, and the mostly empty figure cards. Those belong to the redesign proper, which starts
 tonight.
+
+## Note 5 (2026-09-04, overnight): the coach canvas
+
+Drawn overnight on the instruction to audit every coach screen, research each against Mobbin and
+the impeccable product register, draw the canvas, then rebuild. The audit is
+`2026-09-04-coach-visual-audit.md`, the research `2026-09-04-coach-mobbin-research.md`, and the
+canvas is indexed in `docs/REDESIGN-CANVAS.md` under "The coach canvas, 2026-09-04".
+
+Rulings made on the boards that the spec left open, so they are not re-litigated:
+
+- Home live: the six bubbles sit in a three by two grid aligned to their tops, so a card with only a
+  figure ends after its sentence. Booked calls is the one drenched panel and carries no allowance,
+  which lives on Billing only. The trend is bars, past months faded, the current month solid and
+  labelled "so far", with the partial month stated in a sentence. Keywords render in sentence case.
+  The keyword table prints the denominator on every row and prints an absence sentence in place of
+  rates for a keyword under ten senders.
+- Home first run: three rungs from one list, the header states the count once and the row names
+  the step, the hero always has something to say, and there are no figure cards at all.
+- Inbox: the Needs you view drops the per-row state pill because every row would repeat the view.
+  Lead details are facts only. Composer tabs read "Reply to Denise" and "Note to yourself".
+- Agent: the four cards pack as two stacked columns. Keywords and question order are a fifth
+  full-width panel written as prose with fields inside the sentence, with 44px up and down arrows
+  beside an Asked or Skipped switch. This makes "Four things are yours" five in practice; the
+  sentence stands until Alec rules.
+- Leads: the two request actions live in a per-row menu with "Open the conversation" above them.
+  Stage is a dot plus a word, not a pill. The board's non-drag equivalent is a "Move to" button.
+- Billing: "18 of 25" is a figure and a phrase, not a progress bar. Change plan is the page's one
+  filled button.
+- Onboarding: later steps get a plain ring with no numeral; a step's form panel has no header band
+  because the step title is the h1; the go-live board has no per-row "Ready" pill; on a phone the
+  Continue button is a sticky full-width footer and there is no tab bar because onboarding is not
+  the console.
+- Setup: a broken channel that needs the coach's reconnect says so ("Its permission ran out, and
+  reconnecting brings it back") and carries the button; an outage SetterFi owns says "We're fixing
+  it" and carries nothing. The technical record is one closed disclosure.
+- Notifications: one question, three rows, with Text and Both showing "Not ready yet" while the
+  carrier review runs rather than being hidden.
+- Loading: skeleton bars all the same height, because varying them draws data that has not arrived.
+- Error and not found: one panel, one sentence, one button; no codes anywhere.
