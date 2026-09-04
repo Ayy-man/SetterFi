@@ -25,7 +25,7 @@ intent; provider delivery still requires a persisted attempt and its destination
 | conversation.needs_human | tenant | Conversation needs a person | conversation | coach | bell | Optional | Enabled |
 | conversation.needs_human.unclaimed_24h | tenant | Conversation unclaimed for 24 hours | conversation | coach, success_owner | bell, email | Optional | Enabled |
 | conversation.needs_human.unclaimed_4h | tenant | Conversation unclaimed for 4 hours | conversation | coach | bell | Optional | Enabled |
-| conversation.outbound_send_unconfirmed | platform | Outbound send needs reconciliation | conversation | owner, admin | bell | Required | Enabled |
+| conversation.outbound_send_unconfirmed | platform | Coach outbound send needs reconciliation | conversation | owner, admin | bell | Required | Enabled |
 | conversation.outbound_send_unconfirmed | tenant | Outbound send needs reconciliation | conversation | coach, success_owner | bell | Required | Enabled |
 | conversation.tripwire_escalated | platform | Tripwire escalation | safety | owner, admin | bell | Required | Enabled |
 | conversation.tripwire_escalated | tenant | Conversation escalated | safety | coach | bell | Optional | Enabled |
@@ -35,10 +35,10 @@ intent; provider delivery still requires a persisted attempt and its destination
 | onboarding.a2p_cleared | tenant | A2P cleared | onboarding | coach, success_owner | bell | Optional | Enabled |
 | onboarding.paying_not_live | tenant | Paying account is not live | onboarding | success_owner | bell | Required | Enabled |
 | onboarding.stalled_coach | tenant | Setup waiting on coach | onboarding | coach | bell | Optional | Enabled |
-| onboarding.stalled_external | platform | Setup waiting on provider | onboarding | owner, admin | bell | Required | Enabled |
+| onboarding.stalled_external | platform | Coach setup stalled on a provider | onboarding | owner, admin | bell | Required | Enabled |
 | onboarding.stalled_external | tenant | Setup waiting on provider | onboarding | coach, success_owner | bell | Optional | Enabled |
 | onboarding.stalled_system | platform | Setup needs platform action | onboarding | owner, admin | bell | Required | Enabled |
 | onboarding.stalled | tenant | Onboarding stalled | onboarding | coach, success_owner | bell | Optional | Enabled |
 | send.refused.window_expired | tenant | Message window expired | channel | coach | bell | Optional | Enabled |
-| suppression.provider_unconfirmed | platform | Provider suppression unconfirmed | compliance | owner, admin | bell | Required | Enabled |
+| suppression.provider_unconfirmed | platform | Coach suppression unconfirmed by a provider | compliance | owner, admin | bell | Required | Enabled |
 | suppression.provider_unconfirmed | tenant | Provider suppression unconfirmed | compliance | coach, success_owner | bell, email | Optional | Enabled |

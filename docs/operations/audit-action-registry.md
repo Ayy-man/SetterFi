@@ -69,6 +69,8 @@ only from a persisted receipt for one of these registered actions.
 | channel.messaging_install.started | human | platform | No | No | Install start logged | Messaging install start recorded in the audit log |
 | channel.provider.switched | human | tenant | Yes | Yes | Provider switch logged | Channel provider switch recorded in the audit log |
 | channel.went_live | system | tenant | No | Yes | Channel activation logged | Channel activation recorded in the audit log |
+| coach.question_order.saved | human | tenant | No | Yes | Question order logged | Qualification-question order recorded in the audit log |
+| coach.question.enabled.changed | human | tenant | No | Yes | Question setting logged | Qualification-question setting recorded in the audit log |
 | compliance.control_reply.published | human | tenant | Yes | Yes | Control reply approval logged | Carrier control reply approval recorded in the audit log |
 | consent.opt_in | human | tenant | No | Yes | Consent logged | Consent action recorded in the audit log |
 | consent.opt_out | human | tenant | No | Yes | Opt-out logged | Opt-out action recorded in the audit log |
@@ -81,7 +83,6 @@ only from a persisted receipt for one of these registered actions.
 | contact.imported | human | tenant | No | Yes | Contact import logged | Contact import recorded in the audit log |
 | contact.merged | human | tenant | Yes | Yes | Merge logged | Contact merge recorded in the audit log |
 | contact.note.added | human | tenant | No | Yes | Contact note logged | Contact note recorded in the audit log |
-| contact.pipeline_stage.set | human | tenant | No | Yes | Logged | Change the pipeline stage. This change is recorded in the audit log. |
 | contact.tag.added | human | tenant | No | Yes | Contact tag logged | Contact tag assignment recorded in the audit log |
 | contact.tag.removed | human | tenant | No | Yes | Contact tag removal logged | Contact tag removal recorded in the audit log |
 | contact.unmerged | human | tenant | Yes | Yes | Undo logged | Contact merge undo recorded in the audit log |
@@ -123,6 +124,7 @@ only from a persisted receipt for one of these registered actions.
 | notification.inbox.read | human | tenant | No | Yes | Notification read logged | Notification read recorded in the audit log |
 | notification.inbox.read_all | human | tenant | No | Yes | Inbox read logged | Mark all notifications read recorded in the audit log |
 | notification.onboarding.stalled | system | tenant | No | Yes | Onboarding stall notification recorded | Onboarding stall notification recorded |
+| notification.preference.changed | human | platform | No | Yes | Notification change logged | Notification preference change recorded in the audit log |
 | offer.changed | human | tenant | No | Yes | Offer field change logged | Changed offer fields recorded in the audit log |
 | offer.draft.saved | human | tenant | No | Yes | Offer draft save logged | Offer draft save recorded in the audit log |
 | offer.published | human | tenant | No | Yes | Offer publish logged | Offer publish recorded in the audit log |

@@ -5,25 +5,14 @@ evidence only: it does not prove deployment, provider delivery, a recording, or 
 
 ## Admin navigation coverage
 
-- `/admin/account-terms`: Publish the account terms
-- `/admin/affiliates`: Review affiliate records
-- `/admin/agent-performance`: Read platform measurement
-- `/admin/agents`: Read the agent roster
 - `/admin/alerts`: Work the platform Inbox
 - `/admin/audit`: Use the audit log
 - `/admin/billing`: Review tiers and billing
 - `/admin/brain`: Publish the Brain safely
-- `/admin/brain/testing`: Run an eval suite before publish
-- `/admin/channel-health`: A2P and channel health
 - `/admin/compliance`: Review compliance and DNC evidence
-- `/admin/corrections`: Decide a billing correction
-- `/admin/help`: Use the handover package
 - `/admin/overview`: Read platform measurement
 - `/admin/platform-clients`: Manage the client book
-- `/admin/provisioning`: Operate the provisioning tracker
-- `/admin/support`: Work the support inbox
 - `/admin/system`: Read System health
-- `/admin/tiers`: Review tiers and billing
 
 ---
 
@@ -35,7 +24,7 @@ Take a draft from diff review to every agent without publishing more than you ch
 
 1. **Read the diff before anything else.** The Brain header carries the DRAFT and PUBLISHED lifecycle with version history beside it. Open the diff and read what actually changed (qualification outcomes, objection responses, compliance language) rather than trusting the section you happened to edit.
 2. **Check the eval status on the publish button.** The button surfaces the latest suite result. A failing safety suite soft-warns instead of hard-blocking, which means the decision to continue is yours and it is attributed to you.
-3. **Try the change on the Evals page.** Ask the lead question the edit was meant to fix and compare the draft against the published version. The grounding receipt shows the retrieval behind the answer before any coach sees it.
+3. **Try the change on the Evals tab.** Ask the lead question the edit was meant to fix and compare the draft against the published version. The grounding receipt shows the retrieval behind the answer before any coach sees it.
 4. **Publish to all agents.** One action pushes the published version to every agent. The confirmation names what propagated; anything still sitting in draft stays in draft and keeps saying so.
 5. **Confirm the audit entry.** A brain publish is a privileged action, so it writes an entry with the actor, the version, and the timestamp. That entry is what settles a later question about when a behavior changed.
 
@@ -57,7 +46,7 @@ Prove a brain or model change against the safety and regression suites first.
 
 **Outcome:** You can say which suite passed, on which configuration, before the change went out.
 
-1. **Pick the configuration under test.** The Evals page runs against draft, published, or a candidate configuration, with a client-overlay picker and channel simulation. Choose the one you intend to publish, not the one already live.
+1. **Pick the configuration under test.** The Brain's Evals tab runs against draft, published, or a candidate configuration, with a client-overlay picker and channel simulation. Choose the one you intend to publish, not the one already live.
 2. **Run the safety suite first.** Qualification, compliance, and prompt-injection cases are the gate. They matter more than tone cases because they are the ones that create a real incident.
 3. **Read the failures as receipts, not scores.** Each case opens to the grounding receipt: the rule that fired and the passage it drew from. That is where you see whether the case failed on knowledge or on the decision table.
 4. **Add the case that caused the change.** Any production conversation can be added as an eval case. A fix you add a case for stays fixed across later prompt and model swaps.
@@ -129,7 +118,7 @@ Settle a disputed booked-call count with a reasoned, audited correction.
 
 **Outcome:** The count matches the evidence, and the correction carries a reason anyone can read later.
 
-1. **Reconcile before you adjust.** Open the per-client metering table on Tiers and billing and compare booked calls against the conversations behind them. Only confirmed bookings count; a proposed slot the lead never accepted does not.
+1. **Reconcile before you adjust.** Open the per-client metering table on Money's Tiers tab and compare booked calls against the conversations behind them. Only confirmed bookings count; a proposed slot the lead never accepted does not.
 2. **Export the cycle the client is disputing.** Every table exports CSV and JSON with the rows currently filtered and sorted. A disagreement about a number gets settled from the same rows both sides can read.
 3. **Adjust with a reason, not a silent edit.** The metered-count adjustment requires a written reason. Outcome billing produces disputes, so the reason field is the product feature, not paperwork around it.
 4. **Confirm the audit trail entry.** Meter adjustments are privileged and write an entry with the actor, the client, the old and new counts, and the reason. Check it landed before you reply to the client.
@@ -154,7 +143,7 @@ Triage system problems and lead handoffs from one queue, ranked by how long each
 **Outcome:** Every row that needed a person has been read, and the ones you acted on carry an audit entry.
 
 1. **Read the order before you read the rows.** Both lanes rank by how long a row has waited. Nothing in the platform stores a response target or a reply promise, so no row is late and none is breaching. A long wait is the oldest thing here, not a missed commitment.
-2. **Work the system lane first, because those rows block replies.** A disconnected channel or a blocked provisioning step stops an agent from answering. Open the row, read the blast radius, and follow the account to Channel health, which carries the provider's own error text. Read the receipt checklist there with care: the signed round-trip receipt has no write path yet, so an empty one means nothing was recorded rather than that the test failed.
+2. **Work the system lane first, because those rows block replies.** A disconnected channel or a blocked provisioning step stops an agent from answering. Open the row, read the blast radius, and follow the account to the Health tab on Clients, which carries the provider's own error text. Read the receipt checklist there with care: the signed round-trip receipt has no write path yet, so an empty one means nothing was recorded rather than that the test failed.
 3. **Read the handoff lane as accounts, not as leads.** A handoff row names the account, the channel, what handed the thread over and how long it has waited. It never carries the lead's name or their message: those stay inside the coach's tenant, and the coach sees the thread in their own inbox. Contact the coach rather than trying to reach the lead.
 4. **Mark read when you are done looking, and say the rest out loud.** Marking read is the only per-row state the store keeps, and it means somebody looked. It does not mean the problem is fixed, and nothing records who is working a row, so hand off in writing rather than assuming the queue carries it.
 
@@ -176,7 +165,7 @@ Reply to coach support threads without mixing them with lead conversations.
 
 **Outcome:** The coach receives a persisted reply and the next operator can see who owns the thread.
 
-1. **Choose My clients or All clients.** My clients narrows the queue to your assigned book; All clients is an operating view, not a wider permission. Open the thread in Client requests and keep internal notes separate from the reply the coach will read.
+1. **Choose My clients or All clients.** My clients narrows the queue to your assigned book; All clients is an operating view, not a wider permission. Open the coach request from the Inbox and keep internal notes separate from the reply the coach will read.
 2. **Reply from the support thread.** Use Reply for coach-visible text and Internal note for staff context. Support messages live in their own system and never become lead-conversation messages.
 3. **Confirm the persisted read-back.** A successful reply reappears with its author and time. Reassignment reads Reassigned only after the owner and audit receipt both match the request.
 
@@ -219,7 +208,7 @@ See which client's setter is live, which is on an old version, and which has nev
 
 **Outcome:** You can name every client whose setter is not answering leads on its newest configuration, and say why.
 
-1. **Open Agents and read the three states apart.** There is one setter per client. Live means it is answering leads on a published version. Draft means edits are saved but nothing has ever been published, so it is answering nothing. Never published means the client has no offer layer at all. They are three different pieces of work, so they are three different sentences rather than one word in three colours.
+1. **Open the Agent tab on Clients and read the three states apart.** There is one setter per client. Live means it is answering leads on a published version. Draft means edits are saved but nothing has ever been published, so it is answering nothing. Never published means the client has no offer layer at all. They are three different pieces of work, so they are three different sentences rather than one word in three colours.
 2. **Check the unpublished count before you chase anyone.** The count is the client's draft versions standing above their live one, read from offer_layers. A live setter with two unpublished edits is working correctly on older instructions -- that is a conversation with the coach, not an incident.
 3. **Go to where the setting is owned.** This screen reports state and does not change it. Publishing happens on the client's own offer page, where a change can be reviewed against what it replaces; channels and escalation are their own screens. Each row links to the one place that owns it.
 
@@ -238,7 +227,7 @@ If the open-thread count reads as unavailable, the conversation store did not an
 
 Change optional destinations while leaving required notices locked and visible.
 
-**Outcome:** The account's bell, email, and Slack choices match the persisted registry read-back.
+**Outcome:** The account's bell and email choices match the persisted registry read-back.
 
 1. **Open Notifications and read the rule before changing it.** The event, scope, audience, and default destinations come from the alert registry. Required billing consequences remain enabled and their controls read Required.
 2. **Change one optional destination.** The control is committed only after the service returns the persisted preference. A failed save restores the prior value rather than leaving an optimistic state on screen.
@@ -283,7 +272,7 @@ Separate queued, accepted, delivered, retrying, and terminal notification states
 **Outcome:** You can state what the platform attempted and which receipt is still missing.
 
 1. **Start with the queue evidence.** Queue depth and terminal attempts come from persisted delivery rows. Unknown evidence stays Unavailable and must not be summarized as healthy.
-2. **Read the destination-specific state.** Email acceptance reads Sent until a signed receipt arrives; Slack requires its documented success response; a bell is delivered by the database commit.
+2. **Read the destination-specific state.** Email acceptance reads Sent until a signed receipt arrives; a bell is delivered by the database commit.
 3. **Let the bounded retry policy own retries.** Do not create a second send from the UI. A leased attempt and its retry time keep the provider call idempotent and visible.
 
 ### Verify
@@ -410,7 +399,7 @@ Interpret platform and agent-performance metrics only when their named evidence 
 
 **Outcome:** You can state the definition, window, denominator, and availability reason for a displayed metric.
 
-1. **Start from the metric definition.** Overview and Agent performance use the committed metric registry. The definition and the query must agree on population, attribution window, and exclusion of Demo and Test rows.
+1. **Start from the metric definition.** Overview and the Performance tab on Clients use the committed metric registry. The definition and the query must agree on population, attribution window, and exclusion of Demo and Test rows.
 2. **Treat absent evidence as absent.** Unavailable, No completed events yet, and Needs more history are evidence states. They never become zero, a dash, or a cached result presented as current.
 3. **Use the role boundary.** Success operators receive operational evidence only. Platform economics remain owner/admin-only and incomplete margin has no renderable field.
 
@@ -452,7 +441,7 @@ Review a requested count correction and preserve the offset and audit evidence.
 
 **Outcome:** The request is approved or rejected with a reason and an immutable read-back.
 
-1. **Open Corrections and read the source event.** Compare the request with the billable event and supporting appointment evidence. Do not change the original ledger row.
+1. **Open the Corrections tab on Money and read the source event.** Compare the request with the billable event and supporting appointment evidence. Do not change the original ledger row.
 2. **Approve or reject with a reason.** Approval writes an offset event; rejection records the decision. Both paths require the persisted decision and audit receipt before the UI confirms them.
 3. **Confirm the resulting count.** The current allowance view must reflect the original event plus its offset. A decision label without that read-back is incomplete.
 
@@ -494,7 +483,7 @@ Open the generated operating package and verify its source metadata before relyi
 
 **Outcome:** You are using the committed package whose file hashes match its manifest.
 
-1. **Open Help for the task you are performing.** The in-product guide is the operating source for screen procedures. The generated operator guide contains the same guide text for offline use.
+1. **Open the Help section of your account sheet for the task you are performing.** The in-product guide is the operating source for screen procedures. The generated operator guide contains the same guide text for offline use.
 2. **Check the manifest metadata.** Generated at, source commit, registry counts, and file hashes identify the exact package. They are injected build evidence, not a claim about deployment or provider state.
 3. **Use the escalation path when evidence is absent.** The package labels missing cost, contact, recording, provider, and deployment inputs. Do not replace those labels with an operator guess.
 
@@ -516,8 +505,8 @@ Put the approved terms and privacy copy into the registry a signup acceptance is
 **Outcome:** One published version exists, with a content hash an auditor can compare against the approved document.
 
 1. **Save the approved copy as a draft.** Paste the terms and the privacy policy exactly as counsel supplied them. SetterFi writes no legal copy of its own, and the content hash is computed from these two bodies, so a reformatted paste is a different document.
-2. **Publish the draft you checked.** Publishing stamps the version with your identity and the time, and both the draft and the publication are recorded in the audit log. A published version cannot be edited, replaced, or withdrawn from this screen.
-3. **Switch acceptance on separately.** Publishing alone changes nothing a coach sees. Signup only asks for acceptance once SETTERFI_ACCOUNT_TERMS_LIVE is on, which is why the publisher stays reachable while that flag is off.
+2. **Publish the draft you checked.** Publishing stamps the version with your identity and the time, and both the draft and the publication are recorded in the audit log. A published version cannot be edited, replaced, or withdrawn from the Terms section of your account sheet, where the registry now lives.
+3. **Switch acceptance on separately.** Publishing alone changes nothing a coach sees. Signup only asks for acceptance once SETTERFI_ACCOUNT_TERMS_LIVE is on, which is why the Terms section stays reachable while that flag is off.
 
 ### Verify
 
