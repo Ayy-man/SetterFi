@@ -297,7 +297,17 @@ describe("the demo tenant's own dashboard says so on screen", () => {
       'import { PROVENANCE_COPY } from "@/components/workspace/live/coach-page-head";',
     );
     expect(surface).toMatch(/PROVENANCE_COPY\[measurement\.isDemo \? "demo" : "real"\]/);
-    expect(surface).toMatch(/data-provenance=\{measurement\.isDemo \? "demo" : "real"\}/);
+    /*
+     * The attribute now carries a third arm, `demo-override`, for the ten-minute demo switch that
+     * presents the setup rail as finished. The guard is widened rather than dropped, and it is
+     * widened in the one direction that keeps its claim: the flag still has to reach the attribute,
+     * so a change that stopped labelling a seeded tenant still fails here. The override arm is
+     * asserted alongside it, because a switch that drew a complete setup while the page went on
+     * printing the plain "Demo data" sentence would be the unlabelled state this guard exists to
+     * stop, one level up.
+     */
+    expect(surface).toMatch(/data-provenance=\{[\s\S]*?measurement\.isDemo \? "demo" : "real"\s*\}/);
+    expect(surface).toMatch(/demoOverride\.active \? "demo-override"/);
     expect(surface).not.toMatch(/DemoBadge/);
   });
 });

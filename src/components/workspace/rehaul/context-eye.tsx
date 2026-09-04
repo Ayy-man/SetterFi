@@ -1,7 +1,15 @@
 "use client";
 
 import { Eye } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -50,6 +58,16 @@ export type ContextEyeProps = {
    * eye cannot drift away from the Export button standing next to it.
    */
   scale?: "owner" | "coach";
+  /**
+   * An extra block inside the panel, under the copy and above the hide row.
+   *
+   * The eye is already the console's home for things a reviewer opens on purpose rather than
+   * things a user acts on, and it carries "review only" in its own corner, so a demo affordance
+   * belongs here rather than beside a coach's real controls. The slot stays anonymous on purpose:
+   * this component knows nothing about demos, and the one screen that has such a control passes
+   * it, so no other screen grows one by inheriting a prop it did not ask for.
+   */
+  action?: ReactNode;
   className?: string;
 };
 
@@ -96,6 +114,7 @@ function hide(screen: string) {
 }
 
 export function ContextEye({
+  action,
   className,
   copy,
   position = "absolute",
@@ -200,6 +219,11 @@ export function ContextEye({
             About this screen
           </div>
           <p className="m-0 text-[oklch(0.85_0.01_262)]">{copy}</p>
+          {action ? (
+            <div className="mt-3 border-t border-white/12 pt-3" data-slot="context-eye-action">
+              {action}
+            </div>
+          ) : null}
           <div className="mt-3 flex items-center gap-2">
             <button
               className={cn(
