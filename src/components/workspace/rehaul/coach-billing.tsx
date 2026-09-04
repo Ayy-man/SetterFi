@@ -1,62 +1,56 @@
 "use client";
 
 /*
- * Coach Billing, drawn from `CoachBilling.body.html`.
+ * Coach Billing, drawn from `design/coach/Billing.dc.html`.
  *
- * Data, loaders and mutations are the live page's unchanged: the same `/api/billing/corrections`
- * read, the same `record_attendance` / `skip_attendance` / `request_correction` posts, the same
- * `/api/billing/checkout` state machine, the same parsers and receipts. Nothing here queries
- * anything the old page did not.
+ * The artboard is four things and nothing else: one plan card carrying the price, the period and
+ * the allowance as a figure with a phrase; one "This count looks wrong" button that opens a text
+ * box; one list of appointments with two large buttons per row; and one line inside the plan card
+ * when something about the billing record needs saying. Everything the previous pass carried on
+ * top of that is gone -- the five eyebrow overlines it spelled as categories nobody scans, the
+ * correction form's picker and its draft machinery, the single-bar chart drawn from one reading,
+ * the progress meter under the allowance, and the "Activate your plan" panel that reported the
+ * checkout state machine three times over an active subscription.
  *
- * Where the artboard asks for a fact the record does not carry, the panel says less rather than
- * inventing it:
- *   - "card ending 4242" and an Invoices button. The billing snapshot carries no saved-card and
- *     no invoice document, and there is no coach-reachable route for either, so both header
- *     buttons are omitted. The one real action on this screen -- asking us to move the plan --
- *     takes their place.
- *   - "Last six months". The projection carries one period: `bookedCount` against
- *     `callAllowance` for the period bounded by `periodStart`/`periodEnd`. The chart therefore
- *     draws the one bar it has, labelled with that period's month, rather than five invented ones.
+ * Data and mutations are unchanged: the same `/api/billing/corrections` read, the same
+ * `record_attendance` and `request_correction` posts, the same `/api/billing/checkout` state, the
+ * same parsers. Nothing here queries anything the old page did not.
+ *
+ * Where the artboard asks for a fact the record does not carry, the card says less rather than
+ * inventing it, and the gap is written down in `docs/plans/2026-09-04-coach-rehaul-notes.md`:
+ *   - "Over the allowance, $18 a call". The projection carries no overage rate, so that stat
+ *     prints its absence in words rather than a number nobody can check.
+ *   - "The card ending 4429 expires next month". There is no saved-card record and no coach
+ *     reachable route to one, so the notice line carries only the notices the record does hold.
+ *   - The answered rows ("Grant Okafor, Showed"). `outcomePrompts` is the unanswered queue only;
+ *     a booking whose attendance is already recorded leaves the projection entirely.
+ *   - "Calls from the last two weeks". No window is stated by the read, so the footer says what
+ *     the list is for instead of asserting a range.
+ *
+ * The anatomy is spelled with `coach.css`'s own `.coach-panel*` classes rather than through
+ * `DeckPanel`, because the artboard puts a real button in two of the three header bands and
+ * `DeckPanel`'s band takes a 44px square link by contract. The card face, the band, the eyebrow
+ * and the name are the same rules either way; no stylesheet was edited to get them.
  */
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
-import {
-  STATE_TONE_TO_TONE,
-  Status,
-  StatusDot,
-  Surface,
-  TONE_TEXT,
-} from "@/components/kit/atomics";
+import { Status } from "@/components/kit/atomics";
 import type { BillingCheckoutBrowserState } from "@/app/api/billing/checkout/handler";
-import { BarChart } from "@/components/kit/bar-chart";
 import { DataState } from "@/components/kit/data-state";
-import { DeckPanel } from "@/components/kit/deck-panel";
 import { LoggedButton } from "@/components/kit/logged-button";
-import { Meter } from "@/components/kit/meter";
 import { Skeleton } from "@/components/kit/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ContextEye } from "@/components/workspace/rehaul/context-eye";
-import { Figure } from "@/components/workspace/rehaul/_primitives";
 import {
   parseBillingCheckoutState,
   parseCoachBillingSnapshot,
   resolveOutcomePrompt,
+  noticeDeliveryLabel,
   type CoachBillingSnapshot,
 } from "@/components/workspace/live/coach-billing";
+import { COACH_LEAD_CLASS } from "@/components/workspace/live/coach-type";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { FAILURE_BODY } from "@/lib/copy/failure";
-import {
-  BILLING_INVOICE_STATE_COPY,
-  BILLING_SUBSCRIPTION_STATE_COPY,
-  type StateCopy,
-} from "@/lib/copy/states";
 import {
   WORKSPACE_DISPLAY_TIMEZONE,
   workspaceCountFormat,
@@ -65,185 +59,581 @@ import {
 import { displayName } from "@/lib/format/display-name";
 import { money } from "@/lib/format/metric";
 
-/* The sentences this screen used to print as help text, handed to the eye instead. */
+/*
+ * The sentences this screen used to print as help text, handed to the eye.
+ *
+ * The page's own lead line is not repeated here: the artboard prints "What you pay, what you have
+ * used, and how the calls went" under the title, and a fact said on the page does not also belong
+ * in the eye.
+ */
 export const COACH_BILLING_EYE_COPY =
-  "What you pay, what you have used, and how the calls went. Answering the attendance question "
-  + "feeds your own analytics; it does not change what you are billed. A correction request is "
-  + "read by a person against the conversations, and the saved count does not move until it is "
-  + "decided. Plan changes are arranged with SetterFi and always take effect at the start of a "
-  + "billing period. Coming back from Stripe does not prove a payment: the plan stays unconfirmed "
-  + "here until Stripe confirms the charge to us.";
+  "Answering the attendance question feeds your own analytics; it does not change what you are "
+  + "billed. A correction request is read by a person against the conversations, and the saved "
+  + "count does not move until it is decided. Plan changes are arranged with SetterFi and always "
+  + "take effect at the start of a billing period. Coming back from Stripe does not prove a "
+  + "payment: the plan stays unconfirmed here until Stripe confirms the charge to us.";
 
 /* The shell's own coach title: 46px/600, and the 30px step-down under 640px comes with it. */
 const H1_CLASS = "coach-page-title m-0";
-const TABULAR_CLASS = "[font-variant-numeric:tabular-nums_lining-nums]";
-const MONO_META_CLASS =
-  "font-[family-name:var(--font-mono)] text-[14px] leading-[1.4] text-[color:var(--muted)] "
-  + "[font-variant-numeric:tabular-nums_lining-nums]";
-const SENT_CLASS =
-  "m-0 mt-[10px] max-w-[var(--measure-deck)] text-[16px] leading-[1.5] text-[color:var(--muted)]";
-const ROW_NAME_CLASS = "m-0 text-[18px] leading-[1.35] font-medium text-[color:var(--ink)]";
-const ACTION_CLASS =
-  "inline-flex h-[46px] items-center gap-[8px] rounded-[12px] border border-[var(--line-input)] "
-  + "bg-[var(--card)] px-[20px] text-[16px] leading-[1.4] font-medium text-[color:var(--body)] "
-  + "no-underline hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)]";
-const FIELD_CLASS =
-  "h-[48px] w-full rounded-[10px] border border-[var(--line-input)] bg-[var(--well)] px-[14px] "
-  + "text-[16px] leading-[1.4] text-[color:var(--ink)] placeholder:text-[color:var(--muted)]";
 
-const MONTH_FORMAT = new Intl.DateTimeFormat("en-US", {
+/*
+ * The three control recipes the artboard draws, at the one height it draws them all at.
+ *
+ * 48px everywhere, which clears the 44px floor with room. The good pair is the attendance answer
+ * (`Billing.dc.html:160`), heavier and wider than the page's other actions because it is the one
+ * thing on its row asking for a reply.
+ */
+const CONTROL_BASE =
+  "inline-flex h-[48px] items-center justify-center gap-[10px] rounded-[9px] "
+  + "text-[16px] leading-none whitespace-nowrap no-underline";
+const PRIMARY_CLASS =
+  `${CONTROL_BASE} border border-[var(--accent-line)] [background:var(--accent-fill)] px-[24px] `
+  + "font-semibold text-[color:var(--on-accent)]";
+const SECONDARY_CLASS =
+  `${CONTROL_BASE} border border-[var(--line)] bg-[var(--control-fill)] px-[22px] font-medium `
+  + "text-[color:var(--body)] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)]";
+const GOOD_CLASS =
+  `${CONTROL_BASE} border border-[var(--good-line)] bg-[var(--good-wash)] px-[26px] font-semibold `
+  + "text-[color:var(--good-text)]";
+
+const STAT_LABEL_CLASS = "coach-panel__stat-label";
+const ROW_NAME_CLASS = "m-0 text-[18px] leading-[1.35] font-medium text-[color:var(--ink)]";
+const ROW_META_CLASS = "m-0 text-[16px] leading-[1.45] text-[color:var(--muted)]";
+const FOOTNOTE_CLASS = "m-0 text-[15px] leading-[1.5] text-[color:var(--muted)]";
+const FIELD_LABEL_CLASS = "text-[16px] leading-[1.5] text-[color:var(--muted)]";
+const TEXTAREA_CLASS =
+  "min-h-[120px] w-full resize-y rounded-[9px] border border-[var(--line-input)] bg-[var(--well)] "
+  + "px-[16px] py-[12px] text-[16px] leading-[1.5] text-[color:var(--ink)] "
+  + "placeholder:text-[color:var(--muted)]";
+
+/** "Tuesday, Sep 2 at 2:00 PM", which is how the artboard reads an appointment back. */
+const APPOINTMENT_FORMAT = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
   month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
   timeZone: WORKSPACE_DISPLAY_TIMEZONE,
 });
+
+/** The month the allowance resets in, for the phrase under the figure. */
+const RESET_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  day: "numeric",
+  timeZone: WORKSPACE_DISPLAY_TIMEZONE,
+});
+
+const DAY_MS = 86_400_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function stateCopy(value: string, copy: Readonly<Record<string, StateCopy>>): StateCopy {
-  return copy[value] ?? { label: "State recorded", tone: "neutral" };
-}
-
 function formatDate(value: string) {
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "Date not recorded" : workspaceDateFormat.format(parsed);
+  return Number.isNaN(parsed.getTime()) ? null : workspaceDateFormat.format(parsed);
 }
 
-function monthLabel(value: string) {
+function formatAppointment(value: string) {
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "Period" : MONTH_FORMAT.format(parsed);
+  return Number.isNaN(parsed.getTime()) ? "Time not recorded" : APPOINTMENT_FORMAT.format(parsed);
 }
+
+function formatReset(value: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : RESET_FORMAT.format(parsed);
+}
+
+/**
+ * What to call the price's cadence, measured rather than assumed.
+ *
+ * The projection carries a price and a pair of period boundaries, and no interval field. Printing
+ * "a month" over a record that happens to hold an annual period would be a claim about the
+ * contract this page cannot read, so the two dates decide, and anything that is not one of the
+ * three ordinary cadences gets named as the period it actually is.
+ */
+function cadenceLabel(periodStart: string, periodEnd: string) {
+  const start = Date.parse(periodStart);
+  const end = Date.parse(periodEnd);
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return "each period";
+  const days = Math.round((end - start) / DAY_MS);
+  if (days >= 26 && days <= 32) return "a month";
+  if (days >= 6 && days <= 8) return "a week";
+  if (days >= 360 && days <= 372) return "a year";
+  return "each period";
+}
+
+/** The one line the plan card carries when something about the billing record needs saying. */
+type PlanNotice = {
+  tone: "warning" | "failure" | "waiting";
+  text: string;
+  action?: ReactNode;
+  marker?: ReactNode;
+};
+
+function InfoGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="mt-[2px] size-[20px] flex-none"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 16v-4" />
+      <path d="M12 8h.01" />
+    </svg>
+  );
+}
+
+/**
+ * The notice, chosen rather than stacked.
+ *
+ * The card carries one line, so the states are ordered by what a coach has to do something about
+ * first: an account the platform has stopped, an account with a clock running on it, a payment
+ * this browser can still complete, a plan already moving, and last the delivery of the allowance
+ * notice itself. Everything quieter than that gets no line at all, which is the point of a single
+ * slot: a line that is always there is a line nobody reads.
+ */
+function planNotice({
+  checkout,
+  checkoutPending,
+  checkoutReturn,
+  onCheckout,
+  snapshot,
+}: {
+  checkout: BillingCheckoutBrowserState | null;
+  checkoutPending: boolean;
+  checkoutReturn: "returned" | "canceled" | null;
+  onCheckout(retryAfterCancel: boolean): void;
+  snapshot: CoachBillingSnapshot;
+}): PlanNotice | null {
+  if (snapshot.accountState === "suspended") {
+    return {
+      /*
+       * Not approved copy, and the page says so rather than presenting draft wording as final.
+       * `live/coach-billing.tsx` carries the same marker on the same sentence; the fix is the
+       * owner approving the wording, not dropping the marker.
+       */
+      marker: <Status label="Draft copy" tone="draft" />,
+      text: "This account is suspended. Contact support to review the billing record.",
+      tone: "failure",
+    };
+  }
+  if (snapshot.accountState === "overdue") {
+    return {
+      text: "Payment is overdue. Your agent stays available while the billing record is reviewed.",
+      tone: "warning",
+    };
+  }
+
+  /*
+   * The checkout, folded into this one line. It is plumbing and stays invisible unless there is
+   * something a coach can press: an offer that stands, or a return from Stripe still resolving.
+   * `parseBillingCheckoutState` only allows a null offer on `unavailable`, so an offer is exactly
+   * the test for "there is a checkout to act on".
+   */
+  const offer = checkout?.offer ?? null;
+  const returned = checkoutReturn === "returned" && checkout?.state === "pending";
+  const canceled = checkoutReturn === "canceled" && checkout?.state === "pending";
+  if (returned || checkout?.state === "confirming") {
+    return {
+      text: "Stripe has not confirmed this payment yet. The plan activates when it does.",
+      tone: "waiting",
+    };
+  }
+  if (offer && (checkout?.state === "offered" || checkout?.state === "expired" || canceled)) {
+    return {
+      action: (
+        <button
+          className={SECONDARY_CLASS}
+          disabled={checkoutPending}
+          onClick={() => onCheckout(canceled)}
+          type="button"
+        >
+          {checkoutPending ? "Opening secure checkout" : "Continue to checkout"}
+        </button>
+      ),
+      text: canceled
+        ? "Checkout was canceled in this browser. Nothing was charged."
+        : "This plan is not paid for yet.",
+      tone: "warning",
+    };
+  }
+
+  const movement = snapshot.pendingMovement;
+  if (movement) {
+    const when = formatDate(movement.effectiveAt);
+    return {
+      text: when
+        ? `Your plan moves to ${displayName(movement.tierName)} on ${when}.`
+        : `Your plan moves to ${displayName(movement.tierName)} at the next period.`,
+      tone: "waiting",
+    };
+  }
+
+  const undelivered = snapshot.notices.filter(
+    (notice) => noticeDeliveryLabel(notice) !== "Sent",
+  ).length;
+  if (undelivered > 0) {
+    return {
+      text: `${workspaceCountFormat.format(undelivered)} allowance `
+        + `${undelivered === 1 ? "notice has" : "notices have"} not reached your billing contact `
+        + "yet.",
+      tone: "warning",
+    };
+  }
+  return null;
+}
+
+const NOTICE_GROUND: Record<PlanNotice["tone"], string> = {
+  failure: "border-[var(--failure-line)] bg-[var(--failure-wash)] text-[color:var(--failure-text)]",
+  waiting: "border-[var(--waiting-line)] bg-[var(--waiting-wash)] text-[color:var(--waiting-text)]",
+  warning: "border-[var(--warning-line)] bg-[var(--warning-wash)] text-[color:var(--warning-body)]",
+};
 
 function BillingLoading() {
   return (
-    <div aria-busy="true" className="grid gap-[20px] md:grid-cols-2" role="status">
+    <div aria-busy="true" className="coach-panel" role="status">
       <span className="sr-only">Billing details are loading.</span>
-      {["charge", "allowance"].map((slot) => (
-        <DeckPanel key={slot} name="Loading">
-          <Skeleton aria-hidden className="h-[62px] w-3/5" />
-          <Skeleton aria-hidden className="mt-[14px] h-[12px] w-4/5" />
-        </DeckPanel>
-      ))}
+      <div className="coach-panel__header flex-wrap">
+        <div className="min-w-0">
+          <p className="coach-panel__eyebrow">Your plan</p>
+          <h2 className="coach-panel__name">Reading your billing record</h2>
+        </div>
+      </div>
+      <div className="coach-panel__body">
+        <Skeleton aria-hidden className="h-[62px] w-3/5" />
+        <Skeleton aria-hidden className="mt-[16px] h-[14px] w-4/5" />
+      </div>
     </div>
   );
 }
 
 /**
- * The checkout states, folded into one panel. The live page spreads the same state machine over a
- * banner, a well and three paragraphs; this keeps every state and every control and drops the
- * prose that explained what Stripe is.
+ * The plan card: everything a coach opened this page to read, in one card.
+ *
+ * The figure is the allowance rather than the price, which is the artboard's ruling and the right
+ * one: the price is a number they agreed to once and the allowance is the number that moves. The
+ * price sits in the footer stats beside the period, where a fact you check is easier to find than
+ * a fact that shouts.
  */
-function CheckoutPanel({
-  checkout,
-  checkoutError,
-  checkoutPending,
-  checkoutReturn,
-  onCheckout,
-  onRefresh,
+function PlanCard({
+  notice,
+  snapshot,
 }: {
-  checkout: BillingCheckoutBrowserState | null;
-  checkoutError: string | null;
-  checkoutPending: boolean;
-  checkoutReturn: "returned" | "canceled" | null;
-  onCheckout(retryAfterCancel: boolean): Promise<void>;
-  onRefresh(): void;
+  notice: PlanNotice | null;
+  snapshot: CoachBillingSnapshot;
 }) {
-  const offer = checkout?.offer ?? null;
-  const canceled = checkoutReturn === "canceled" && checkout?.state === "pending";
-  const returned = checkoutReturn === "returned" && checkout?.state === "pending";
-  const interval = offer?.interval === "day" ? "day"
-    : offer?.interval === "week" ? "week"
-      : offer?.interval === "year" ? "year" : "month";
-  const checking = checkout === null && checkoutError === null;
-  const label = checking ? "Checking checkout availability"
-    : checkout?.state === "confirming" ? "Payment confirmed; activating"
-      : returned ? "Waiting for Stripe confirmation"
-        : canceled ? "Checkout canceled in this browser"
-          : checkout?.state === "pending" ? "Checkout started; payment not confirmed"
-            : checkout?.state === "expired" ? "Checkout expired"
-              : checkout?.state === "offered" ? "Ready for secure checkout"
-                : "Checkout unavailable";
-  const tone = checkout?.state === "confirming" || returned || checking ? "waiting"
-    : canceled || checkout?.state === "expired" ? "warning" : "neutral";
+  const reset = formatReset(snapshot.periodEnd);
+  const start = formatDate(snapshot.periodStart);
+  const end = formatDate(snapshot.periodEnd);
+  const cadence = cadenceLabel(snapshot.periodStart, snapshot.periodEnd);
 
   return (
-    <DeckPanel
-      className="col-span-full"
-      eyebrow="Subscription"
-      meta={<Status label={label} tone={tone} />}
-      name="Activate your plan"
+    <section
+      aria-labelledby="coach-billing-plan"
+      className="coach-panel"
+      data-hero="true"
+      data-slot="billing-plan"
     >
-      {offer ? (
-        <div className="flex flex-wrap items-end justify-between gap-[20px]">
-          <div className="min-w-0">
-            <p className={`m-0 ${ROW_NAME_CLASS}`}>{offer.label}</p>
-            <Figure className={`mt-[8px] ${TABULAR_CLASS}`} size="md">
-              {money(offer.amountCents, offer.currency)} / {interval}
-            </Figure>
+      <div className="coach-panel__header flex-wrap">
+        <div className="min-w-0">
+          <p className="coach-panel__eyebrow">Your plan</p>
+          <h2 className="coach-panel__name" id="coach-billing-plan">
+            {displayName(snapshot.tierName)}
+          </h2>
+        </div>
+        {/*
+          The page's one filled button. There is no self-serve plan mover and there is not going
+          to be one: a change is arranged with SetterFi and takes effect at a period boundary, so
+          the control is a link to the place that conversation happens, drawn at the weight the
+          artboard gives it.
+        */}
+        <a className={`${PRIMARY_CLASS} ml-auto flex-none`} href="/coach/help">
+          Change plan
+        </a>
+      </div>
+
+      <div className="coach-panel__body">
+        <div className="flex flex-wrap items-baseline gap-[12px]">
+          <span className="coach-panel__figure" data-slot="billing-allowance">
+            {workspaceCountFormat.format(snapshot.bookedCount)}
+          </span>
+          <span className="text-[26px] leading-[1.2] font-medium text-[color:var(--muted)]">
+            of {workspaceCountFormat.format(snapshot.callAllowance)}
+          </span>
+        </div>
+        {/*
+          The phrase, not a bar. A meter under this figure drew the same ratio a second time and
+          the artboard draws no bar on this screen; the sentence is what a coach reads out loud.
+        */}
+        <p className="coach-panel__sentence" data-slot="billing-allowance-phrase">
+          Booked calls this billing period.{reset ? ` Resets ${reset}.` : ""}
+        </p>
+
+        <div className="coach-panel__footer coach-panel__stats">
+          <div className="coach-panel__stat">
+            <span className={STAT_LABEL_CLASS}>Cost</span>
+            <span className="coach-panel__stat-value">
+              {money(snapshot.priceCents, snapshot.currency)}
+              <span className="text-[length:var(--coach-eyebrow)] font-sans text-[color:var(--muted)]">
+                {" "}
+                {cadence}
+              </span>
+            </span>
           </div>
-          <div className="flex flex-wrap items-center gap-[12px]">
-            {checkout?.state === "offered" || checkout?.state === "expired" ? (
-              <LoggedButton
-                actionKey="billing.checkout.created"
-                disabled={checkoutPending}
-                onClick={() => onCheckout(false)}
-                scale="coach"
-                variant="primary"
-              >
-                {checkoutPending ? "Opening secure checkout"
-                  : checkout.state === "expired" ? "Start new checkout" : "Continue to checkout"}
-              </LoggedButton>
-            ) : null}
-            {canceled ? (
-              <LoggedButton
-                actionKey="billing.checkout.created"
-                disabled={checkoutPending}
-                onClick={() => onCheckout(true)}
-                scale="coach"
-                variant="primary"
-              >
-                {checkoutPending ? "Opening secure checkout" : "Try checkout again"}
-              </LoggedButton>
-            ) : null}
-            {checkout?.state === "pending" && !canceled && !returned ? (
-              <LoggedButton
-                actionKey="billing.checkout.created"
-                disabled={checkoutPending}
-                onClick={() => onCheckout(false)}
-                scale="coach"
-              >
-                {checkoutPending ? "Opening secure checkout" : "Return to checkout"}
-              </LoggedButton>
-            ) : null}
-            {returned || checkout?.state === "confirming" ? (
-              <button
-                className={`${ACTION_CLASS} cursor-pointer`}
-                disabled={checkoutPending}
-                onClick={onRefresh}
-                type="button"
-              >
-                Refresh status
-              </button>
-            ) : null}
+          <div className="coach-panel__stat">
+            <span className={STAT_LABEL_CLASS}>Current period</span>
+            {start && end ? (
+              <span className="coach-panel__stat-value">{start} to {end}</span>
+            ) : (
+              <span className="coach-panel__stat-value" data-absent="true">
+                Period dates not recorded
+              </span>
+            )}
+          </div>
+          {/*
+            The artboard's third stat is an overage rate. Nothing in the projection carries one,
+            so this states the absence where the figure would be rather than printing a rate the
+            page cannot check. See the rehaul notes for the read Codex would have to add.
+          */}
+          <div className="coach-panel__stat">
+            <span className={STAT_LABEL_CLASS}>Over the allowance</span>
+            <span className="coach-panel__stat-value" data-absent="true">
+              Not stated on your record
+            </span>
           </div>
         </div>
-      ) : null}
-      {checkoutError ? (
-        <p
-          className="m-0 mt-[12px] text-[16px] leading-[1.5]"
-          role="alert"
-          style={{ color: TONE_TEXT.failure }}
+      </div>
+
+      {notice ? (
+        <div
+          className={`flex flex-wrap items-center gap-x-[12px] gap-y-[10px] border-t px-[20px] py-[16px] ${NOTICE_GROUND[notice.tone]}`}
+          data-slot="billing-notice"
+          role="status"
         >
-          {checkoutError}
-        </p>
+          <InfoGlyph />
+          {notice.marker}
+          <span className="min-w-0 flex-1 text-[16px] leading-[1.5]">{notice.text}</span>
+          {notice.action}
+        </div>
       ) : null}
-      {/* Status, not an explainer: why a return is not a payment is in the eye. */}
-      {returned ? (
-        <p className={SENT_CLASS} role="status">
-          Payment not confirmed.
-        </p>
+    </section>
+  );
+}
+
+/**
+ * "This count looks wrong": one button, one box, one send.
+ *
+ * The previous pass drew a picker of billable events, a reason field, an in-flight status and a
+ * standing "Logged" caption, which is four controls for one sentence. `SIMPLIFICATION-SPEC` 2.8
+ * calls that "right instinct, too much form" and the artboard answers with a button that opens a
+ * box.
+ *
+ * The route still wants a `quantityDelta` and an `eventId`, so the request is anchored to the
+ * most recent billable call in the period and the coach's words are the reason a person reads.
+ * That anchoring is stated under the box rather than left implicit -- what is decided is the
+ * count, and the anchor is which record the request hangs on.
+ */
+function CorrectionCard({
+  onSubmit,
+  pending,
+  receipt,
+  snapshot,
+}: {
+  onSubmit(event: FormEvent<HTMLFormElement>): void;
+  pending: boolean;
+  receipt: boolean;
+  snapshot: CoachBillingSnapshot;
+}) {
+  const [open, setOpen] = useState(false);
+  const anchor = snapshot.correctionCandidates.at(0) ?? null;
+
+  return (
+    <section
+      aria-labelledby="coach-billing-correction"
+      className="coach-panel"
+      data-slot="billing-correction"
+    >
+      <div className="coach-panel__header flex-wrap">
+        <div className="min-w-0">
+          <p className="coach-panel__eyebrow">Booked calls</p>
+          <h2 className="coach-panel__name" id="coach-billing-correction">
+            Does {workspaceCountFormat.format(snapshot.bookedCount)} look wrong?
+          </h2>
+        </div>
+        <button
+          aria-expanded={open}
+          className={`${SECONDARY_CLASS} ml-auto flex-none`}
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          This count looks wrong
+        </button>
+      </div>
+
+      {open ? (
+        <div className="coach-panel__body gap-[12px]">
+          {anchor ? (
+            <form className="flex flex-col gap-[12px]" onSubmit={onSubmit}>
+              <label className={FIELD_LABEL_CLASS} htmlFor="billing-correction-reason">
+                What should the count be? A person checks it against the conversations.
+              </label>
+              <textarea
+                className={TEXTAREA_CLASS}
+                id="billing-correction-reason"
+                name="reason"
+                placeholder="Tell us what looks wrong"
+                required
+              />
+              <input name="eventId" type="hidden" value={anchor.eventId} />
+              <p className={FOOTNOTE_CLASS}>
+                Filed against {anchor.label}, the latest call in this period. Nothing on your bill
+                moves until a person decides it.
+              </p>
+              <div className="flex justify-end">
+                <LoggedButton
+                  actionKey="billing.correction.requested"
+                  disabled={pending}
+                  scale="coach"
+                  type="submit"
+                  wrapperClassName="items-end"
+                >
+                  {pending ? "Sending" : "Send to support"}
+                </LoggedButton>
+              </div>
+              {receipt ? (
+                <Status
+                  label={AUDIT_ACTIONS["billing.correction.requested"].microcopy}
+                  tone="good"
+                />
+              ) : null}
+            </form>
+          ) : (
+            /*
+              Absence, in the slot the form would fill. A workspace with no billable call in the
+              period has nothing to correct, and an empty box over a Send button would invite a
+              request the route refuses.
+            */
+            <p className="m-0 max-w-[24ch] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]">
+              No billed calls are recorded for this period yet.
+            </p>
+          )}
+        </div>
       ) : null}
-    </DeckPanel>
+    </section>
+  );
+}
+
+/**
+ * The one question only the coach can answer.
+ *
+ * Two buttons per row and nothing else: the artboard's third control, Skip, is gone, because a
+ * row a coach does not want to answer is already answered by leaving it alone, and a third button
+ * on a two-button question is the form asking about itself.
+ *
+ * The list is the unanswered queue. On the demo workspace it is empty by design rather than by
+ * accident -- every billable row on a demo tenant carries `is_test` and the projections exclude
+ * it -- so the absence names that reason instead of reading as a screen that failed to load.
+ */
+function AttendanceCard({
+  onRecord,
+  pendingId,
+  receipt,
+  snapshot,
+}: {
+  onRecord(appointmentId: string, status: "completed" | "no_show"): void;
+  pendingId: string | null;
+  receipt: boolean;
+  snapshot: CoachBillingSnapshot;
+}) {
+  const prompts = snapshot.outcomePrompts;
+
+  return (
+    <section
+      aria-labelledby="coach-billing-attendance"
+      className="coach-panel"
+      data-slot="billing-attendance"
+    >
+      <div className="coach-panel__header flex-wrap">
+        <div className="min-w-0">
+          <p className="coach-panel__eyebrow">Only you can tell us</p>
+          <h2 className="coach-panel__name" id="coach-billing-attendance">
+            How did these appointments go?
+          </h2>
+        </div>
+        {pendingId ? (
+          <span className="ml-auto flex-none">
+            <Status label="Saving your answer" tone="waiting" />
+          </span>
+        ) : receipt ? (
+          <span className="ml-auto flex-none">
+            <Status
+              label={AUDIT_ACTIONS["appointment.attendance_set"].microcopy}
+              tone="good"
+            />
+          </span>
+        ) : null}
+      </div>
+
+      {prompts.length > 0 ? (
+        <ul className="m-0 list-none p-0">
+          {prompts.map((prompt) => (
+            <li
+              className="flex flex-wrap items-center gap-x-[24px] gap-y-[12px] border-t border-[var(--line-soft)] px-[20px] py-[16px] first:border-t-0"
+              key={prompt.appointmentId}
+            >
+              <div className="min-w-0 flex-1 basis-[min(100%,20ch)]">
+                <p className={ROW_NAME_CLASS}>{displayName(prompt.label)}</p>
+                <p className={ROW_META_CLASS}>{formatAppointment(prompt.occurredAt)}</p>
+              </div>
+              <div className="flex flex-wrap gap-[12px]">
+                <button
+                  className={GOOD_CLASS}
+                  disabled={pendingId !== null}
+                  onClick={() => onRecord(prompt.appointmentId, "completed")}
+                  type="button"
+                >
+                  Showed
+                </button>
+                <button
+                  className={SECONDARY_CLASS}
+                  disabled={pendingId !== null}
+                  onClick={() => onRecord(prompt.appointmentId, "no_show")}
+                  type="button"
+                >
+                  No-show
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="coach-panel__body">
+          <p
+            className="m-0 max-w-[34ch] text-[20px] leading-[1.35] font-medium text-[color:var(--muted)]"
+            data-slot="billing-attendance-absent"
+          >
+            {snapshot.isDemo
+              ? "No calls are listed here. This is a demo workspace, so its bookings are marked as "
+                + "test data and never billed."
+              : "No appointments are waiting for an answer."}
+          </p>
+        </div>
+      )}
+
+      <div className="border-t border-[var(--line-soft)] px-[20px] py-[14px]">
+        <p className={FOOTNOTE_CLASS}>
+          Every answer is logged. It feeds your own analytics and never changes what you are
+          billed.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -262,14 +652,10 @@ export function CoachBillingRehaul({
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionReceipt, setActionReceipt] = useState<string | null>(null);
-  const [correctionEventId, setCorrectionEventId] = useState("");
-  const [correctionReason, setCorrectionReason] = useState("");
   const [correctionPending, setCorrectionPending] = useState(false);
   const [pendingAppointmentId, setPendingAppointmentId] = useState<string | null>(null);
   const [checkout, setCheckout] = useState<BillingCheckoutBrowserState | null>(null);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutPending, setCheckoutPending] = useState(false);
-  const [checkoutLoadAttempt, setCheckoutLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -302,30 +688,25 @@ export function CoachBillingRehaul({
           signal: controller.signal,
         });
         /*
-         * A 404 is the route saying hosted checkout is not configured in this deployment, which
-         * is a reading rather than a failure: there is no offer, no attempt and nothing to
-         * verify. Printing "could not be verified" over it told a coach with a paid, active
-         * subscription that their payment was in doubt. It is the same "unavailable" the route
-         * returns when the flag is on and the tenant has no offer, so it is recorded as that.
+         * A 404 is the route saying hosted checkout is not configured in this deployment, which is
+         * a reading rather than a failure: there is no offer, no attempt and nothing to verify.
+         * A read that fails for any other reason is recorded the same way, because this screen has
+         * one slot for a notice and a checkout the page cannot read is not the thing a coach with
+         * an active subscription needs it for. The page never claims a payment either way.
          */
-        if (response.status === 404) {
+        if (!response.ok) {
           setCheckout({ state: "unavailable", offer: null, attempt: null });
-          setCheckoutError(null);
           return;
         }
-        const payload: unknown = await response.json();
-        if (!response.ok) throw new Error("BILLING_CHECKOUT_STATE_REFUSED");
-        setCheckout(parseBillingCheckoutState(payload));
-        setCheckoutError(null);
+        setCheckout(parseBillingCheckoutState(await response.json()));
       } catch {
         if (!controller.signal.aborted) {
-          setCheckout(null);
-          setCheckoutError("Checkout status could not be verified. No payment session was created.");
+          setCheckout({ state: "unavailable", offer: null, attempt: null });
         }
       }
     })();
     return () => controller.abort();
-  }, [enabled, checkoutLoadAttempt]);
+  }, [enabled]);
 
   if (!enabled) {
     return (
@@ -348,16 +729,9 @@ export function CoachBillingRehaul({
     setLoadAttempt((attempt) => attempt + 1);
   }
 
-  function refreshCheckout() {
-    setCheckoutPending(false);
-    setCheckoutLoadAttempt((attempt) => attempt + 1);
-    setLoadAttempt((attempt) => attempt + 1);
-  }
-
   async function startCheckout(retryAfterCancel: boolean) {
     if (!checkout?.offer || checkoutPending) return;
     setCheckoutPending(true);
-    setCheckoutError(null);
     try {
       const response = await fetch("/api/billing/checkout", {
         method: "POST",
@@ -372,7 +746,7 @@ export function CoachBillingRehaul({
       if (!response.ok || !hostedUrl) throw new Error("BILLING_CHECKOUT_URL_REFUSED");
       window.location.assign(hostedUrl);
     } catch {
-      setCheckoutError("Secure checkout could not be opened. Nothing was charged; try again.");
+      setActionError("Secure checkout could not be opened. Nothing was charged; try again.");
       setCheckoutPending(false);
     }
   }
@@ -390,16 +764,20 @@ export function CoachBillingRehaul({
 
   async function requestCorrection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!correctionEventId || !correctionReason.trim()) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const eventId = String(data.get("eventId") ?? "");
+    const reason = String(data.get("reason") ?? "").trim();
+    if (!eventId || !reason) return;
     setCorrectionPending(true);
     setActionError(null);
     setActionReceipt(null);
     try {
       const payload = await post({
         action: "request_correction",
-        eventId: correctionEventId,
+        eventId,
         quantityDelta: -1,
-        reason: correctionReason,
+        reason,
       });
       const result = isRecord(payload.result) ? payload.result : null;
       if (
@@ -407,8 +785,7 @@ export function CoachBillingRehaul({
         || typeof result.requestId !== "string"
         || typeof result.requestAuditId !== "number"
       ) throw new Error("BILLING_CORRECTION_RECEIPT_INVALID");
-      setCorrectionEventId("");
-      setCorrectionReason("");
+      form.reset();
       setActionReceipt(AUDIT_ACTIONS["billing.correction.requested"].microcopy);
     } catch {
       setActionError("The correction request was refused. Nothing changed.");
@@ -436,69 +813,26 @@ export function CoachBillingRehaul({
     }
   }
 
-  async function skipOutcome(appointmentId: string) {
-    if (!snapshot) return;
-    const previous = snapshot;
-    setPendingAppointmentId(appointmentId);
-    setActionError(null);
-    setActionReceipt(null);
-    setSnapshot(resolveOutcomePrompt(snapshot, appointmentId));
-    try {
-      const payload = await post({
-        action: "skip_attendance",
-        appointmentId,
-        idempotencyKey: `skip-attendance:${appointmentId}`,
-      });
-      const appointment = isRecord(payload.appointment) ? payload.appointment : null;
-      if (appointment?.id !== appointmentId || appointment.attendanceState !== "skipped") {
-        throw new Error("ATTENDANCE_SKIP_RECEIPT_INVALID");
-      }
-      setActionReceipt(AUDIT_ACTIONS["appointment.attendance_set"].microcopy);
-    } catch {
-      setSnapshot(previous);
-      setActionError("The skip was refused. The appointment is still waiting for an outcome.");
-    } finally {
-      setPendingAppointmentId(null);
-    }
-  }
-
-  const subscription = snapshot
-    ? stateCopy(snapshot.subscriptionState, BILLING_SUBSCRIPTION_STATE_COPY)
+  const notice = snapshot
+    ? planNotice({
+      checkout,
+      checkoutPending,
+      checkoutReturn,
+      onCheckout: (retry) => void startCheckout(retry),
+      snapshot,
+    })
     : null;
-  const invoice = snapshot ? stateCopy(snapshot.invoiceState, BILLING_INVOICE_STATE_COPY) : null;
-  const waiting = snapshot?.outcomePrompts.length ?? 0;
 
   return (
     <div className="relative min-w-0">
       <div className="flex flex-wrap items-end gap-[24px]">
         <div className="min-w-0">
           <h1 className={H1_CLASS}>Billing</h1>
-          {snapshot && subscription ? (
-            <div className="mt-[10px] flex flex-wrap items-center gap-[20px] text-[16px] text-[color:var(--body)]">
-              <span className="flex items-center gap-[8px]">
-                <StatusDot size={6} tone={STATE_TONE_TO_TONE[subscription.tone]} />
-                {displayName(snapshot.tierName)}
-                <span aria-hidden className="text-[color:var(--faint)]">·</span>
-                {/* The plan's own state in words. The period end is a labelled sentence on the
-                    charge panel now, so it is not repeated here as a bare date. */}
-                {subscription.label}
-              </span>
-              {invoice ? (
-                <Status
-                  label={`Invoice: ${invoice.label}`}
-                  tone={STATE_TONE_TO_TONE[invoice.tone]}
-                  treatment="bare"
-                />
-              ) : null}
-            </div>
-          ) : null}
+          <p className={`m-0 mt-[12px] max-w-[76ch] ${COACH_LEAD_CLASS}`}>
+            What you pay, what you have used, and how the calls went.
+          </p>
         </div>
-        {/*
-          The artboard's Invoices and Update card sit here. Neither has a record or a route behind
-          it, so the header carries the one action this screen really has.
-        */}
-        <div className="ml-auto flex flex-wrap items-center gap-[10px]">
-          <a className={ACTION_CLASS} href="/coach/help">Ask us to change your plan</a>
+        <div className="ml-auto flex flex-none items-center">
           <ContextEye
             copy={COACH_BILLING_EYE_COPY}
             placement="header"
@@ -508,240 +842,57 @@ export function CoachBillingRehaul({
         </div>
       </div>
 
-      <div className="mt-[32px] grid min-w-0 items-start gap-[32px] lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="flex min-w-0 flex-col gap-[20px]">
-          {loading ? <BillingLoading /> : null}
-          {!loading && loadError ? (
-            <DataState
-              body={`Billing records could not be read. ${FAILURE_BODY.billing}`}
-              kind="error"
-              retry={retryLoad}
-              title="Billing details could not load"
-            />
-          ) : null}
-          {!loading && !loadError && !snapshot ? (
-            <DataState
-              body={`${FAILURE_BODY.billingUnavailable} ${FAILURE_BODY.billing}`}
-              kind="unavailable"
-              retry={retryLoad}
-              title="Billing details could not load"
-            />
-          ) : null}
-
-          {/*
-            The panel is the call to action for a plan that is not paid for yet, so it is drawn
-            only when it has something to say: an offer that stands, a return from Stripe to
-            resolve, or a read that genuinely failed. An "unavailable" reading with neither is
-            none of those, and drawing it anyway left a coach on a live subscription looking at
-            an empty card headed "Activate your plan" over the words "Checkout unavailable".
-            `parseBillingCheckoutState` only allows a null offer on `unavailable`, so an offer is
-            exactly the test for "there is a checkout to act on".
-          */}
-          {checkoutError !== null
-            || checkoutReturn !== null
-            || (checkout !== null && checkout.state !== "active" && checkout.offer !== null) ? (
-            <CheckoutPanel
-              checkout={checkout}
-              checkoutError={checkoutError}
-              checkoutPending={checkoutPending}
-              checkoutReturn={checkoutReturn}
-              onCheckout={startCheckout}
-              onRefresh={refreshCheckout}
-            />
-          ) : null}
-
-          {snapshot ? (
-            <>
-              <div className="grid min-w-0 gap-[20px] md:grid-cols-2">
-                <DeckPanel
-                  drench="live"
-                  eyebrow="Charged each month"
-                  name={`${displayName(snapshot.tierName)} plan`}
-                >
-                  <Figure className={TABULAR_CLASS} size="hero">
-                    <span data-slot="billing-charge">
-                      {money(snapshot.priceCents, snapshot.currency)}
-                    </span>
-                  </Figure>
-                  {/* The artboard's "card ending 4242" is not in the snapshot and has no route
-                      behind it, so the sentence carries only the date the record does hold. */}
-                  <p className={SENT_CLASS}>Next charge {formatDate(snapshot.periodEnd)}.</p>
-                </DeckPanel>
-
-                <DeckPanel eyebrow="Booked calls this period" name="Allowance">
-                  <Figure className={TABULAR_CLASS} size="hero">
-                    <span data-slot="billing-allowance">
-                      {workspaceCountFormat.format(snapshot.bookedCount)}
-                      <span className="text-[28px] text-[color:var(--muted)]">
-                        /{workspaceCountFormat.format(snapshot.callAllowance)}
-                      </span>
-                    </span>
-                  </Figure>
-                  {snapshot.callAllowance > 0 ? (
-                    <Meter
-                      className="mt-[16px]"
-                      value={snapshot.bookedCount / snapshot.callAllowance}
-                    />
-                  ) : null}
-                  <p className={SENT_CLASS}>Resets {formatDate(snapshot.periodEnd)}.</p>
-                </DeckPanel>
-              </div>
-
-              <DeckPanel
-                eyebrow="Two taps each"
-                meta={
-                  <span className={MONO_META_CLASS}>
-                    {workspaceCountFormat.format(waiting)} waiting
-                  </span>
-                }
-                name="Did they show up?"
-              >
-                {pendingAppointmentId ? (
-                  <Status className="mb-[12px]" label="Saving attendance choice" tone="waiting" />
-                ) : actionReceipt === AUDIT_ACTIONS["appointment.attendance_set"].microcopy ? (
-                  <Status className="mb-[12px]" label={actionReceipt} tone="good" />
-                ) : null}
-                {waiting ? (
-                  <ul className="m-[-20px] list-none p-0">
-                    {snapshot.outcomePrompts.map((prompt) => (
-                      <li
-                        className="flex flex-wrap items-center gap-[16px] border-b border-[var(--line-soft)] px-[20px] py-[16px] last:border-b-0"
-                        key={prompt.appointmentId}
-                      >
-                        <div className="min-w-0 flex-1 basis-[min(100%,18ch)]">
-                          <p className={ROW_NAME_CLASS}>{prompt.label}</p>
-                          <span className={MONO_META_CLASS}>{formatDate(prompt.occurredAt)}</span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-[12px]">
-                          <LoggedButton
-                            actionKey="appointment.attendance_set"
-                            disabled={pendingAppointmentId !== null}
-                            onClick={() => void recordOutcome(prompt.appointmentId, "completed")}
-                            scale="coach-verb"
-                            type="button"
-                          >
-                            Showed
-                          </LoggedButton>
-                          <LoggedButton
-                            actionKey="appointment.attendance_set"
-                            disabled={pendingAppointmentId !== null}
-                            onClick={() => void recordOutcome(prompt.appointmentId, "no_show")}
-                            scale="coach-verb"
-                            type="button"
-                          >
-                            No show
-                          </LoggedButton>
-                          <LoggedButton
-                            actionKey="appointment.attendance_set"
-                            disabled={pendingAppointmentId !== null}
-                            onClick={() => void skipOutcome(prompt.appointmentId)}
-                            scale="coach-verb"
-                            type="button"
-                            variant="ghost"
-                          >
-                            Skip
-                          </LoggedButton>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className={`${SENT_CLASS} mt-0`}>Nothing is waiting for an outcome.</p>
-                )}
-              </DeckPanel>
-            </>
-          ) : null}
-        </div>
+      <div className="mt-[32px] flex min-w-0 flex-col gap-[24px]">
+        {loading ? <BillingLoading /> : null}
+        {!loading && loadError ? (
+          <DataState
+            body={`Billing records could not be read. ${FAILURE_BODY.billing}`}
+            kind="error"
+            retry={retryLoad}
+            title="Billing details could not load"
+          />
+        ) : null}
+        {!loading && !loadError && !snapshot ? (
+          <DataState
+            body={`${FAILURE_BODY.billingUnavailable} ${FAILURE_BODY.billing}`}
+            kind="unavailable"
+            retry={retryLoad}
+            title="Billing details could not load"
+          />
+        ) : null}
 
         {snapshot ? (
-          <div className="flex min-w-0 flex-col gap-[20px]">
-            {/*
-              One bar, because one period is what the projection carries. The artboard's five
-              earlier months would each be a number this page cannot read.
-            */}
-            <DeckPanel eyebrow="This billing period" name="Booked calls">
-              <BarChart
-                height={140}
-                label="Booked calls by billing period"
-                labels={[monthLabel(snapshot.periodStart)]}
-                values={[snapshot.bookedCount]}
-                width={360}
+          <>
+            <div className="grid min-w-0 items-start gap-[24px] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+              <PlanCard notice={notice} snapshot={snapshot} />
+              <CorrectionCard
+                onSubmit={(event) => void requestCorrection(event)}
+                pending={correctionPending}
+                receipt={
+                  actionReceipt === AUDIT_ACTIONS["billing.correction.requested"].microcopy
+                }
+                snapshot={snapshot}
               />
-            </DeckPanel>
+            </div>
 
-            <DeckPanel eyebrow="If a call is counted wrong" name="This looks wrong">
-              <form className="flex flex-col gap-[12px]" onSubmit={requestCorrection}>
-                <Select
-                  disabled={!snapshot.correctionCandidates.length}
-                  onValueChange={(value) => setCorrectionEventId(value ?? "")}
-                  value={correctionEventId || null}
-                >
-                  <SelectTrigger
-                    aria-label="Pick the call"
-                    className="h-[48px] w-full"
-                    id="billing-correction-event"
-                  >
-                    <SelectValue placeholder="Pick the call" />
-                  </SelectTrigger>
-                  <SelectContent align="start" alignItemWithTrigger={false}>
-                    {snapshot.correctionCandidates.map((candidate) => (
-                      <SelectItem key={candidate.eventId} value={candidate.eventId}>
-                        {candidate.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/*
-                  The reason stays, against the artboard, because `/api/billing/corrections`
-                  refuses a `request_correction` with an empty `reason`. A picker and a button
-                  alone would post a request the route rejects, or make this page invent the
-                  sentence a person is going to read.
-                */}
-                <input
-                  aria-label="What looks wrong"
-                  className={FIELD_CLASS}
-                  onChange={(event) => setCorrectionReason(event.target.value)}
-                  placeholder="What looks wrong"
-                  required
-                  value={correctionReason}
-                />
-                <LoggedButton
-                  actionKey="billing.correction.requested"
-                  className="w-full justify-center"
-                  disabled={correctionPending || !correctionEventId || !correctionReason.trim()}
-                  scale="coach"
-                  type="submit"
-                  variant="primary"
-                >
-                  {correctionPending ? "Asking" : "Ask for a review"}
-                </LoggedButton>
-                {correctionPending ? (
-                  <Status label="Request in flight" tone="waiting" />
-                ) : actionReceipt === AUDIT_ACTIONS["billing.correction.requested"].microcopy ? (
-                  <Status label={actionReceipt} tone="good" />
-                ) : (
-                  <span className={`${MONO_META_CLASS} text-[14px] text-[color:var(--faint)]`}>
-                    Logged
-                  </span>
-                )}
-              </form>
-            </DeckPanel>
-          </div>
+            <AttendanceCard
+              onRecord={(appointmentId, status) => void recordOutcome(appointmentId, status)}
+              pendingId={pendingAppointmentId}
+              receipt={actionReceipt === AUDIT_ACTIONS["appointment.attendance_set"].microcopy}
+              snapshot={snapshot}
+            />
+          </>
         ) : null}
 
         {actionError ? (
-          <Surface
-            as="p"
-            className="col-span-full m-0 text-[16px] leading-[1.5]"
+          <p
+            className="m-0 text-[16px] leading-[1.5] text-[color:var(--failure-text)]"
             role="alert"
-            style={{ color: TONE_TEXT.failure }}
-            tone="failure"
           >
             {actionError}
-          </Surface>
+          </p>
         ) : null}
       </div>
-
     </div>
   );
 }

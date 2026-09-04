@@ -148,3 +148,11 @@ UI consumer already declare it; the coach preference module carries its own loca
 - `npx vitest run src/lib/repositories/coach-notification-preference.test.ts src/app/api/coach/notification-preference/route.test.ts src/lib/notifications src/app/api/notification-preferences src/app/api/coach/keyword-goals src/components/workspace/live/notification-view-models.test.ts` - 16 files, 127 tests pass, confirming the notifications matrix, its resolver, and its UI view-model consumer are all unaffected
 - `npx tsc --noEmit` (whole project, run standalone in the foreground at the end of the round,
   after the `events.ts` revert above) - **clean, exit 0, zero errors**
+
+## Round 2 intake (from the surface rebuilds, appended by the lead as lanes report)
+
+- Billing: a period-level correction request that takes a reason with no eventId and no
+  quantityDelta; the overage rate on the coach billing projection; the billing interval on the
+  projection so cadence is not inferred from period dates; settled attendance rows so the list can
+  show bookings already answered. The login coach's seeded period runs Oct 2025 to Oct 2026, which
+  is the seed-demo-history anchoring, not a read defect.
