@@ -118,10 +118,10 @@ const DARK = {
   "t-data-1": [0.8148, 0.085, 264],
   "t-data-2": [0.7, 0.028, 262],
   "t-data-3": [0.78, 0.12, 75],
-  good: [0.6718, 0.066, 164.1],
-  "good-text": [0.8074, 0.0468, 162.2],
-  warning: [0.6633, 0.0955, 71.2],
-  "warning-text": [0.7971, 0.0738, 69.8],
+  good: [0.68, 0.075, 178],
+  "good-text": [0.81, 0.05, 178],
+  warning: [0.68, 0.1, 335],
+  "warning-text": [0.81, 0.07, 335],
   critical: [0.74, 0.14, 25],
   "critical-text": [0.74, 0.14, 25],
   /* Not the retired teal at hue 209.4. This entry described a colour no block carried from the
@@ -142,8 +142,8 @@ const DARK = {
 } as const satisfies Record<string, Oklch>;
 
 const DARK_WASHES = {
-  "good-wash": [111, 163, 139, 0.11],
-  "warning-wash": [184, 137, 78, 0.14],
+  "good-wash": [98, 168, 152, 0.11],
+  "warning-wash": [191, 128, 177, 0.14],
   "accent-wash": [70, 110, 215, 0.14],
   "waiting-wash": [143, 160, 216, 0.1],
   "draft-wash": [139, 124, 201, 0.13],
@@ -169,10 +169,10 @@ const LIGHT = {
   "t-data-1": [0.47, 0.16, 264],
   "t-data-2": [0.56, 0.03, 262],
   "t-data-3": [0.56, 0.12, 75],
-  good: [0.6237, 0.095, 164],
-  "good-text": [0.4992, 0.09, 164],
-  warning: [0.6409, 0.115, 71],
-  "warning-text": [0.5183, 0.105, 71],
+  good: [0.6228, 0.1, 178],
+  "good-text": [0.5, 0.09, 178],
+  warning: [0.6518, 0.13, 335],
+  "warning-text": [0.525, 0.12, 335],
   critical: [0.6537, 0.155, 25],
   "critical-text": [0.5244, 0.15, 25],
   "accent-text": [0.44, 0.165, 264],
@@ -189,8 +189,8 @@ const LIGHT = {
 } as const satisfies Record<string, Oklch>;
 
 const LIGHT_WASHES = {
-  "good-wash": [36, 132, 96, 0.09],
-  "warning-wash": [176, 116, 32, 0.1],
+  "good-wash": [48, 155, 135, 0.09],
+  "warning-wash": [192, 111, 175, 0.1],
   "accent-wash": [46, 92, 200, 0.07],
   "waiting-wash": [92, 110, 196, 0.09],
   "draft-wash": [124, 96, 204, 0.1],

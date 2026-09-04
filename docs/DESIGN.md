@@ -206,10 +206,10 @@ not running, clay that it broke. **SUPERSEDED 2026-09-01: a near-white ground an
 
 ### Secondary
 
-- **Signal Amber** (`--warning`, `oklch(0.6633 0.0955 71.2)`): waiting on the coach. Owns the
+- **Signal Orchid** (`--warning`, `oklch(0.68 0.1 335)` dark, `oklch(0.6518 0.13 335)` light; was Signal Amber at hue 71 until 2026-09-04, when the coach's own to-do count had worn amber on every screen and it read as a bootstrap warning): waiting on the coach. Owns the
   attention card, the NEEDS YOU badge, provisioning day counters, and an attention-bearing rail
   count (`--warning-text`). `--warning-body` is the softened body copy on the amber card.
-- **Enforced Sage** (`--good`, `oklch(0.6718 0.066 164.1)`): live, enforced, booked. Spent once per
+- **Enforced Teal** (`--good`, `oklch(0.68 0.075 178)` dark, `oklch(0.6228 0.1 178)` light; was Enforced Sage at hue 164 until 2026-09-04): live, enforced, booked. Spent once per
   screen; on the coach agent page that spend is the pricing invariant pill.
 
 ### Tertiary
