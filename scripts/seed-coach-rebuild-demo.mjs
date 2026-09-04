@@ -46,6 +46,7 @@ const REBUILD_DEMO_IDS = Object.freeze({
   conversations: Object.freeze([id(20), id(21), id(22), id(23)]),
   messages: Object.freeze([id(30), id(31), id(32), id(33)]),
   instagramConnection: id(40),
+  qualificationQuestions: Object.freeze([id(50), id(51), id(52), id(53)]),
 });
 
 const REBUILD_DEMO_VALUES = Object.freeze({
@@ -56,18 +57,64 @@ const REBUILD_DEMO_VALUES = Object.freeze({
   supportResponderBody: "Confirmed -- the number on your live offer matches what you published.",
   supportAssignReason: "Routine coach question, routed to the assigned success owner (demo)",
   supportResolveReason: "Answered the coach's question; nothing further pending (demo)",
-  offerProgramName: "SETTERFI_DEMO_PLACEHOLDER_REBUILD_PROGRAM",
-  // `offer_layers_content_hash_chk` requires 64 lowercase hex characters.
+  offerProgramName: "Funding accelerator",
+  offerProgramDescription:
+    "We help service businesses secure working capital and structure smart growth financing in under 30 days.",
+  // `offer_layers_content_hash_chk` requires 64 lowercase hex characters. Re-derived from the
+  // current program name each run so a name change (like this one) forces a fresh draft version
+  // rather than reusing stale content under an old hash.
   offerContentHash: createHash("sha256")
-    .update("SETTERFI_DEMO_PLACEHOLDER_REBUILD_OFFER_V1")
+    .update("SETTERFI_DEMO_REBUILD_OFFER_V2:Funding accelerator")
     .digest("hex"),
+  priceOne: { label: "Funding accelerator", amountCents: 199900, billingPeriod: "one_time" },
+  priceTwo: { label: "Monthly coaching", amountCents: 49900, billingPeriod: "monthly" },
+  businessLegalName: "Reid Capital Coaching LLC",
+  businessWebsiteUrl: "https://reidcapitalcoaching.com",
+  businessAddressLine1: "482 Harbor View Drive",
+  businessCity: "Charleston",
+  businessRegion: "SC",
+  businessPostalCode: "29401",
   contactNames: Object.freeze([
     "Rowan Ashford (demo)",
     "Priya Kutty (demo)",
     "Devon Larkspur (demo)",
     "Marisol Quan (demo)",
   ]),
+  // `app.coach_question_defaults` (`read_coach_questions`'s source) cross-joins every
+  // `status = 'published', disposition = 'shared'` `brain_knowledge_entries` row against every
+  // eligible tenant with no per-tenant or per-keyword-goal scoping in the schema today -- there
+  // were zero such rows on the hosted database before this seeder, so this list is empty for
+  // every tenant on the platform, not only this one. These four match the qualification fields
+  // the Inbox lead card already reads (credit range, funding goal, timeline, monthly revenue),
+  // inserted in this order so their `default_position` (row_number over created_at, id) matches.
+  qualificationQuestions: Object.freeze([
+    {
+      category: "credit_range",
+      question: "What's your current credit range?",
+      answer: "Used to route the lead to the right funding products before a call is booked.",
+    },
+    {
+      category: "funding_goal",
+      question: "How much funding are you looking to secure?",
+      answer: "Used to route the lead to the right funding products before a call is booked.",
+    },
+    {
+      category: "timeline",
+      question: "What's your timeline to get funded?",
+      answer: "Used to route the lead to the right funding products before a call is booked.",
+    },
+    {
+      category: "monthly_revenue",
+      question: "What's your business's average monthly revenue?",
+      answer: "Used to route the lead to the right funding products before a call is booked.",
+    },
+  ]),
 });
+
+// `vector(1536)`; content is irrelevant to `read_coach_questions` (no semantic search runs
+// against it there), so a fixed unit vector is enough to satisfy
+// `brain_knowledge_entries_publishable_chk`. Same placeholder `seed-phase2-demo.mjs` uses.
+const UNIT_EMBEDDING = `[1,${Array.from({ length: 1535 }, () => "0").join(",")}]`;
 
 function daysAgoIso(days, hours = 0) {
   const at = new Date();
@@ -105,12 +152,20 @@ async function seedBusinessProfile(database) {
     `insert into public.business_profiles
        (id, tenant_id, legal_name, entity_type, has_ein, website_url, address_line1,
         address_line2, city, region, postal_code, country_code)
-     values ($1, $2, 'SETTERFI_DEMO_PLACEHOLDER_REBUILD_BUSINESS', 'llc', true,
-       'https://example.invalid/coach-rebuild-demo', 'SETTERFI_DEMO_PLACEHOLDER_ADDRESS', null,
-       'Example City', 'EX', '00000', 'US')
+     values ($1::uuid, $2::uuid, $3, 'llc', true, $4, $5, null, $6, $7, $8, 'US')
      on conflict (id) do update set legal_name = excluded.legal_name,
-       website_url = excluded.website_url, address_line1 = excluded.address_line1`,
-    [REBUILD_DEMO_IDS.businessProfile, PHASE7_DEMO_IDS.tenant],
+       website_url = excluded.website_url, address_line1 = excluded.address_line1,
+       city = excluded.city, region = excluded.region, postal_code = excluded.postal_code`,
+    [
+      REBUILD_DEMO_IDS.businessProfile,
+      PHASE7_DEMO_IDS.tenant,
+      REBUILD_DEMO_VALUES.businessLegalName,
+      REBUILD_DEMO_VALUES.businessWebsiteUrl,
+      REBUILD_DEMO_VALUES.businessAddressLine1,
+      REBUILD_DEMO_VALUES.businessCity,
+      REBUILD_DEMO_VALUES.businessRegion,
+      REBUILD_DEMO_VALUES.businessPostalCode,
+    ],
   );
 }
 
@@ -301,20 +356,25 @@ async function seedSupportThread(database) {
 
 async function seedPublishedOffer(database) {
   const published = await database.query(
-    "select id from public.offer_layers where tenant_id = $1 and status = 'published'",
+    "select id, program_name from public.offer_layers where tenant_id = $1 and status = 'published'",
     [PHASE7_DEMO_IDS.tenant],
   );
-  if (published.rowCount > 0) return;
+  // Idempotent on content rather than existence: a re-run with a changed program name (as this
+  // round's fix was) has to publish a new version rather than leaving the old one in place.
+  if (published.rowCount > 0 && published.rows[0].program_name === REBUILD_DEMO_VALUES.offerProgramName) {
+    return;
+  }
 
   const draft = await database.query(
-    "select id from public.offer_layers where tenant_id = $1 and status = 'draft'",
+    "select id, content_hash from public.offer_layers where tenant_id = $1 and status = 'draft'",
     [PHASE7_DEMO_IDS.tenant],
   );
   const draftId = draft.rows[0]?.id ?? null;
+  const draftContentHash = draft.rows[0]?.content_hash ?? null;
 
   const offerPayload = {
     programName: REBUILD_DEMO_VALUES.offerProgramName,
-    programDescription: "SETTERFI_DEMO_PLACEHOLDER_REBUILD_PROGRAM_DESCRIPTION",
+    programDescription: REBUILD_DEMO_VALUES.offerProgramDescription,
     creditMin: 640,
     fundingGoalMinCents: 2500000,
     fundingGoalMaxCents: 10000000,
@@ -323,10 +383,7 @@ async function seedPublishedOffer(database) {
     creditRepair: "no_good_credit_only",
     bookingHorizonDays: 21,
     bookingMode: "direct",
-    prices: [
-      { label: "SETTERFI_DEMO_PLACEHOLDER_REBUILD_PRICE_ONE", amountCents: 199900, billingPeriod: "one_time" },
-      { label: "SETTERFI_DEMO_PLACEHOLDER_REBUILD_PRICE_TWO", amountCents: 49900, billingPeriod: "monthly" },
-    ],
+    prices: [REBUILD_DEMO_VALUES.priceOne, REBUILD_DEMO_VALUES.priceTwo],
     contentHash: REBUILD_DEMO_VALUES.offerContentHash,
   };
 
@@ -336,7 +393,7 @@ async function seedPublishedOffer(database) {
       PHASE7_DEMO_IDS.tenant,
       PHASE7_DEMO_IDS.coach,
       draftId,
-      draftId === null ? null : REBUILD_DEMO_VALUES.offerContentHash,
+      draftId === null ? null : draftContentHash,
       JSON.stringify(offerPayload),
     ],
   );
@@ -345,6 +402,37 @@ async function seedPublishedOffer(database) {
     `select * from public.publish_offer_draft($1, $2, $3, $4)`,
     [PHASE7_DEMO_IDS.tenant, PHASE7_DEMO_IDS.coach, offerId, REBUILD_DEMO_VALUES.offerContentHash],
   );
+}
+
+async function seedQualificationQuestions(database) {
+  const rows = REBUILD_DEMO_VALUES.qualificationQuestions;
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    const sourceRef = `coach-rebuild:question:${row.category}`;
+    // `created_at` spaced a second apart, in list order: `app.coach_question_defaults` orders by
+    // `row_number() over (order by created_at, id)`, and that becomes each row's `default_position`.
+    const createdAt = daysAgoIso(0, -index);
+    await database.query(
+      `insert into public.brain_knowledge_entries
+         (id, question, answer, category, match_keywords, status, source, source_ref, disposition,
+          response_template, embedding, version, published_at, created_at, updated_at)
+       values ($1::uuid, $2, $3, $4, '{}', 'published', 'mock', $5, 'shared', $3, $6::vector, 1,
+         $7::timestamptz, $7::timestamptz, $7::timestamptz)
+       on conflict (source, source_ref) where source_ref is not null do update set
+         question = excluded.question, answer = excluded.answer, category = excluded.category,
+         status = 'published', disposition = 'shared', response_template = excluded.response_template,
+         embedding = excluded.embedding, updated_at = excluded.updated_at`,
+      [
+        REBUILD_DEMO_IDS.qualificationQuestions[index],
+        row.question,
+        row.answer,
+        row.category,
+        sourceRef,
+        UNIT_EMBEDDING,
+        createdAt,
+      ],
+    );
+  }
 }
 
 async function readBack(database, threadId) {
@@ -356,13 +444,18 @@ async function readBack(database, threadId) {
           and first_touch_keyword is not null and id = any($2::uuid[])) keyword_conversations,
        (select count(*)::int from public.business_profiles where id = $3) business_profiles,
        (select count(*)::int from public.channel_connections where id = $4 and state = 'expired') expired_connections,
-       (select count(*)::int from public.support_threads where id = $5 and assigned_to is not null) support_threads`,
+       (select count(*)::int from public.support_threads where id = $5 and assigned_to is not null) support_threads,
+       (select count(*)::int from public.brain_knowledge_entries
+          where id = any($6::uuid[]) and status = 'published' and disposition = 'shared') qualification_questions,
+       (select count(*)::int from public.brain_knowledge_entries
+          where status = 'published' and disposition = 'shared') shared_questions_platform_wide`,
     [
       PHASE7_DEMO_IDS.tenant,
       REBUILD_DEMO_IDS.conversations,
       REBUILD_DEMO_IDS.businessProfile,
       REBUILD_DEMO_IDS.instagramConnection,
       threadId,
+      REBUILD_DEMO_IDS.qualificationQuestions,
     ],
   )).rows[0];
   return counts;
@@ -383,6 +476,7 @@ export async function seedCoachRebuildDemo({ argumentsList = process.argv.slice(
     await seedKeywordGoalsAndConversations(database);
     const threadId = await seedSupportThread(database);
     await seedPublishedOffer(database);
+    await seedQualificationQuestions(database);
     const counts = await readBack(database, threadId);
     await database.query("commit");
     console.log(`Coach rebuild demo seed read-back: ${JSON.stringify(counts)}`);
