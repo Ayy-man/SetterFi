@@ -57,7 +57,7 @@ type PendingCalendar = { id: string; name: string; timeZone: string };
  * `calendar_connections` row expect; only the words a coach reads change.
  */
 const PROVIDER_LABELS: Readonly<Record<Connection["provider"], string>> = {
-  ghl: "SetterFi workspace calendar",
+  ghl: "SetterFi's backup calendar",
   google: "Google Calendar",
 };
 
@@ -192,16 +192,23 @@ export function CalendarStep() {
   // Reconnect and connect are the same route, so there is one authorization path in the product.
   const showConnect = connectAvailable && !choosing && (!googleRow || expired || faulted);
   const accountability = AUDIT_ACTIONS["calendar.connected"];
+  /*
+   * Google is the calendar; the workspace calendar is the backup calls land in until Google is
+   * connected. So while there is no Google row and the press is available, connecting Google is
+   * the step's one filled action and Continue steps down to the secondary face. Once Google is
+   * connected (or the press is not available) Continue takes the fill back.
+   */
+  const connectLeads = showConnect && !googleRow;
 
   return (
     <OnboardingStepShell
       eyeCopy={CALENDAR_STEP_EYE_COPY}
       eyeScreen="onboarding-calendar"
-      lead={verified
-        ? "Your agent can see when you are free, so it can offer real times and book them."
-        : "Your agent needs somewhere to put the calls it books, and permission to see when you are free."}
+      lead={googleRow && verified
+        ? "Your agent can see when you are free in Google Calendar, so it can offer real times and book them."
+        : "Connect your Google Calendar so your agent can see when you are free and put the calls it books on it."}
       primary={
-        <Link className={STEP_PRIMARY_CLASS} href={nextStepHref("calendar")}>
+        <Link className={connectLeads ? `${STEP_SECONDARY_CLASS} w-full sm:w-auto` : STEP_PRIMARY_CLASS} href={nextStepHref("calendar")}>
           Continue to your offer
         </Link>
       }
@@ -229,7 +236,7 @@ export function CalendarStep() {
                 className="m-0 text-[20px] leading-[1.2] font-[500] tracking-[-0.015em] text-[color:var(--ink)]"
                 id="onboarding-calendar-provider"
               >
-                Calendar provider
+                Google Calendar
               </h2>
             </div>
             <StatePill
@@ -241,9 +248,26 @@ export function CalendarStep() {
           </div>
 
           <div className="flex flex-col gap-[16px] px-[16px] py-[20px] sm:px-[20px]">
+            {connectLeads ? (
+              <div className="flex flex-wrap items-center gap-[14px]">
+                <a className={STEP_PRIMARY_CLASS} data-slot="rehaul-calendar-connect" href={GOOGLE_CONNECT_PATH}>
+                  Connect Google Calendar
+                </a>
+                <span
+                  aria-label={accountability.ariaLabel}
+                  className="inline-flex items-center gap-[8px] text-[14px] text-[color:var(--muted)]"
+                >
+                  <ShieldCheck aria-hidden className="size-[16px]" />
+                  {accountability.microcopy}
+                </span>
+              </div>
+            ) : null}
+
             <div className="grid gap-[16px] sm:grid-cols-2">
               <div className="min-w-0">
-                <p className="mb-[6px] text-[16px] leading-[1.4] text-[color:var(--muted)]">Calendar</p>
+                <p className="mb-[6px] text-[16px] leading-[1.4] text-[color:var(--muted)]">
+                  {connection && !googleRow ? "Calls land here until Google is connected" : "Calendar"}
+                </p>
                 <StepReadback absent={!connection}>
                   {connection
                     ? `${PROVIDER_LABELS[connection.provider]}${connection.calendarName ? `, ${connection.calendarName}` : ""}`
@@ -251,7 +275,7 @@ export function CalendarStep() {
                       ? "Reading your calendar…"
                       : loaded === "failed"
                         ? "Your calendar could not be read just now"
-                        : "No calendar connected yet"}
+                        : "No Google Calendar connected yet"}
                 </StepReadback>
               </div>
               {/* The account is said only when there is one: "No account recorded" was the
@@ -270,7 +294,7 @@ export function CalendarStep() {
               </p>
             ) : null}
 
-            {loaded === "read" && !connectAvailable && !verified ? (
+            {loaded === "read" && !connectAvailable && !googleRow ? (
               /*
                 No button, no form. Where the press is not switched on for this workspace the
                 calendar is connected by a person at SetterFi, and the screen says so rather than
@@ -280,15 +304,15 @@ export function CalendarStep() {
                 className="m-0 border-t border-[var(--line-soft)] pt-[16px] text-[16px] leading-[1.5] text-[color:var(--body)]"
                 data-slot="rehaul-calendar-ask"
               >
-                Connecting a calendar is not switched on for this workspace yet. Message us from the
-                bubble in the corner and a person will connect it with you; it takes one call.
+                The Google Calendar connection is not switched on for this workspace yet. Message us
+                from the bubble in the corner and a person will switch it on with you.
               </p>
             ) : null}
 
-            {showConnect ? (
+            {showConnect && !connectLeads ? (
               <div className="flex flex-wrap items-center gap-[14px] border-t border-[var(--line-soft)] pt-[16px]">
-                <a className={STEP_SECONDARY_CLASS} href={GOOGLE_CONNECT_PATH}>
-                  {expired || faulted ? "Reconnect Google Calendar" : "Connect Google Calendar"}
+                <a className={STEP_SECONDARY_CLASS} data-slot="rehaul-calendar-connect" href={GOOGLE_CONNECT_PATH}>
+                  Reconnect Google Calendar
                 </a>
                 <span
                   aria-label={accountability.ariaLabel}

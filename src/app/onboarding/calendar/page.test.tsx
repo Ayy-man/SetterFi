@@ -51,7 +51,7 @@ describe("CalendarOnboardingPage", () => {
       connection: null, googleConnectAvailable: false, googleGrant: null, pendingCalendars: [],
     })));
     render(<CalendarOnboardingPage />);
-    await screen.findByText("No calendar connected yet");
+    await screen.findByText("No Google Calendar connected yet");
 
     expect(screen.queryByText("Record it by hand")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
@@ -73,14 +73,36 @@ describe("CalendarOnboardingPage", () => {
       googleConnectAvailable: false, googleGrant: null, pendingCalendars: [],
     })));
     render(<CalendarOnboardingPage />);
-    await screen.findByText("SetterFi workspace calendar, Consults");
+    await screen.findByText("SetterFi's backup calendar, Consults");
 
     expect(document.body.textContent ?? "").not.toMatch(/gohighlevel|high\s*level|\bGHL\b/i);
     // The identifiers behind the row stay behind it.
     expect(document.body.textContent ?? "").not.toContain("calendar-1");
     expect(document.body.textContent ?? "").not.toContain("account-1");
     expect(screen.getByText("Availability verified, so your agent can book")).toBeVisible();
-    // Verified and not connectable by press: nothing to do here, so no ask either.
+    // The backup is named as the backup, and with the press off the screen says who switches it on.
+    expect(screen.getByText("Calls land here until Google is connected")).toBeVisible();
+    expect(document.querySelector("[data-slot='rehaul-calendar-ask']")).not.toBeNull();
+  });
+
+  /**
+   * Google is the calendar; the workspace calendar is where calls land until Google is connected.
+   * So with the press available and no Google row, connecting Google is the step's one filled
+   * action, above the readback, and Continue steps down to the secondary face.
+   */
+  it("leads with Connect Google Calendar as the filled action while a backup calendar is in place", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({
+      connection: { provider: "ghl", calendarName: "Consults", externalCalendarId: "calendar-1", externalAccountReference: null, authorizationRecordedAt: null, state: "ready" },
+      googleConnectAvailable: true, googleGrant: null, pendingCalendars: [],
+    })));
+    render(<CalendarOnboardingPage />);
+
+    const connect = await screen.findByRole("link", { name: "Connect Google Calendar" });
+    expect(connect).toHaveAttribute("href", "/api/calendars/google/connect");
+    expect(connect.className).toContain("accent-fill");
+    const readback = screen.getByText("SetterFi's backup calendar, Consults");
+    expect(connect.compareDocumentPosition(readback) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Continue to your offer" }).className).not.toContain("accent-fill");
     expect(document.querySelector("[data-slot='rehaul-calendar-ask']")).toBeNull();
   });
 
@@ -94,13 +116,13 @@ describe("CalendarOnboardingPage", () => {
       connection: null, googleConnectAvailable: false, googleGrant: null, pendingCalendars: [],
     })));
     render(<CalendarOnboardingPage />);
-    await screen.findByText("No calendar connected yet");
+    await screen.findByText("No Google Calendar connected yet");
 
     expect(screen.queryByRole("link", { name: /Connect Google Calendar/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
     expect(screen.queryByText("No account recorded")).not.toBeInTheDocument();
     expect(document.querySelector("[data-slot='rehaul-calendar-ask']"))
-      .toHaveTextContent(/a person will connect it with you/);
+      .toHaveTextContent(/a person will switch it on with you/);
   });
 
   /**
