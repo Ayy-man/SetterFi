@@ -84,13 +84,27 @@ export type CoachBillingSnapshot = {
   notices: readonly CoachBillingNotice[];
   correctionCandidates: readonly CoachCorrectionCandidate[];
   outcomePrompts: readonly CoachOutcomePrompt[];
+  /**
+   * Appointments in this period whose attendance the coach already answered, most recent first,
+   * at most twenty. `coach_billing_projection` started returning them in migration
+   * `20261012000010`; the card under "Did they show up?" lists them so an answer does not vanish
+   * the moment it is given.
+   */
+  settledAttendance: readonly CoachSettledAttendance[];
   isDemo: boolean;
+};
+
+export type CoachSettledAttendance = {
+  appointmentId: string;
+  label: string;
+  occurredAt: string;
+  outcome: "completed" | "no_show";
 };
 
 const SNAPSHOT_KEYS = [
   "accountState", "bookedCount", "callAllowance", "correctionCandidates", "currency",
   "invoiceState", "isDemo", "notices", "outcomePrompts", "pendingMovement", "periodEnd",
-  "periodStart", "priceCents", "subscriptionState", "tierName", "timezone",
+  "periodStart", "priceCents", "settledAttendance", "subscriptionState", "tierName", "timezone",
 ] as const;
 
 /*
@@ -254,7 +268,8 @@ export function parseCoachBillingSnapshot(value: unknown): CoachBillingSnapshot 
       .includes(String(snapshot.accountState))
     || (snapshot.pendingMovement !== null && !isRecord(snapshot.pendingMovement))
     || !Array.isArray(snapshot.notices) || !Array.isArray(snapshot.correctionCandidates)
-    || !Array.isArray(snapshot.outcomePrompts) || typeof snapshot.isDemo !== "boolean"
+    || !Array.isArray(snapshot.outcomePrompts) || !Array.isArray(snapshot.settledAttendance)
+    || typeof snapshot.isDemo !== "boolean"
   ) throw new Error("COACH_BILLING_PROJECTION_INVALID");
   return snapshot as CoachBillingSnapshot;
 }
@@ -1140,6 +1155,35 @@ export function CoachBilling({
                 No past appointments are waiting for an outcome.
               </p>
             )}
+            {/*
+              What the coach already answered this period, so a press on Showed or No show leaves
+              a record on the page rather than making the row disappear. Read only: changing an
+              answer is a correction request, which is the strip at the foot of the page.
+            */}
+            {snapshot.settledAttendance.length ? (
+              <ul
+                aria-label="Already answered"
+                className="m-0 list-none border-t border-[var(--line-soft)] p-0"
+              >
+                {snapshot.settledAttendance.map((settled) => (
+                  <li
+                    className="flex flex-wrap items-center justify-between gap-[16px] border-b border-[var(--line-soft)] px-[30px] py-[18px] last:border-b-0"
+                    key={settled.appointmentId}
+                  >
+                    <div className="min-w-0 flex-1 basis-[min(100%,20ch)]">
+                      <p className={`m-0 ${ROW_TITLE_CLASS}`}>{settled.label}</p>
+                      <span className={`${ROW_META_CLASS} font-[family-name:var(--font-mono)]`}>
+                        {formatDate(settled.occurredAt)}
+                      </span>
+                    </div>
+                    <Status
+                      label={settled.outcome === "completed" ? "Showed" : "No show"}
+                      tone={settled.outcome === "completed" ? "good" : "neutral"}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {/*
               The half of the old sentence worth keeping, moved to where it answers something.
               "This does not change your bill" is a reassurance about pressing the buttons, so it

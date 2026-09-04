@@ -24,6 +24,7 @@ const snapshot: CoachBillingSnapshot = {
   outcomePrompts: [
     { appointmentId: "appt-1", label: "Maria Pena", occurredAt: "2026-08-28T18:30:00.000Z" },
   ],
+  settledAttendance: [],
   isDemo: false,
 };
 

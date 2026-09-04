@@ -29,6 +29,7 @@ const suspendedSnapshot: CoachBillingSnapshot = {
   notices: [],
   correctionCandidates: [],
   outcomePrompts: [],
+  settledAttendance: [],
   isDemo: false,
 };
 

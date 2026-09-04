@@ -41,6 +41,7 @@ const coachSnapshot: CoachBillingSnapshot = {
   notices: [],
   correctionCandidates: [],
   outcomePrompts: [{ appointmentId: "appointment-1", label: "Synthetic call", occurredAt: "2026-08-20" }],
+  settledAttendance: [],
   isDemo: true,
 };
 
