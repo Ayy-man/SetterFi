@@ -1,0 +1,245 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;450;500;540;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    :root {
+      /* Lifted verbatim from src/app/tokens.css, bare :root block (the light palette). */
+      --canvas: oklch(0.9612 0.0042 262);
+      --pane: oklch(0.9745 0.0034 262);
+      --pane-bloom: radial-gradient(85% 50% at 78% -8%, rgba(46, 92, 200, 0.06), rgba(46, 92, 200, 0) 60%);
+      --card-top: oklch(0.9975 0.0016 262);
+      --card: oklch(0.9905 0.0026 262);
+      --well: oklch(0.983 0.0048 262);
+      --raised: var(--card-top);
+      --band: rgba(60, 90, 150, 0.1);
+      --row-hover: rgba(60, 90, 150, 0.035);
+      --control-fill: rgba(28, 42, 82, 0.035);
+      --line: rgba(60, 90, 150, 0.13);
+      --line-soft: rgba(60, 90, 150, 0.06);
+      --line-input: rgba(60, 90, 150, 0.15);
+      --ink: oklch(0.2325 0.023 262);
+      --body: oklch(0.2905 0.032 262);
+      --muted: oklch(0.3604 0.036 262);
+      --faint: oklch(0.4349 0.039 262);
+      --accent: oklch(0.5 0.15 264);
+      --accent-fill: linear-gradient(180deg, oklch(0.523 0.148 266), oklch(0.443 0.152 261));
+      --accent-hover: oklch(0.455 0.158 264);
+      --accent-line: rgba(46, 92, 200, 0.32);
+      --accent-text: oklch(0.44 0.165 264);
+      --accent-wash: rgba(46, 92, 200, 0.07);
+      --accent-wash-strong: rgba(46, 92, 200, 0.1);
+      --accent-edge: rgba(46, 92, 200, 0.22);
+      --on-accent: oklch(0.99 0.003 267);
+      --focus-ring: oklch(0.47 0.16 264 / 0.65);
+      --good: oklch(0.6237 0.095 164);
+      --good-text: oklch(0.4992 0.09 164);
+      --good-wash: rgba(36, 132, 96, 0.09);
+      --good-line: rgba(36, 132, 96, 0.26);
+      --warning: oklch(0.6409 0.115 71);
+      --warning-text: oklch(0.5183 0.105 71);
+      --warning-body: oklch(0.47 0.045 80);
+      --warning-wash: rgba(176, 116, 32, 0.1);
+      --warning-line: rgba(176, 116, 32, 0.28);
+      --waiting: oklch(0.6398 0.115 271);
+      --waiting-text: oklch(0.5152 0.105 271);
+      --waiting-wash: rgba(92, 110, 196, 0.09);
+      --waiting-line: rgba(92, 110, 196, 0.26);
+      --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 1px 2px rgba(28, 42, 82, 0.04), 0 8px 20px -14px rgba(28, 42, 82, 0.16);
+      --shadow-raised: 0 1px 2px rgba(28, 42, 82, 0.06), 0 10px 26px -10px rgba(28, 42, 82, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      /* Canvas-only: the one drenched panel a coach screen may carry. Deep blue on the accent hue,
+         so it is the same family as --accent without being the accent fill a button spends. */
+      --drench: linear-gradient(158deg, oklch(0.36 0.1 264), oklch(0.27 0.075 266));
+      --on-drench: oklch(0.99 0.003 267);
+      --on-drench-muted: rgba(255, 255, 255, 0.78);
+      --drench-line: rgba(255, 255, 255, 0.16);
+      --primary-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 8px 20px -8px var(--accent);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--body); font-family: "Archivo", system-ui, sans-serif; font-size: 16px; font-weight: 450; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent-text); text-decoration: none; }
+    a:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
+    a.pill:hover, a.btn:hover, a.tab:hover { text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3, p { margin: 0; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums lining-nums; }
+    svg.i { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    svg.i24 { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    table { border-collapse: collapse; width: 100%; }
+
+  </style>
+</helmet>
+<div style="position: relative; min-height: 1154px; background: var(--canvas);">
+  <!-- Top chrome: mark and product name, the setup title where the pill bar sits on the console,
+       then the context eye at coach scale, the bell and the account chip. -->
+  <div style="display: flex; align-items: center; gap: 32px; height: 76px; padding: 0 40px; border-bottom: 1px solid var(--line); background: var(--pane); flex: none;">
+    <div style="display: flex; align-items: center; gap: 12px; width: 250px; flex: none;">
+      <div style="display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--accent-edge); background: var(--accent-wash); color: var(--accent-text);">
+        <svg class="i" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      </div>
+      <span style="font-size: 20px; font-weight: 600; letter-spacing: -0.014em; color: var(--ink);">Your agent</span>
+    </div>
+    <div style="display: flex; justify-content: center; flex-grow: 1;">
+      <span style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; color: var(--ink);">Setup</span>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 12px; width: 250px; flex: none;">
+      <button aria-label="What this page shows" style="display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--well); color: var(--muted);">
+        <svg class="i" viewBox="0 0 24 24"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <button aria-label="Notifications" style="display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--well); color: var(--muted);">
+        <svg class="i" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      </button>
+      <button style="display: flex; align-items: center; gap: 11px; height: 46px; padding: 0 14px 0 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--well); color: var(--ink);">
+        <span class="mono" style="display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--accent-wash); border: 1px solid var(--accent-edge); color: var(--accent-text); font-size: 14px;">RF</span>
+        <span style="font-size: 16px; font-weight: 500; color: var(--ink);">Reid</span>
+        <svg class="i" viewBox="0 0 24 24" style="width: 17px; height: 17px; color: var(--faint);"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </div>
+  </div>
+  <div style="padding: 36px 40px 96px; background-image: var(--pane-bloom);">
+    <div style="margin-bottom: 32px;">
+      <h1 style="margin-bottom: 12px; font-size: 46px; font-weight: 600; letter-spacing: -0.026em; line-height: 1.05; color: var(--ink);">Set up your agent</h1>
+      <p style="font-size: 17px; line-height: 1.5; color: var(--body); max-width: 76ch;">Two steps are waiting on you. The rest is with us and the carriers.</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 24px; align-items: start;">
+
+      <!-- The N26 vertical status list: one panel, six rungs, one button at the foot that resumes. -->
+      <div style="display: flex; flex-direction: column;">
+        <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--card-top), var(--card)); box-shadow: var(--shadow-card); overflow: hidden; flex-grow: 1;">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--line);">
+      <div style="min-width: 0;">
+        <span style="display: block; margin-bottom: 4px; font-size: 14px; color: var(--muted);">Six steps, in order</span>
+        <h2 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--ink);">2 of 6 done</h2>
+      </div>
+      
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: flex-start; gap: 20px; padding: 20px 20px 20px 20px; border-bottom: 1px solid var(--line-soft);">
+        <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; width: 44px; flex: none;">
+          <span style="display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 999px; border: 1px solid var(--good-line); background: var(--good-wash); color: var(--good-text);"><svg class="i" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg></span>
+          <span style="flex-grow: 1; width: 2px; margin: 8px 0 -28px; background: var(--line);"></span>
+        </div>
+        <div style="flex-grow: 1; min-width: 0; padding-top: 8px;">
+          <h3 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--ink);">Business profile</h3>
+          <p style="margin-top: 6px; max-width: 56ch; font-size: 16px; line-height: 1.55; color: var(--muted);">Saved on 28 August. Your name, city and what you help people with.</p>
+        </div>
+        <div style="flex: none; padding-top: 12px;"><span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--good-wash); border: 1px solid var(--good-line); color: var(--good-text); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--good); flex: none;"></span>Done</span></div>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 20px; padding: 20px 20px 20px 20px; border-bottom: 1px solid var(--line-soft);">
+        <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; width: 44px; flex: none;">
+          <span style="display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 999px; border: 1px solid var(--good-line); background: var(--good-wash); color: var(--good-text);"><svg class="i" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg></span>
+          <span style="flex-grow: 1; width: 2px; margin: 8px 0 -28px; background: var(--line);"></span>
+        </div>
+        <div style="flex-grow: 1; min-width: 0; padding-top: 8px;">
+          <h3 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--ink);">Instagram and Messenger</h3>
+          <p style="margin-top: 6px; max-width: 56ch; font-size: 16px; line-height: 1.55; color: var(--muted);">Connected as @reidfunding on 29 August.</p>
+        </div>
+        <div style="flex: none; padding-top: 12px;"><span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--good-wash); border: 1px solid var(--good-line); color: var(--good-text); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--good); flex: none;"></span>Done</span></div>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 20px; padding: 20px 20px 20px 20px; border-bottom: 1px solid var(--line-soft);">
+        <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; width: 44px; flex: none;">
+          <span style="display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 999px; border: 1px solid var(--accent-edge); background: var(--accent-wash);"><span style="width: 16px; height: 16px; border-radius: 999px; background: var(--accent);"></span></span>
+          <span style="flex-grow: 1; width: 2px; margin: 8px 0 -28px; background: var(--line);"></span>
+        </div>
+        <div style="flex-grow: 1; min-width: 0; padding-top: 8px;">
+          <h3 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--ink);">Texting eligibility</h3>
+          <p style="margin-top: 6px; max-width: 56ch; font-size: 16px; line-height: 1.55; color: var(--muted);">Your details are with the carriers. Nothing is broken and there is nothing for you to do while it runs.</p>
+        </div>
+        <div style="flex: none; padding-top: 12px;"><span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--waiting-wash); border: 1px solid var(--waiting-line); color: var(--waiting-text); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--waiting); flex: none;"></span>Day 14 of about 21</span></div>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 20px; padding: 20px 20px 20px 20px; border-bottom: 1px solid var(--line-soft);">
+        <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; width: 44px; flex: none;">
+          <span style="display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 999px; border: 1px solid var(--line); background: var(--well);"></span>
+          <span style="flex-grow: 1; width: 2px; margin: 8px 0 -28px; background: var(--line);"></span>
+        </div>
+        <div style="flex-grow: 1; min-width: 0; padding-top: 8px;">
+          <h3 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--body);">Calendar</h3>
+          <p style="margin-top: 6px; max-width: 56ch; font-size: 16px; line-height: 1.55; color: var(--muted);">Tell us where your calls should land, so your agent can book them.</p>
+        </div>
+        <div style="flex: none; padding-top: 12px;"><span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--warning-wash); border: 1px solid var(--warning-line); color: var(--warning-text); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--warning); flex: none;"></span>Waiting on you</span></div>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 20px; padding: 20px 20px 20px 20px; border-bottom: 1px solid var(--line-soft);">
+        <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; width: 44px; flex: none;">
+          <span style="display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 999px; border: 1px solid var(--line); background: var(--well);"></span>
+          <span style="flex-grow: 1; width: 2px; margin: 8px 0 -28px; background: var(--line);"></span>
+        </div>
+        <div style="flex-grow: 1; min-width: 0; padding-top: 8px;">
+          <h3 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--body);">Your offer</h3>
+          <p style="margin-top: 6px; max-width: 56ch; font-size: 16px; line-height: 1.55; color: var(--muted);">What you sell, what it costs, and who is a good fit.</p>
+        </div>
+        <div style="flex: none; padding-top: 12px;"><span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--warning-wash); border: 1px solid var(--warning-line); color: var(--warning-text); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--warning); flex: none;"></span>Waiting on you</span></div>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 20px; padding: 20px 20px 20px 20px; ">
+        <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; width: 44px; flex: none;">
+          <span style="display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 999px; border: 1px solid var(--line); background: var(--well);"></span>
+          
+        </div>
+        <div style="flex-grow: 1; min-width: 0; padding-top: 8px;">
+          <h3 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--body);">Go live</h3>
+          <p style="margin-top: 6px; max-width: 56ch; font-size: 16px; line-height: 1.55; color: var(--muted);">Turn your agent on. This is the last step and it takes one press.</p>
+        </div>
+        <div style="flex: none; padding-top: 12px;"><span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--control-fill); border: 1px solid var(--line); color: var(--muted); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint); flex: none;"></span>Comes last</span></div>
+      </div>
+    </div>    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; border-top: 1px solid var(--line); background: var(--well);">
+      <p style="font-size: 16px; color: var(--muted); max-width: 44ch;">You can leave and come back. Every answer is saved as you go.</p>
+      <button style="display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 48px; padding: 0 24px; border-radius: 9px; border: 1px solid var(--accent-line); background: var(--accent-fill); color: var(--on-accent); font-size: 16px; font-weight: 600; box-shadow: var(--primary-shadow); white-space: nowrap; ">Continue with your calendar</button>
+    </div>
+  </div>
+      </div>
+
+      <!-- The right column carries facts about the account, not an explanation of the page. -->
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--card-top), var(--card)); box-shadow: var(--shadow-card); overflow: hidden;">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--line);">
+      <div style="min-width: 0;">
+        <span style="display: block; margin-bottom: 4px; font-size: 14px; color: var(--muted);">Nothing for you to do</span>
+        <h2 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--ink);">We handle these for you</h2>
+      </div>
+      
+    </div>
+    <div style="padding: 4px 20px 14px;">
+        <div style="display: flex; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--line-soft);">
+          <span style="color: var(--good-text); padding-top: 2px;"><svg class="i" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg></span>
+          <p style="font-size: 16px; line-height: 1.55; color: var(--body);">Your agent answers within a minute, day and night.</p>
+        </div>        <div style="display: flex; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--line-soft);">
+          <span style="color: var(--good-text); padding-top: 2px;"><svg class="i" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg></span>
+          <p style="font-size: 16px; line-height: 1.55; color: var(--body);">Anyone who asks to stop hearing from you is opted out for you.</p>
+        </div>        <div style="display: flex; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--line-soft);">
+          <span style="color: var(--good-text); padding-top: 2px;"><svg class="i" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg></span>
+          <p style="font-size: 16px; line-height: 1.55; color: var(--body);">Hot leads reach you by email and text the moment they qualify.</p>
+        </div>        <div style="display: flex; gap: 14px; padding: 18px 0; ">
+          <span style="color: var(--good-text); padding-top: 2px;"><svg class="i" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg></span>
+          <p style="font-size: 16px; line-height: 1.55; color: var(--body);">Nothing you connect starts answering until you press go live.</p>
+        </div>
+    </div>
+  </div>
+        <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--card-top), var(--card)); box-shadow: var(--shadow-card); overflow: hidden;">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--line);">
+      <div style="min-width: 0;">
+        <span style="display: block; margin-bottom: 4px; font-size: 14px; color: var(--muted);">Not answered here</span>
+        <h2 style="font-size: 20px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--ink);">Ask a person</h2>
+      </div>
+      
+    </div>
+    <div style="padding: 18px 20px 20px;">
+      <p style="max-width: 34ch; font-size: 16px; line-height: 1.5; color: var(--muted);">Message us from the bubble in the corner. Someone answers on weekdays between 9 and 6 Eastern.</p>
+    </div>
+  </div>
+      </div>
+    </div>
+  </div>
+  <!-- Support bubble: 56px, ink not accent, so it never competes with the page's one filled button. -->
+  <button aria-label="Message support" style="position: absolute; right: 32px; bottom: 32px; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12); background: var(--ink); color: var(--on-accent); box-shadow: var(--shadow-raised);">
+    <svg class="i24" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+  </button>
+</div>
+</x-dc>
+</body>
+</html>

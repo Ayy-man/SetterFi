@@ -1,0 +1,220 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1960,
+      "title": "Home, live",
+      "page": "page-1"
+    },
+    {
+      "file": "HomeFirstRun.dc.html",
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1000,
+      "title": "Home, first run",
+      "page": "page-1"
+    },
+    {
+      "file": "Inbox.dc.html",
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1000,
+      "title": "Inbox",
+      "page": "page-1"
+    },
+    {
+      "file": "Agent.dc.html",
+      "x": 0,
+      "y": 2080,
+      "w": 1440,
+      "h": 2747,
+      "title": "Your agent",
+      "page": "page-1"
+    },
+    {
+      "file": "Leads.dc.html",
+      "x": 1520,
+      "y": 2080,
+      "w": 1440,
+      "h": 940,
+      "title": "Leads, list",
+      "page": "page-1"
+    },
+    {
+      "file": "LeadsBoard.dc.html",
+      "x": 3040,
+      "y": 2080,
+      "w": 1440,
+      "h": 1327,
+      "title": "Leads, board",
+      "page": "page-1"
+    },
+    {
+      "file": "Billing.dc.html",
+      "x": 0,
+      "y": 4947,
+      "w": 1440,
+      "h": 1251,
+      "title": "Billing",
+      "page": "page-1"
+    },
+    {
+      "file": "HomeMobile.dc.html",
+      "x": 1520,
+      "y": 4947,
+      "w": 390,
+      "h": 2195,
+      "title": "Home on a phone",
+      "page": "page-1"
+    },
+    {
+      "file": "Vocabulary.dc.html",
+      "x": 0,
+      "y": 7262,
+      "w": 1440,
+      "h": 4299,
+      "title": "Vocabulary",
+      "page": "page-1"
+    },
+    {
+      "file": "OnboardingOverview.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1154,
+      "title": "Onboarding, overview",
+      "page": "page-2"
+    },
+    {
+      "file": "OnboardingStep.dc.html",
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 894,
+      "title": "Onboarding, one step",
+      "page": "page-2"
+    },
+    {
+      "file": "OnboardingConnect.dc.html",
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1048,
+      "title": "Onboarding, connect",
+      "page": "page-2"
+    },
+    {
+      "file": "OnboardingGoLive.dc.html",
+      "x": 0,
+      "y": 1274,
+      "w": 1440,
+      "h": 1019,
+      "title": "Onboarding, go live",
+      "page": "page-2"
+    },
+    {
+      "file": "Setup.dc.html",
+      "x": 1520,
+      "y": 1274,
+      "w": 1440,
+      "h": 1117,
+      "title": "Your setup",
+      "page": "page-2"
+    },
+    {
+      "file": "OnboardingStepMobile.dc.html",
+      "x": 3040,
+      "y": 1274,
+      "w": 390,
+      "h": 1028,
+      "title": "Onboarding step on a phone",
+      "page": "page-2"
+    },
+    {
+      "file": "AccountMenu.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 676,
+      "title": "Account menu",
+      "page": "page-3"
+    },
+    {
+      "file": "Notifications.dc.html",
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1234,
+      "title": "Settings, where to be told",
+      "page": "page-3"
+    },
+    {
+      "file": "SupportBubble.dc.html",
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 942,
+      "title": "Support bubble, open",
+      "page": "page-3"
+    },
+    {
+      "file": "Tips.dc.html",
+      "x": 0,
+      "y": 1354,
+      "w": 1440,
+      "h": 1181,
+      "title": "Tips and trainings",
+      "page": "page-3"
+    },
+    {
+      "file": "Loading.dc.html",
+      "x": 1520,
+      "y": 1354,
+      "w": 1440,
+      "h": 1336,
+      "title": "Home, loading",
+      "page": "page-3"
+    },
+    {
+      "file": "ErrorState.dc.html",
+      "x": 3040,
+      "y": 1354,
+      "w": 1440,
+      "h": 601,
+      "title": "Home, read failed",
+      "page": "page-3"
+    },
+    {
+      "file": "NotFound.dc.html",
+      "x": 0,
+      "y": 2810,
+      "w": 1440,
+      "h": 634,
+      "title": "Page not found",
+      "page": "page-3"
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  },
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Console"
+    },
+    {
+      "id": "page-2",
+      "name": "Onboarding and setup"
+    },
+    {
+      "id": "page-3",
+      "name": "Chrome and states"
+    }
+  ]
+}

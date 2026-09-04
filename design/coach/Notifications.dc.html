@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;450;500;540;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    :root {
+      /* Lifted verbatim from src/app/tokens.css, bare :root block (the light palette). */
+      --canvas: oklch(0.9612 0.0042 262);
+      --pane: oklch(0.9745 0.0034 262);
+      --pane-bloom: radial-gradient(85% 50% at 78% -8%, rgba(46, 92, 200, 0.06), rgba(46, 92, 200, 0) 60%);
+      --card-top: oklch(0.9975 0.0016 262);
+      --card: oklch(0.9905 0.0026 262);
+      --well: oklch(0.983 0.0048 262);
+      --raised: var(--card-top);
+      --band: rgba(60, 90, 150, 0.1);
+      --row-hover: rgba(60, 90, 150, 0.035);
+      --control-fill: rgba(28, 42, 82, 0.035);
+      --line: rgba(60, 90, 150, 0.13);
+      --line-soft: rgba(60, 90, 150, 0.06);
+      --line-input: rgba(60, 90, 150, 0.15);
+      --ink: oklch(0.2325 0.023 262);
+      --body: oklch(0.2905 0.032 262);
+      --muted: oklch(0.3604 0.036 262);
+      --faint: oklch(0.4349 0.039 262);
+      --accent: oklch(0.5 0.15 264);
+      --accent-fill: linear-gradient(180deg, oklch(0.523 0.148 266), oklch(0.443 0.152 261));
+      --accent-hover: oklch(0.455 0.158 264);
+      --accent-line: rgba(46, 92, 200, 0.32);
+      --accent-text: oklch(0.44 0.165 264);
+      --accent-wash: rgba(46, 92, 200, 0.07);
+      --accent-wash-strong: rgba(46, 92, 200, 0.1);
+      --accent-edge: rgba(46, 92, 200, 0.22);
+      --on-accent: oklch(0.99 0.003 267);
+      --focus-ring: oklch(0.47 0.16 264 / 0.65);
+      --good: oklch(0.6237 0.095 164);
+      --good-text: oklch(0.4992 0.09 164);
+      --good-wash: rgba(36, 132, 96, 0.09);
+      --good-line: rgba(36, 132, 96, 0.26);
+      --warning: oklch(0.6409 0.115 71);
+      --warning-text: oklch(0.5183 0.105 71);
+      --warning-body: oklch(0.47 0.045 80);
+      --warning-wash: rgba(176, 116, 32, 0.1);
+      --warning-line: rgba(176, 116, 32, 0.28);
+      --waiting: oklch(0.6398 0.115 271);
+      --waiting-text: oklch(0.5152 0.105 271);
+      --waiting-wash: rgba(92, 110, 196, 0.09);
+      --waiting-line: rgba(92, 110, 196, 0.26);
+      --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 1px 2px rgba(28, 42, 82, 0.04), 0 8px 20px -14px rgba(28, 42, 82, 0.16);
+      --shadow-raised: 0 1px 2px rgba(28, 42, 82, 0.06), 0 10px 26px -10px rgba(28, 42, 82, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      /* Canvas-only: the one drenched panel a coach screen may carry. Deep blue on the accent hue,
+         so it is the same family as --accent without being the accent fill a button spends. */
+      --drench: linear-gradient(158deg, oklch(0.36 0.1 264), oklch(0.27 0.075 266));
+      --on-drench: oklch(0.99 0.003 267);
+      --on-drench-muted: rgba(255, 255, 255, 0.78);
+      --drench-line: rgba(255, 255, 255, 0.16);
+      --primary-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 8px 20px -8px var(--accent);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--body); font-family: "Archivo", system-ui, sans-serif; font-size: 16px; font-weight: 450; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent-text); text-decoration: none; }
+    a:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
+    a.pill:hover, a.btn:hover, a.tab:hover { text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3, p { margin: 0; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums lining-nums; }
+    svg.i { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    svg.i24 { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    table { border-collapse: collapse; width: 100%; }
+
+  </style>
+</helmet>
+<div style="position: relative; min-height: 1234px; background: var(--canvas);">
+  <!-- Top chrome: mark and product name, one centred pill group of five, bell and account chip. -->
+  <div style="display: flex; align-items: center; gap: 32px; height: 76px; padding: 0 40px; border-bottom: 1px solid var(--line); background: var(--pane); flex: none;">
+    <div style="display: flex; align-items: center; gap: 12px; width: 250px; flex: none;">
+      <div style="display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--accent-edge); background: var(--accent-wash); color: var(--accent-text);">
+        <svg class="i" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      </div>
+      <span style="font-size: 20px; font-weight: 600; letter-spacing: -0.014em; color: var(--ink);">Your agent</span>
+    </div>
+    <div style="display: flex; justify-content: center; flex-grow: 1;">
+      <div style="display: flex; align-items: center; gap: 4px; padding: 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--well);">
+        <a class="pill" href="#" style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 26px; border-radius: 999px; font-size: 17px; white-space: nowrap; font-weight: 500; color: var(--muted); border: 1px solid transparent;">Overview</a><a class="pill" href="#" style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 26px; border-radius: 999px; font-size: 17px; white-space: nowrap; font-weight: 500; color: var(--muted); border: 1px solid transparent;">Inbox<span class="mono" style="display: grid; place-items: center; min-width: 26px; height: 24px; padding: 0 8px; border-radius: 999px; background: var(--warning-wash); border: 1px solid var(--warning-line); color: var(--warning-text); font-size: 14px;">4</span></a><a class="pill" href="#" style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 26px; border-radius: 999px; font-size: 17px; white-space: nowrap; font-weight: 500; color: var(--muted); border: 1px solid transparent;">Leads</a><a class="pill" href="#" style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 26px; border-radius: 999px; font-size: 17px; white-space: nowrap; font-weight: 500; color: var(--muted); border: 1px solid transparent;">Agent</a><a class="pill" href="#" style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 26px; border-radius: 999px; font-size: 17px; white-space: nowrap; font-weight: 500; color: var(--muted); border: 1px solid transparent;">Billing</a>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 12px; width: 250px; flex: none;">
+      <button aria-label="Notifications" style="display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--well); color: var(--muted);">
+        <svg class="i" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      </button>
+      <button style="display: flex; align-items: center; gap: 11px; height: 46px; padding: 0 14px 0 8px; border-radius: 12px; border: 1px solid var(--accent-edge); background: var(--accent-wash); color: var(--ink);">
+        <span class="mono" style="display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--accent-wash); border: 1px solid var(--accent-edge); color: var(--accent-text); font-size: 14px;">RF</span>
+        <span style="font-size: 16px; font-weight: 500; color: var(--ink);">Reid</span>
+        <svg class="i" viewBox="0 0 24 24" style="width: 17px; height: 17px; color: var(--faint);"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </div>
+  </div>
+  <div style="padding: 36px 40px 96px; background-image: var(--pane-bloom);">
+    <a href="#" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin: -10px 0 4px; padding: 0 2px; font-size: 16px; color: var(--accent-text);"><svg class="i" viewBox="0 0 24 24" style="width: 18px; height: 18px;"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>Back to Home</a>
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 32px;">
+      <div style="min-width: 0;">
+        <h1 style="margin-bottom: 12px; font-size: 46px; font-weight: 600; letter-spacing: -0.026em; line-height: 1.05; color: var(--ink);">Settings</h1>
+        <p style="font-size: 17px; line-height: 1.5; color: var(--body); max-width: 76ch;">One thing to choose, and a list of what we already send you. Everything else is decided for you.</p>
+      </div>
+    </div>
+
+    <h2 style="margin-bottom: 16px; font-size: 22px; font-weight: 500; letter-spacing: -0.015em; color: var(--ink);">Where do you want to be told?</h2>
+    <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px;">
+      <div style="display: flex; align-items: center; gap: 18px; min-height: 96px; padding: 20px 22px; border-radius: 17px; border: 1px solid var(--accent-edge); background: var(--accent-wash);">
+        <span style="display: grid; place-items: center; width: 48px; height: 48px; flex: none; border-radius: 12px; border: 1px solid var(--line); background: var(--card-top); color: var(--accent-text);"><svg class="i24" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m3 7 9 6 9-6"/></svg></span>
+        <div style="min-width: 0; flex-grow: 1;">
+          <div style="font-size: 17px; font-weight: 500; color: var(--ink);">Email</div>
+          <p style="margin-top: 2px; font-size: 16px; line-height: 1.5; color: var(--muted);">Sent to reid@fenwickfunding.com.</p>
+        </div>
+        <span style="display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 999px; background: var(--accent-wash-strong); border: 1px solid var(--accent-edge); color: var(--accent-text);"><svg class="i" viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke-width: 2.4;"><path d="m4 12.5 5 5 11-11"/></svg></span>
+        <span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--accent-wash); border: 1px solid var(--accent-edge); color: var(--accent-text); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--accent); flex: none;"></span>Chosen</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 18px; min-height: 96px; padding: 20px 22px; border-radius: 17px; border: 1px solid var(--line); background: var(--well);">
+        <span style="display: grid; place-items: center; width: 48px; height: 48px; flex: none; border-radius: 12px; border: 1px solid var(--line); background: var(--card-top); color: var(--accent-text);"><svg class="i24" viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-9.1 8.5L7 21l1-3.6A8.5 8.5 0 1 1 21 11.5z"/></svg></span>
+        <div style="min-width: 0; flex-grow: 1;">
+          <div style="font-size: 17px; font-weight: 500; color: var(--ink);">Text</div>
+          <p style="margin-top: 2px; font-size: 16px; line-height: 1.5; color: var(--muted);">Opens the day your number clears carrier review, on day 14 of about 21.</p>
+        </div>
+        <span style="display: block; width: 28px; height: 28px; flex: none; border-radius: 999px; border: 1px solid var(--line-input); background: var(--card-top);"></span>
+        <span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--control-fill); border: 1px solid var(--line); color: var(--muted); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint); flex: none;"></span>Not ready yet</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 18px; min-height: 96px; padding: 20px 22px; border-radius: 17px; border: 1px solid var(--line); background: var(--well);">
+        <span style="display: grid; place-items: center; width: 48px; height: 48px; flex: none; border-radius: 12px; border: 1px solid var(--line); background: var(--card-top); color: var(--accent-text);"><svg class="i24" viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="10" rx="2.5"/><path d="M8 18.5h11a3 3 0 0 0 3-3V10"/><path d="m11 21.5-3-3 3-3"/></svg></span>
+        <div style="min-width: 0; flex-grow: 1;">
+          <div style="font-size: 17px; font-weight: 500; color: var(--ink);">Both</div>
+          <p style="margin-top: 2px; font-size: 16px; line-height: 1.5; color: var(--muted);">We will offer this the day texting opens.</p>
+        </div>
+        <span style="display: block; width: 28px; height: 28px; flex: none; border-radius: 999px; border: 1px solid var(--line-input); background: var(--card-top);"></span>
+        <span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--control-fill); border: 1px solid var(--line); color: var(--muted); font-size: 15px; font-weight: 500; white-space: nowrap;"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint); flex: none;"></span>Not ready yet</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--card-top), var(--card)); box-shadow: var(--shadow-card); overflow: hidden; margin-bottom: 24px;">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--line);">
+      <div style="display: flex; align-items: flex-start; gap: 14px; min-width: 0;">
+        <div style="min-width: 0;">
+          <span style="display: block; margin-bottom: 4px; font-size: 14px; color: var(--muted);">Nothing here is a setting</span>
+          <h2 style="font-size: 22px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--ink);">What we already send you</h2>
+        </div>
+      </div>
+      
+    </div>
+      <div style="padding: 6px 26px 20px;">
+        <p style="max-width: 76ch; margin: 16px 0 4px; font-size: 16px; line-height: 1.55; color: var(--muted);">There are four of these, and only four. We send nothing else, so there is nothing here to switch off.</p>
+        <div style="display: flex; align-items: flex-start; gap: 14px; min-height: 60px; padding: 16px 0; border-top: 1px solid var(--line-soft);">
+          <span style="display: grid; place-items: center; width: 26px; height: 26px; flex: none; margin-top: 1px; border-radius: 999px; background: var(--good-wash); border: 1px solid var(--good-line); color: var(--good-text);"><svg class="i" viewBox="0 0 24 24" style="width: 15px; height: 15px; stroke-width: 2.2;"><path d="m4 12.5 5 5 11-11"/></svg></span>
+          <span style="font-size: 16px; line-height: 1.55; color: var(--body);">A lead is waiting on you, because your agent will not answer that one for you.</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 14px; min-height: 60px; padding: 16px 0; border-top: 1px solid var(--line-soft);">
+          <span style="display: grid; place-items: center; width: 26px; height: 26px; flex: none; margin-top: 1px; border-radius: 999px; background: var(--good-wash); border: 1px solid var(--good-line); color: var(--good-text);"><svg class="i" viewBox="0 0 24 24" style="width: 15px; height: 15px; stroke-width: 2.2;"><path d="m4 12.5 5 5 11-11"/></svg></span>
+          <span style="font-size: 16px; line-height: 1.55; color: var(--body);">A call was booked, with the day, the time and who it is with.</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 14px; min-height: 60px; padding: 16px 0; border-top: 1px solid var(--line-soft);">
+          <span style="display: grid; place-items: center; width: 26px; height: 26px; flex: none; margin-top: 1px; border-radius: 999px; background: var(--good-wash); border: 1px solid var(--good-line); color: var(--good-text);"><svg class="i" viewBox="0 0 24 24" style="width: 15px; height: 15px; stroke-width: 2.2;"><path d="m4 12.5 5 5 11-11"/></svg></span>
+          <span style="font-size: 16px; line-height: 1.55; color: var(--body);">Instagram, Messenger or text messages stopped working, the same hour we see it.</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 14px; min-height: 60px; padding: 16px 0; border-top: 1px solid var(--line-soft);">
+          <span style="display: grid; place-items: center; width: 26px; height: 26px; flex: none; margin-top: 1px; border-radius: 999px; background: var(--good-wash); border: 1px solid var(--good-line); color: var(--good-text);"><svg class="i" viewBox="0 0 24 24" style="width: 15px; height: 15px; stroke-width: 2.2;"><path d="m4 12.5 5 5 11-11"/></svg></span>
+          <span style="font-size: 16px; line-height: 1.55; color: var(--body);">Your bill, three days before we charge the card ending 4429.</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 20px;">
+      <button style="display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 48px; padding: 0 24px; border-radius: 9px; border: 1px solid var(--accent-line); background: var(--accent-fill); color: var(--on-accent); font-size: 16px; font-weight: 600; box-shadow: var(--primary-shadow); white-space: nowrap;">Save</button>
+      <span style="font-size: 16px; color: var(--muted);">Your choice takes effect on the next thing we send you.</span>
+    </div>
+  </div>
+  <!-- Support bubble: 56px, ink not accent, so it never competes with the page's one filled button. -->
+  <button aria-label="Message support" style="position: absolute; right: 32px; bottom: 32px; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12); background: var(--ink); color: var(--on-accent); box-shadow: var(--shadow-raised);">
+    <svg class="i24" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+  </button>
+</div>
+</x-dc>
+</body>
+</html>
