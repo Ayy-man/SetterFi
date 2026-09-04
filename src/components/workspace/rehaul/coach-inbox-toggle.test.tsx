@@ -10,11 +10,12 @@ import type { ConversationRead } from "@/lib/repositories/conversations";
  * A separate file from `coach-inbox.test.tsx` on purpose: that file is the Inbox's behaviour
  * suite and belongs to the screen's own lane, and this is a shared-kit-boundary guard that
  * happens to be pinned on the one screen where the defect was measured. Keeping it apart means
- * the screen can be rebuilt without this assertion being lost in the diff.
+ * the screen can be rebuilt without this assertion being lost in the diff, which is exactly what
+ * the 2026-09-04 rebuild then did.
  *
- * What it pins is exactly what was broken: the button's own class list has to name a background
+ * What it pins is exactly what was broken: the control's own class list has to name a background
  * and a text colour, they have to be different tokens, and neither property may be spelled twice.
- * jsdom resolves no `var()`, so asserting on the computed colour here would assert on nothing --
+ * jsdom resolves no `var()`, so asserting on the computed colour here would assert on nothing;
  * the token identity is the strongest true statement this environment can make. The emitted-CSS
  * half of the rule lives in `src/components/kit/utility-collision.test.ts`, and the measured
  * contrast was checked in Chrome against the dev server.
@@ -74,32 +75,66 @@ function tokenFor(element: Element, property: "background-color" | "color"): str
   return matches[0] ?? null;
 }
 
-function toggleColours(row: ConversationRead) {
-  render(<CoachInbox initialConversations={[row]} nowIso={NOW} viewerId="coach-1" />);
-  const button = screen.getByRole("button", { name: row.takenOverBy === "coach-1" ? "Hand back" : "Take over" });
+function bandColours(row: ConversationRead, role: "switch" | "button", name?: RegExp) {
+  render(
+    <CoachInbox
+      initialConversations={[row]}
+      nowIso={NOW}
+      view="everything"
+      viewerId="coach-1"
+    />,
+  );
+  const control = role === "switch"
+    ? screen.getByRole("switch")
+    : screen.getByRole("button", { name: name! });
 
   return {
-    background: tokenFor(button, "background-color"),
-    text: tokenFor(button, "color"),
+    label: control.textContent ?? "",
+    background: tokenFor(control, "background-color"),
+    text: tokenFor(control, "color"),
   };
 }
 
-describe("the Inbox agent toggle is legible in both states", () => {
-  it("paints Take over on distinct background and text tokens", () => {
-    const { background, text } = toggleColours(conversation());
+describe("the Inbox band control is legible in every state it takes", () => {
+  it("paints the agent-on state on distinct tokens and says which state it is in", () => {
+    const { background, label, text } = bandColours(
+      conversation({ status: "agent", statusReason: null }),
+      "switch",
+    );
 
-    expect(background).toBe("var(--ink)");
-    expect(text).toBe("var(--card)");
+    expect(label).toContain("Your agent is answering");
+    expect(background).toBe("var(--good-wash)");
+    expect(text).toBe("var(--good-text)");
     expect(background).not.toBe(text);
   });
 
-  it("paints Hand back on distinct background and text tokens", () => {
-    const { background, text } = toggleColours(
+  it("paints the you-are-answering state on distinct tokens and says which state it is in", () => {
+    const { background, label, text } = bandColours(
       conversation({ status: "human", statusReason: null, takenOverBy: "coach-1" }),
+      "switch",
     );
 
-    expect(background).toBe("var(--ink)");
-    expect(text).toBe("var(--card)");
+    expect(label).toContain("You are answering");
+    expect(background).toBe("var(--warning-wash)");
+    expect(text).toBe("var(--warning-text)");
+    expect(background).not.toBe(text);
+  });
+
+  /*
+   * The third state the switch cannot hold. A thread a handover rule stopped has no holder, and
+   * `release` refuses an empty `expectedHolderId`, so the only write here is `claim` and the band
+   * draws a button. It is held to the same colour rule as the two switch arms.
+   */
+  it("paints the stopped state on distinct tokens and offers the one write that is legal", () => {
+    const { background, label, text } = bandColours(
+      conversation(),
+      "button",
+      /^Answer this yourself$/u,
+    );
+
+    expect(label).toContain("Answer this yourself");
+    expect(background).toBe("var(--warning-wash)");
+    expect(text).toBe("var(--warning-text)");
     expect(background).not.toBe(text);
   });
 });

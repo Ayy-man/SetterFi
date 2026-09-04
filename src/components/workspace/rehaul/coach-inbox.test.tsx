@@ -5,6 +5,15 @@ import { describe, expect, it, vi } from "vitest";
 import { CoachInbox } from "@/components/workspace/rehaul/coach-inbox";
 import type { ConversationRead } from "@/lib/repositories/conversations";
 
+/*
+ * The Inbox against `design/coach/Inbox.dc.html`.
+ *
+ * Each block below pins one rule the artboard draws rather than one implementation detail: the
+ * three views and no fourth, the lane pill a single-lane view drops, the closing sentence, the
+ * labelled agent toggle, attribution under every bubble, the handover as a centred line, the two
+ * composer tabs over one field, and a rail of facts with nothing pressable in it.
+ */
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/coach/conversations",
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
@@ -47,7 +56,7 @@ function conversation(overrides: Partial<ConversationRead> = {}): ConversationRe
   };
 }
 
-const OTHER = conversation({
+const AGENT_HELD = conversation({
   id: "two",
   contactId: "contact-two",
   contactName: "Darnell Okafor",
@@ -66,88 +75,343 @@ const OTHER = conversation({
   }],
 });
 
-function renderInbox(rows: ConversationRead[] = [conversation(), OTHER]) {
-  return render(<CoachInbox initialConversations={rows} nowIso={NOW} viewerId="coach-1" />);
+const COUNTS = { needsYou: 1, agentHandling: 1 };
+
+function renderInbox(options: {
+  rows?: ConversationRead[];
+  view?: "needs-you" | "agent-handling" | "everything";
+  viewIds?: string[];
+} = {}) {
+  const rows = options.rows ?? [conversation(), AGENT_HELD];
+  const view = options.view ?? "needs-you";
+  // The server hands the client the ids its own view filter kept, so the fixture does the same.
+  const viewIds = options.viewIds
+    ?? (view === "everything"
+      ? rows.map((row) => row.id)
+      : rows
+        .filter((row) => (view === "needs-you"
+          ? row.status === "needs_human" || row.status === "human" || row.status === "scope_blocked"
+          : row.status === "agent"))
+        .map((row) => row.id));
+  return render(
+    <CoachInbox
+      initialConversations={rows}
+      nowIso={NOW}
+      view={view}
+      viewCounts={COUNTS}
+      viewerId="coach-1"
+      viewIds={viewIds}
+    />,
+  );
 }
 
 describe("CoachInbox", () => {
-  it("titles the surface Inbox and reads the thread's wait as a mono figure", () => {
+  it("offers three views and no fourth, with the two lane sizes on their tabs", () => {
     renderInbox();
 
-    expect(screen.getByRole("heading", { level: 1, name: "Inbox" })).toBeInTheDocument();
-    expect(screen.getByText("12m")).toBeInTheDocument();
+    const views = screen.getByRole("navigation", { name: "Which threads" });
+    const links = within(views).getAllByRole("link");
+
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Needs you1",
+      "Agent handling1",
+      "Everything",
+    ]);
+    expect(links[0]).toHaveAttribute("aria-current", "page");
   });
 
-  it("prints none of the old page's explainer sentences", () => {
+  it("prints none of the old page's explainer sentences on the page itself", () => {
     renderInbox();
 
-    expect(
-      screen.queryByText(/Every thread your agent is running, and the ones it has handed to you\./u),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Every thread your agent is running/u)).not.toBeInTheDocument();
     expect(screen.queryByText(/Search reads the lead's name/u)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Taking over pauses the agent/u)).not.toBeInTheDocument();
   });
 
-  it("opens on Needs you and shows every thread once All is chosen", async () => {
-    const user = userEvent.setup();
+  it("shows only the view the server resolved, and says so when the list ends", () => {
     renderInbox();
 
     const list = screen.getByRole("region", { name: "Conversations" });
+    expect(within(list).getByText("Jasmine Torres")).toBeInTheDocument();
     expect(within(list).queryByText("Darnell Okafor")).not.toBeInTheDocument();
+    expect(within(list).getByText("That is everything waiting on you.")).toBeInTheDocument();
+  });
 
-    await user.click(within(list).getByRole("button", { name: /^All$/u }));
-    expect(within(list).getByText("Darnell Okafor")).toBeInTheDocument();
+  it("drops the lane pill inside a single-lane view and carries it where lanes are mixed", () => {
+    const { unmount } = renderInbox();
+
+    const list = screen.getByRole("region", { name: "Conversations" });
+    expect(within(list).queryByText("Needs you")).not.toBeInTheDocument();
+    unmount();
+
+    const handling = renderInbox({ view: "agent-handling" });
+    expect(
+      within(screen.getByRole("region", { name: "Conversations" })).queryByText("Agent handling"),
+    ).not.toBeInTheDocument();
+    handling.unmount();
+
+    renderInbox({ view: "everything" });
+    const everything = screen.getByRole("region", { name: "Conversations" });
+    expect(within(everything).getByText("Needs you")).toBeInTheDocument();
+    expect(within(everything).getByText("Agent handling")).toBeInTheDocument();
+  });
+
+  it("names the channel in words and the wait in words, never as a code or an abbreviation", () => {
+    renderInbox({ view: "everything" });
+
+    const list = screen.getByRole("region", { name: "Conversations" });
+    expect(within(list).getByText("Instagram")).toBeInTheDocument();
+    expect(within(list).getByText("Text message")).toBeInTheDocument();
+    expect(within(list).getByText("12 minutes")).toBeInTheDocument();
+    expect(within(list).queryByText("IG")).not.toBeInTheDocument();
+    expect(within(list).queryByText("12m")).not.toBeInTheDocument();
   });
 
   it("filters the list from the search box", async () => {
     const user = userEvent.setup();
-    renderInbox();
+    renderInbox({ view: "everything" });
 
     const list = screen.getByRole("region", { name: "Conversations" });
-    await user.click(within(list).getByRole("button", { name: /^All$/u }));
-    await user.type(screen.getByRole("searchbox", { name: "Search leads" }), "darnell");
+    await user.type(screen.getByRole("searchbox", { name: /^Search a name/u }), "darnell");
 
     expect(within(list).getByText("Darnell Okafor")).toBeInTheDocument();
     expect(within(list).queryByText("Jasmine Torres")).not.toBeInTheDocument();
   });
 
-  it("names the recorded handoff on the held line and gates the composer behind Take over", () => {
-    renderInbox();
+  it("filters by channel from a menu rather than a native select", async () => {
+    const user = userEvent.setup();
+    const { container } = renderInbox({ view: "everything" });
 
-    expect(screen.getByText(/The lead asked for a person/u)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Take over" })).toBeEnabled();
-    expect(screen.getByRole("textbox", { name: /^Reply as/u })).toBeDisabled();
+    expect(container.querySelector("select")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /All channels/u }));
+    await user.click(screen.getByRole("menuitem", { name: "Text message" }));
+
+    const list = screen.getByRole("region", { name: "Conversations" });
+    expect(within(list).getByText("Darnell Okafor")).toBeInTheDocument();
+    expect(within(list).queryByText("Jasmine Torres")).not.toBeInTheDocument();
   });
 
-  it("reads collected answers off the conversation and says what was never asked", () => {
+  it("says the agent is answering only where the agent is actually running the thread", () => {
+    const { unmount } = renderInbox({ view: "agent-handling" });
+
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveAccessibleName(/Your agent is answering/u);
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("button", { name: "Take over" })).not.toBeInTheDocument();
+    unmount();
+
+    /*
+     * The contradiction this replaced: a thread a handover rule had stopped carried a switch
+     * reading "Your agent is answering", on and green, directly above a transcript line saying
+     * the agent had stopped and would not resume on its own.
+     */
+    renderInbox();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your agent is answering/u)).not.toBeInTheDocument();
+  });
+
+  it("offers the one write the route accepts on a thread the agent stopped", () => {
     renderInbox();
 
-    const rail = screen.getByRole("complementary", { name: "Lead" });
-    expect(within(rail).getByText("Wants")).toBeInTheDocument();
-    expect(within(rail).getByText("Launching a business")).toBeInTheDocument();
+    // `release` refuses an empty holder id, so a stopped thread nobody holds can only be claimed.
+    const thread = screen.getByRole("region", { name: "Thread" });
+    expect(within(thread).getByRole("button", { name: "Answer this yourself" })).toBeEnabled();
+    expect(within(thread).getByText(/Your agent stopped here\./u)).toBeInTheDocument();
+  });
+
+  it("hands the thread back with the same switch once it is the viewer's", () => {
+    renderInbox({
+      rows: [conversation({ status: "human", statusReason: null, takenOverBy: "coach-1" })],
+      viewIds: ["one"],
+    });
+
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveAccessibleName(/You are answering/u);
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(toggle).toBeEnabled();
+  });
+
+  it("names the holder and presses nothing when another person has the thread", () => {
+    renderInbox({
+      rows: [conversation({ status: "human", statusReason: null, takenOverBy: "coach-2" })],
+      viewIds: ["one"],
+    });
+
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveAccessibleName(/Someone on your team is answering/u);
+    expect(toggle).toBeDisabled();
+  });
+
+  it("heads the thread with the lead, the channel and the age of the first message", () => {
+    renderInbox();
+
+    const thread = screen.getByRole("region", { name: "Thread" });
+    expect(within(thread).getByRole("heading", { name: "Jasmine Torres" })).toBeInTheDocument();
+    expect(within(thread).getByText("Instagram, first message 12 minutes ago")).toBeInTheDocument();
+  });
+
+  it("puts the sender and the time under every bubble", () => {
+    renderInbox({
+      rows: [conversation({
+        messages: [
+          {
+            id: "message-one",
+            direction: "in",
+            author: "lead",
+            body: "Is the credit rebuild included if I sign up?",
+            createdAt: "2026-09-03T11:48:00.000Z",
+            delivered: true,
+          },
+          {
+            id: "message-two",
+            direction: "out",
+            author: "agent",
+            body: "Two quick questions and I will know if this is a fit.",
+            createdAt: "2026-09-03T11:50:00.000Z",
+            delivered: true,
+          },
+        ],
+      })],
+    });
+
+    const thread = screen.getByRole("region", { name: "Thread" });
+    expect(within(thread).getByText("Jasmine, today 7:48 am")).toBeInTheDocument();
+    expect(within(thread).getByText("Your agent, today 7:50 am")).toBeInTheDocument();
+  });
+
+  it("draws the handover the backend wrote as a centred line, in the second person when it is the viewer's", () => {
+    renderInbox({
+      rows: [conversation({
+        status: "human",
+        statusReason: null,
+        takenOverBy: "coach-1",
+        messages: [
+          {
+            id: "message-one",
+            direction: "in",
+            author: "lead",
+            body: "Is the credit rebuild included if I sign up?",
+            createdAt: "2026-09-03T11:48:00.000Z",
+            delivered: true,
+          },
+          {
+            id: "message-two",
+            direction: "system",
+            author: "system",
+            body: "Automation paused, Reid Fletcher took over",
+            createdAt: "2026-09-03T11:52:00.000Z",
+            delivered: false,
+          },
+        ],
+      })],
+      viewIds: ["one"],
+    });
+
+    expect(screen.getByText("You joined the conversation, today 7:52 am")).toBeInTheDocument();
+  });
+
+  it("says why the agent stopped, in the words of the rule the run recorded", () => {
+    renderInbox();
+
+    const stop = screen.getByText(/Your agent stopped here\./u);
+    expect(stop).toHaveTextContent("The agent stops and the thread comes to you.");
+  });
+
+  it("offers Reply and Note as two tabs over one field, and gates the write behind the band", () => {
+    renderInbox();
+
+    expect(screen.getByRole("button", { name: "Reply to Jasmine" }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Note to yourself" }))
+      .toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("textbox", { name: "Reply to Jasmine" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
+  it("says why the field is shut in the words of the state it is actually in", () => {
+    const stopped = renderInbox();
+    // "Turn your agent off" is true only where the agent is answering, and here it is not.
+    expect(screen.getByPlaceholderText("Take this thread to reply")).toBeInTheDocument();
+    stopped.unmount();
+
+    renderInbox({ view: "agent-handling" });
+    expect(screen.getByPlaceholderText("Turn your agent off to reply")).toBeInTheDocument();
+  });
+
+  it("takes the composer's placeholder from the artboard once the thread is the viewer's", () => {
+    renderInbox({
+      rows: [conversation({ status: "human", statusReason: null, takenOverBy: "coach-1" })],
+      viewIds: ["one"],
+    });
+
+    expect(screen.getByPlaceholderText("Type your message")).toBeEnabled();
+  });
+
+  it("renames the field when the note tab is chosen, keeping one field for both", async () => {
+    const user = userEvent.setup();
+    renderInbox({
+      rows: [conversation({ status: "human", statusReason: null, takenOverBy: "coach-1" })],
+      viewIds: ["one"],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Note to yourself" }));
+
+    expect(screen.getByRole("textbox", { name: "Note to yourself" })).toBeInTheDocument();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+  });
+
+  it("lists the lead's facts in the rail with nothing pressable but the hide chevron", () => {
+    renderInbox();
+
+    const rail = screen.getByRole("complementary", { name: "Lead details" });
+    for (const label of [
+      "Credit range",
+      "Funding goal",
+      "Timeline",
+      "Questions answered",
+      "Decision",
+      "Booking",
+    ]) {
+      expect(within(rail).getByText(label)).toBeInTheDocument();
+    }
     expect(within(rail).getByText("680 to 719")).toBeInTheDocument();
-    expect(within(rail).getAllByText("not asked yet").length).toBeGreaterThan(0);
-    expect(within(rail).getByText("not yet")).toBeInTheDocument();
+    expect(within(rail).getByText("3 of 4 answered")).toBeInTheDocument();
+    expect(within(rail).getByText("Not decided yet")).toBeInTheDocument();
+    expect(within(rail).getByText("Not booked yet")).toBeInTheDocument();
+
+    const controls = within(rail).getAllByRole("button");
+    expect(controls).toHaveLength(1);
+    expect(controls[0]).toHaveAccessibleName("Hide lead details");
   });
 
-  it("carries Logged on both writes: taking the thread over and sending a reply", () => {
-    renderInbox();
-
-    // Take over pauses the agent on a real lead and writes an audit row; Send writes to the lead.
-    // Neither is a preview, so neither goes without the microcopy.
-    expect(screen.getAllByText("Logged")).toHaveLength(2);
-  });
-
-  it("carries the conversations export the old console had, as the server export", async () => {
+  it("hides the rail behind its one chevron and offers the same chevron to bring it back", async () => {
     const user = userEvent.setup();
     renderInbox();
 
-    await user.click(screen.getByRole("button", { name: "Export table" }));
+    const rail = screen.getByRole("complementary", { name: "Lead details" });
+    await user.click(within(rail).getByRole("button", { name: "Hide lead details" }));
 
-    // Server mode, so the file is the whole set the route can see rather than the pane's rows,
-    // and the shared menu says so and says the download is recorded.
-    expect(screen.getByText("All matching rows")).toBeInTheDocument();
-    expect(screen.getAllByText("Export start logged")).toHaveLength(2);
+    expect(within(rail).queryByText("Credit range")).not.toBeInTheDocument();
+    expect(within(rail).getByRole("button", { name: "Show lead details" })).toBeInTheDocument();
+  });
+
+  it("keeps the thread reachable back to the list, which is what the phone needs", async () => {
+    const user = userEvent.setup();
+    renderInbox({ view: "everything" });
+
+    const list = screen.getByRole("region", { name: "Conversations" });
+    await user.click(within(list).getByRole("button", { name: /Darnell Okafor/u }));
+    expect(screen.getByRole("heading", { name: "Darnell Okafor" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to the list" }));
+    expect(within(list).getByText("Jasmine Torres")).toBeInTheDocument();
+  });
+
+  it("spends exactly one accent fill on the screen, on Send", () => {
+    const { container } = renderInbox();
+
+    const filled = container.querySelectorAll('[class*="bg-[image:var(--accent-fill)]"]');
+    expect(filled).toHaveLength(1);
+    expect(filled[0]).toHaveTextContent("Send");
   });
 
   it("says the inbox is unavailable when conversations are disabled", () => {

@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { CoachInbox } from "@/components/workspace/rehaul/coach-inbox";
+import {
+  CoachInbox,
+  type CoachInboxView,
+} from "@/components/workspace/rehaul/coach-inbox";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { brainObjectionsLive, phase1Live } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import {
+  conversationViewStatuses,
   listConversationSet,
+  type CoachConversationView,
   type ConversationRead,
 } from "@/lib/repositories/conversations";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -45,105 +50,23 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 type PageProps = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
-const STATUS_TO_LIFECYCLE: Record<ConversationRead["status"], string> = {
-  agent: "agent",
-  needs_human: "needs-you",
-  human: "human",
-  nurture: "follow-up",
-  closed: "closed",
-  scope_blocked: "scope-blocked",
-  opted_out: "opted-out",
+/**
+ * The Inbox's three views, in the URL because a coach can share one, mapped onto the repository's
+ * own view names rather than onto a second set of status predicates. These tabs are the only
+ * cohort control the screen has; the seven named views and the objection cohorts are gone.
+ */
+const VIEW_KEYS: Record<CoachInboxView, CoachConversationView> = {
+  "needs-you": "needs_you",
+  "agent-handling": "agent_handling",
+  everything: "everything",
 };
 
-const STATUS_LABELS: Record<ConversationRead["status"], string> = {
-  agent: "Agent handling",
-  needs_human: "Needs you",
-  human: "Human handling",
-  nurture: "Follow-up",
-  closed: "Closed",
-  scope_blocked: "Scope blocked",
-  opted_out: "Opted out",
-};
-
-function firstParam(
+function requestedView(
   params: Record<string, string | string[] | undefined>,
-  key: string,
-) {
-  const raw = params[key];
-  return Array.isArray(raw) ? raw[0] ?? "" : raw ?? "";
-}
-
-function allParams(
-  params: Record<string, string | string[] | undefined>,
-  key: string,
-) {
-  const raw = params[key];
-  return Array.isArray(raw) ? raw : raw ? [raw] : [];
-}
-
-function channelLabel(channel: ConversationRead["channel"]) {
-  if (channel === "sms") return "Text messages (SMS)";
-  if (channel === "messenger") return "Messenger";
-  if (channel === "webchat") return "Web chat";
-  return channel.charAt(0).toUpperCase() + channel.slice(1);
-}
-
-function isToday(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  const now = new Date();
-  return date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth()
-    && date.getDate() === now.getDate();
-}
-
-function outcomeMatches(conversation: ConversationRead, outcomes: readonly string[]) {
-  if (outcomes.length === 0) return true;
-  return outcomes.some((outcome) => {
-    if (outcome === "qualified") return conversation.qualification.outcome === "BOOK";
-    if (outcome === "not-fit") return conversation.qualification.outcome === "HARD_DQ";
-    return outcome === "still-deciding"
-      && (conversation.qualification.outcome === null
-        || conversation.qualification.outcome === "SOFT_DQ");
-  });
-}
-
-function filteredConversationIds(
-  conversations: readonly ConversationRead[],
-  params: Record<string, string | string[] | undefined>,
-) {
-  const requestedView = firstParam(params, "view") || "all";
-  const query = firstParam(params, "q").trim().toLocaleLowerCase();
-  const channels = allParams(params, "channel");
-  const lifecycles = allParams(params, "lifecycle");
-  const outcomes = allParams(params, "outcome");
-
-  return conversations.filter((conversation) => {
-    const matchesView = requestedView === "all"
-      || (requestedView === "needs-you" && conversation.status === "needs_human")
-      || (requestedView === "agent-handling" && conversation.status === "agent")
-      || (requestedView === "booked-today"
-        && Boolean(conversation.appointment && isToday(conversation.appointment.startAt)))
-      || requestedView.startsWith("objection-");
-    const latestMessage = conversation.messages.at(-1)?.body ?? "No messages yet";
-    const haystack = `${conversation.contactName} ${channelLabel(conversation.channel)} ${STATUS_LABELS[conversation.status]} ${latestMessage}`.toLocaleLowerCase();
-    return matchesView
-      && (channels.length === 0 || channels.includes(conversation.channel))
-      && (lifecycles.length === 0
-        || lifecycles.includes(STATUS_TO_LIFECYCLE[conversation.status]))
-      && outcomeMatches(conversation, outcomes)
-      && (!query || haystack.includes(query));
-  }).map((conversation) => conversation.id);
-}
-
-function queryIdentity(params: Record<string, string | string[] | undefined>) {
-  return Object.entries(params)
-    .flatMap(([key, raw]) => (Array.isArray(raw) ? raw : raw ? [raw] : [])
-      .map((value) => [key, value] as const))
-    .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
-      leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue))
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-    .join("&") || "all-conversations";
+): CoachInboxView | null {
+  const raw = Array.isArray(params.view) ? params.view[0] : params.view;
+  const value = (raw ?? "").trim();
+  return value in VIEW_KEYS ? value as CoachInboxView : null;
 }
 
 /** A malformed objection id is treated as absent rather than as an error; a bad URL is not worth
@@ -154,6 +77,15 @@ function requestedObjection(params: Record<string, string | string[] | undefined
   return value && UUID.test(value) ? value : null;
 }
 
+/** The ids a view holds, decided by the repository's status lookup and applied here. */
+function idsInView(conversations: readonly ConversationRead[], view: CoachInboxView) {
+  const statuses = conversationViewStatuses(VIEW_KEYS[view]);
+  const allowed = statuses ? new Set<ConversationRead["status"]>(statuses) : null;
+  return conversations
+    .filter((conversation) => allowed === null || allowed.has(conversation.status))
+    .map((conversation) => conversation.id);
+}
+
 export default async function CoachConversationsPage({ searchParams }: PageProps) {
   if (!phase1Live()) return <CoachInbox enabled={false} initialConversations={[]} />;
 
@@ -162,22 +94,51 @@ export default async function CoachConversationsPage({ searchParams }: PageProps
   /*
    * `?objection=<id>` is the whole of the objection story on this route now. The inbox's cohort
    * pills were cut to three per `Inbox.dc.html`, so there is no longer a `view=objection-N` to
-   * resolve -- what remains is the shareable parameter the agent page's "what leads push back on"
+   * resolve; what remains is the shareable parameter the agent page's "what leads push back on"
    * rows link to, applied here on the server where the tenant scope is enforced.
    */
   const directObjectionId = brainObjectionsLive() ? requestedObjection(params) : null;
-  const conversations = await listConversationSet(context.tenantId, { objectionId: directObjectionId });
+
+  /*
+   * One read, not one per view.
+   *
+   * `listConversationSet` takes a `view` and filters in the query, which is the right shape for a
+   * caller that wants one lane. This screen draws the size of the other two lanes on their tabs,
+   * so a filtered read would need a second and a third round trip to count what it did not fetch,
+   * and the playbook's rule 7 measured a bare Supabase round trip at 300 to 360ms against queries
+   * that run in single-digit milliseconds. So the set is read once and the view boundary is
+   * applied here from `conversationViewStatuses`, the repository's own lookup, which exists
+   * precisely so the tab boundary and the status enum cannot drift apart.
+   */
+  const conversations = await listConversationSet(
+    context.tenantId,
+    { objectionId: directObjectionId },
+  );
+
+  const needsYou = idsInView(conversations, "needs-you");
+  const agentHandling = idsInView(conversations, "agent-handling");
+  // Absent a chosen view the screen opens where the work is, and on an inbox with nothing waiting
+  // it opens on the whole list rather than on an empty lane.
+  const view = requestedView(params) ?? (needsYou.length > 0 ? "needs-you" : "everything");
 
   return (
     <CoachInbox
-      filteredConversationIds={filteredConversationIds(conversations, params)}
       impersonation={context.impersonation}
       initialConversations={conversations}
-      key={queryIdentity(params)}
+      key={view}
       // One instant for every wait on the page, resolved here so the server pass and the hydrated
       // client cannot disagree about how long a lead has been waiting.
       nowIso={new Date().toISOString()}
+      view={view}
+      viewCounts={{ needsYou: needsYou.length, agentHandling: agentHandling.length }}
       viewerId={context.actorId ?? null}
+      viewIds={
+        view === "needs-you"
+          ? needsYou
+          : view === "agent-handling"
+            ? agentHandling
+            : conversations.map((conversation) => conversation.id)
+      }
     />
   );
 }
