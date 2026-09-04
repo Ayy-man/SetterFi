@@ -201,14 +201,10 @@ const SHARED_MOUNT_DEBT: Record<string, string> = {
   // file was opened for and none is this lane's to fix, but they are the same defect: a console
   // atomic rendering console sizes on a page whose floor is 14px. Each is a coach screen reading
   // 11-13.5px somewhere today.
-  Callout: "12.5px note line",
-  DataTable: "12.5px header and cells",
-  KeyValueList: "12px keys",
-  MonoMeta: "12px",
-  QueueItem: "11.5 / 12 / 13.5px",
-  SettingRow: "12 / 13.5px",
+  // Seven more rows (Callout, DataTable, KeyValueList, MonoMeta, QueueItem, SettingRow,
+  // StatusAbsent) came out on 2026-09-04 when the coach rebuild stopped mounting them; the
+  // atomics are unchanged, the coach just no longer reaches them.
   Status: "11 / 11.5 / 12.5px",
-  StatusAbsent: "11.5px",
 };
 
 describe("no shared component reaches a coach page with only a sub-floor rendering", () => {
@@ -229,7 +225,9 @@ describe("no shared component reaches a coach page with only a sub-floor renderi
     // `Segmented` until the rehaul replaced the live measurement surface, whose window picker was
     // the coach's only mount of it; `DataTable` is mounted by the coach's own tables and carries a
     // debt row below, so it is a component this file already knows it reaches.
-    expect(anyMounted.some((recipe) => recipe.component === "DataTable")).toBe(true);
+    // `DataTable` held this line until the Leads rebuild; `DeckPanel` is the panel anatomy every
+    // rebuilt coach surface mounts, so it is the one name this file can rely on reaching.
+    expect(anyMounted.some((recipe) => recipe.component === "DeckPanel")).toBe(true);
   });
 
   it("mounts nothing whose every size is under the floor", () => {
@@ -364,17 +362,11 @@ const COACH_CSS = readFileSync(resolve(ROOT, "src/app/(workspace)/coach/coach.cs
 
 /** The selector in `coach.css` that has to reach each recorded component. */
 const FLOOR_SELECTORS: Record<string, readonly string[]> = {
-  Callout: ['[data-slot="callout-title"]'],
-  DataTable: ['[data-slot="data-table"] td'],
-  // Keys draw through `.t-overline`/`.t-muted` and values through `.t-body`/`.t-id`, so the
-  // token re-author reaches this one and no selector is needed. Named here rather than omitted,
-  // because "no rule" and "no rule needed" have to be different statements.
-  KeyValueList: ["--t-body", "--t-over"],
-  MonoMeta: ['[data-slot="mono-meta"]'],
-  QueueItem: ['[data-slot="queue-item-title"]', '[data-slot="queue-item-context"]'],
-  SettingRow: ['[data-slot="setting-row-title"]', '[data-slot="setting-row-description"]'],
+  // The rules for Callout, DataTable, KeyValueList, MonoMeta, QueueItem, SettingRow and
+  // StatusAbsent are still in coach.css; their rows left with the debt rows on 2026-09-04 once no
+  // coach page mounted them, and the assertion below deletes a row the moment its debt is gone,
+  // so this register cannot outlive the one above it.
   Status: ['[data-slot="status"]', '[data-slot="status-detail"]'],
-  StatusAbsent: ['[data-slot="status-absent"]'],
 };
 
 describe("every shared component that renders under the floor is raised by the coach stylesheet", () => {

@@ -1096,6 +1096,8 @@ svg.i.i-lg { width: 20px; height: 20px; }
   --measure-deck: 34ch;
   --measure-caption: 28ch;
   --measure-tight: 48ch;
+  /* One sentence of coach copy at 16px: the step and panel lead lines the 2026-09-04 rebuild wrote at 54-60ch. */
+  --measure-sentence: 56ch;
   --measure-prose: 68ch;
   --measure-wide: 72ch;
 }
