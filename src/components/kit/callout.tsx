@@ -52,7 +52,10 @@ export function Callout({ body, className, day, title, tone }: CalloutProps): Re
       data-tone={tone}
     >
       <div className="min-w-0 flex-1">
-        <p className="m-0 flex items-center gap-[var(--s-2)] text-[12.5px] leading-[1.3] font-semibold text-[var(--ink)]">
+        <p
+          className="m-0 flex items-center gap-[var(--s-2)] text-[12.5px] leading-[1.3] font-semibold text-[var(--ink)]"
+          data-slot="callout-title"
+        >
           <span
             aria-hidden="true"
             className={cn(

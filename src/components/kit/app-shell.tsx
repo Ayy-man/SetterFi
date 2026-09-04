@@ -10,6 +10,7 @@ import {
 } from "@/components/kit/app-sidebar";
 import { AppTopbar } from "@/components/kit/app-topbar";
 import { CoachSupportBubble } from "@/components/workspace/live/coach-support-bubble";
+import { CoachContextEyeSurface } from "@/components/workspace/rehaul/context-eye";
 import { PaletteClientProvider } from "@/components/kit/palette-clients";
 import type { Crumb } from "@/components/kit/breadcrumbs";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -606,7 +607,21 @@ export function AppShell({
               and the same five links, and below `sm` it is still the `fixed` phone tab bar that
               `<main>`'s bottom pad below reserves room for.
             */}
-            {children}
+            {/*
+              The coach shell's own eye default: header placement at the coach's 46px, so an eye
+              mounted by any coach screen lands beside Export rather than in the bottom-right
+              corner the support bubble owns. `CoachScale` declares the same thing for the
+              onboarding and auth surfaces, which never render an `AppShell`.
+
+              The console keeps the module default -- floating, 32px -- because it is the density
+              its eleven callsites were drawn at, and every one of them that wants the header row
+              already says so.
+            */}
+            {role === "coach" ? (
+              <CoachContextEyeSurface>{children}</CoachContextEyeSurface>
+            ) : (
+              children
+            )}
           </main>
         </div>
 

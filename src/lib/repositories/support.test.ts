@@ -26,6 +26,7 @@ const coachThread = {
   subject: "Synthetic support subject",
   status: "open" as const,
   assigned_to: null,
+  related_contact_id: null,
   is_test: true,
   created_at: "2026-08-18T00:00:00.000Z",
   updated_at: "2026-08-18T00:01:00.000Z",
@@ -228,9 +229,38 @@ describe("support repository", () => {
       p_actor_id: "coach-user",
       p_subject: "  Request body subject  ",
       p_body: "Request body message",
+      p_related_contact_id: null,
     });
     expect(result.subject).toBe("Synthetic support subject");
     expect(result.messages[0].body).toBe("Synthetic support question");
+  });
+
+  it("passes and reads back an explicit related contact id", async () => {
+    const callCreateThread = vi.fn(async () => [{
+      thread_id: "thread-1",
+      message_id: "message-public",
+    }]);
+    const repository = createSupportRepository(dependencies({
+      callCreateThread,
+      projectCoachThreads: async () => [{ ...coachThread, related_contact_id: "contact-1" }],
+    }));
+
+    const result = await repository.createCoachSupportThread({
+      expectedTenant: "tenant-1",
+      userId: "coach-user",
+      subject: "Report a duplicate",
+      body: "Same lead, two numbers.",
+      relatedContactId: "contact-1",
+    });
+
+    expect(callCreateThread).toHaveBeenCalledWith({
+      p_expected_tenant: "tenant-1",
+      p_actor_id: "coach-user",
+      p_subject: "Report a duplicate",
+      p_body: "Same lead, two numbers.",
+      p_related_contact_id: "contact-1",
+    });
+    expect(result.relatedContactId).toBe("contact-1");
   });
 
   it("hard-codes coach append as public and rejects a missing persisted message read-back", async () => {

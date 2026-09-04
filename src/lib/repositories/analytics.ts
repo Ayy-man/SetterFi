@@ -309,9 +309,17 @@ export async function loadCoachMeasurement(
   });
   const keywordMetric = metrics.find((metric) => metric.metricKey === "coach.keyword.conversations");
   /*
-   * Conservation remains the invariant: the attributed keyword rows must sum to the metric the
-   * page prints beside them. Unattributed conversations are intentionally absent now, because
-   * adding a `No keyword` row would manufacture opt-ins and inflate every percent denominator.
+   * Conservation remains the invariant: the keyword rows must sum to the metric the page prints
+   * beside them. `read_coach_measurement` (20260823000001_phase7_measurement.sql:1371-1390)
+   * already groups conversations by `coalesce(nullif(btrim(first_touch_keyword), ''), 'No
+   * keyword')`, computed with the same per-group counts as every named keyword, so a window with
+   * at least one unattributed conversation arrives here carrying that row already -- this
+   * repository accepts whatever rows the RPC produced, it does not filter one out or add one.
+   * What it deliberately does not do is manufacture a `No keyword` row client-side when the RPC's
+   * own grouping produced none, e.g. an empty window (`keywords: []`, see the test below): a
+   * placeholder row with nothing to bucket would be an opt-in count invented on this side of the
+   * wire, not a fact read from the database, and doing that once already took the coach home page
+   * down in production (digest 211570165).
    */
   const keywordTotal = keywords.reduce((total, row) => total + row.conversations, 0);
   if (keywordTotal !== keywordMetric?.value) {

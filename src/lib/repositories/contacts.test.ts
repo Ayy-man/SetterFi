@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getContactIdentityDetail, listContacts } from "@/lib/repositories/contacts";
+import {
+  countContactsByStage,
+  getContactIdentityDetail,
+  listContacts,
+} from "@/lib/repositories/contacts";
 
 function row(id: string, tenantId = "tenant-a") {
   return {
@@ -168,5 +172,40 @@ describe("getContactIdentityDetail", () => {
         detailSource({ candidateTenantId: "tenant-b" }),
       ),
     ).rejects.toThrow("CONTACT_CANDIDATE_TENANT_MISMATCH");
+  });
+});
+
+describe("countContactsByStage", () => {
+  it("carries every canonical stage even when a stage has no leads", async () => {
+    const counts = await countContactsByStage("tenant-a", async () => [
+      { tenant_id: "tenant-a", pipeline_stage: "new_lead" },
+      { tenant_id: "tenant-a", pipeline_stage: "new_lead" },
+      { tenant_id: "tenant-a", pipeline_stage: "booked" },
+    ]);
+    expect(counts).toEqual({
+      new_lead: 2,
+      qualifying: 0,
+      booked: 1,
+      qualified_no_buy: 0,
+      long_term_followup: 0,
+      no_show: 0,
+      disqualified: 0,
+    });
+  });
+
+  it("rejects a cross-tenant row even when the source ignored its predicate", async () => {
+    await expect(
+      countContactsByStage("tenant-a", async () => [
+        { tenant_id: "tenant-b", pipeline_stage: "new_lead" },
+      ]),
+    ).rejects.toThrow("CONTACT_TENANT_MISMATCH");
+  });
+
+  it("refuses a stage outside the canonical set rather than dropping it silently", async () => {
+    await expect(
+      countContactsByStage("tenant-a", async () => [
+        { tenant_id: "tenant-a", pipeline_stage: "archived" },
+      ]),
+    ).rejects.toThrow("CONTACT_STAGE_COUNT_STAGE_INVALID");
   });
 });

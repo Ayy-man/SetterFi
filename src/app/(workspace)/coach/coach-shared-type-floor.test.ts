@@ -344,3 +344,65 @@ describe("a shared component with two densities is mounted at the coach's densit
     });
   }
 });
+
+/**
+ * The half the two rules above cannot state: a component may be *allowed* on a coach page and
+ * still render under the floor there.
+ *
+ * `SHARED_MOUNT_DEBT` records ten components as known violations and then permits them, which is
+ * honest about the state of the code and does nothing for the coach reading 11.5px. The
+ * 2026-09-04 visual audit measured the result -- the floor breached on nine of eleven coach
+ * screens, every breach coming from a kit component rather than from page code.
+ *
+ * So each debt row now owes a rule in `coach.css` that raises it under `[data-shell-role="coach"]`
+ * and nowhere else, and this is where that is checked. The debt list stays as it is: the literal
+ * in the component is still a literal, the console still renders it, and the row is still true.
+ * What changes is that a coach can read it. A row may be deleted only when the component itself
+ * stops carrying a sub-floor size, which is what the sibling assertion above already enforces.
+ */
+const COACH_CSS = readFileSync(resolve(ROOT, "src/app/(workspace)/coach/coach.css"), "utf8");
+
+/** The selector in `coach.css` that has to reach each recorded component. */
+const FLOOR_SELECTORS: Record<string, readonly string[]> = {
+  Callout: ['[data-slot="callout-title"]'],
+  DataTable: ['[data-slot="data-table"] td'],
+  // Keys draw through `.t-overline`/`.t-muted` and values through `.t-body`/`.t-id`, so the
+  // token re-author reaches this one and no selector is needed. Named here rather than omitted,
+  // because "no rule" and "no rule needed" have to be different statements.
+  KeyValueList: ["--t-body", "--t-over"],
+  MonoMeta: ['[data-slot="mono-meta"]'],
+  QueueItem: ['[data-slot="queue-item-title"]', '[data-slot="queue-item-context"]'],
+  SettingRow: ['[data-slot="setting-row-title"]', '[data-slot="setting-row-description"]'],
+  Status: ['[data-slot="status"]', '[data-slot="status-detail"]'],
+  StatusAbsent: ['[data-slot="status-absent"]'],
+};
+
+describe("every shared component that renders under the floor is raised by the coach stylesheet", () => {
+  it("names a rule for every recorded debt row", () => {
+    const uncovered = Object.keys(SHARED_MOUNT_DEBT).filter((name) => !(name in FLOOR_SELECTORS));
+
+    expect(
+      uncovered,
+      "these components are permitted onto a coach page with only a sub-floor rendering and "
+        + "nothing in coach.css raises them, so a coach reads them below 14px. Add a scoped rule "
+        + "and register its selector here.",
+    ).toEqual([]);
+  });
+
+  it("finds each of those rules in the stylesheet, scoped to the coach shell", () => {
+    const missing = Object.entries(FLOOR_SELECTORS)
+      .flatMap(([component, selectors]) =>
+        selectors
+          .filter((selector) => !COACH_CSS.includes(selector))
+          .map((selector) => `${component}: ${selector}`))
+      .sort();
+
+    expect(missing, "registered here but absent from coach.css").toEqual([]);
+  });
+
+  it("keeps no selector row for a component that is no longer in debt", () => {
+    const stale = Object.keys(FLOOR_SELECTORS).filter((name) => !(name in SHARED_MOUNT_DEBT));
+
+    expect(stale, "these components carry no sub-floor size any more -- drop their rows").toEqual([]);
+  });
+});

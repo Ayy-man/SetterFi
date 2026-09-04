@@ -28,8 +28,9 @@ const unreadConversation: ConversationRead = {
   isDemo: false,
   isTest: true,
   lastActivityAt: "2026-09-11T00:00:00.000Z",
-  qualification: { credit: null, goal: null, timeline: null, outcome: null },
+  qualification: { credit: null, goal: null, timeline: null, business: null, outcome: null },
   appointment: null,
+  proposedSlots: null,
   messages: [],
 };
 

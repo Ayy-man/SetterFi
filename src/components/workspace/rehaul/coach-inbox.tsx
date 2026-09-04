@@ -18,6 +18,7 @@ import type { ConversationRead } from "@/lib/repositories/conversations";
 import { workspaceNavigationFor } from "@/lib/workspace-navigation";
 import { Pill, StatusDot, type StatusTone } from "./_primitives";
 import { ContextEye } from "./context-eye";
+import { displayText, displayTextOrNull } from "@/lib/format/display-name";
 
 /**
  * The coach Inbox as `CoachInbox.body.html` draws it: three panes filling the viewport under the
@@ -95,10 +96,44 @@ const AVATAR_CLASS =
   "flex shrink-0 items-center justify-center rounded-full border border-[var(--accent-edge)] "
   + "bg-[var(--accent-wash)] font-mono font-medium tracking-[-0.02em] text-[color:var(--accent-text)]";
 
-const BUTTON_CLASS =
+/*
+ * The shape only: height, radius, padding, type, and the disabled treatment. Deliberately no
+ * colour, and that omission is the fix for a defect rather than a tidy-up.
+ *
+ * This constant used to carry `bg-[var(--card)] text-[color:var(--ink)]` as well, and the two
+ * callsites that wanted a different pair appended one -- `${BUTTON_CLASS} bg-[var(--ink)]
+ * text-[color:var(--card)]`. Two arbitrary utilities of the same CSS property in one class list
+ * do not resolve in the order they are written: Tailwind emits each candidate once, in its own
+ * sort order, and the cascade then picks whichever rule it emitted later. On the agent toggle it
+ * picked `bg-[var(--ink)]` for the background and `text-[color:var(--ink)]` for the text, so the
+ * single most important action on the coach side rendered ink on ink, measured at 1:1 contrast in
+ * the 2026-09-04 visual audit, and read as a black slab with no label.
+ *
+ * The class of bug is invisible to `tsc`, to jsdom and to review, because both halves are
+ * plainly written down and only the emitted stylesheet knows which one won. So it is closed
+ * structurally instead: a base that sets no colour, one named variant per colour pair, and
+ * `src/components/kit/utility-collision.test.ts` failing on any constant-plus-callsite pair that
+ * spells the same property twice anywhere in `src`.
+ */
+const BUTTON_SHAPE_CLASS =
   "inline-flex h-[46px] min-w-0 items-center justify-center gap-[8px] rounded-[12px] border "
-  + "border-[var(--line-input)] bg-[var(--card)] px-[20px] text-[16px] font-medium "
-  + "text-[color:var(--ink)] disabled:cursor-not-allowed disabled:opacity-55";
+  + "px-[20px] text-[16px] font-medium disabled:cursor-not-allowed disabled:opacity-55";
+
+/** The quiet button: a card face on the input hairline. */
+const BUTTON_CLASS =
+  `${BUTTON_SHAPE_CLASS} border-[var(--line-input)] bg-[var(--card)] text-[color:var(--ink)]`;
+
+/**
+ * The agent toggle, which is ink under card rather than card under ink: the one control on this
+ * screen that inverts, so a coach can find it without reading it.
+ */
+const BUTTON_INK_CLASS =
+  `${BUTTON_SHAPE_CLASS} border-transparent bg-[var(--ink)] text-[color:var(--card)]`;
+
+/** Send, which is the page's one accent fill. */
+const BUTTON_ACCENT_CLASS =
+  `${BUTTON_SHAPE_CLASS} border-transparent bg-[image:var(--accent-fill)] `
+  + "text-[color:var(--on-accent)]";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/u).filter(Boolean);
@@ -464,7 +499,14 @@ export function CoachInbox({
                         <span className="mt-[2px] truncate text-[15px] text-[color:var(--muted)]">
                           {booked
                             ? `Booked · ${booked}`
-                            : latestBody(conversation) ?? "No messages yet"}
+                            /*
+                              The seeders write a trailing " (demo)" onto every body on the
+                              measurement tenant, which the hosted verifier requires and the
+                              column keeps. A coach reading a thread preview is not the reader
+                              that marker is for, so it comes off here and only here: the search
+                              haystack above still matches the raw string.
+                            */
+                            : displayTextOrNull(latestBody(conversation)) ?? "No messages yet"}
                         </span>
                         <span className="mt-[6px] flex items-center gap-[8px] text-[14px]">
                           <span className={`flex items-center gap-[6px] ${readout.text}`}>
@@ -523,7 +565,7 @@ export function CoachInbox({
                   */}
                   <div className="ml-auto flex shrink-0 flex-col items-center gap-[4px]">
                     <button
-                      className={`${BUTTON_CLASS} border-transparent bg-[var(--ink)] text-[color:var(--card)]`}
+                      className={BUTTON_INK_CLASS}
                       disabled={busy || readOnly}
                       onClick={() => void mutate(heldByViewer ? "release" : "claim")}
                       type="button"
@@ -547,7 +589,7 @@ export function CoachInbox({
                           className="max-w-[70%] self-center text-center text-[14px] text-[color:var(--faint)]"
                           key={message.id}
                         >
-                          {message.body}
+                          {displayText(message.body)}
                         </div>
                       );
                     }
@@ -562,7 +604,7 @@ export function CoachInbox({
                         ].join(" ")}
                         key={message.id}
                       >
-                        {message.body}
+                        {displayText(message.body)}
                       </div>
                     );
                   })}
@@ -625,7 +667,7 @@ export function CoachInbox({
                   {/* Privileged send: it writes to the lead, so it keeps the Logged microcopy. */}
                   <div className="flex shrink-0 flex-col items-center gap-[4px]">
                     <button
-                      className={`${BUTTON_CLASS} border-transparent bg-[image:var(--accent-fill)] text-[color:var(--on-accent)]`}
+                      className={BUTTON_ACCENT_CLASS}
                       disabled={!heldByViewer || readOnly || busy || !draft.trim()}
                       type="submit"
                     >

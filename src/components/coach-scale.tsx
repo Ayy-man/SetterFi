@@ -31,6 +31,8 @@ import type { ElementType, HTMLAttributes, ReactNode } from "react";
  * palette and no rule -- it loads the language the workspace already ships -- but the guard cannot
  * tell those apart from a page's import statement, and it should not have to.
  */
+import { CoachContextEyeSurface } from "@/components/workspace/rehaul/context-eye";
+
 import "../app/(workspace)/coach/coach.css";
 
 export type CoachScaleProps = {
@@ -43,7 +45,14 @@ export function CoachScale({ as, children, ...rest }: CoachScaleProps) {
   const Tag = (as ?? "div") as ElementType;
   return (
     <Tag data-shell-role="coach" {...rest}>
-      {children}
+      {/*
+        The attribute above carries the stylesheet; this carries the one piece of the coach
+        density React has to know rather than CSS. A `ContextEye` mounted anywhere inside gets the
+        coach's 46px header control instead of the console's 32px floating one, without every
+        onboarding screen remembering two props -- which is what the 2026-09-04 audit found none
+        of them did, in four different combinations.
+      */}
+      <CoachContextEyeSurface>{children}</CoachContextEyeSurface>
     </Tag>
   );
 }

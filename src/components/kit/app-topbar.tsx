@@ -355,7 +355,7 @@ export function AppTopbar({
       <span
         className={cn(
           "tracking-normal",
-          isCoach ? "font-[family-name:var(--font-mono)] text-[13px]" : "text-over",
+          isCoach ? "font-[family-name:var(--font-mono)] text-[14px]" : "text-over",
           account?.firstName
             && (isCoach
               ? "inline-flex size-[32px] items-center justify-center rounded-[8px] border border-[var(--accent-edge)] bg-[var(--accent-wash)] text-[var(--accent-text)]"

@@ -7,6 +7,7 @@
 
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { setPipelineStage as setAuditedPipelineStage } from "@/lib/audit";
+import { PIPELINE_STAGES, type PipelineStage } from "@/lib/pipeline/transitions";
 
 export type ContactCursor = { lastActivityAt: string; id: string };
 
@@ -379,4 +380,46 @@ export async function setPipelineStage(
   ...args: Parameters<typeof setAuditedPipelineStage>
 ): ReturnType<typeof setAuditedPipelineStage> {
   return setAuditedPipelineStage(...args);
+}
+
+export type PipelineStageCounts = Readonly<Record<PipelineStage, number>>;
+
+type StageCountRow = { tenant_id: string; pipeline_stage: string };
+type StageCountSource = (tenantId: string) => Promise<StageCountRow[]>;
+
+async function loadLiveStageCounts(tenantId: string): Promise<StageCountRow[]> {
+  const client = createSupabaseServiceClient();
+  const { data, error } = await client
+    .from("contacts")
+    .select("tenant_id, pipeline_stage")
+    .eq("tenant_id", tenantId)
+    .is("merged_into_contact_id", null);
+  if (error) throw new Error(`CONTACT_STAGE_COUNT_READ_FAILED:${error.message}`);
+  return (data ?? []) as unknown as StageCountRow[];
+}
+
+/**
+ * Every board column, even one with zero leads, so the kanban never drops a stage the way a
+ * derived-from-rows count would.
+ */
+export async function countContactsByStage(
+  tenantId: string,
+  source: StageCountSource = loadLiveStageCounts,
+): Promise<PipelineStageCounts> {
+  const expectedTenant = tenantId.trim();
+  if (!expectedTenant) throw new Error("EXPECTED_TENANT_REQUIRED");
+  const rows = await source(expectedTenant);
+  if (rows.some((row) => row.tenant_id !== expectedTenant)) {
+    throw new Error("CONTACT_TENANT_MISMATCH");
+  }
+  const counts = Object.fromEntries(
+    PIPELINE_STAGES.map((stage) => [stage, 0]),
+  ) as Record<PipelineStage, number>;
+  for (const row of rows) {
+    if (!PIPELINE_STAGES.includes(row.pipeline_stage as PipelineStage)) {
+      throw new Error("CONTACT_STAGE_COUNT_STAGE_INVALID");
+    }
+    counts[row.pipeline_stage as PipelineStage] += 1;
+  }
+  return counts;
 }

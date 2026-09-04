@@ -7,6 +7,7 @@
 
 import { createHash } from "node:crypto";
 
+import type { ProposedSlotSet } from "@/lib/booking/types";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { inboxVerbsLive, phase1Live, phase3Live } from "@/lib/env-contract";
 import { createMockGhlDriver, createRealGhlDriver } from "@/lib/integrations/ghl";
@@ -82,6 +83,7 @@ export type ConversationRead = {
     credit: string | null;
     goal: string | null;
     timeline: string | null;
+    business?: string | null;
     outcome: string | null;
   };
   appointment: {
@@ -95,6 +97,13 @@ export type ConversationRead = {
     externalId: string | null;
     updatedAt: string;
   } | null;
+  /**
+   * The rail's "proposed slots" reading of booking status: the candidate times the agent offered
+   * that have not (or not yet) resolved into a confirmed appointment. Null once nothing has been
+   * proposed, or once the row fails the same shape check the booking service itself applies to
+   * this jsonb column: a malformed proposal reads as absent rather than as a guess at its slots.
+   */
+  proposedSlots?: ProposedSlotSet | null;
   messages: ConversationMessageRead[];
 };
 
@@ -118,11 +127,14 @@ type ConversationRow = {
   is_test: boolean;
   last_message_at: string | null;
   created_at: string;
+  proposed_slots?: unknown;
+  proposed_slots_at?: string | null;
   contact: {
     name: string | null;
     credit_range: string | null;
     funding_goal: string | null;
     timeline: string | null;
+    business_stage: string | null;
     outcome: string | null;
   };
   tenant: { is_demo: boolean };
@@ -152,12 +164,38 @@ type ConversationPageSource = (input: {
   cursor: ConversationCursor | null;
   limit: number;
   conversationIds?: readonly string[];
+  statuses?: readonly ConversationStatus[];
 }) => Promise<ConversationRow[]>;
 
 export type ConversationByIdSource = (input: {
   tenantId: string;
   conversationId: string;
 }) => Promise<ConversationRow | null>;
+
+/**
+ * The Inbox's three tabs are a status filter, not three screens. "Needs you" is every status the
+ * agent is not actively holding on its own (a human already has it, or the agent handed it off),
+ * "agent handling" is the agent's own status, and "everything" applies no filter at all. Kept as
+ * a lookup rather than three ad hoc predicates so the tab boundary and the status enum cannot
+ * drift apart from each other.
+ */
+export const CONVERSATION_VIEWS = ["needs_you", "agent_handling", "everything"] as const;
+export type CoachConversationView = (typeof CONVERSATION_VIEWS)[number];
+
+const CONVERSATION_VIEW_STATUSES: Record<
+  Exclude<CoachConversationView, "everything">,
+  readonly ConversationStatus[]
+> = {
+  needs_you: ["needs_human", "human", "scope_blocked"],
+  agent_handling: ["agent"],
+};
+
+export function conversationViewStatuses(
+  view: CoachConversationView,
+): readonly ConversationStatus[] | null {
+  if (view === "everything") return null;
+  return CONVERSATION_VIEW_STATUSES[view];
+}
 
 /**
  * A coach at the cap sees the 500 most recent conversations carrying the objection, and the
@@ -176,7 +214,8 @@ const CONVERSATION_SELECT = `
   id, tenant_id, contact_id, channel, status, status_reason, needs_human_at, taken_over_by,
   unread_by_coach, disclosure_pending, current_step_asks, is_test, last_message_at, created_at,
   scope_attack_count, tripwire_count, tripwire_classes, cadence_anchor_at, last_lead_inbound_at,
-  contact:contacts!inner(name, credit_range, funding_goal, timeline, outcome),
+  proposed_slots, proposed_slots_at,
+  contact:contacts!inner(name, credit_range, funding_goal, timeline, business_stage, outcome),
   tenant:tenants!inner(is_demo),
   messages!messages_conversation_id_fkey(
     id, direction, author, body, created_at, provider_message_id
@@ -219,6 +258,7 @@ async function loadLivePage(input: {
   cursor: ConversationCursor | null;
   limit: number;
   conversationIds?: readonly string[];
+  statuses?: readonly ConversationStatus[];
 }): Promise<ConversationRow[]> {
   const client = createSupabaseServiceClient();
   let query = client
@@ -232,6 +272,7 @@ async function loadLivePage(input: {
   // The tenant predicate stays: the filter narrows an already-scoped query rather than
   // replacing its scope.
   if (input.conversationIds) query = query.in("id", [...input.conversationIds]);
+  if (input.statuses) query = query.in("status", [...input.statuses]);
 
   // Rows without a last_message_at sort last (NULLS LAST), so a null-blind lt/eq predicate would
   // drop them after the first page boundary and a "complete set" read would silently be partial.
@@ -263,6 +304,34 @@ async function loadLiveConversation(input: {
     .maybeSingle();
   if (error) throw new Error(`CONVERSATION_READ_FAILED:${error.message}`);
   return data as unknown as ConversationRow | null;
+}
+
+/**
+ * Reads `conversations.proposed_slots` the same defensive way the booking service reads it before
+ * offering it to a lead: a shape that fails any part of the check is not a partial proposal, it is
+ * no proposal, so the rail falls back to nothing rather than rendering a broken slot list.
+ */
+function parseProposedSlots(value: unknown): ProposedSlotSet | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (
+    typeof row.calendarConnectionId !== "string" ||
+    typeof row.rangeStartAt !== "string" ||
+    typeof row.rangeEndAt !== "string" ||
+    typeof row.proposedAt !== "string" ||
+    typeof row.presentationTimezone !== "string" ||
+    !Array.isArray(row.slots)
+  ) return null;
+  const slots = row.slots.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+    const slot = candidate as Record<string, unknown>;
+    return typeof slot.id === "string" && typeof slot.startAt === "string" &&
+      typeof slot.endAt === "string" && typeof slot.timezone === "string" &&
+      typeof slot.display === "string"
+      ? [{ id: slot.id, startAt: slot.startAt, endAt: slot.endAt, timezone: slot.timezone, display: slot.display }]
+      : [];
+  });
+  return slots.length === row.slots.length ? { ...row, slots } as ProposedSlotSet : null;
 }
 
 function mapConversation(row: ConversationRow): ConversationRead {
@@ -306,6 +375,7 @@ function mapConversation(row: ConversationRow): ConversationRead {
       credit: row.contact.credit_range,
       goal: row.contact.funding_goal,
       timeline: row.contact.timeline,
+      business: row.contact.business_stage,
       outcome: row.contact.outcome,
     },
     appointment: appointment
@@ -321,6 +391,7 @@ function mapConversation(row: ConversationRow): ConversationRead {
           updatedAt: appointment.updated_at,
         }
       : null,
+    proposedSlots: parseProposedSlots(row.proposed_slots),
     messages,
   };
 }
@@ -867,6 +938,7 @@ export async function listConversations(
     cursor?: ConversationCursor | null;
     limit?: number;
     objectionId?: string | null;
+    view?: CoachConversationView;
   } = {},
   source: ConversationPageSource = loadLivePage,
   resolveObjectionConversations: ObjectionConversationResolver = objectionConversationIds,
@@ -874,6 +946,7 @@ export async function listConversations(
   const expectedTenant = requiredTenant(tenantId);
   const limit = Math.max(1, Math.min(options.limit ?? 50, 100));
   const objectionId = options.objectionId ?? null;
+  const statuses = options.view ? conversationViewStatuses(options.view) : null;
 
   // The restriction is enforced here, where the rows are fetched, rather than implied by the URL
   // that prepared it. An unknown or foreign objection resolves to nothing and short-circuits to
@@ -889,6 +962,7 @@ export async function listConversations(
     cursor: options.cursor ?? null,
     limit,
     ...(conversationIds ? { conversationIds } : {}),
+    ...(statuses ? { statuses } : {}),
   });
   if (rows.some((row) => row.tenant_id !== expectedTenant)) {
     throw new Error("CONVERSATION_TENANT_MISMATCH");
@@ -989,12 +1063,13 @@ export async function acknowledgeConversationRead(input: {
  */
 export async function listConversationSet(
   tenantId: string,
-  options: { objectionId?: string | null } = {},
+  options: { objectionId?: string | null; view?: CoachConversationView } = {},
   source: ConversationPageSource = loadLivePage,
   resolveObjectionConversations: ObjectionConversationResolver = objectionConversationIds,
 ): Promise<ConversationRead[]> {
   const expectedTenant = requiredTenant(tenantId);
   const objectionId = options.objectionId ?? null;
+  const statuses = options.view ? conversationViewStatuses(options.view) : null;
   let conversationIds: readonly string[] | null = null;
 
   if (objectionId) {
@@ -1012,6 +1087,7 @@ export async function listConversationSet(
       cursor,
       limit: 100,
       ...(conversationIds ? { conversationIds } : {}),
+      ...(statuses ? { statuses } : {}),
     });
     if (rows.some((row) => row.tenant_id !== expectedTenant)) {
       throw new Error("CONVERSATION_TENANT_MISMATCH");

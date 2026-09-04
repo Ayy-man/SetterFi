@@ -29,6 +29,7 @@ const coachThread = {
   subject: "Synthetic support subject",
   status: "open" as const,
   assigned_to: null,
+  related_contact_id: null,
   is_test: true,
   created_at: "2026-08-18T00:00:00.000Z",
   updated_at: "2026-08-18T00:01:00.000Z",

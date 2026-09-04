@@ -27,6 +27,7 @@ export type CoachSupportThreadRead = {
   subject: string;
   status: SupportStatus;
   assignedTo: string | null;
+  relatedContactId?: string | null;
   isTest: boolean;
   createdAt: string;
   updatedAt: string;
@@ -44,6 +45,7 @@ export type PlatformSupportThreadRead = {
   status: SupportStatus;
   assignedTo: { id: string; name: string | null } | null;
   successOwner: { id: string; name: string | null } | null;
+  relatedContactId?: string | null;
   isTest: boolean;
   createdAt: string;
   updatedAt: string;
@@ -75,6 +77,7 @@ type RawCoachThread = {
   subject: string;
   status: SupportStatus;
   assigned_to: string | null;
+  related_contact_id: string | null;
   is_test: boolean;
   created_at: string;
   updated_at: string;
@@ -171,7 +174,7 @@ function parseCoachMessage(value: unknown): CoachSupportMessageRead {
 function parseCoachThread(value: unknown): CoachSupportThreadRead {
   const code = "COACH_SUPPORT_PROJECTION_INVALID";
   if (!isRecord(value) || !exactKeys(value, [
-    "id", "tenant_id", "subject", "status", "assigned_to", "is_test",
+    "id", "tenant_id", "subject", "status", "assigned_to", "related_contact_id", "is_test",
     "created_at", "updated_at", "messages",
   ]) || !SUPPORT_STATUSES.includes(value.status as SupportStatus)
     || typeof value.is_test !== "boolean" || !Array.isArray(value.messages)) {
@@ -183,6 +186,7 @@ function parseCoachThread(value: unknown): CoachSupportThreadRead {
     subject: requiredString(value.subject, code),
     status: value.status as SupportStatus,
     assignedTo: nullableString(value.assigned_to, code),
+    relatedContactId: nullableString(value.related_contact_id, code),
     isTest: value.is_test,
     createdAt: requiredString(value.created_at, code),
     updatedAt: requiredString(value.updated_at, code),
@@ -217,7 +221,7 @@ function parsePlatformThread(value: unknown): PlatformSupportThreadRead {
   if (!isRecord(value) || !exactKeys(value, [
     "id", "tenant_id", "tenant_name", "tenant_is_demo", "subject", "status",
     "assigned_to", "assigned_to_name", "success_owner_id", "success_owner_name",
-    "is_test", "created_at", "updated_at", "messages",
+    "related_contact_id", "is_test", "created_at", "updated_at", "messages",
   ]) || !SUPPORT_STATUSES.includes(value.status as SupportStatus)
     || typeof value.tenant_is_demo !== "boolean" || typeof value.is_test !== "boolean"
     || !Array.isArray(value.messages)) throw new SupportRepositoryError(code);
@@ -236,6 +240,7 @@ function parsePlatformThread(value: unknown): PlatformSupportThreadRead {
     successOwner: successOwnerId
       ? { id: successOwnerId, name: nullableString(value.success_owner_name, code) }
       : null,
+    relatedContactId: nullableString(value.related_contact_id, code),
     isTest: value.is_test,
     createdAt: requiredString(value.created_at, code),
     updatedAt: requiredString(value.updated_at, code),
@@ -326,7 +331,7 @@ async function liveDependencies(): Promise<SupportRepositoryDependencies> {
     }
 
     let query = client.from("support_threads")
-      .select("id,tenant_id,subject,status,assigned_to,is_test,created_at,updated_at")
+      .select("id,tenant_id,subject,status,assigned_to,related_contact_id,is_test,created_at,updated_at")
       .order("updated_at", { ascending: false }).order("id", { ascending: false });
     if (input.expectedTenant) query = query.eq("tenant_id", input.expectedTenant);
     if (tenantIds) query = query.in("tenant_id", tenantIds);
@@ -382,6 +387,7 @@ async function liveDependencies(): Promise<SupportRepositoryDependencies> {
         subject: String(thread.subject),
         status: thread.status as SupportStatus,
         assigned_to: thread.assigned_to ? String(thread.assigned_to) : null,
+        related_contact_id: thread.related_contact_id ? String(thread.related_contact_id) : null,
         is_test: Boolean(thread.is_test),
         created_at: String(thread.created_at),
         updated_at: String(thread.updated_at),
@@ -563,18 +569,22 @@ export function createSupportRepository(dependencies?: SupportRepositoryDependen
     userId: string;
     subject: string;
     body: string;
+    relatedContactId?: string | null;
   }) {
     const source = await deps();
+    const relatedContactId = input.relatedContactId ?? null;
     const receipt = oneRow(await source.callCreateThread({
       p_expected_tenant: input.expectedTenant,
       p_actor_id: input.userId,
       p_subject: input.subject,
       p_body: input.body,
+      p_related_contact_id: relatedContactId,
     }), "SUPPORT_THREAD_CREATE_RECEIPT_INVALID");
     const threadId = requiredString(receipt.thread_id, "SUPPORT_THREAD_CREATE_RECEIPT_INVALID");
     const messageId = requiredString(receipt.message_id, "SUPPORT_THREAD_CREATE_RECEIPT_INVALID");
     const thread = await getCoachSupportThread(input.expectedTenant, input.userId, threadId);
-    if (!thread.messages.some((message) => message.id === messageId)) {
+    if (!thread.messages.some((message) => message.id === messageId)
+      || thread.relatedContactId !== relatedContactId) {
       throw new SupportRepositoryError("SUPPORT_THREAD_CREATE_READBACK_MISMATCH");
     }
     return thread;

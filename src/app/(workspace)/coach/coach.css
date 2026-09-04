@@ -1473,3 +1473,273 @@ body.is-kanban-pointer-dragging * {
     transform: none !important;
   }
 }
+
+/* ==========================================================================================
+ * The shared kit boundary: three rules that apply to every component mounted under the coach
+ * shell, whether or not the screen that mounted it remembered to ask.
+ *
+ * Everything below is scoped to `[data-shell-role="coach"]`, so the owner console cannot be
+ * reached by any of it. That scoping is not a courtesy, it is the whole safety argument: the
+ * console is 13.5px body with 30-34px controls for the client's team, and it must not move.
+ *
+ * Why here rather than in the components: `COACH_READING_CLASS` is opt-in per screen, and the
+ * 2026-09-04 coach visual audit measured what opt-in buys -- 16px body on the five routes that
+ * mount a rehauled component, and 11.5 to 13.5px on the six that do not, breaching the floor on
+ * nine of eleven screens. A rule every caller has to remember is a rule the next screen breaks.
+ * ========================================================================================== */
+
+/* -----------------------------------------------------------------------------------------
+ * 1. The type floor, at the boundary rather than at the callsite.
+ *
+ * `docs/SIMPLIFICATION-SPEC.md` §5: "secondary and helper text 14px minimum -- nothing below it,
+ * ever", over a 16px body. Two mechanisms, because the kit sets its sizes two ways.
+ *
+ * The token half is first: the `--t-*` scale is the console's, and re-authoring it under a shell
+ * root is the move `console.css` already makes for `--t-target`. Anything reading a token lands on
+ * the coach floor the moment these are declared, with no component edited -- `StateBadge` through
+ * `--t-badge`, `DataTable`'s column headers through `--t-label`, the breadcrumb trail through
+ * `--t-mono-crumb`, `.t-mono-meta`.
+ *
+ * The class half is second, and it is not redundant. `tokens.css` writes `.t-body`, `.t-muted`,
+ * `.t-overline`, `.t-th`, `.t-id` and their siblings as flat px literals sitting *beside* the
+ * token family rather than reading it, so the block above moves none of them. That gap was found
+ * in Chrome, not in review: the pipeline screen's `Callout` still measured 13px with every token
+ * in place, because `.t-muted` declares a flat 13px of its own and always did.
+ *
+ * The literal half is third: components that spell a size inline, reached by their `data-slot`.
+ *
+ * `coach-type.ts` argued against exactly this, on the grounds that a token redefinition moves
+ * every coach surface at once while several were being ported in parallel. That was true when it
+ * was written and is the reason the classes exist; it is no longer the live risk. The audit's
+ * finding is that the surfaces which were never ported are the ones reading 11.5px, so the blast
+ * radius the note was protecting is now the defect. The classes stay -- a screen that wants the
+ * coach's 16px on an element the kit did not draw still opts in -- they are simply no longer the
+ * only thing standing between a coach and a 12px label.
+ * ----------------------------------------------------------------------------------------- */
+
+[data-shell-role="coach"] {
+  /* The reading pair. `--t-body` is the console's 13px and `--t-read` its 15px; both are the
+     coach's 16, which is the number every round of demo feedback was actually about. */
+  --t-body: var(--coach-body);
+  --t-read: var(--coach-body);
+  /* A row name is a step over body on both sides of the product; here that step is the coach's
+     own `--coach-row-name`, so a kit table row and a hand-rolled one agree. */
+  --t-row: var(--coach-row-name);
+  /* Everything below the floor, raised to it and no further. 14px is a floor, not a target: a
+     badge is still smaller than the sentence beside it, it is simply legible now. */
+  --t-nav: 15px;
+  --t-badge: 14px;
+  --t-over: 14px;
+  --t-label: 14px;
+  --t-mono-meta: 14px;
+  --t-mono-crumb: 14px;
+  /* The console's section title is 14px at 600, which is the floor exactly -- and a heading at
+     the floor reads as body on a 16px surface, so it takes the step the role is owed. */
+  --t-section-title: 16px;
+  --t-section: 17px;
+
+  /*
+   * The corner the support bubble owns, as a number the layout can reserve.
+   *
+   * 60px launcher plus its 32px offset from the bottom edge, plus 16px of air. The audit measured
+   * the bubble overlapping content on six screens at a fixed (1370, 838), and `context-eye.tsx`
+   * lines 41-47 record the identical defect for the eye: an absolute bottom-right corner is also
+   * where every pane's action row ends. The eye was fixed by moving into the header; the bubble
+   * cannot move, because a help launcher that is not in the corner is not a help launcher. So the
+   * corner is reserved instead, and the bubble keeps it.
+   *
+   * Below `sm` the launcher sits above the fixed 56px pill tab bar and its safe-area inset, which
+   * is the same expression `coach-support-bubble.tsx` and `<main>` both already spell.
+   */
+  --coach-bubble-reserve: calc(32px + 60px + 16px);
+}
+
+@media (max-width: 639px) {
+  [data-shell-role="coach"] {
+    --coach-bubble-reserve: calc(56px + env(safe-area-inset-bottom) + 16px + 60px + 16px);
+  }
+}
+
+/*
+ * The product's type-role classes, which are px literals in `tokens.css` rather than reads of the
+ * `--t-*` family beside them.
+ *
+ * This was the gap the first pass of this rule missed and Chrome found: `.t-muted` carries a flat
+ * 13px of its own, so re-authoring `--t-body` under the coach root moved nothing on the pipeline
+ * screen's `Callout`, which was still measuring 13px in the browser after the tokens were in
+ * place. Both mechanisms are needed because `tokens.css` uses both, and the class half is the one
+ * the older surfaces are built out of.
+ *
+ * Every rule carries two attribute selectors, which outranks the single class regardless of which
+ * stylesheet the browser loaded first -- specificity rather than source order, because source
+ * order between a route stylesheet and the generated utility sheet is not this file's to decide.
+ */
+/* `:is`, never `:where`: `:where` contributes no specificity, so the rule would tie with the
+   bare `.t-muted` class and be decided by stylesheet order, which is exactly the thing this file
+   cannot know. `:is` takes its argument's specificity, so the pair beats the single class. */
+[data-shell-role="coach"] :is(.t-body, .t-muted, .t-transcript) {
+  font-size: var(--coach-body);
+  line-height: 1.55;
+}
+
+[data-shell-role="coach"] :is(.t-faint, .t-nav, .t-overline, .t-th, .t-badge, .t-count, .t-id) {
+  font-size: 14px;
+}
+
+/*
+ * The literal half of the floor.
+ *
+ * These are kit components whose size is a px literal rather than a token, so no redefinition
+ * reaches them. Each selector carries two attribute selectors, which outranks the single class
+ * Tailwind emits for `text-[12px]` regardless of which stylesheet the browser loaded first --
+ * specificity rather than source order, because source order between a route stylesheet and the
+ * generated utility sheet is not a thing this file gets to decide.
+ *
+ * The list is not free-form: `coach-shared-type-floor.test.ts` derives the components a coach
+ * page can reach with a sub-floor rendering and fails if one of them has no rule here. So the
+ * next kit atomic to grow a 12px literal is caught by the guard rather than by the next audit.
+ */
+/* Two marker classes rather than slots, for the faces whose elements carry no `data-slot`: a
+   `next/Link` wearing `kitButtonClass` (measured at 12.5px on `/coach/pipelines`) and a chart's
+   axis labels (measured at 10px on `/coach/billing`). Both markers are declared where the face
+   is, in `button-class.ts` and `chart-theme.tsx`. */
+[data-shell-role="coach"] .kit-button,
+[data-shell-role="coach"] .chart-axis-label,
+[data-shell-role="coach"] [data-slot="callout-title"],
+[data-shell-role="coach"] [data-slot="data-table"] td,
+[data-shell-role="coach"] [data-slot="mono-meta"],
+[data-shell-role="coach"] [data-slot="note-strip"] p,
+[data-shell-role="coach"] [data-slot="queue-item-title"],
+[data-shell-role="coach"] [data-slot="queue-item-clock"],
+[data-shell-role="coach"] [data-slot="queue-item-context"],
+[data-shell-role="coach"] [data-slot="setting-row-title"],
+[data-shell-role="coach"] [data-slot="setting-row-description"],
+[data-shell-role="coach"] [data-slot="setting-summary-line"],
+[data-shell-role="coach"] [data-slot="collapsed-setting-summary"],
+[data-shell-role="coach"] [data-slot="setting-section-summary"],
+[data-shell-role="coach"] [data-slot="status"],
+[data-shell-role="coach"] [data-slot="status-detail"],
+[data-shell-role="coach"] [data-slot="status-absent"],
+[data-shell-role="coach"] [data-slot="provenance-chip"],
+[data-shell-role="coach"] [data-slot="kit-button"],
+[data-shell-role="coach"] [data-slot="button"],
+/* A shadcn `Button` rendered through a Radix trigger keeps the trigger's slot name rather than
+   its own, so the row above does not reach it. Measured at 12.8px on the Leads toolbar. */
+[data-shell-role="coach"] [data-slot="dropdown-menu-trigger"],
+[data-shell-role="coach"] [data-slot="add-chip-button"] {
+  font-size: 14px;
+}
+
+/* The four that are a sentence rather than a label take the body size, because they are the copy
+   a coach reads rather than the tag on a figure. */
+[data-shell-role="coach"] [data-slot="data-table"] td,
+[data-shell-role="coach"] [data-slot="note-strip"] p,
+[data-shell-role="coach"] [data-slot="queue-item-title"],
+[data-shell-role="coach"] [data-slot="setting-row-title"],
+[data-shell-role="coach"] [data-slot="setting-row-description"] {
+  font-size: var(--coach-body);
+}
+
+/* -----------------------------------------------------------------------------------------
+ * 2. The 44px target, at the boundary rather than at the callsite.
+ *
+ * The playbook's rule 11 says 44px on the coach side with no exceptions, and the audit found the
+ * breaches all come from kit primitives rather than page code: `DataTable`'s sort trigger
+ * measured 8px wide, a kanban card's menu 28px, a checkbox indicator 16x16, `Button size="sm"`
+ * 26px tall. Those are correct sizes for a console the client's team drives with a mouse all day,
+ * and wrong for a coach on a phone.
+ *
+ * This is the second half of a rule that already existed. The `min-height: var(--coach-target)`
+ * block earlier in this file raises every coach control to 44px *tall*, and it is why the sort
+ * trigger measures 8x44 rather than 8x8. What it cannot do is widen: a `min-width` on the same
+ * selector would push every table header apart. So height stays there and the target is completed
+ * here, in both directions, without moving anything.
+ *
+ * A pseudo-element hit box rather than a size change, because half of these sit in a row whose
+ * height is the design: growing an 8px sort trigger to 44px would push every table header apart.
+ * The box is centred on the control, so it grows symmetrically and does not shift what it belongs
+ * to; `pointer-events: auto` on a box drawn over nothing is what makes the target real rather
+ * than decorative.
+ *
+ * `::after` is claimed here, and one existing user of it is excluded by name below: the kanban
+ * card's landing ring. Everything else in the coach lane draws its own decoration on a real
+ * element, which was checked before this rule landed rather than assumed.
+ */
+[data-shell-role="coach"] :is(
+  button,
+  summary,
+  [role="button"],
+  [role="menuitem"],
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"],
+  [role="option"],
+  [role="tab"],
+  [role="switch"],
+  [role="checkbox"],
+  [role="radio"]
+):not([data-kanban-card], [data-slot="coach-support-launcher"]) {
+  position: relative;
+}
+
+[data-shell-role="coach"] :is(
+  button,
+  summary,
+  [role="button"],
+  [role="menuitem"],
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"],
+  [role="option"],
+  [role="tab"],
+  [role="switch"],
+  [role="checkbox"],
+  [role="radio"]
+):not([data-kanban-card], [data-slot="coach-support-launcher"])::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: 100%;
+  height: 100%;
+  min-width: var(--coach-target);
+  min-height: var(--coach-target);
+  pointer-events: auto;
+  /* Nothing is painted: no background and no border are set, so the box is a fact about the
+     pointer rather than about the drawing. `checkbox.tsx` and `switch.tsx` already reach for this
+     exact technique at `after:-inset-x-3 after:-inset-y-2`, which buys a 16px checkbox a 40x32
+     target; this rule outranks it and finishes the job at 44 square.
+     `accordion.tsx` styles `focus-visible:after:border-ring` on its trigger, which still applies:
+     the border colour it sets lands on this box, and nothing here sets a border width against it. */
+}
+
+/* A control that is already at or over the floor gains nothing and must not gain a stacking
+   context it did not have, so the hit box is dropped where the element is genuinely large. This
+   cannot be expressed as a selector, so it is expressed as geometry: `min-width`/`min-height`
+   only grow the box, and `width/height: 100%` means a 60px launcher keeps its own 60px. */
+
+/* -----------------------------------------------------------------------------------------
+ * 3. The reserved corner.
+ *
+ * Two rules, because the coach side has two page shapes. An ordinary scrolling page reserves the
+ * corner as bottom padding on `<main>`, which is the pane every screen renders into. A page that
+ * declares `data-layout="fixed"` owns the viewport and manages its own scrolling -- the Inbox is
+ * the only coach one -- and padding `<main>` there would leave a strip of bare pane under an
+ * edge-to-edge three-pane grid. Those panes reserve the corner inside their own scroll regions
+ * instead, which is where their content actually ends.
+ * ----------------------------------------------------------------------------------------- */
+
+[data-shell-role="coach"] main#main {
+  padding-bottom: calc(var(--s-6) + var(--coach-bubble-reserve));
+}
+
+[data-shell-role="coach"] main#main:has([data-layout="fixed"]) {
+  /* Back to the shell's own padding, which the fixed page's negative margin is written against. */
+  padding-bottom: var(--s-6);
+}
+
+[data-shell-role="coach"] [data-layout="fixed"] [class*="overflow-y-auto"]::after {
+  content: "";
+  display: block;
+  flex: 0 0 auto;
+  height: var(--coach-bubble-reserve);
+}

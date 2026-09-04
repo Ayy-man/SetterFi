@@ -2,7 +2,9 @@
 
 import { Eye } from "lucide-react";
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useRef,
@@ -39,18 +41,18 @@ export type ContextEyeProps = {
    */
   position?: "absolute" | "fixed";
   /**
-   * Where the eye lives.
+   * Where the eye lives. Unset, it takes the surrounding surface's default (see
+   * `ContextEyeSurface`): `header` under the coach and onboarding shells, `floating` elsewhere.
    *
-   * `floating` (the default) is the bottom-right button every screen shipped with. It has one
-   * defect the canvas review named: an absolute bottom-right corner is also where a pane's action
-   * row ends, and on the Inbox the eye sat on the Reply button. `header` is the fix. The eye
-   * becomes a 32px control in the page header's trailing slot, beside Export, where nothing can
-   * be underneath it, and the popover opens downward from there. Screens with a header row use
-   * `header`; screens without one keep `floating` and reserve a bottom gutter for it.
+   * `floating` is the bottom-right button every screen shipped with. It has one defect the canvas
+   * review named: an absolute bottom-right corner is also where a pane's action row ends, and on
+   * the Inbox the eye sat on the Reply button. `header` is the fix. The eye becomes a control in
+   * the page header's trailing slot, beside Export, where nothing can be underneath it, and the
+   * popover opens downward from there.
    */
   placement?: "floating" | "header";
   /**
-   * Control density for `placement="header"`.
+   * Control density for `placement="header"`. Unset, it takes the surrounding surface's default.
    *
    * The rule the artboard draws is "same height as its neighbours", and the two apps disagree on
    * what that height is: the owner console runs a 32px control row, the coach app a 46px one. A
@@ -70,6 +72,68 @@ export type ContextEyeProps = {
   action?: ReactNode;
   className?: string;
 };
+
+/**
+ * The placement and scale a surface gives every eye mounted inside it.
+ *
+ * The 2026-09-04 coach visual audit measured four behaviours for one component: header at coach
+ * scale on home, agent, contacts, billing, integrations and tips; header at *owner* scale on
+ * conversations; floating on help and on all five onboarding sub-routes; and absent on the
+ * onboarding root. Every one of those is a per-callsite prop, so the drift was not a bug anybody
+ * introduced -- it is what a per-callsite prop with a single global default does over eleven
+ * screens and three lanes.
+ *
+ * A surface default rather than a prop sweep, for the reason the sibling type-floor rule exists:
+ * a rule each caller has to remember is a rule the next screen breaks. The coach shell and the
+ * onboarding shell declare their density once, and an eye mounted anywhere under them inherits
+ * it. A caller that genuinely wants the other behaviour still passes the prop and still wins.
+ *
+ * `owner`/`floating` stays the module default, so nothing on the console moves: the console's
+ * eleven callsites either pass `placement="header"` explicitly or want the floating corner, and
+ * no console surface renders this provider.
+ */
+export type ContextEyeSurfaceValue = {
+  placement: "floating" | "header";
+  scale: "owner" | "coach";
+};
+
+const CONTEXT_EYE_SURFACE: ContextEyeSurfaceValue = { placement: "floating", scale: "owner" };
+const ContextEyeSurfaceContext = createContext<ContextEyeSurfaceValue>(CONTEXT_EYE_SURFACE);
+
+export function ContextEyeSurface({
+  children,
+  value,
+}: {
+  children: ReactNode;
+  value: ContextEyeSurfaceValue;
+}) {
+  return (
+    <ContextEyeSurfaceContext.Provider value={value}>{children}</ContextEyeSurfaceContext.Provider>
+  );
+}
+
+/** The surface's defaults, for a test or a sibling control that has to match the eye's height. */
+export function useContextEyeSurface(): ContextEyeSurfaceValue {
+  return useContext(ContextEyeSurfaceContext);
+}
+
+/**
+ * The coach density, as a component rather than as an exported value.
+ *
+ * Both mount sites are server-reachable -- `CoachScale` has no directive and is rendered from
+ * onboarding's server pages -- and `docs/ENGINEERING-BRIEF.md` records that importing a *value*
+ * from a `"use client"` module into a server component replaces it with a client reference that
+ * throws in production. That has happened four times in this repo. A component crosses the
+ * boundary safely; the object it supplies never leaves this module.
+ *
+ * 46px and header, because that is the height of the Export button the eye stands beside on a
+ * coach surface and the corner it must not sit in is the one the support bubble owns.
+ */
+export function CoachContextEyeSurface({ children }: { children: ReactNode }) {
+  return (
+    <ContextEyeSurface value={{ placement: "header", scale: "coach" }}>{children}</ContextEyeSurface>
+  );
+}
 
 /**
  * Left empty on purpose. Screens pass their own `screen` string today; if a shared list of ids
@@ -118,10 +182,19 @@ export function ContextEye({
   className,
   copy,
   position = "absolute",
-  placement = "floating",
-  scale = "owner",
+  placement: placementProp,
+  scale: scaleProp,
   screen,
 }: ContextEyeProps) {
+  /*
+   * The surface decides, the caller overrides. Read before the early return on `hidden` because
+   * hooks may not be conditional, which is also why this is a context read rather than a DOM
+   * probe for `[data-shell-role="coach"]`: a probe would have to happen after mount and would
+   * render the wrong density for one frame on every coach screen.
+   */
+  const surface = useContextEyeSurface();
+  const placement = placementProp ?? surface.placement;
+  const scale = scaleProp ?? surface.scale;
   /**
    * `useSyncExternalStore` rather than state seeded in an effect. The server snapshot is always
    * "visible" and React re-renders with the real one after hydration -- the same one-frame flash a
@@ -240,7 +313,13 @@ export function ContextEye({
             >
               Hide for now
             </button>
-            <span className="ml-auto font-mono text-[11px] text-[oklch(0.7_0.02_262)]">
+            {/*
+              Sentence, not mono, and at the panel's own size rather than 11px.
+              `SIMPLIFICATION-SPEC` §5 puts mono on numbers in tables and nowhere else, and this
+              is a two-word label; the 2026-09-04 audit counted the same misuse on eight coach
+              surfaces. The eye renders on both densities, so the coach's 14px floor governs.
+            */}
+            <span className="ml-auto text-[14px] text-[oklch(0.7_0.02_262)]">
               review only
             </span>
           </div>

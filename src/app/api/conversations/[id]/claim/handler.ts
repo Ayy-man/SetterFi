@@ -37,6 +37,9 @@ export function conversationResponse(
     isTest: conversation.isTest,
     qualification: { ...conversation.qualification },
     appointment: conversation.appointment ? { ...conversation.appointment } : null,
+    proposedSlots: conversation.proposedSlots
+      ? { ...conversation.proposedSlots, slots: conversation.proposedSlots.slots.map((slot) => ({ ...slot })) }
+      : null,
     messages: conversation.messages.map((message) => ({ ...message })),
   };
 }

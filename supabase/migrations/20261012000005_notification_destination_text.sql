@@ -1,0 +1,23 @@
+-- Add a text (SMS) notification destination for the coach one-preference settings control.
+--
+-- docs/PRODUCT.md's account-menu Notifications surface collapses the coach's per-rule
+-- bell/email matrix into a single email/text/both choice (round 4). The bell stays mandatory
+-- and out of band: it costs nothing to deliver and needs no provider, so it is not part of the
+-- coach's choice. Email and text are the two destinations that choice actually governs, and
+-- text has never had an enum value to store a preference against.
+--
+-- This is additive only. `notification_destination` gains 'sms' as a legal value for
+-- `alert_rules.default_destinations`, `notification_preferences.destination` and
+-- `notification_deliveries.destination`; nothing existing is renamed or removed, so no
+-- dependent function needs to be dropped and recreated the way the Slack removal did.
+--
+-- The delivery worker is intentionally untouched. `claim_notification_deliveries` still filters
+-- `destination::text = 'email'`, so an 'sms' delivery row is written and stays pending forever
+-- until a text-sending worker exists to claim it -- the same honest-pending-without-a-provider
+-- state the email destination already documents in src/lib/notifications/events.ts. Wiring an
+-- actual SMS provider and worker is deferred to a later round; this migration only makes the
+-- value legal to store.
+--
+-- Postgres allows ALTER TYPE ... ADD VALUE outside of a transaction that also uses the new
+-- value, which is exactly what this file does: it adds the value and touches nothing else.
+alter type public.notification_destination add value if not exists 'sms';

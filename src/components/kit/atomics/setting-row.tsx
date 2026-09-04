@@ -85,7 +85,10 @@ export function SettingRow({
           </IconTile>
         ) : null}
         <div className="min-w-0">
-          <div className="mb-[3px] text-[13.5px] leading-[1.3] font-[500] text-[color:var(--ink)]">
+          <div
+            className="mb-[3px] text-[13.5px] leading-[1.3] font-[500] text-[color:var(--ink)]"
+            data-slot="setting-row-title"
+          >
             {title}
           </div>
           <p
@@ -238,7 +241,10 @@ export function CollapsedSettingCard({
         <span className="mb-[4px] block text-[15px] leading-[1.3] font-[600] text-[color:var(--ink)]">
           {title}
         </span>
-        <span className="block max-w-[var(--measure-prose)] text-[12.5px] leading-[1.45] text-[color:var(--muted)]">
+        <span
+          className="block max-w-[var(--measure-prose)] text-[12.5px] leading-[1.45] text-[color:var(--muted)]"
+          data-slot="setting-summary-line"
+        >
           {description}
         </span>
       </span>
@@ -314,7 +320,10 @@ export function SettingSection({
           >
             {title}
           </span>
-          <span className="block max-w-[var(--measure-prose)] text-[12.5px] leading-[1.45] text-[color:var(--muted)]">
+          <span
+          className="block max-w-[var(--measure-prose)] text-[12.5px] leading-[1.45] text-[color:var(--muted)]"
+          data-slot="setting-summary-line"
+        >
             {description}
           </span>
         </span>

@@ -539,7 +539,7 @@ exports[`AdminInboxSurface lanes > keeps the flag-off inbox output stable 1`] = 
                 class="flex flex-wrap gap-[8px]"
               >
                 <button
-                  class="inline-flex items-center justify-center gap-[var(--s-2)] whitespace-nowrap transition-[filter,color,border-color,background-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 h-[30px] px-[11px] text-[12.5px] rounded-[var(--r-chip)] border border-[var(--line)] bg-[var(--control-fill)] font-[400] text-[color:var(--body)] [box-shadow:0_1px_0_rgba(255,255,255,.05)_inset] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] flex-1"
+                  class="kit-button inline-flex items-center justify-center gap-[var(--s-2)] whitespace-nowrap transition-[filter,color,border-color,background-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 h-[30px] px-[11px] text-[12.5px] rounded-[var(--r-chip)] border border-[var(--line)] bg-[var(--control-fill)] font-[400] text-[color:var(--body)] [box-shadow:0_1px_0_rgba(255,255,255,.05)_inset] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] flex-1"
                   data-size="md"
                   data-slot="kit-button"
                   data-variant="secondary"
@@ -548,7 +548,7 @@ exports[`AdminInboxSurface lanes > keeps the flag-off inbox output stable 1`] = 
                   Open channel health
                 </button>
                 <button
-                  class="inline-flex items-center justify-center gap-[var(--s-2)] whitespace-nowrap transition-[filter,color,border-color,background-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 h-[30px] px-[11px] text-[12.5px] rounded-[var(--r-chip)] border border-[var(--line)] bg-[var(--control-fill)] font-[400] text-[color:var(--body)] [box-shadow:0_1px_0_rgba(255,255,255,.05)_inset] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] flex-1"
+                  class="kit-button inline-flex items-center justify-center gap-[var(--s-2)] whitespace-nowrap transition-[filter,color,border-color,background-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 h-[30px] px-[11px] text-[12.5px] rounded-[var(--r-chip)] border border-[var(--line)] bg-[var(--control-fill)] font-[400] text-[color:var(--body)] [box-shadow:0_1px_0_rgba(255,255,255,.05)_inset] hover:border-[var(--accent-edge)] hover:text-[color:var(--ink)] flex-1"
                   data-size="md"
                   data-slot="kit-button"
                   data-variant="secondary"

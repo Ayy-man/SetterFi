@@ -57,8 +57,20 @@ const VARIANT = {
  */
 export const ACCENT_FILL_SHADOW_CLASS = "shadow-[0_1px_0_rgba(255,255,255,0.25)_inset]";
 
+/**
+ * `kit-button` is a marker, not a style: no stylesheet defines it as a rule on its own.
+ *
+ * It exists so `coach.css` can name this face. `KitButton` carries `data-slot="kit-button"` and
+ * the coach type floor keys on that, but `kitButtonClass` is exported precisely for the elements
+ * that are not `KitButton` -- a `next/Link` that has to be the page's live action -- and those
+ * carry no slot. The 2026-09-04 audit measured one of them, "Tell us about a lead" on
+ * `/coach/pipelines`, rendering at 12.5px under a 14px floor for exactly that reason.
+ *
+ * A class rather than a slot because a caller spreading `data-slot` would overwrite it, which is
+ * what a Radix trigger already does to `data-slot="button"` elsewhere in this kit.
+ */
 const BASE =
-  "inline-flex shrink-0 items-center justify-center gap-[var(--s-2)] whitespace-nowrap transition-[filter,color,border-color,background-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100";
+  "kit-button inline-flex shrink-0 items-center justify-center gap-[var(--s-2)] whitespace-nowrap transition-[filter,color,border-color,background-color] duration-[var(--duration-quick)] ease-[var(--ease-out)] active:scale-[var(--press-scale)] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100";
 
 /**
  * The same face, for the elements that cannot be a `<button>`.

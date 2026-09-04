@@ -153,7 +153,7 @@ export function CoachPillbar({
                  * a 19px chip at 11.5px rather than 24px at 13px -- because the tab bar is
                  * shorter, not because the tone changes.
                  */
-                className="rounded-[var(--r-full)] bg-[var(--warning-wash)] px-[var(--s-2)] font-[family-name:var(--font-mono)] text-[13px] leading-[20px] text-[color:var(--warning-text)] max-sm:px-[6px] max-sm:text-[12px] max-sm:leading-[18px]"
+                className="rounded-[var(--r-full)] bg-[var(--warning-wash)] px-[var(--s-2)] font-[family-name:var(--font-mono)] text-[14px] leading-[20px] text-[color:var(--warning-text)] max-sm:px-[6px] max-sm:text-[12px] max-sm:leading-[18px]"
                 data-coach-target="exempt"
               >
                 {item.count}

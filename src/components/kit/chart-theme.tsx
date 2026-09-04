@@ -72,7 +72,8 @@ export const CHART_LEGEND_SWATCH_PX = 8;
 
 /** Axis labels: mono 10px faint, and only ever at the two ends of the range. */
 export const CHART_AXIS_LABEL_CLASS =
-  "font-[family-name:var(--font-mono)] text-[10px] leading-none text-[var(--faint)] tabular-nums";
+  "chart-axis-label font-[family-name:var(--font-mono)] text-[10px] leading-none "
+  + "text-[var(--faint)] tabular-nums";
 
 /** Series fills carry opacity rather than a lighter colour, so the hue stays one hue. */
 export const CHART_AREA_OPACITY = 0.18;

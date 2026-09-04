@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONVERSATION_STATUSES,
+  CONVERSATION_VIEWS,
+  conversationViewStatuses,
   listConversations,
+  listConversationSet,
   persistDeferredWithAudit,
   persistedTemplateApproved,
   sendAuditActorFor,
@@ -39,11 +42,14 @@ function row(id: string, tenantId = "tenant-a") {
     is_test: true,
     last_message_at: "2026-08-17T12:00:00.000Z",
     created_at: "2026-08-17T11:00:00.000Z",
+    proposed_slots: null,
+    proposed_slots_at: null,
     contact: {
       name: "Alex",
       credit_range: "prime",
       funding_goal: "50k_100k",
       timeline: "1_3_months",
+      business_stage: "established",
       outcome: null,
     },
     tenant: { is_demo: true },
@@ -100,6 +106,47 @@ describe("listConversations", () => {
       lastActivityAt: "2026-08-17T12:00:00.000Z",
       id: "conversation-b",
     });
+  });
+
+  it("carries the captured business stage into the rail's qualification block", async () => {
+    const result = await listConversations(
+      "tenant-a",
+      { limit: 1 },
+      async () => [row("conversation-a")],
+    );
+
+    expect(result.items[0].qualification).toMatchObject({ business: "established" });
+  });
+
+  it("reads a well-formed proposed-slots proposal into the rail's booking-status field", async () => {
+    const proposal = {
+      calendarConnectionId: "calendar-1",
+      rangeStartAt: "2026-08-18T00:00:00.000Z",
+      rangeEndAt: "2026-08-25T00:00:00.000Z",
+      proposedAt: "2026-08-17T12:00:00.000Z",
+      presentationTimezone: "America/New_York",
+      slots: [
+        { id: "slot-1", startAt: "2026-08-18T14:00:00.000Z", endAt: "2026-08-18T14:30:00.000Z",
+          timezone: "America/New_York", display: "Tue 10:00am ET" },
+      ],
+    };
+    const result = await listConversations(
+      "tenant-a",
+      { limit: 1 },
+      async () => [{ ...row("conversation-a"), proposed_slots: proposal }],
+    );
+
+    expect(result.items[0].proposedSlots).toEqual(proposal);
+  });
+
+  it("drops a malformed proposed-slots row to null instead of guessing at its shape", async () => {
+    const result = await listConversations(
+      "tenant-a",
+      { limit: 1 },
+      async () => [{ ...row("conversation-a"), proposed_slots: { slots: "not-an-array" } }],
+    );
+
+    expect(result.items[0].proposedSlots).toBeNull();
   });
 
   it("carries the objection filter to the page source alongside cursor and limit", async () => {
@@ -163,6 +210,58 @@ describe("listConversations", () => {
 
     expect(calls).toEqual([{ tenantId: "tenant-a", cursor: null, limit: 25 }]);
     expect(resolverCalls).toBe(0);
+  });
+
+  it("resolves the three inbox views to the right status set", () => {
+    expect(CONVERSATION_VIEWS).toEqual(["needs_you", "agent_handling", "everything"]);
+    expect(conversationViewStatuses("needs_you")).toEqual(["needs_human", "human", "scope_blocked"]);
+    expect(conversationViewStatuses("agent_handling")).toEqual(["agent"]);
+    expect(conversationViewStatuses("everything")).toBeNull();
+  });
+
+  it("carries the view filter to the page source as a status list", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const result = await listConversations(
+      "tenant-a",
+      { limit: 10, view: "needs_you" },
+      async (input) => { calls.push(input); return [row("conversation-a")]; },
+    );
+
+    expect(calls).toEqual([{
+      tenantId: "tenant-a",
+      cursor: null,
+      limit: 10,
+      statuses: ["needs_human", "human", "scope_blocked"],
+    }]);
+    expect(result.items.map((item) => item.id)).toEqual(["conversation-a"]);
+  });
+
+  it("asks for no status filter at all on the everything view", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    await listConversations(
+      "tenant-a",
+      { limit: 10, view: "everything" },
+      async (input) => { calls.push(input); return [row("conversation-a")]; },
+    );
+
+    expect(calls).toEqual([{ tenantId: "tenant-a", cursor: null, limit: 10 }]);
+  });
+
+  it("carries the view filter through listConversationSet the same way", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const items = await listConversationSet(
+      "tenant-a",
+      { view: "agent_handling" },
+      async (input) => { calls.push(input); return [row("conversation-a")]; },
+    );
+
+    expect(calls).toEqual([{
+      tenantId: "tenant-a",
+      cursor: null,
+      limit: 100,
+      statuses: ["agent"],
+    }]);
+    expect(items.map((item) => item.id)).toEqual(["conversation-a"]);
   });
 
   it("pins all seven persisted states for schema drift", () => {

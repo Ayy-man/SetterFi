@@ -10,6 +10,7 @@ import {
   AvatarFallback,
 } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
+import { displayName, displayText } from "@/lib/format/display-name"
 
 export type TranscriptMessage = {
   id: string
@@ -106,7 +107,7 @@ function groupIntoRuns(
       }
     }
 
-    const runName = explicitName ?? defaultAuthorName(author, variant)
+    const runName = explicitName ? displayName(explicitName) : defaultAuthorName(author, variant)
 
     while (runEnd < messages.length && messages[runEnd].author === author) {
       const nextName = messages[runEnd].authorName
@@ -208,7 +209,7 @@ function SystemMessage({ message }: { message: TranscriptMessage }): ReactElemen
     >
       <span className="flex max-w-[var(--measure-wide)] flex-wrap items-baseline justify-center gap-x-[var(--s-2)] text-center">
         <strong className="font-[var(--t-row-w)] text-[color:var(--muted)]">System</strong>
-        <span>{message.body}</span>
+        <span>{displayText(message.body)}</span>
         <time>{message.at}</time>
       </span>
     </div>
@@ -309,7 +310,14 @@ function TranscriptRow({
           className={messageClassName}
           data-slot="message-text"
         >
-          {message.body}
+          {/*
+            The seeders staple a trailing `(demo)` onto every body they write, so provenance is
+            legible in a query. On screen the audit counted it twenty times on one coach pane. It
+            is stripped here, at the one component every transcript renders through, rather than
+            by each screen: `displayName` already made this decision for names and the screens
+            that inherited it are the ones that stopped repeating themselves.
+          */}
+          {displayText(message.body)}
         </p>
 
         {message.grounding ? <GroundingReceipt grounding={message.grounding} /> : null}

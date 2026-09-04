@@ -69,7 +69,10 @@ export function createSupportService(repository: SupportRepository) {
       const actor = coachSession(session);
       return repository.getCoachSupportThread(actor.expectedTenant, actor.userId, threadId);
     },
-    async createCoachThread(session: SupportSession, input: { subject: string; body: string }) {
+    async createCoachThread(
+      session: SupportSession,
+      input: { subject: string; body: string; relatedContactId?: string | null },
+    ) {
       const actor = coachSession(session);
       return repository.createCoachSupportThread({ ...actor, ...input });
     },
