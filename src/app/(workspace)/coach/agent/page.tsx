@@ -180,7 +180,7 @@ export default async function CoachAgentPage() {
   const repository = createOfferLayerRepository();
   const cadenceEnabled = phase1Live() && phase3Live();
 
-  const [draft, published, channelRows, questions, objections] = await Promise.all([
+  const [draft, published, channelRows, questions, objections, allowedHosts] = await Promise.all([
     repository.loadOffer({ tenantId, status: "draft" }),
     repository.loadOffer({ tenantId, status: "published" }),
     /*
@@ -198,11 +198,14 @@ export default async function CoachAgentPage() {
       ? readCoachQuestions({ tenantId, userId: actorId }).catch(() => null)
       : Promise.resolve(null),
     coachObjections(actorId, tenantId),
+    // The hosts a link may point at, so the links card can refuse on the row rather than on save.
+    repository.loadAllowedHosts(tenantId).catch(() => undefined),
   ]);
 
   return (
     <CoachAgentShell navCounts={await coachNavCounts(tenantId)}>
       <CoachAgent
+        allowedHosts={allowedHosts}
         cadence={{
           enabled: cadenceEnabled,
           channels: cadenceEnabled ? cadenceChannels(channelRows) : [],

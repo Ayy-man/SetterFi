@@ -35,3 +35,14 @@ export const WINDOW_BOUND_TOUCHES: readonly WindowBoundTouch[] = Object.freeze([
   Object.freeze({ touchNo: 1, beforeWindowCloseMs: 22 * HOUR_MS, purpose: "lead_magnet" }),
   Object.freeze({ touchNo: 2, beforeWindowCloseMs: 4 * HOUR_MS, purpose: "last_touch" }),
 ]);
+
+/** How many of the platform's touches still send, given the coach's purpose rows. */
+export function cadenceTouchSummary(
+  rows: readonly { channelClass: "durable" | "window_bound" | "none"; purpose: OfferCadencePurpose }[],
+): { sending: number; total: number } {
+  const total = DURABLE_TOUCHES.length + WINDOW_BOUND_TOUCHES.length;
+  const off = rows.filter((row) =>
+    row.purpose === "none" && (row.channelClass === "durable" || row.channelClass === "window_bound"),
+  ).length;
+  return { sending: Math.max(0, total - off), total };
+}

@@ -19,12 +19,18 @@ export const OFFER_CADENCE_PURPOSES = [
   "proof_point",
   "new_angle",
   "last_touch",
+  "none",
 ] as const;
+
 
 export const OFFER_CADENCE_CHANNELS = ["durable", "window_bound", "none"] as const;
 
 export type OfferCadencePurpose = (typeof OFFER_CADENCE_PURPOSES)[number];
 export type OfferCadenceChannel = (typeof OFFER_CADENCE_CHANNELS)[number];
+
+/** The purposes that send something. "none" is a switched-off touch and never reaches a template. */
+export const OFFER_CADENCE_SENDING_PURPOSES: readonly OfferCadencePurpose[] =
+  OFFER_CADENCE_PURPOSES.filter((purpose) => purpose !== "none");
 
 /**
  * The coach-facing wording for the two cadence enums. A coach picks a purpose from a dropdown
@@ -38,6 +44,7 @@ export const OFFER_CADENCE_PURPOSE_LABELS: Record<OfferCadencePurpose, string> =
   proof_point: "Approved proof point",
   new_angle: "A new angle",
   last_touch: "Final check-in",
+  none: "Nothing",
 };
 
 export const OFFER_CADENCE_CHANNEL_LABELS: Record<OfferCadenceChannel, string> = {

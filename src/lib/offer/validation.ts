@@ -19,6 +19,7 @@ import {
   type CoachOfferPriceInput,
   type CoachOfferProofInput,
 } from "@/lib/offer/types";
+import { DURABLE_TOUCHES, WINDOW_BOUND_TOUCHES } from "@/lib/followups/touch-lists";
 import {
   OFFER_RULE_BOUNDS,
   OFFER_RULE_OPS,
@@ -236,8 +237,32 @@ function validateAssets(value: unknown, allowedHosts: readonly string[]): CoachO
   });
 }
 
+/**
+ * At least one touch per channel class must still send. A coach may switch any touch to
+ * "Nothing", but a class with every touch off is follow-up switched off by another name, and that
+ * is a platform decision (`cadence.enabled`), not a row on the offer.
+ */
+function assertSomeTouchSends(rows: readonly CoachCadencePurposeInput[]) {
+  const counts: Record<string, number> = {
+    durable: DURABLE_TOUCHES.length,
+    window_bound: WINDOW_BOUND_TOUCHES.length,
+  };
+  for (const channelClass of Object.keys(counts)) {
+    const off = rows.filter((row) => row.channelClass === channelClass && row.purpose === "none").length;
+    if (off >= counts[channelClass]) {
+      throw new OfferValidationError("OFFER_CADENCE_ALL_OFF", channelClass);
+    }
+  }
+}
+
 function validateCadence(value: unknown): CoachCadencePurposeInput[] {
   const seen = new Set<string>();
+  const rows = validateCadenceRows(value, seen);
+  assertSomeTouchSends(rows);
+  return rows;
+}
+
+function validateCadenceRows(value: unknown, seen: Set<string>): CoachCadencePurposeInput[] {
   return array(value, "cadencePurposes", Number.MAX_SAFE_INTEGER).map((candidate, index) => {
     const cadence = record(candidate, `cadencePurposes[${index}]`);
     exactKeys(

@@ -88,6 +88,25 @@ describe("validateCoachOfferDraft rules and guidelines", () => {
     ).toThrow("OFFER_STRING_INVALID:voiceGuidelines");
   });
 
+  it("accepts Nothing on a touch but not on every touch of a class", () => {
+    const some = validateCoachOfferDraft(
+      { ...BASE, cadencePurposes: [{ channelClass: "durable", touchNo: 1, purpose: "none", assetId: null }] },
+      [],
+    );
+    expect(some.cadencePurposes[0].purpose).toBe("none");
+    expect(() =>
+      validateCoachOfferDraft(
+        {
+          ...BASE,
+          cadencePurposes: [1, 2, 3, 4, 5].map((touchNo) => ({
+            channelClass: "durable", touchNo, purpose: "none", assetId: null,
+          })),
+        },
+        [],
+      ),
+    ).toThrow("OFFER_CADENCE_ALL_OFF:durable");
+  });
+
   it("accepts the two new billing periods", () => {
     const offer = validateCoachOfferDraft(
       {

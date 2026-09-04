@@ -71,6 +71,7 @@ import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import { humanError } from "@/lib/copy/errors";
 import { money } from "@/lib/format/metric";
 import { OFFER_BOUNDS } from "@/lib/brain/contracts";
+import { ASSET_LINK_RULE, DEFAULT_ASSET_HOSTS, hostOf } from "@/lib/offer/asset-hosts";
 import {
   OFFER_RULE_BOUNDS,
   OFFER_RULE_OP_LABELS,
@@ -136,6 +137,12 @@ export type RehaulCoachAgentProps = {
   supportEnabled: boolean;
   /** Test seam. Omit and the component loads goals from the tenant-scoped route. */
   initialKeywordGoals?: readonly KeywordGoal[];
+  /**
+   * Every host a saved link may point at, from the repository's own list, so a link the save
+   * would refuse is named on the row before the press rather than swallowed by the 409. Defaults
+   * to the platform hosts alone.
+   */
+  allowedHosts?: readonly string[];
 };
 
 /* ------------------------------------------------------------------ *
@@ -649,6 +656,34 @@ const BOOK_A_CALL = "book-a-call";
  * The screen
  * ------------------------------------------------------------------ */
 
+/** Slug for a link from its label: lowercase, hyphenated, unique among the rows it joins. */
+function slugFor(label: string, taken: readonly string[]) {
+  const base = label.trim().toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-+|-+$/gu, "") || "link";
+  let slug = base;
+  let n = 2;
+  while (taken.includes(slug)) slug = `${base}-${n++}`;
+  return slug;
+}
+
+/** Why a link cannot be saved, in one sentence, or null when it can. */
+function linkProblem(url: string, allowedHosts: readonly string[]): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return "This is not a full link. Start it with https://";
+  }
+  if (parsed.protocol !== "https:") return "Only https links can be shared.";
+  const host = parsed.hostname.toLowerCase();
+  const allowed = allowedHosts.some((candidate) => {
+    const normalized = candidate.trim().toLowerCase();
+    return normalized && (host === normalized || host.endsWith(`.${normalized}`));
+  });
+  return allowed ? null : `${host} is not a host your agent may link to. Host it on your own website, Drive, Dropbox, Notion, Loom, YouTube, Vimeo or Calendly.`;
+}
+
 export function CoachAgent({
   cadence = { enabled: false, channels: [] },
   initialKeywordGoals,
@@ -657,6 +692,7 @@ export function CoachAgent({
   questions,
   supportEnabled,
   testEnabled,
+  allowedHosts = DEFAULT_ASSET_HOSTS,
 }: RehaulCoachAgentProps) {
   const loadedOffer = useMemo(
     () => editableOffer(initialState.draft ?? initialState.published),
@@ -1098,6 +1134,37 @@ export function CoachAgent({
    * see. That is stated on the bar rather than discovered on the press.
    */
   const programMissing = !form.programName.trim();
+
+  /* ---------------- links ---------------- */
+
+  function updateAsset(index: number, patch: { label?: string; url?: string }) {
+    updateForm(
+      "assets",
+      form.assets.map((asset, at) => {
+        if (at !== index) return asset;
+        const next = { ...asset, ...patch };
+        if (patch.label !== undefined) {
+          const taken = form.assets.filter((_, other) => other !== index).map((row) => row.slug);
+          next.slug = slugFor(patch.label, taken);
+        }
+        return next;
+      }),
+    );
+  }
+
+  /*
+   * A link the server already accepted is allowed by definition, whatever list this render was
+   * handed: the page may have failed to read the tenant's own hosts, and a saved link must never
+   * block the Save it was saved by.
+   */
+  const savedLinkUrls = savedOffer.assets.map((asset) => asset.url);
+  const linkProblems = form.assets.map((asset) =>
+    savedLinkUrls.includes(asset.url) ? null : linkProblem(asset.url, allowedHosts),
+  );
+  const linksBlocked = form.assets.some((asset, index) =>
+    linkProblems[index] !== null || !asset.label.trim() || !asset.url.trim(),
+  );
+  const linksSet = form.assets.length > 0;
 
   async function requestChange(section: string) {
     setRequested((current) => ({ ...current, [section]: "sent" }));
@@ -1576,9 +1643,23 @@ export function CoachAgent({
                     ? "When a lead goes quiet, your agent follows up on our schedule and then stops. We pick the timing, you pick what each one is for."
                     : "Follow-up is not switched on yet, so nothing is being sent. What you set here is kept and used the day it is."}
                 </p>
-                {cadenceSchedule.map((group) => (
+                {cadenceSchedule.map((group) => {
+                  const purposeOf = (touchNo: number) =>
+                    savedPurposeFor(form.cadencePurposes, group.channelClass, touchNo)
+                    ?? group.touches.find((touch) => touch.touchNo === touchNo)?.defaultPurpose
+                    ?? "none";
+                  const sending = group.touches.filter((touch) => purposeOf(touch.touchNo) !== "none").length;
+                  return (
                   <div className="flex flex-col gap-[10px]" key={group.channelClass}>
                     <span className={`block ${COACH_EYEBROW_CLASS}`}>{group.channelLabel}</span>
+                    {sending < group.touches.length ? (
+                      <p
+                        className="m-0 text-[15px] leading-[1.4] text-[color:var(--muted)]"
+                        data-slot="rehaul-cadence-summary"
+                      >
+                        {`${sending} of ${group.touches.length} send. The rest are switched off; timing stays ours.`}
+                      </p>
+                    ) : null}
                     {group.touches.map((touch) => (
                       /*
                        * The board runs the sentence and its field inline on one wrapping row,
@@ -1620,7 +1701,20 @@ export function CoachAgent({
                           </SelectTrigger>
                           <SelectContent align="start" alignItemWithTrigger={false}>
                             {PURPOSE_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
+                              /*
+                               * "Nothing" on the last touch that still sends would switch the
+                               * whole class off, which is the platform's `cadence.enabled` to
+                               * decide, so that one option is refused on that one row.
+                               */
+                              <SelectItem
+                                disabled={
+                                  option.value === "none"
+                                  && sending === 1
+                                  && purposeOf(touch.touchNo) !== "none"
+                                }
+                                key={option.value}
+                                value={option.value}
+                              >
                                 {option.label}
                               </SelectItem>
                             ))}
@@ -1629,7 +1723,95 @@ export function CoachAgent({
                       </div>
                     ))}
                   </div>
-                ))}
+                  );
+                })}
+              </div>
+            </DeckPanel>
+
+            {/*
+              * Links your agent can share. `SIMPLIFICATION-SPEC.md` 2.4 demoted marketing assets
+              * to an intake request; on 2026-09-05 the decision was reversed to a link-only editor
+              * here, because nothing in the send path carries a file and every channel accepts a
+              * URL, so the only thing a coach needs is a place to paste one and the rule stated.
+              * Full width under the four cards: the rows are one shape and it is a list, not a
+              * card that pairs with another.
+              */}
+            <DeckPanel
+              className="md:col-span-2"
+              eyebrow="Yours"
+              meta={<StatePill label={linksSet ? "Set" : "None yet"} set={linksSet} />}
+              name="Links your agent can share"
+            >
+              <div className="flex flex-col gap-[12px]">
+                <p className={`m-0 max-w-[var(--measure-prose)] ${COACH_LEAD_CLASS} text-[color:var(--body)]`}>
+                  {ASSET_LINK_RULE}
+                </p>
+                {form.assets.map((asset, index) => {
+                  const name = asset.label.trim() || `link ${index + 1}`;
+                  const problem = linkProblems[index];
+                  return (
+                    <div className="flex flex-col gap-[6px]" data-slot="rehaul-link" key={`asset-${index}`}>
+                      <div className={WELL_ROW_CLASS}>
+                        <Input
+                          aria-label={`Name of link ${index + 1}`}
+                          className={`${FIELD_CLASS} flex-1 basis-[180px]`}
+                          maxLength={OFFER_BOUNDS.asset.labelMax}
+                          onChange={(event) => updateAsset(index, { label: event.target.value })}
+                          placeholder="Funding checklist"
+                          value={asset.label}
+                        />
+                        <Input
+                          aria-invalid={problem ? true : undefined}
+                          aria-label={`Address of ${name}`}
+                          className={`${FIELD_CLASS} flex-[2] basis-[260px]`}
+                          inputMode="url"
+                          maxLength={OFFER_BOUNDS.asset.urlMax}
+                          onChange={(event) => updateAsset(index, { url: event.target.value })}
+                          placeholder="https://"
+                          value={asset.url}
+                        />
+                        <button
+                          aria-label={`Remove ${name}`}
+                          className={`${ICON_BUTTON_CLASS} ml-auto`}
+                          onClick={() =>
+                            updateForm("assets", form.assets.filter((_, at) => at !== index))
+                          }
+                          type="button"
+                        >
+                          <X aria-hidden className="size-[20px]" />
+                        </button>
+                      </div>
+                      {problem ? (
+                        <p className="m-0 px-[16px] text-[15px] leading-[1.4] font-medium text-[color:var(--failure-text)]">
+                          {problem}
+                        </p>
+                      ) : hostOf(asset.url) ? (
+                        <p className="m-0 px-[16px] text-[15px] leading-[1.4] text-[color:var(--muted)]">
+                          {`Your agent can send this link from ${hostOf(asset.url)}.`}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {form.assets.length === 0 ? (
+                  <p className={ABSENCE_CLASS}>
+                    No links yet, so a booked call is the only thing your agent can offer.
+                  </p>
+                ) : null}
+                <button
+                  className={DASHED_ADD_CLASS}
+                  disabled={form.assets.length >= OFFER_BOUNDS.asset.maxRows}
+                  onClick={() =>
+                    updateForm("assets", [
+                      ...form.assets,
+                      { slug: slugFor("", form.assets.map((row) => row.slug)), label: "", url: "" },
+                    ])
+                  }
+                  type="button"
+                >
+                  <Sign />
+                  Add a link
+                </button>
               </div>
             </DeckPanel>
           </div>
@@ -1711,8 +1893,8 @@ export function CoachAgent({
           */}
           {goalRows && goalRows.length > 0 && form.assets.length === 0 ? (
             <p className={`m-0 ${COACH_FOOTNOTE_CLASS}`}>
-              We hold no links for you yet, so a booked call is the only reply your agent can send.
-              Send us anything you want it to share and we will add it.
+              You have no links saved yet, so a booked call is the only reply your agent can send.
+              Add one under &ldquo;Links your agent can share&rdquo; and it appears here.
             </p>
           ) : null}
 
@@ -1859,7 +2041,7 @@ export function CoachAgent({
           </button>
           <button
             className={ACCENT_BUTTON_CLASS}
-            disabled={busy || !dirty || programMissing}
+            disabled={busy || !dirty || programMissing || linksBlocked}
             onClick={() => void save()}
             type="button"
           >

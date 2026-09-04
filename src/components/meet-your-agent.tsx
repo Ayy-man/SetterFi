@@ -7,7 +7,7 @@ import "./meet-your-agent.css";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
-import { AgentFlow } from "@/components/agent-flow";
+import { AgentFlow, type AgentFlowFollowUps } from "@/components/agent-flow";
 import { CoachScale } from "@/components/coach-scale";
 import styles from "@/components/meet-your-agent.module.css";
 import { SetterFiMark } from "@/components/brand";
@@ -42,6 +42,8 @@ type MobilePanel = "chat" | "trace";
 type MeetYourAgentProps = {
   enabled: boolean;
   canPromote: boolean;
+  /** The follow-up count from the offer the sandbox runs against; null when not known. */
+  followUps?: AgentFlowFollowUps | null;
   initialContext?: PreviewContext;
   lockedContext?: boolean;
   embedded?: boolean;
@@ -173,6 +175,7 @@ async function sha256(value: unknown) {
 export function MeetYourAgent({
   enabled,
   canPromote,
+  followUps = null,
   initialContext = "client",
   lockedContext = false,
   embedded = false,
@@ -947,6 +950,7 @@ export function MeetYourAgent({
 
           <div className="trace-canvas-shell">
             <AgentFlow
+              followUps={followUps}
               sessionId={sessionId}
               current={currentStage}
               done={doneStages}

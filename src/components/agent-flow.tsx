@@ -22,7 +22,7 @@ import { useReducedMotion } from "motion/react";
 import type { AgentStage, Booking, GuardrailEvent } from "@/lib/agent-simulator";
 
 type TraceStatus = "idle" | "active" | "done" | "deflect" | "block";
-type TraceId = AgentStage | "brain";
+type TraceId = AgentStage | "brain" | "followup";
 
 type TraceNodeData = {
   label: string;
@@ -38,8 +38,13 @@ type TraceEdgeData = {
 type TraceNode = Node<TraceNodeData, "trace">;
 type TraceEdge = Edge<TraceEdgeData, "trace">;
 
+/** What the coach's published offer says about follow-up: how many touches still send. */
+export type AgentFlowFollowUps = { sending: number; total: number };
+
 export type AgentFlowProps = {
   sessionId: string | null;
+  /** Null when no offer is known; the node then names the platform schedule rather than a count. */
+  followUps?: AgentFlowFollowUps | null;
   current: AgentStage;
   done: AgentStage[];
   thinking: boolean;
@@ -62,6 +67,7 @@ const NODE_LAYOUT: Record<TraceId, { x: number; y: number }> = {
   guardrail: { x: 360, y: 265 },
   book: { x: 180, y: 400 },
   closing: { x: 360, y: 400 },
+  followup: { x: 0, y: 400 },
 };
 
 const TRACE_IDS = Object.keys(NODE_LAYOUT) as TraceId[];
@@ -79,6 +85,7 @@ const EDGE_LAYOUT: ReadonlyArray<{
   { source: "qualify", target: "guardrail", sourceHandle: "bottom", targetHandle: "top" },
   { source: "objection", target: "book", sourceHandle: "bottom", targetHandle: "top" },
   { source: "guardrail", target: "closing", sourceHandle: "bottom", targetHandle: "top" },
+  { source: "objection", target: "followup", sourceHandle: "bottom", targetHandle: "top" },
 ];
 
 const NODE_LABELS: Record<TraceId, string> = {
@@ -89,7 +96,16 @@ const NODE_LABELS: Record<TraceId, string> = {
   guardrail: "Guardrail",
   book: "Book call",
   closing: "Closing",
+  followup: "Follow up",
 };
+
+/** The follow-up node reads the offer, not the turn: it says what will send when a lead goes quiet. */
+function followUpSublabel(followUps: AgentFlowFollowUps | null | undefined) {
+  if (!followUps) return "on our schedule";
+  if (followUps.sending === 0) return "switched off";
+  if (followUps.sending === followUps.total) return `${followUps.total} touches`;
+  return `${followUps.sending} of ${followUps.total} touches`;
+}
 
 /* The nodes the trace walks while a turn is in flight, so the canvas shows the
    agent reading before it shows the agent answering. */
@@ -168,23 +184,29 @@ const edgeTypes = { trace: memo(TraceEdgeComponent) };
 
 type TraceState = AgentFlowProps & { scanStage: TraceId | null };
 
+/** Whether a walked stage list includes this trace id; the brain and follow-up nodes never do. */
+function walked(done: readonly AgentStage[], id: TraceId) {
+  return id !== "brain" && id !== "followup" && done.includes(id);
+}
+
 function nodeStatus(id: TraceId, state: TraceState): TraceStatus {
   if (!state.sessionId) return "idle";
 
   if (state.thinking) {
     if (id === state.scanStage) return "active";
     if (id === "brain") return state.brainUsed ? "done" : "idle";
-    return state.done.includes(id) ? "done" : "idle";
+    return walked(state.done, id) ? "done" : "idle";
   }
 
   if (id === "brain") return state.brainUsed ? "done" : "idle";
+  if (id === "followup") return "idle";
 
   if (id === "guardrail" && state.guardrail) {
     return state.guardrail.type === "block" ? "block" : "deflect";
   }
 
   if (id === state.current) return "active";
-  if (state.done.includes(id)) return "done";
+  if (walked(state.done, id)) return "done";
   return "idle";
 }
 
@@ -198,8 +220,8 @@ function edgeStatus(source: TraceId, target: TraceId, state: TraceState): TraceS
   const activeNode = state.thinking ? state.scanStage : state.current;
   if (target === activeNode) return "active";
 
-  const sourceDone = source === "brain" ? state.brainUsed : state.done.includes(source);
-  const targetDone = target !== "brain" && state.done.includes(target);
+  const sourceDone = source === "brain" ? state.brainUsed : walked(state.done, source);
+  const targetDone = walked(state.done, target);
   return sourceDone && targetDone ? "done" : "idle";
 }
 
@@ -234,6 +256,7 @@ export function agentFlowSnapshot(
     closing: sessionReady
       ? state.current === "closing" ? "test run complete" : "exit path"
       : "waiting for session",
+    followup: followUpSublabel(state.followUps),
   };
 
   return TRACE_IDS.map((id) => ({

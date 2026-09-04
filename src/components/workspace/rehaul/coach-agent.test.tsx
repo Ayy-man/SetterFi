@@ -321,6 +321,51 @@ describe("the coach's own rules", () => {
   });
 });
 
+describe("links your agent can share", () => {
+  it("adds a link, names a host the agent may not use, and blocks Save until it is fixed", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    await user.click(screen.getByRole("button", { name: "Add a link" }));
+    await user.type(screen.getByLabelText("Name of link 2"), "Funding checklist");
+    const address = screen.getByLabelText("Address of Funding checklist");
+    await user.type(address, "https://random.example/checklist.pdf");
+    expect(screen.getByText(/random\.example is not a host your agent may link to/u)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    await user.clear(address);
+    await user.type(address, "https://drive.google.com/file/d/abc/view");
+    expect(screen.getByText("Your agent can send this link from drive.google.com.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Remove Funding checklist" }));
+    expect(screen.queryByLabelText("Name of link 2")).not.toBeInTheDocument();
+  });
+
+  it("states the rule and keeps a saved link allowed whatever list it was handed", () => {
+    renderAgent();
+    expect(screen.getByText(/Files cannot be uploaded here/u)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.queryByText(/is not a host your agent may link to/u)).not.toBeInTheDocument();
+  });
+});
+
+describe("switching a follow-up off", () => {
+  it("offers Nothing, counts what still sends, and refuses Nothing on the last sending touch", async () => {
+    const user = userEvent.setup();
+    renderAgent();
+
+    const durable = screen.getByRole("combobox", { name: "What Reply-window channels follow-up 1 says" });
+    await user.click(durable);
+    await user.click(await screen.findByRole("option", { name: "Nothing" }));
+    expect(screen.getByText(/1 of 2 send\. The rest are switched off/u)).toBeInTheDocument();
+
+    const last = screen.getByRole("combobox", { name: "What Reply-window channels follow-up 2 says" });
+    await user.click(last);
+    expect(await screen.findByRole("option", { name: "Nothing" })).toHaveAttribute("aria-disabled", "true");
+  });
+});
+
 describe("how you sound", () => {
   it("takes voice guidelines as a paragraph and reads them back", async () => {
     const user = userEvent.setup();

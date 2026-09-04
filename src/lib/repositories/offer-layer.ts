@@ -6,6 +6,7 @@
  */
 
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { assetHostsFor } from "@/lib/offer/asset-hosts";
 import { OFFER_RULE_OPS, type OfferQualificationRule, type OfferRuleOp } from "@/lib/offer/rules";
 import {
   parseOfferChangeTrail,
@@ -209,17 +210,17 @@ export function createOfferLayerRepository(): OfferLayerRepository {
   const client = createSupabaseServiceClient();
   return {
     loadAllowedHosts: async (tenantId) => {
-      const { data, error } = await client
-        .from("tenant_settings")
-        .select("tenant_id, link_whitelist")
-        .eq("tenant_id", tenantId)
-        .single();
-      if (error || !data || data.tenant_id !== tenantId) {
-        throw new Error(`OFFER_WHITELIST_READ_FAILED:${error?.message ?? "empty"}`);
-      }
-      return Array.isArray(data.link_whitelist)
-        ? data.link_whitelist.filter((value): value is string => typeof value === "string")
+      const [settings, profile] = await Promise.all([
+        client.from("tenant_settings").select("tenant_id, link_whitelist").eq("tenant_id", tenantId).maybeSingle(),
+        client.from("business_profiles").select("website_url").eq("tenant_id", tenantId).maybeSingle(),
+      ]);
+      if (settings.error) throw new Error(`OFFER_SETTINGS_READ_FAILED:${settings.error.message}`);
+      const whitelist = Array.isArray(settings.data?.link_whitelist)
+        ? settings.data.link_whitelist.filter((value): value is string => typeof value === "string")
         : [];
+      // A missing profile is not a failure: the platform list still applies.
+      const website = profile.error ? null : (profile.data?.website_url as string | null | undefined) ?? null;
+      return assetHostsFor(whitelist, website);
     },
     saveDraft: async (input) => {
       const { data, error } = await client.rpc("save_offer_draft", {

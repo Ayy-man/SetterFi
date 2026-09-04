@@ -6,6 +6,9 @@ import { MeetYourAgent } from "@/components/meet-your-agent";
 import { loadPlatformActor, loadRouteActor } from "@/lib/auth/actors";
 import { RehaulMeetAgent } from "@/components/workspace/rehaul/meet-agent";
 import { phase7MeetAgentLive } from "@/lib/env-contract";
+import type { AgentFlowFollowUps } from "@/components/agent-flow";
+import { pickPlatformDemoTenant } from "@/lib/demo-tenant";
+import { cadenceTouchSummary } from "@/lib/followups/touch-lists";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -33,6 +36,28 @@ async function publishedRules(tenantId: string): Promise<CoachAgentPreviewRules>
     };
   } catch {
     return { creditFloor: null, minimumRaiseCents: null };
+  }
+}
+
+/**
+ * What the sandbox's follow-up node says: how many touches the published offer still sends.
+ *
+ * A platform actor's sandbox runs against the platform demo tenant, chosen the same way the test
+ * agent chooses it, so the node reads the same offer the turns do. Null on any failure, and the
+ * node then names the platform schedule rather than a count it cannot stand behind.
+ */
+async function sandboxFollowUps(): Promise<AgentFlowFollowUps | null> {
+  try {
+    const { data } = await createSupabaseServiceClient()
+      .from("tenants")
+      .select("id, created_at")
+      .eq("is_demo", true);
+    const tenantId = pickPlatformDemoTenant(data ?? []);
+    if (!tenantId) return null;
+    const offer = await createOfferLayerRepository().loadOffer({ status: "published", tenantId });
+    return offer ? cadenceTouchSummary(offer.cadencePurposes) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -72,6 +97,7 @@ export default async function MeetAgentPage() {
       <MeetYourAgent
         canPromote={canPromote}
         enabled
+        followUps={await sandboxFollowUps()}
         initialContext={canPromote ? "admin" : "client"}
       />
     );

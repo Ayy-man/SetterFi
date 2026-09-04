@@ -116,13 +116,20 @@ export function materializeCadence(input: MaterializeCadenceInput): Materialized
 
   // Positions already in the past are skipped, not queued. The quiet-gap floor
   // may shift only a still-future position after a recent human or agent send.
+  // A position the coach set to "Nothing" is dropped here, before anything is
+  // queued, so no template is ever looked up for it.
   return positions
     .filter((touch) => touch.scheduledAt > materializedAt)
+    .map((touch) => ({
+      ...touch,
+      purpose: purposeFor(channelClass, touch.touchNo, touch.purpose, overrides),
+    }))
+    .filter((touch) => touch.purpose !== "none")
     .map((touch): MaterializedFollowup => ({
       tenantId: input.tenantId,
       conversationId: input.conversationId,
       touchNo: touch.touchNo,
-      purpose: purposeFor(channelClass, touch.touchNo, touch.purpose, overrides),
+      purpose: touch.purpose,
       scheduledAt: new Date(Math.max(
         touch.scheduledAt,
         lastOutboundAt === null ? touch.scheduledAt : lastOutboundAt + QUIET_GAP_MS,
