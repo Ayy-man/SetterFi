@@ -3,47 +3,35 @@
 /*
  * Step 4 of 6.
  *
- * Every loader, every post and every state rule is unchanged: the same
- * `GET/POST /api/onboarding/calendar`, the same `/api/calendars/google/connect` anchor and
- * `/api/calendars/google/select` post, the same distinction between a stored authorization and a
- * verified availability read, and the same refusal to tell a dead grant apart from a check that
- * could not run.
+ * Every loader, every post and every state rule is unchanged: the same `GET /api/onboarding/calendar`,
+ * the same `/api/calendars/google/connect` anchor and `/api/calendars/google/select` post, the
+ * same distinction between a stored authorization and a verified availability read, and the same
+ * refusal to tell a dead grant apart from a check that could not run.
  *
- * What changed is the chrome and the ordering. The step title is the h1 and the panels carry no
- * competing heading band above them; the four explanatory sentences that used to change with the
- * state are the eye's; and the page's single filled button is Continue in the footer, which at
- * 390px is a sticky full-width bar. The manual receipt keeps its `data-slot` names because the
- * guard beside this file reads them, and the rule it guards -- every provider identifier demoted
- * into the fallback panel -- is a rule about this screen rather than about its markup.
+ * What is gone, since 2026-09-05, is the manual receipt panel. It asked a coach for a provider
+ * account reference, a provider calendar reference and an authorization receipt reference, which
+ * are SetterFi's identifiers for a calendar SetterFi connected by hand. A coach never holds any
+ * of those, so the panel was a support tool drawn on a coach's screen. `POST /api/onboarding/calendar`
+ * still records one; the person who does that is us, and the screen says so when the press is not
+ * available.
  */
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 
 import {
-  KitInput,
   TONE_LINE,
   TONE_MARK,
   TONE_TEXT,
   TONE_WASH,
   type Tone,
 } from "@/components/kit/atomics";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ShieldCheck } from "@/components/kit/icons";
 import {
   OnboardingStepShell,
-  STEP_FIELD_CLASS,
-  STEP_MONO_CLASS,
   STEP_PANEL_CLASS,
   STEP_PRIMARY_CLASS,
   STEP_SECONDARY_CLASS,
-  StepField,
   StepReadback,
   nextStepHref,
 } from "@/components/onboarding/step-shell";
@@ -64,29 +52,11 @@ type GoogleGrant = {
   reauthorizationRequired: boolean;
 };
 type PendingCalendar = { id: string; name: string; timeZone: string };
-type Form = {
-  provider: "ghl" | "google";
-  externalAccountReference: string;
-  externalCalendarId: string;
-  calendarName: string;
-  timezone: string;
-  authorizationReceipt: string;
-};
-
-const EMPTY: Form = {
-  provider: "ghl",
-  externalAccountReference: "",
-  externalCalendarId: "",
-  calendarName: "",
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-  authorizationReceipt: "",
-};
-
 /**
  * Coach-visible provider names. The stored value stays `ghl` because that is what the API and the
  * `calendar_connections` row expect; only the words a coach reads change.
  */
-const PROVIDER_LABELS: Readonly<Record<Form["provider"], string>> = {
+const PROVIDER_LABELS: Readonly<Record<Connection["provider"], string>> = {
   ghl: "SetterFi workspace calendar",
   google: "Google Calendar",
 };
@@ -121,8 +91,8 @@ export const CALENDAR_STEP_EYE_COPY =
   + "you did caused that, and reconnecting takes one press. Without a lasting authorization "
   + "SetterFi cannot keep the connection alive on its own, and without every calendar permission "
   + "it can neither read availability nor place a booking. A calendar with no time zone set can "
-  + "land a call at the wrong hour, which is why one is required. The manual fields are "
-  + "provider-issued identifiers for SetterFi to complete with you, never an OAuth access token.";
+  + "land a call at the wrong hour, which is why one is required. Where the connect button is not "
+  + "available yet, a person at SetterFi connects the calendar with you and records it.";
 
 /** The vocabulary's 32px state pill: a dot, then the word. Never pressable. */
 function StatePill({ label, tone }: { label: string; tone: Tone }) {
@@ -142,10 +112,8 @@ function StatePill({ label, tone }: { label: string; tone: Tone }) {
 }
 
 export function CalendarStep() {
-  const [form, setForm] = useState<Form>(EMPTY);
   const [connection, setConnection] = useState<Connection | null>(null);
-  const [status, setStatus] = useState("Loading saved calendar authorization…");
-  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState<"reading" | "read" | "failed">("reading");
   const [connectAvailable, setConnectAvailable] = useState(false);
   const [grant, setGrant] = useState<GoogleGrant | null>(null);
   const [pending, setPending] = useState<readonly PendingCalendar[]>([]);
@@ -173,26 +141,10 @@ export function CalendarStep() {
       if (outcome && outcome !== "ready" && outcome in CALLBACK_SENTENCES) {
         setConnectMessage(CALLBACK_SENTENCES[outcome]);
       }
-      if (payload.connection) {
-        const found = payload.connection;
-        setConnection(found);
-        setForm((current) => ({
-          ...current,
-          provider: found.provider,
-          externalAccountReference: found.externalAccountReference ?? "",
-          externalCalendarId: found.externalCalendarId,
-          calendarName: found.calendarName ?? "",
-        }));
-      }
-      setStatus(payload.connection
-        ? "Saved calendar authorization loaded."
-        : "Authorize a calendar with its provider before recording its receipt here.");
-    }).catch(() => setStatus("Calendar authorization could not be loaded."));
+      if (payload.connection) setConnection(payload.connection);
+      setLoaded("read");
+    }).catch(() => setLoaded("failed"));
   }, []);
-
-  function change(key: keyof Form, value: string) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
 
   /*
    * Two refusals that must never be told apart wrongly. A dead grant is gone and the way back is
@@ -229,27 +181,6 @@ export function CalendarStep() {
         : `SetterFi could not read availability from ${calendar?.name ?? "that calendar"} yet, so booking stays off. The authorization is saved and nothing needs redoing.`);
     } catch {
       setConnectMessage("The calendar could not be saved. Nothing was changed, so you can pick again.");
-    }
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setStatus("Recording the provider authorization receipt…");
-    try {
-      const response = await fetch("/api/onboarding/calendar", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...form, calendarName: form.calendarName || null }),
-      });
-      const payload = await response.json() as { connection?: Connection; audit?: { id: string } };
-      if (!response.ok || !payload.connection || !payload.audit?.id) throw new Error();
-      setConnection(payload.connection);
-      setStatus("Authorization receipt recorded and logged. Calendar availability has not been verified, so booking is not ready.");
-    } catch {
-      setStatus("Calendar authorization could not be recorded. Confirm that provider authorization has actually happened, then try again.");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -312,22 +243,45 @@ export function CalendarStep() {
           <div className="flex flex-col gap-[16px] px-[16px] py-[20px] sm:px-[20px]">
             <div className="grid gap-[16px] sm:grid-cols-2">
               <div className="min-w-0">
-                <p className="mb-[6px] text-[16px] leading-[1.4] text-[color:var(--muted)]">Provider</p>
+                <p className="mb-[6px] text-[16px] leading-[1.4] text-[color:var(--muted)]">Calendar</p>
                 <StepReadback absent={!connection}>
-                  {connection ? PROVIDER_LABELS[connection.provider] : "No provider connected yet"}
+                  {connection
+                    ? `${PROVIDER_LABELS[connection.provider]}${connection.calendarName ? `, ${connection.calendarName}` : ""}`
+                    : loaded === "reading"
+                      ? "Reading your calendar…"
+                      : loaded === "failed"
+                        ? "Your calendar could not be read just now"
+                        : "No calendar connected yet"}
                 </StepReadback>
               </div>
-              <div className="min-w-0">
-                <p className="mb-[6px] text-[16px] leading-[1.4] text-[color:var(--muted)]">Connected as</p>
-                <StepReadback absent={!grant?.connectedAs} mono={Boolean(grant?.connectedAs)}>
-                  {grant?.connectedAs ?? "No account recorded"}
-                </StepReadback>
-              </div>
+              {/* The account is said only when there is one: "No account recorded" was the
+                  screen stating an absence of its own bookkeeping, not of anything the coach owns. */}
+              {grant?.connectedAs ? (
+                <div className="min-w-0">
+                  <p className="mb-[6px] text-[16px] leading-[1.4] text-[color:var(--muted)]">Connected as</p>
+                  <StepReadback mono>{grant.connectedAs}</StepReadback>
+                </div>
+              ) : null}
             </div>
 
             {connectMessage ? (
               <p aria-live="polite" className="m-0 text-[16px] leading-[1.45] text-[color:var(--body)]">
                 {connectMessage}
+              </p>
+            ) : null}
+
+            {loaded === "read" && !connectAvailable && !verified ? (
+              /*
+                No button, no form. Where the press is not switched on for this workspace the
+                calendar is connected by a person at SetterFi, and the screen says so rather than
+                asking the coach for identifiers only we hold.
+              */
+              <p
+                className="m-0 border-t border-[var(--line-soft)] pt-[16px] text-[16px] leading-[1.5] text-[color:var(--body)]"
+                data-slot="rehaul-calendar-ask"
+              >
+                Connecting a calendar is not switched on for this workspace yet. Message us from the
+                bubble in the corner and a person will connect it with you; it takes one call.
               </p>
             ) : null}
 
@@ -411,123 +365,6 @@ export function CalendarStep() {
           </section>
         ) : null}
 
-        <section
-          aria-labelledby="onboarding-calendar-manual"
-          className={STEP_PANEL_CLASS}
-          data-slot="rehaul-calendar-manual"
-        >
-          <div className="flex min-h-[78px] flex-col justify-center border-b border-[var(--line)] px-[16px] py-[19px] sm:px-[20px]">
-            <span className="mb-[4px] block text-[14px] leading-[1.55] text-[color:var(--muted)]">
-              Only if the press did not work
-            </span>
-            <h2
-              className="m-0 text-[20px] leading-[1.2] font-[500] tracking-[-0.015em] text-[color:var(--ink)]"
-              id="onboarding-calendar-manual"
-            >
-              Record it by hand
-            </h2>
-          </div>
-
-          <form
-            className="flex flex-col gap-[16px] px-[16px] py-[20px] sm:px-[20px]"
-            onSubmit={(event) => void submit(event)}
-          >
-            <p aria-live="polite" className="m-0 text-[16px] leading-[1.4] text-[color:var(--muted)]">
-              {status}
-            </p>
-
-            <StepField id="calendar-provider" label="Calendar provider">
-              <Select
-                onValueChange={(value) => change("provider", value ?? form.provider)}
-                value={form.provider}
-              >
-                <SelectTrigger className={STEP_FIELD_CLASS} id="calendar-provider">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="start" alignItemWithTrigger={false}>
-                  <SelectItem value="ghl">{PROVIDER_LABELS.ghl}</SelectItem>
-                  <SelectItem value="google">{PROVIDER_LABELS.google}</SelectItem>
-                </SelectContent>
-              </Select>
-            </StepField>
-
-            <div className="grid gap-[16px] sm:grid-cols-2">
-              <StepField id="account-reference" label="Provider account reference">
-                <KitInput
-                  className={`text-[16px] ${STEP_MONO_CLASS}`}
-                  id="account-reference"
-                  onChange={(event) => change("externalAccountReference", event.target.value)}
-                  placeholder="Paste the reference"
-                  required
-                  shellClassName={STEP_FIELD_CLASS}
-                  value={form.externalAccountReference}
-                />
-              </StepField>
-
-              <StepField id="calendar-reference" label="Provider calendar reference">
-                <KitInput
-                  className={`text-[16px] ${STEP_MONO_CLASS}`}
-                  id="calendar-reference"
-                  onChange={(event) => change("externalCalendarId", event.target.value)}
-                  placeholder="Paste the reference"
-                  required
-                  shellClassName={STEP_FIELD_CLASS}
-                  value={form.externalCalendarId}
-                />
-              </StepField>
-
-              {/*
-                Optional, and load-bearing: the flag path once posted `calendarName: null` on every
-                manual receipt, so a calendar the coach had named came back nameless above.
-              */}
-              <StepField id="calendar-name" label="Calendar name (optional)">
-                <KitInput
-                  className="text-[16px]"
-                  id="calendar-name"
-                  onChange={(event) => change("calendarName", event.target.value)}
-                  shellClassName={STEP_FIELD_CLASS}
-                  value={form.calendarName}
-                />
-              </StepField>
-
-              <StepField id="calendar-timezone" label="Calendar timezone">
-                <KitInput
-                  className={`text-[16px] ${STEP_MONO_CLASS}`}
-                  id="calendar-timezone"
-                  onChange={(event) => change("timezone", event.target.value)}
-                  required
-                  shellClassName={STEP_FIELD_CLASS}
-                  value={form.timezone}
-                />
-              </StepField>
-            </div>
-
-            <StepField id="authorization-receipt" label="Authorization receipt reference">
-              <KitInput
-                className={`text-[16px] ${STEP_MONO_CLASS}`}
-                id="authorization-receipt"
-                onChange={(event) => change("authorizationReceipt", event.target.value)}
-                placeholder="Never an access token"
-                required
-                shellClassName={STEP_FIELD_CLASS}
-                value={form.authorizationReceipt}
-              />
-            </StepField>
-
-            <div className="flex flex-wrap items-center gap-[14px]">
-              <button className={STEP_SECONDARY_CLASS} disabled={saving} type="submit">
-                {saving ? "Recording…" : "Record the receipt"}
-              </button>
-              <span
-                aria-label={accountability.ariaLabel}
-                className="inline-flex items-center gap-[8px] text-[14px] text-[color:var(--muted)]"
-              >
-                <ShieldCheck aria-hidden className="size-[16px]" />
-                {accountability.microcopy}
-              </span>
-            </div>
-          </form>
-        </section>
       </div>
     </OnboardingStepShell>
   );
