@@ -6,10 +6,16 @@ import { CoachSupport } from "@/components/workspace/live/coach-support";
 import { phase8SupportLive } from "@/lib/env-contract";
 import { loadSupportSession } from "@/lib/support/service";
 
-export const metadata: Metadata = { title: "Help and support" };
+export const metadata: Metadata = { title: "Guides" };
 export const dynamic = "force-dynamic";
 
-const CRUMBS = [{ label: "Coach" }, { label: "Help" }] as const;
+/*
+ * The route keeps its path and loses its name. `/coach/help` is what the support bubble's "Read
+ * the guides" points at and what `workspace-navigation.test.ts` checks stays reachable, so moving
+ * it would break both for a cosmetic gain; what the page holds is the guides and the record of
+ * what the coach has asked, which is what the crumb says.
+ */
+const CRUMBS = [{ label: "Coach" }, { label: "Guides" }] as const;
 
 function CoachHelpShell({ enabled }: { enabled: boolean }) {
   return (

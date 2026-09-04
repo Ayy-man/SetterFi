@@ -35,6 +35,7 @@ import {
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
+import { displayName, displayText } from "@/lib/format/display-name";
 import { cn } from "@/lib/utils";
 import { useWorkspaceEnv } from "@/components/workspace/workspace-env";
 import type { ReactNode } from "react";
@@ -167,6 +168,67 @@ const THEME_CHOICES: ReadonlyArray<{ value: ThemePreference; label: string }> = 
   { value: "dark", label: "Dark" },
   { value: "system", label: "System" },
 ];
+
+/*
+ * The coach's appearance control: `AccountMenu.dc.html` draws a 12px well of 4px padding holding
+ * three 44px segments, the live one washed and the other two bare.
+ *
+ * Every declaration carries `!`. `coach.css` styles a coach menu's radio items at
+ * `[data-shell-role="coach"].coach-account-menu :where([data-slot="dropdown-menu-radio-item"])`,
+ * which is two classes and outranks a bare Tailwind utility, so without the flag the segments
+ * would silently render as the 48px stacked rows that rule is for. The stylesheet is frozen for
+ * this rebuild and is right about a menu row; this is not a menu row.
+ */
+const APPEARANCE_TROUGH_CLASS =
+  "mt-[4px] flex gap-[4px] rounded-[12px] border border-[var(--line)] bg-[var(--well)] p-[4px]";
+const APPEARANCE_SEGMENT_CLASS =
+  "min-h-[44px]! flex-1 justify-center rounded-[9px]! border border-transparent px-[10px]! "
+  + "text-[16px]! font-medium! whitespace-nowrap "
+  /* The kit hangs a check glyph off the right edge of a radio item. In a stacked list that is the
+     state; in a segmented control the washed cell already is, and the glyph would sit on top of
+     the next segment's label. */
+  + "[&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden";
+const APPEARANCE_SEGMENT_ON_CLASS =
+  "border-[var(--accent-edge)]! bg-[var(--accent-wash-strong)] text-[var(--ink)]! font-semibold!";
+const APPEARANCE_SEGMENT_OFF_CLASS = "text-[var(--muted)]!";
+
+/**
+ * The three appearance choices, drawn as a segmented control for the coach and as the console's
+ * stacked radio rows everywhere else.
+ *
+ * Split out of the menu body because the coach shape needs a wrapper element around the three
+ * items and the console shape must not have one. The items stay `DropdownMenuRadioItem`s in both,
+ * so the group keeps its roving focus, its arrow keys and its `aria-checked` either way -- the
+ * wrapper is a box, not a new control.
+ */
+function ThemeChoices({
+  isCoach,
+  preference,
+}: {
+  isCoach: boolean;
+  preference: ThemePreference;
+}) {
+  const items = THEME_CHOICES.map((choice) => (
+    <DropdownMenuRadioItem
+      className={
+        isCoach
+          ? cn(
+            APPEARANCE_SEGMENT_CLASS,
+            preference === choice.value
+              ? APPEARANCE_SEGMENT_ON_CLASS
+              : APPEARANCE_SEGMENT_OFF_CLASS,
+          )
+          : undefined
+      }
+      key={choice.value}
+      value={choice.value}
+    >
+      {choice.label}
+    </DropdownMenuRadioItem>
+  ));
+  if (!isCoach) return <>{items}</>;
+  return <div className={APPEARANCE_TROUGH_CLASS}>{items}</div>;
+}
 
 /**
  * The account sheet, loaded only where it is rendered.
@@ -558,18 +620,23 @@ export function AppTopbar({
         {/*
           The account chip.
 
-          For a coach or an owner it opens the 520px account sheet instead of the eleven-row
-          dropdown: the same sections, over the page the reader is already on, rather than six
-          separate routes out of it. The chip itself is the same control either way -- same face,
-          same contents, same accessible name -- because both share `accountChipClassName` and
-          `accountChipContent` above.
+          The owner console opens the 520px account sheet, unchanged: the same sections, over the
+          page the reader is already on, and it carries the account terms registry and the operator
+          runbooks that only a platform operator may see.
 
-          Affiliate is excluded rather than folded into the owner variant. The canvas draws two
-          account panels, `OwnerSettings` and `CoachSettings`, and the owner one carries the
-          account terms registry and the operator runbooks -- platform sections an affiliate must
-          not be handed. With no artboard of its own, the affiliate portal keeps the menu it has.
+          The coach opens a menu again, and that is a revision rather than a regression. The sheet
+          was the coach's chip too until `design/coach/AccountMenu.dc.html` settled the shape: a
+          340px panel of three destinations, an appearance control, and Sign out. A coach has five
+          screens; a sheet with sections in it is the console's answer to nineteen. The sheet's
+          coach variant stays reachable in its own right at `/account`, so nothing it holds became
+          unreachable when the chip stopped opening it.
+
+          Affiliate keeps the menu it has, with no artboard of its own to move it.
+
+          The chip itself is the same control in all three cases -- same face, same contents, same
+          accessible name -- because they share `accountChipClassName` and `accountChipContent`.
         */}
-        {role !== "affiliate" ? (
+        {role === "admin" ? (
           <>
             <Button
               aria-label={ROLE_ACCOUNT_LABELS[role]}
@@ -583,7 +650,7 @@ export function AppTopbar({
             <AccountSheet
               onOpenChange={setAccountSheetOpen}
               open={accountSheetOpen}
-              variant={isCoach ? "coach" : "owner"}
+              variant="owner"
             />
           </>
         ) : (
@@ -655,7 +722,14 @@ export function AppTopbar({
                           isCoach && "coach-account-menu__name",
                         )}
                       >
-                        {account.fullName}
+                        {/*
+                          The seeders staple "(demo)" onto every name they write, and the coach
+                          menu is a place a person reads their own name. The console keeps the raw
+                          string because the pill beside it is what says "demo" there; the coach
+                          side has no such pill, so the marker would be the only demo signal on the
+                          screen and it would be sitting inside the account's own name.
+                        */}
+                        {isCoach ? displayName(account.fullName) : account.fullName}
                       </span>
                     ) : null}
                     {account.business ? (
@@ -665,7 +739,7 @@ export function AppTopbar({
                           isCoach && "coach-account-menu__business",
                         )}
                       >
-                        {account.business}
+                        {isCoach ? displayText(account.business) : account.business}
                       </span>
                     ) : null}
                   </span>
@@ -687,19 +761,36 @@ export function AppTopbar({
                   Billing
                 </DropdownMenuItem>
               ) : null}
+              {/*
+                One row, two words, because the coach page it opens is no longer only about
+                notifications. `AccountMenu.dc.html` names it Settings and `Notifications.dc.html`
+                titles the page Settings, so the row and its destination now say the same word.
+                Every other role still reads "Notification settings", which is what /admin/alerts
+                is and all it is.
+              */}
               {notificationSettingsHref ? (
                 <DropdownMenuItem render={<Link href={notificationSettingsHref} />}>
                   <Settings aria-hidden strokeWidth={1.75} />
-                  Notification settings
+                  {isCoach ? "Settings" : "Notification settings"}
                 </DropdownMenuItem>
               ) : null}
-              {helpHref ? (
+              {/*
+                Help is the coach's one demoted row, and the support bubble took it: the bubble's
+                "Read the guides" is on every coach page, which is a better entry point than a row
+                behind a chip. Every other role that has a help surface still gets the row here.
+              */}
+              {helpHref && !isCoach ? (
                 <DropdownMenuItem render={<Link href={helpHref} />}>
                   <QuestionMark aria-hidden strokeWidth={1.75} />
                   Help
                 </DropdownMenuItem>
               ) : null}
-              {mode === "supabase" ? (
+              {/*
+                Account security is not on the coach artboard, and leaving it in was the difference
+                between a menu of three destinations and a menu of five. Password and session
+                management still live at /account/security, reached from the account page itself.
+              */}
+              {isCoach ? null : mode === "supabase" ? (
                 <DropdownMenuItem render={<Link href="/account/security" />}>
                   <UserCircle aria-hidden strokeWidth={1.75} />
                   Account security
@@ -713,22 +804,37 @@ export function AppTopbar({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuRadioGroup
+              className={isCoach ? "flex flex-col" : undefined}
               onValueChange={(value) => chooseTheme(value as ThemePreference)}
               value={preference ?? "system"}
             >
+              {/*
+                "Appearance" for the coach, "Theme" everywhere else, and the glyph goes with the
+                word. The artboard labels the group by what it changes rather than by the name of
+                the setting, and it draws no sun or moon beside it -- the three segments below
+                already say which of them is on, so a glyph mirroring the resolved theme would be
+                the same fact printed twice.
+              */}
               <DropdownMenuLabel className="flex items-center gap-[var(--s-2)] text-[var(--t-badge)] text-[var(--muted)]">
-                {theme === "dark" ? (
+                {isCoach ? null : theme === "dark" ? (
                   <Moon aria-hidden className="size-[var(--s-4)]" strokeWidth={1.75} />
                 ) : (
                   <Sun aria-hidden className="size-[var(--s-4)]" strokeWidth={1.75} />
                 )}
-                Theme
+                {isCoach ? "Appearance" : "Theme"}
               </DropdownMenuLabel>
-              {THEME_CHOICES.map((choice) => (
-                <DropdownMenuRadioItem key={choice.value} value={choice.value}>
-                  {choice.label}
-                </DropdownMenuRadioItem>
-              ))}
+              {/*
+                The coach's three choices are a segmented control rather than three stacked rows:
+                one line that says which of three the surface is on, which is what
+                `AccountMenu.dc.html` draws and what keeps a five-screen menu from spending three
+                48px rows on a preference nobody opens the menu for.
+
+                The trough is a plain wrapper and the segments are still `DropdownMenuRadioItem`s,
+                so the group keeps its roving focus, its arrow keys and its `aria-checked`. Every
+                declaration on the segments carries `!` because `coach.css` styles a coach menu's
+                radio items as 48px rows at two-class specificity, which outranks a bare utility.
+              */}
+              <ThemeChoices isCoach={isCoach} preference={preference ?? "system"} />
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             {mode === "supabase" ? (

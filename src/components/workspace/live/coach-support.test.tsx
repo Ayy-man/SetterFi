@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CoachSupport } from "@/components/workspace/live/coach-support";
@@ -12,7 +11,7 @@ vi.mock("next/navigation", () => ({
 const thread: CoachSupportThreadRead = {
   id: "thread-one",
   tenantId: "tenant-one",
-  subject: "Calendar setup question",
+  subject: "Calendar setup question (demo)",
   status: "open",
   assignedTo: null,
   isTest: false,
@@ -21,211 +20,112 @@ const thread: CoachSupportThreadRead = {
   messages: [{
     id: "message-one",
     authorId: "author-one",
-    authorName: "Aisha Bello",
+    authorName: "Aisha Bello (demo)",
     body: "Can you help me check my booking hours?",
     isTest: false,
     createdAt: "2026-08-24T10:00:00.000Z",
   }],
 };
 
-function jsonResponse(value: unknown) {
+function jsonResponse(value: unknown, status = 200) {
   return new Response(JSON.stringify(value), {
     headers: { "Content-Type": "application/json" },
-    status: 200,
+    status,
   });
 }
 
 afterEach(() => {
   vi.unstubAllGlobals();
-});
-
-describe("CoachSupport", () => {
-  it("opens on Support and renders a saved message without a table above it", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
-
-    render(<CoachSupport enabled />);
-
-    expect(screen.getByRole("tab", { name: "Support" })).toHaveAttribute("aria-selected", "true");
-    const messageList = await screen.findByRole("feed", { name: "Support messages" });
-    expect(screen.getByText("Can you help me check my booking hours?")).toBeVisible();
-    expect(messageList).toContainElement(screen.getByText("Can you help me check my booking hours?"));
-    expect(document.querySelector("table")).not.toBeInTheDocument();
-  });
-
-  it("renders a non-error empty state on the default tab when there are no requests", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [] })));
-
-    render(<CoachSupport enabled />);
-
-    expect(await screen.findByRole("heading", { name: "No support requests" })).toBeVisible();
-    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
-    expect(screen.getByRole("tab", { name: "Support" })).toHaveAttribute("aria-selected", "true");
-  });
+  vi.restoreAllMocks();
 });
 
 /**
- * Help is a reading surface with one verb on it. These pin the two things the redesign claims:
- * the page spends exactly one accent fill and it follows the live action, and prose stays inside
- * the Line Length rule instead of running the width of the pane.
+ * The Help page after spec section 2.9 demoted it. The audit measured what keeping a help centre
+ * beside the bubble cost: two floating circles 250px apart in one corner, three support entry
+ * points on a support page, two accent-filled primary actions in view. So the page keeps the
+ * guides and the record, and gives up every way of starting or continuing a conversation.
  */
-describe("CoachSupport at one pane per screen", () => {
-  /**
-   * At 390px the request list and the conversation stacked on one page, so opening a request meant
-   * scrolling past the whole composer and the list to reach it, with nothing to get back with.
-   * The wide layout still shows both columns; only the narrow one hides a pane, so these assert
-   * the container-query class that does the hiding rather than a viewport width jsdom has no
-   * layout for.
-   */
-  function panes(container: HTMLElement) {
-    const list = container.querySelector("#new-support-request")?.closest("div.flex");
-    const detail = list?.nextElementSibling;
-    return { detail: detail as HTMLElement, list: list as HTMLElement };
-  }
-
-  it("opens on the request list with neither pane hidden until a request is picked", async () => {
+describe("CoachSupport", () => {
+  it("offers no way to write, since the bubble is the one place to do that", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
-
     const { container } = render(<CoachSupport enabled />);
-    await screen.findByRole("feed", { name: "Support messages" });
 
-    const { detail, list } = panes(container);
-    expect(list.className).not.toContain("@max-4xl/help:hidden");
-    expect(detail.className).toContain("@max-4xl/help:hidden");
+    await screen.findByText("Can you help me check my booking hours?");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Send|Create|Reply/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    // And therefore no accent fill either: the page has no verb left to spend one on.
+    expect(container.querySelectorAll('[class*="--accent-fill"]')).toHaveLength(0);
   });
 
-  it("shows the conversation alone with a back control once a request is picked", async () => {
-    const user = userEvent.setup();
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
-
-    const { container } = render(<CoachSupport enabled />);
-    await screen.findByRole("feed", { name: "Support messages" });
-
-    await user.click(screen.getByRole("button", { name: /Calendar setup question/ }));
-
-    const opened = panes(container);
-    expect(opened.list.className).toContain("@max-4xl/help:hidden");
-    expect(opened.detail.className).not.toContain("@max-4xl/help:hidden");
-
-    // The back control is the narrow layout's only way out, and the wide layout hides it.
-    const back = screen.getByRole("button", { name: "Back to requests" });
-    expect(back.className).toContain("@4xl/help:hidden");
-
-    await user.click(back);
-    const closed = panes(container);
-    expect(closed.list.className).not.toContain("@max-4xl/help:hidden");
-    expect(closed.detail.className).toContain("@max-4xl/help:hidden");
-  });
-});
-
-describe("CoachSupport reply append", () => {
   /**
-   * The coach composer must survive a refused write the same way the admin one does: the draft
-   * stays put, the refusal is stated, and nothing rejects into the browser.
+   * There is no coach guide catalogue anywhere in the tree -- `lib/admin-help-guides.ts` is
+   * operator runbooks whose own docblock says a coach must never see them. The absence is stated
+   * in words where the list would be, rather than filled with headings nobody has written copy
+   * behind.
    */
-  it("keeps the draft and reports a refused reply without an unhandled rejection", async () => {
-    const user = userEvent.setup();
-    const rejections: unknown[] = [];
-    const onRejection = (reason: unknown) => rejections.push(reason);
-    process.on("unhandledRejection", onRejection);
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-        if ((init?.method ?? "GET") === "GET") return jsonResponse({ threads: [thread] });
-        return new Response(JSON.stringify({ error: "Refused." }), {
-          headers: { "Content-Type": "application/json" },
-          status: 500,
-        });
-      }),
-    );
-
-    try {
-      render(<CoachSupport enabled />);
-
-      const draft = await screen.findByPlaceholderText("Write a reply");
-      await user.type(draft, "Any update on this?");
-      await user.click(screen.getByRole("button", { name: "Send reply" }));
-
-      const alert = await screen.findByRole("alert");
-      expect(alert).toHaveTextContent(
-        "The reply could not be confirmed. The thread is unchanged.",
-      );
-      expect(draft).toHaveValue("Any update on this?");
-
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(rejections).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onRejection);
-    }
-  });
-});
-
-describe("CoachSupport, redesign invariants", () => {
-  it("spends exactly one accent fill, on the reply when a request is open", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
-
-    render(<CoachSupport enabled />);
-
-    await screen.findByRole("feed", { name: "Support messages" });
-    const fills = document.querySelectorAll('[class*="--accent-fill"]');
-    expect(fills, "one accent fill on the page, never two and never zero").toHaveLength(1);
-    expect(fills[0].textContent).toBe("Send reply");
-    expect(screen.getByRole("button", { name: "Create request" }).className)
-      .not.toContain("--accent-fill");
-  });
-
-  it("moves the fill to Create request when there is nothing to reply to", async () => {
+  it("states that the guides are not written rather than drawing an empty list", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [] })));
-
     render(<CoachSupport enabled />);
 
-    await screen.findByRole("heading", { name: "No support requests" });
-    const fills = document.querySelectorAll('[class*="--accent-fill"]');
-    expect(fills).toHaveLength(1);
-    expect(fills[0].textContent).toBe("Create request");
+    const guides = screen
+      .getAllByRole("heading", { name: "Guides" })
+      .map((heading) => heading.closest("section"))
+      .find(Boolean) as HTMLElement;
+    expect(within(guides).getByText("No guides have been written yet.")).toBeVisible();
+    expect(within(guides).queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("caps every run of prose at a readable measure and never nests a card", async () => {
+  it("lists what the coach has already asked, read only", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
-
     render(<CoachSupport enabled />);
 
-    const body = await screen.findByText("Can you help me check my booking hours?");
-    expect(body.className, "message bodies stay inside the Line Length rule").toContain("max-w-[var(--measure-prose)]");
-
-    /*
-     * The card shape moved from `Surface` to `DeckPanel` in the coach port, and the nesting check
-     * moved with it. Without the length assertion first this loop would have gone vacuous the
-     * moment the selector stopped matching anything -- which is exactly what happened to the
-     * `.surface-card` version of it, and why the count is asserted before the nesting is.
-     */
-    const panels = document.querySelectorAll(".coach-panel");
-    expect(panels.length, "the page is built out of deck panels").toBeGreaterThan(0);
-    for (const panel of panels) {
-      expect(panel.querySelector(".coach-panel")).toBeNull();
-    }
+    const panel = screen
+      .getByRole("heading", { name: "What you have asked us" })
+      .closest("section") as HTMLElement;
+    await waitFor(() => expect(within(panel).getByText("Calendar setup question")).toBeVisible());
+    expect(within(panel).getByText("Can you help me check my booking hours?")).toBeVisible();
+    expect(within(panel).getByText("Open")).toBeVisible();
   });
 
   /**
-   * The layout failure this port exists to avoid, asserted as placement rather than as pixels.
-   *
-   * The pre-port row put a truncating 13px subject and a `shrink-0` mono timestamp on one flex
-   * line inside a narrow column -- the same shape that rendered the inbox's lead names as "Jo…"
-   * and "M…". At coach scale the timestamp is wider still. `truncate` is invisible to jsdom, so
-   * nothing would go red; what a test can see is whether the clock is on the subject's line.
+   * The audit counted `(demo)` six times on this page: the sidebar item, the thread title, both
+   * author names and both message bodies. `displayName` covers names; a subject and a message body
+   * are free text and take `displayText`.
    */
-  it("keeps a request's timestamp off the line its subject is on", async () => {
+  it("strips the seeders' marker from subjects, authors and bodies", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [thread] })));
-
     render(<CoachSupport enabled />);
 
-    const row = await screen.findByRole("button", { name: /Calendar setup question/u });
-    const subject = row.querySelector("[data-request-subject]");
-    const meta = row.querySelector("[data-request-meta]");
-    expect(subject, "the row still names the request").toHaveTextContent("Calendar setup question");
-    expect(meta?.querySelector("time"), "the row still dates the request").not.toBeNull();
-    expect(subject!.contains(meta!.querySelector("time")!)).toBe(false);
-    expect(subject!.className, "a subject that truncates is a subject a coach cannot read")
-      .not.toContain("truncate");
+    await screen.findByText("Calendar setup question");
+    expect(screen.getByText(/Aisha Bello,/u)).toBeVisible();
+    expect(screen.queryByText(/\(demo\)/u)).not.toBeInTheDocument();
+  });
+
+  it("says the read failed rather than showing an empty record", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({}, 503)));
+    render(<CoachSupport enabled />);
+
+    expect(await screen.findByText("Your requests could not be read just now.")).toBeVisible();
+    expect(screen.queryByText("You have not written to us yet.")).not.toBeInTheDocument();
+  });
+
+  it("says support messaging is off rather than reading when it is disabled", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CoachSupport enabled={false} />);
+
+    expect(screen.getByText(/Support messaging is not active/u)).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("titles the page at the coach scale and offers a way back", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ threads: [] })));
+    render(<CoachSupport enabled />);
+
+    const title = screen.getByRole("heading", { level: 1, name: "Guides" });
+    expect(title.className).toContain("coach-page-title");
+    expect(screen.getByRole("link", { name: /Back to Home/u }))
+      .toHaveAttribute("href", "/coach/home");
   });
 });

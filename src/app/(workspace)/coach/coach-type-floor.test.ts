@@ -243,7 +243,6 @@ const COACH_ONLY_TYPE_DEBT: Record<string, number> = {
   // an outstanding violation nobody can find. The `offer-editor-*.tsx` shells went the same way
   // once the rehaul's own agent screen took over what they edited.
   "src/components/workspace/live/coach-contacts.tsx": 2,
-  "src/components/workspace/live/leads-surface.tsx": 1,
 };
 
 describe("the coach's components hold the same floor as the coach's stylesheet", () => {
@@ -445,9 +444,14 @@ describe("the coach's components hold the same floor as the coach's stylesheet",
    * `COACH_SURFACE_TITLE_CLASS`. Each must still read it: a surface that stops is either dropping
    * the role or respelling it, and both are worth a failure.
    */
+  /*
+   * `coach-support-bubble.tsx` held a row here until the 2026-09-04 rebuild, citing
+   * `CoachSupportBubble.dc.html:203` as a 20px/600 header line. The current artboard has no such
+   * line: the panel is headed by the name of the person answering, at 17px/500 over a 14px status,
+   * which is a person rather than a surface. So the role left the surface, which is the first of
+   * the two outcomes this register's own failure message names, and the row went with it.
+   */
   const ATTESTED_SURFACE_TITLES: Record<string, string> = {
-    "src/components/workspace/live/coach-support-bubble.tsx":
-      "CoachSupportBubble.dc.html:203 -- the popover's header line, 20px/600 with -0.015em",
     "src/components/workspace/live/escalation-panel.tsx":
       "an instance of CoachSupportBubble.dc.html:203's shape -- SurfaceHeader's band with no "
         + "overline passed, a title and a --muted sub-line -- rather than an artboard of its own",

@@ -1,13 +1,7 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { CoachTips, type CoachTraining } from "@/components/workspace/live/coach-tips";
-
-// `DataState` calls `useRouter` for its retry affordance, which jsdom has no app router for.
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
-}));
 
 const TRAININGS: readonly CoachTraining[] = [
   {
@@ -17,9 +11,6 @@ const TRAININGS: readonly CoachTraining[] = [
     duration: "8:14",
     sentence: "Your agent will only say a number you have written down yourself.",
     href: "/coach/tips/prices",
-    addedAt: "2026-08-26T00:00:00.000Z",
-    featured: true,
-    related: { label: "Open my offer sheet", href: "/coach/agent" },
   },
   {
     id: "guarantee",
@@ -46,15 +37,29 @@ describe("CoachTips", () => {
    * placeholder catalogue left in the prop default, or a search box implying content the reader
    * has simply failed to find.
    */
-  it("renders the real page head and an honest empty state with no data", () => {
+  it("renders the real page head and states the absence with no data", () => {
     render(<CoachTips />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Tips and trainings" })).toBeVisible();
-    expect(screen.getByText(/none of them assumes you know what an API is/u)).toBeVisible();
-    expect(screen.getByRole("heading", { name: "No trainings have been published yet" }))
-      .toBeVisible();
+    expect(screen.getByText(/None of them runs longer than nine minutes/u)).toBeVisible();
+    expect(screen.getByText("No trainings have been published yet.")).toBeVisible();
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Watch/u })).not.toBeInTheDocument();
+  });
+
+  /**
+   * The absence is a sentence at the coach's own scale, not a dashed box at the scale of a form
+   * field. The audit measured the old one at 13px with 450px of grey under it, on a page whose
+   * only content was that sentence.
+   */
+  it("states the absence at the coach scale rather than at the console's", () => {
+    render(<CoachTips />);
+
+    const absence = screen.getByText("No trainings have been published yet.");
+    expect(absence.className).toContain("text-[20px]");
+    expect(absence.className).toContain("var(--muted)");
+    // Inside a real panel, so the absence fills the slot the content would have filled.
+    expect(absence.closest(".coach-panel")).not.toBeNull();
   });
 
   /*
@@ -65,8 +70,8 @@ describe("CoachTips", () => {
   it("offers a way back to a page, since neither route in is one", () => {
     render(<CoachTips />);
 
-    const back = screen.getByRole("link", { name: /Back to Home/u });
-    expect(back).toHaveAttribute("href", "/coach/home");
+    expect(screen.getByRole("link", { name: /Back to Home/u }))
+      .toHaveAttribute("href", "/coach/home");
   });
 
   /**
@@ -74,21 +79,27 @@ describe("CoachTips", () => {
    * ahead of its content is that the day the catalogue lands the work is passing a prop.
    */
   it("draws the artboard's card shape from the trainings prop", () => {
-    render(<CoachTips trainings={TRAININGS} />);
+    const { container } = render(<CoachTips trainings={TRAININGS} />);
 
-    const featured = screen.getByRole("heading", { name: "Writing prices your agent can quote" });
-    expect(featured).toBeVisible();
-    expect(screen.getByText(/Start here · added/u)).toBeVisible();
-    expect(screen.getByRole("link", { name: /Watch now/u }))
-      .toHaveAttribute("href", "/coach/tips/prices");
-    expect(screen.getByRole("link", { name: "Open my offer sheet" }))
-      .toHaveAttribute("href", "/coach/agent");
-
+    expect(container.querySelectorAll(".coach-panel")).toHaveLength(TRAININGS.length);
     // Every card carries its category eyebrow, its title, its duration and its sentence.
     expect(screen.getByText("Objections")).toBeVisible();
     expect(screen.getByRole("heading", { name: "When a lead asks for a guarantee" })).toBeVisible();
     expect(screen.getByText("5:02")).toBeVisible();
     expect(screen.getByText("Why your agent refuses to promise an approval.")).toBeVisible();
+  });
+
+  /**
+   * The duration rides the header band's `meta` slot rather than the card body. Three cards in a
+   * row then show three lengths on one line, instead of at three different heights, because the
+   * sentences under them are not the same length.
+   */
+  it("puts each duration in the band beside the name, not in the body", () => {
+    render(<CoachTips trainings={TRAININGS} />);
+
+    const duration = screen.getByText("5:02");
+    expect(duration.closest(".coach-panel__header")).not.toBeNull();
+    expect(duration.className).toContain("font-mono");
   });
 
   /**
@@ -99,29 +110,12 @@ describe("CoachTips", () => {
   it("offers no watch link for a training that is not playable yet", () => {
     render(<CoachTips trainings={TRAININGS} />);
 
-    expect(screen.getByRole("link", { name: "Watch When a lead asks for a guarantee" }))
-      .toBeVisible();
-    expect(screen.queryByRole("link", { name: "Watch What happens during carrier review" }))
-      .not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "What happens during carrier review" }))
-      .toBeVisible();
-  });
-
-  it("filters the grid from the search field and says so when nothing matches", async () => {
-    const user = userEvent.setup();
-    render(<CoachTips trainings={TRAININGS} />);
-
-    const search = screen.getByRole("searchbox", { name: "Search the trainings" });
-    await user.type(search, "guarantee");
-
-    expect(screen.getByRole("heading", { name: "When a lead asks for a guarantee" })).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "What happens during carrier review" }))
-      .not.toBeInTheDocument();
-
-    await user.clear(search);
-    await user.type(search, "zzzz");
-
-    expect(screen.getByRole("heading", { name: "Nothing matches that search" })).toBeVisible();
+    const carrier = screen
+      .getByRole("heading", { name: "What happens during carrier review" })
+      .closest("section") as HTMLElement;
+    expect(carrier.querySelector('[data-slot="training-watch"]')).toBeNull();
+    expect(carrier).toHaveTextContent("This one is not published yet.");
+    expect(screen.getAllByRole("link", { name: /Watch now/u })).toHaveLength(2);
   });
 
   /**
@@ -137,45 +131,19 @@ describe("CoachTips", () => {
   });
 
   /**
-   * The drench budget: `docs/REDESIGN-CANVAS.md` allows at most two drenched panels and nothing
-   * else filling. The artboard's saturated thumbnail is a block inside the featured card, not the
-   * card itself, so no panel spends the budget and the screen's only accent fill is Watch now.
+   * One filled control in view, and it goes to the first playable training rather than to a card
+   * chosen for it. The previous build led with a wide drenched card carrying the fill, which was a
+   * hero asserting an editorial ranking nobody had made; the current artboard draws six equal
+   * cards and nothing saturated at all.
    */
-  it("saturates the featured thumbnail without drenching a panel", () => {
+  it("spends one accent fill, on the first playable card, and drenches nothing", () => {
     const { container } = render(<CoachTips trainings={TRAININGS} />);
 
-    expect(container.querySelectorAll(".coach-panel")).toHaveLength(3);
     expect(container.querySelectorAll(".coach-panel[data-drench]")).toHaveLength(0);
-    expect(container.querySelectorAll('[class*="coach-drench-info"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[class*="coach-drench"]')).toHaveLength(0);
 
     const fills = container.querySelectorAll('[class*="--accent-fill"]');
     expect(fills, "one accent fill on the page, never two and never zero").toHaveLength(1);
-    expect(fills[0].textContent).toContain("Watch now");
-  });
-});
-
-/*
- * The featured training's card, which is the canvas's one banded-and-large panel.
- *
- * `CoachTips.dc.html:123` sets its name at 26px/500/-0.018em inside a real eyebrow+name band at
- * `padding: 17px 26px`, and draws the card itself at `24px 24px 17px 17px` -- the same radius as
- * the six cards under it. The code had exactly the opposite pair: `hero`, which only moves the
- * radius to 30px, and the ordinary 20px name. So both halves are asserted here, because fixing
- * either one alone leaves the card wrong in the other direction.
- */
-describe("CoachTips featured card", () => {
-  it("names the featured training at the artboard's hero size without enlarging its radius", () => {
-    render(<CoachTips trainings={TRAININGS} />);
-
-    const heading = screen.getByRole("heading", { name: "Writing prices your agent can quote" });
-    // Positive control: this is the featured card and not one of the six in the grid below it,
-    // which is what the eyebrow's "Start here" category and the card's own section identify.
-    const card = heading.closest("section") as HTMLElement;
-    expect(card).toHaveTextContent("Start here");
-
-    // The band is still there -- this is the banded shape at a hero size, not the title-led one.
-    expect(card.querySelector(".coach-panel__header")).not.toBeNull();
-    expect(heading.className).toContain("text-[26px]!");
-    expect(card).not.toHaveAttribute("data-hero");
+    expect(fills[0]!.closest("section")).toHaveTextContent("Writing prices your agent can quote");
   });
 });
