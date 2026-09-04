@@ -4,18 +4,14 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/kit/app-shell";
 import { DataState } from "@/components/kit/data-state";
-import type {
-  AppointmentEvidenceByContact,
-  NextSetterTouchByContact,
-} from "@/components/workspace/live/leads-surface";
 import { CoachLeads } from "@/components/workspace/rehaul/coach-leads";
+import type { AppointmentEvidenceByContact } from "@/components/workspace/rehaul/coach-leads-model";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
 import type { WorkspaceNavCounts } from "@/lib/workspace-navigation";
-import { phase1Live } from "@/lib/env-contract";
+import { phase1Live, pipelineWriteLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import { listContacts } from "@/lib/repositories/contacts";
-import { listFollowups } from "@/lib/repositories/followups";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Leads" };
@@ -23,6 +19,14 @@ export const dynamic = "force-dynamic";
 
 const CRUMBS = [{ label: "Workspace" }, { label: "Leads" }] as const;
 
+/**
+ * One screen, two routes.
+ *
+ * `SIMPLIFICATION-SPEC` 2.3 merges Contacts and Pipeline into a single Leads screen with a
+ * List / Board switch, and the two routes survive only as the two doors into it: this one opens
+ * on the list, the switch writes `?view=` from there, and `workspace-navigation.ts` already
+ * matches both paths to the one Leads pill. Nothing on the other route is mounted any more.
+ */
 function LeadsShell({
   children,
   navCounts,
@@ -81,7 +85,7 @@ async function liveCoachContext() {
   };
 }
 
-/** Every lead, not the first page: views and local exports must cover the complete dataset. */
+/** Every lead, not the first page: the search, the board and the export all cover the whole set. */
 async function listAllContacts(tenantId: string) {
   const items: Awaited<ReturnType<typeof listContacts>>["items"] = [];
   let cursor: Awaited<ReturnType<typeof listContacts>>["nextCursor"] = null;
@@ -111,8 +115,8 @@ async function loadAppointmentEvidence(
     .eq("tenant_id", tenantId)
     .in("contact_id", [...contactIds])
     .order("start_at", { ascending: false });
-  // A failed read is not the same claim as zero receipts: null tells the surface to pause
-  // evidence-dependent moves honestly instead of refusing them for the wrong reason.
+  // A failed read is not the same claim as zero receipts: null tells the surface to pause the
+  // moves that need a receipt honestly, instead of refusing them for the wrong reason.
   if (error) return null;
 
   const evidence: AppointmentEvidenceByContact = {};
@@ -128,49 +132,12 @@ async function loadAppointmentEvidence(
   return evidence;
 }
 
-/**
- * The setter's next automated touch per contact, for the call-back list.
- *
- * `followups` is keyed to a conversation and `listFollowups` already resolves the contact behind
- * it, so this is a fold rather than a query: the earliest `scheduled_at` per contact among the
- * rows still standing. A paused row is not a scheduled touch, and a sent or canceled one is
- * history.
- *
- * A truncated read returns `null`, not a partial map. Past the limit every missing contact would
- * render "No automated touch scheduled", which is a claim the read never established, and a false
- * absence on a list a coach works down is worse than saying nothing at all.
- */
-async function loadNextSetterTouch(
-  tenantId: string,
-  contactIds: readonly string[],
-): Promise<NextSetterTouchByContact | null> {
-  if (!contactIds.length) return {};
-  const limit = 500;
-  try {
-    const rows = await listFollowups(tenantId, { limit });
-    if (rows.length >= limit) return null;
-    const wanted = new Set(contactIds);
-    const next: Record<string, string> = {};
-    for (const row of rows) {
-      if (row.status !== "scheduled" || row.pausedAt !== null) continue;
-      if (!wanted.has(row.contactId)) continue;
-      const current = next[row.contactId];
-      if (!current || Date.parse(row.scheduledAt) < Date.parse(current)) {
-        next[row.contactId] = row.scheduledAt;
-      }
-    }
-    return next;
-  } catch {
-    return null;
-  }
-}
-
 export default async function CoachContactsPage() {
   if (!phase1Live()) {
     return (
       <LeadsShell>
         <DataState
-          body="Turn on lead management to view contacts and pipeline stages."
+          body="Turn on lead management to view your leads and their stages."
           kind="empty"
           title="Leads are not enabled"
         />
@@ -180,23 +147,22 @@ export default async function CoachContactsPage() {
 
   const context = await liveCoachContext();
   const items = await listAllContacts(context.tenantId);
-  const contactIds = items.map((contact) => contact.id);
   // One clock reading for the whole render, taken here so the server pass and the hydrated client
-  // measure every silence figure on the call-back list against the same instant.
+  // measure every relative age against the same instant.
   const nowIso = new Date().toISOString();
-  const [appointmentEvidence, nextSetterTouch] = await Promise.all([
-    loadAppointmentEvidence(context.tenantId, contactIds),
-    loadNextSetterTouch(context.tenantId, contactIds),
-  ]);
+  const appointmentEvidence = await loadAppointmentEvidence(
+    context.tenantId,
+    items.map((contact) => contact.id),
+  );
   return (
     <LeadsShell navCounts={await coachNavCounts(context.tenantId)}>
       <CoachLeads
         appointmentEvidence={appointmentEvidence}
-        defaultView="table"
+        defaultView="list"
         impersonation={context.impersonation}
         initialContacts={items}
-        nextSetterTouch={nextSetterTouch}
         nowIso={nowIso}
+        writeEnabled={pipelineWriteLive()}
       />
     </LeadsShell>
   );

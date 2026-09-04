@@ -1,245 +1,260 @@
 "use client";
 
-import { ContextEye } from "@/components/workspace/rehaul/context-eye";
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useMemo, useRef, useState } from "react";
 
-import { Figure, MonoMeta, Surface } from "@/components/kit/atomics";
 import { ExportMenu } from "@/components/kit/export-menu";
-import { Columns, Menu } from "@/components/kit/icons";
-import { SegmentedControl } from "@/components/kit/segmented-control";
-import { CoachContacts } from "@/components/workspace/live/coach-contacts";
-import type { AppointmentEvidenceByContact } from "@/components/workspace/live/coach-pipeline";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { CoachScale } from "@/components/coach-scale";
 import {
   COACH_EYEBROW_CLASS,
   COACH_ROW_NAME_CLASS,
+  COACH_SURFACE_TITLE_CLASS,
 } from "@/components/workspace/live/coach-type";
+import { filterLeads, LEAD_SEARCH_PLACEHOLDER } from "@/components/workspace/live/lead-search";
+import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import {
-  CALLBACK_STAGES,
+  channelLabel,
+  coachLeadsView,
+  lastActivityLabel,
+  leadBoard,
   leadExportRows,
-  silentDays,
-  type NextSetterTouchByContact,
-} from "@/components/workspace/live/leads-surface";
-import { workspaceDateFormat } from "@/lib/format/datetime";
+  leadSentence,
+  leadsProvenance,
+  moveTargets,
+  outcomeLabel,
+  stageDot,
+  stageLabel,
+  type AppointmentEvidenceByContact,
+  type CoachLeadsView,
+} from "@/components/workspace/rehaul/coach-leads-model";
+import { displayName } from "@/lib/format/display-name";
 import { useQueryState } from "@/lib/query-state";
 import type { ContactRead } from "@/lib/repositories/contacts";
 
 /* The sentences this screen no longer prints under its heading, handed to the eye instead. */
 const LEADS_EYE_COPY =
-  "Everyone who has messaged you, and where each one got to. The board reads each lead's "
-  + "stage today, not the path it took. A card marked Needs you is sitting in a no show or "
-  + "a long-term follow-up with no automated touch left to run, so the next move is yours.";
+  "Everyone who has messaged you, and where each one got to. The list is ordered by newest "
+  + "activity. The board reads each lead's stage today, not the path it took, and moving a card "
+  + "is recorded against your name. Report a duplicate and Request deletion both open a message "
+  + "to support; neither one changes the lead.";
 
-export type CoachLeadsView = "table" | "board";
+const REQUEST_NOTE =
+  "Both requests open a message to support.";
+
+export type CoachLeadsRequestKind = "duplicate" | "deletion";
 
 export type CoachLeadsProps = {
   /** null means the appointment read itself failed; {} means it succeeded and found nothing. */
   appointmentEvidence: AppointmentEvidenceByContact | null;
-  /** null means the follow-up read failed or came back truncated. */
-  nextSetterTouch?: NextSetterTouchByContact | null;
-  /** The page's own clock, threaded from the server so silence figures do not move on hydration. */
+  /** The page's own clock, threaded from the server so relative ages do not move on hydration. */
   nowIso: string;
+  /** The view the route opens on: the list on `/coach/contacts`, the board on `/coach/pipelines`. */
   defaultView: CoachLeadsView;
   initialContacts: ContactRead[];
   impersonation?: { sessionId: string; tenantId: string } | null;
+  /** `SETTERFI_PIPELINE_WRITE_LIVE`. Off means the board says so once and moves nothing. */
+  writeEnabled?: boolean;
 };
 
+const PAGE_SIZE = 25;
+
 /**
- * The board's columns, one per stage this build actually stores.
+ * The stage filter's "no filter" value.
  *
- * The artboard heads the board with AppointWise's seven names -- New lead, Qualification active,
- * Qualified, Call booked, Unqualified, Rescheduled, Cancelled -- and this build stores seven
- * stages of its own, in `COACH_PIPELINE_STAGES`. The two sevens are not the same seven, so four
- * of the artboard's names sit over the stage that means what they say, and three do not appear at
- * all:
- *
- * - **Qualified** is not a stage here. What the build records once a lead is ready to book is a
- *   decision on the lead (`outcome === "BOOK"`), which the funnel already counts as "Ready to
- *   book". A column with that heading would be one no lead could ever be moved into.
- * - **Rescheduled** and **Cancelled** have no stored state behind them either. The nearest things
- *   this build holds are "Long-term follow-up" and "No show", and those are the words the rest of
- *   the product uses for them -- the dashboard's call-back tile counts exactly those two stages --
- *   so renaming them on this one screen would make two screens disagree about the same leads.
- *
- * Every column is therefore backed by a real stage key, and the mapping is one to one: no stage is
- * merged into another and none is invented.
- *
- * **The dots.** Amber is spent only where the lead is the coach's to act on -- a stage the setter
- * has stopped working. "Call booked" is green because a booking is a thing the server recorded,
- * not a thing anyone is still waiting for. Everything else that is merely pending reads `--muted`:
- * the artboard's indigo for "Call booked" and "Long-term follow-up" was a second persistent colour
- * standing beside amber, and two persistent colours mean neither of them says anything.
+ * An empty string reads as "no selection" to the select primitive, which then renders a blank
+ * trigger rather than the words "All stages": the absence of a filter is a state with a name, and
+ * a control that shows nothing is a control a coach cannot tell from a broken one.
  */
-export const LEAD_BOARD_COLUMNS = [
-  { dot: "var(--accent)", key: "new_lead", label: "New lead" },
-  { dot: "var(--warning)", key: "qualifying", label: "Qualification active" },
-  { dot: "var(--good)", key: "booked", label: "Call booked" },
-  { dot: "var(--muted)", key: "long_term_followup", label: "Long-term follow-up" },
-  { dot: "var(--warning)", key: "no_show", label: "No show" },
-  { dot: "var(--muted)", key: "qualified_no_buy", label: "Qualified, no buy" },
-  { dot: "var(--muted)", key: "disqualified", label: "Unqualified" },
-] as const;
+const ALL_STAGES = "all";
 
-export type LeadBoardColumn = {
-  key: string;
-  label: string;
-  dot: string;
-  /** Terminal stages read at a lower weight, as the artboard draws them. */
-  spent: boolean;
-  contacts: readonly ContactRead[];
-};
+const CONTROL_CLASS =
+  "inline-flex h-[48px] shrink-0 items-center justify-center gap-[10px] rounded-[9px] border "
+  + "border-[var(--line)] bg-[var(--control-fill)] px-[22px] text-[16px] font-medium "
+  + "text-[color:var(--body)] whitespace-nowrap hover:border-[var(--accent-edge)] "
+  + "disabled:opacity-60";
 
-export type LeadBoard = {
-  columns: readonly LeadBoardColumn[];
-  /**
-   * Leads whose stored stage has no column, keyed by the raw value. Never empty and silent: a lead
-   * this board cannot place is named rather than dropped out of the count.
-   */
-  unplaced: readonly { stage: string; count: number }[];
-};
+const MENU_CONTENT_CLASS =
+  "w-[268px] rounded-[12px] border border-[var(--line)] bg-[var(--raised)] p-[6px] "
+  + "shadow-[var(--shadow-raised)]";
 
-const SPENT_STAGES: readonly string[] = ["qualified_no_buy", "disqualified"];
+const MENU_ITEM_CLASS =
+  "flex min-h-[48px] items-center rounded-[8px] px-[14px] text-[16px] leading-[1.4] "
+  + "text-[color:var(--ink)] focus:bg-[var(--row-hover)] data-disabled:opacity-60";
 
-/** The seven columns with their leads, plus anything the seven could not place. */
-export function leadBoard(contacts: readonly ContactRead[]): LeadBoard {
-  const known = new Set<string>(LEAD_BOARD_COLUMNS.map((column) => column.key));
-  const unplaced = new Map<string, number>();
-  for (const contact of contacts) {
-    if (known.has(contact.pipelineStage)) continue;
-    unplaced.set(contact.pipelineStage, (unplaced.get(contact.pipelineStage) ?? 0) + 1);
-  }
-  return {
-    columns: LEAD_BOARD_COLUMNS.map((column) => ({
-      contacts: contacts.filter((contact) => contact.pipelineStage === column.key),
-      dot: column.dot,
-      key: column.key,
-      label: column.label,
-      spent: SPENT_STAGES.includes(column.key),
-    })),
-    unplaced: Array.from(unplaced.entries())
-      .map(([stage, count]) => ({ count, stage }))
-      .sort((left, right) => left.stage.localeCompare(right.stage)),
-  };
+const CELL_CLASS = "px-[26px] text-[16px] leading-[1.4]";
+
+function MoreIcon() {
+  return (
+    <svg aria-hidden className="size-[20px]" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+      <circle cx="5" cy="12" r="1.2" />
+      <circle cx="12" cy="12" r="1.2" />
+      <circle cx="19" cy="12" r="1.2" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg aria-hidden className="size-[16px] text-[color:var(--faint)]" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" viewBox="0 0 24 24">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function conversationHref(contactId: string) {
+  return `/coach/conversations?contact=${encodeURIComponent(contactId)}`;
+}
+
+/** A stage as a dot and a word. Never a pill: the row is already dense with boxes. */
+function StageWord({ stage }: { stage: string }) {
+  return (
+    <span className="inline-flex items-center gap-[8px] whitespace-nowrap text-[16px] text-[color:var(--body)]">
+      <span
+        aria-hidden
+        className="size-[8px] shrink-0 rounded-full"
+        style={{ background: stageDot(stage) }}
+      />
+      {stageLabel(stage)}
+    </span>
+  );
 }
 
 /**
- * Whether a lead is waiting on the coach rather than on the setter.
+ * The three things a coach can do to one lead, behind one 44px trigger.
  *
- * The one thing the loaded data establishes: the lead is sitting in a stage the setter has stopped
- * working -- a no show or a long-term follow-up -- and no automated touch is scheduled for it. If
- * the follow-up read failed or came back truncated (`null`), no card claims it, because an absence
- * that was never established is not evidence of one.
+ * Two of them file a request and neither performs it, which is the whole point of the demotion in
+ * `SIMPLIFICATION-SPEC` 2.3: merge, unmerge and a type-to-confirm permanent delete were controls
+ * asking a coach to reason about identity resolution and irreversible destruction. The sentence
+ * under the items says what the two requests do, once, in the only place a coach meets them.
  */
-export function needsCoach(
-  contact: ContactRead,
-  nextSetterTouch: NextSetterTouchByContact | null,
-): boolean {
-  if (nextSetterTouch === null) return false;
-  if (!(CALLBACK_STAGES as readonly string[]).includes(contact.pipelineStage)) return false;
-  return !nextSetterTouch[contact.id];
-}
-
-function formatDate(iso: string) {
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? null : workspaceDateFormat.format(at);
-}
-
-export type LeadCardMeta = { text: string; tone: "neutral" | "warning" };
-
-/**
- * The second line on a card: the next thing that happens to this lead, or how long it has been
- * quiet. Every branch reads a field the page already loaded.
- */
-export function leadCardMeta(
-  contact: ContactRead,
-  input: {
-    evidence: AppointmentEvidenceByContact;
-    nextSetterTouch: NextSetterTouchByContact | null;
-    nowMs: number;
-  },
-): LeadCardMeta {
-  if (needsCoach(contact, input.nextSetterTouch)) {
-    return { text: "Needs you · no automated touch scheduled", tone: "warning" };
-  }
-  const appointment = input.evidence[contact.id];
-  if (contact.pipelineStage === "booked" && appointment) {
-    const date = formatDate(appointment.startAt);
-    if (date) return { text: date, tone: "neutral" };
-  }
-  const touch = input.nextSetterTouch?.[contact.id];
-  if (touch) {
-    const date = formatDate(touch);
-    if (date) return { text: `Next touch ${date}`, tone: "neutral" };
-  }
-  const captured = contact.goal ?? contact.credit ?? contact.timeline;
-  const days = silentDays(contact.lastActivityAt, input.nowMs);
-  const silence = days === null ? "no activity recorded" : days === 0 ? "today" : `${days}d quiet`;
-  return { text: captured ? `${captured} · ${silence}` : silence, tone: "neutral" };
-}
-
-/**
- * The line under the title: how many leads this month, and how many of them are booked.
- *
- * "This month" is the calendar month of the page's own clock, measured on `lastActivityAt`, which
- * is the only date every lead carries. It is therefore leads active this month rather than leads
- * created this month, and the words say so.
- */
-export function leadsMonthStatus(
-  contacts: readonly ContactRead[],
-  nowIso: string,
-): { active: number; booked: number; label: string } {
-  const now = new Date(nowIso);
-  const valid = !Number.isNaN(now.getTime());
-  const inMonth = valid
-    ? contacts.filter((contact) => {
-        const at = new Date(contact.lastActivityAt);
-        if (Number.isNaN(at.getTime())) return false;
-        return (
-          at.getUTCFullYear() === now.getUTCFullYear() && at.getUTCMonth() === now.getUTCMonth()
-        );
-      })
-    : [];
-  const booked = inMonth.filter((contact) => contact.pipelineStage === "booked").length;
-  return {
-    active: inMonth.length,
-    booked,
-    label: valid
-      ? `${inMonth.length} active this month · ${booked} booked`
-      : "Month figures unavailable",
-  };
-}
-
-function isView(value: string | null): value is CoachLeadsView {
-  return value === "table" || value === "board";
-}
-
-function LeadCard({
+function LeadMenu({
   contact,
-  meta,
-  spent,
+  onRequest,
 }: {
   contact: ContactRead;
-  meta: LeadCardMeta;
-  spent: boolean;
+  onRequest: (contact: ContactRead, kind: CoachLeadsRequestKind) => void;
 }) {
+  const name = displayName(contact.name);
   return (
-    <div
-      className="rounded-[12px] border bg-[var(--card)] px-[14px] py-[12px]"
-      data-lead-card={contact.id}
-      style={{
-        borderColor: meta.tone === "warning" ? "var(--warning-line)" : "var(--line)",
-        opacity: spent ? 0.75 : 1,
-      }}
-    >
-      <div className={COACH_ROW_NAME_CLASS}>{contact.name}</div>
-      <div
-        className="mt-[2px] text-[14px] leading-[1.4]"
-        data-lead-card-meta={contact.id}
-        style={{ color: meta.tone === "warning" ? "var(--warning-text)" : "var(--faint)" }}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            aria-label={`More for ${name}`}
+            className="grid size-[44px] shrink-0 place-items-center rounded-[10px] border border-[var(--line)] bg-[var(--control-fill)] text-[color:var(--body)]"
+            type="button"
+          />
+        }
       >
-        {meta.text}
-      </div>
-    </div>
+        <MoreIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className={MENU_CONTENT_CLASS}>
+        <CoachScale>
+          <DropdownMenuItem
+            className={MENU_ITEM_CLASS}
+            render={<Link href={conversationHref(contact.id)} />}
+          >
+            Open the conversation
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className={MENU_ITEM_CLASS}
+            onClick={() => onRequest(contact, "duplicate")}
+          >
+            Report a duplicate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className={MENU_ITEM_CLASS}
+            onClick={() => onRequest(contact, "deletion")}
+          >
+            Request deletion
+          </DropdownMenuItem>
+          <p className={`m-0 px-[14px] pt-[8px] pb-[10px] ${COACH_EYEBROW_CLASS}`}>{REQUEST_NOTE}</p>
+        </CoachScale>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
+}
+
+/**
+ * The non-drag equivalent of the board's drag gesture, as a full-width button on every card.
+ *
+ * Drag alone fails this audience and the accessibility floor both, so every move a pointer can
+ * make by dragging is also one item in this menu. The stages a transition rule refuses are listed
+ * and disabled with the reason attached, rather than dropped: a coach who cannot see "Call booked"
+ * cannot tell a stage that does not apply from a stage the screen forgot.
+ */
+function MoveMenu({
+  contact,
+  evidence,
+  evidenceChecked,
+  onMove,
+  pending,
+}: {
+  contact: ContactRead;
+  evidence: AppointmentEvidenceByContact;
+  evidenceChecked: boolean;
+  onMove: (contact: ContactRead, stage: string) => void;
+  pending: boolean;
+}) {
+  const targets = moveTargets(contact, { evidence, evidenceChecked });
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            aria-label={`Move ${displayName(contact.name)} to another stage`}
+            className="flex h-[44px] w-full items-center justify-center gap-[8px] rounded-[9px] border border-[var(--line)] bg-[var(--control-fill)] px-[14px] text-[15px] font-medium text-[color:var(--body)] disabled:opacity-60"
+            disabled={pending}
+            type="button"
+          />
+        }
+      >
+        {pending ? "Moving" : "Move to"}
+        <ChevronIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className={MENU_CONTENT_CLASS}>
+        <CoachScale>
+          {targets.map((target) => (
+            <DropdownMenuItem
+              className={MENU_ITEM_CLASS}
+              disabled={target.disabled}
+              key={target.key}
+              onClick={() => onMove(contact, target.key)}
+            >
+              {target.disabled ? `${target.label}, ${target.reason}` : target.label}
+            </DropdownMenuItem>
+          ))}
+        </CoachScale>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function makeIdempotencyKey(contactId: string, stage: string) {
+  const random = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  return `pipeline:${contactId}:${stage}:${random}`;
 }
 
 export function CoachLeads({
@@ -247,200 +262,496 @@ export function CoachLeads({
   defaultView,
   impersonation = null,
   initialContacts,
-  nextSetterTouch = null,
   nowIso,
+  writeEnabled = false,
 }: CoachLeadsProps) {
   const query = useQueryState();
   const [contacts, setContacts] = useState(initialContacts);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [stage, setStage] = useState("");
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const [notice, setNotice] = useState("");
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [request, setRequest] = useState<{ contact: ContactRead; kind: CoachLeadsRequestKind } | null>(null);
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const moveGenerationRef = useRef(new Map<string, symbol>());
 
-  const requested = query.get("view");
-  const activeView = isView(requested) ? requested : defaultView;
+  const view = coachLeadsView(query.get("view"), defaultView);
+  const nowMs = Date.parse(nowIso);
   const evidence = useMemo<AppointmentEvidenceByContact>(
     () => appointmentEvidence ?? {},
     [appointmentEvidence],
   );
-  const nowMs = Date.parse(nowIso);
-  const board = useMemo(() => leadBoard(contacts), [contacts]);
-  const status = useMemo(() => leadsMonthStatus(contacts, nowIso), [contacts, nowIso]);
-  const exportRows = useMemo(() => leadExportRows(contacts), [contacts]);
+  const evidenceChecked = appointmentEvidence !== null;
+  const canMove = writeEnabled && !impersonation;
 
-  const strip = useMemo(() => {
-    const count = (of: (contact: ContactRead) => boolean) => contacts.filter(of).length;
-    return [
-      {
-        key: "open",
-        label: "Open",
-        value: count((contact) =>
-          ["new_lead", "qualifying", "long_term_followup", "no_show"].includes(
-            contact.pipelineStage,
-          ),
-        ),
-      },
-      {
-        key: "booked",
-        label: "Booked",
-        value: count((contact) => contact.pipelineStage === "booked"),
-      },
-      {
-        key: "lost",
-        label: "Lost outcomes",
-        value: count((contact) => SPENT_STAGES.includes(contact.pipelineStage)),
-      },
-      {
-        key: "undecided",
-        label: "Awaiting a decision",
-        value: count((contact) => contact.outcome === null),
-      },
-    ];
-  }, [contacts]);
+  const visible = useMemo(
+    () => filterLeads(contacts, {
+      channels: [],
+      outcomes: [],
+      query: search,
+      stages: stage ? [stage] : [],
+    }),
+    [contacts, search, stage],
+  );
+  const board = useMemo(() => leadBoard(visible), [visible]);
+  const exportRows = useMemo(() => leadExportRows(visible), [visible]);
+  const provenance = useMemo(() => leadsProvenance(contacts), [contacts]);
 
-  function contactMerged(_winnerId: string, loserId: string) {
-    setContacts((current) => current.filter((contact) => contact.id !== loserId));
+  /**
+   * The one sentence about why a card cannot be moved, said in one place.
+   *
+   * The board this replaces stated the same fact four times in 160 vertical pixels. It is a fact
+   * about the whole board rather than about any one lead, so it lives above the columns and the
+   * cards simply do not draw a control they cannot honour.
+   */
+  const moveBlocked = !writeEnabled
+    ? "Stage changes are not switched on in this environment, so no lead can be moved yet."
+    : impersonation
+      ? "You are viewing this workspace as support, so no lead can be moved from here."
+      : null;
+
+  async function moveLead(contact: ContactRead, target: string) {
+    if (!canMove || pendingId) return;
+    const previousStage = contact.pipelineStage;
+    if (previousStage === target) return;
+
+    const generation = Symbol(contact.id);
+    moveGenerationRef.current.set(contact.id, generation);
+    setPendingId(contact.id);
+    setNotice("");
+    setContacts((rows) => rows.map((row) => (
+      row.id === contact.id ? { ...row, pipelineStage: target } : row
+    )));
+
+    try {
+      const response = await fetch(
+        `/api/contacts/${encodeURIComponent(contact.id)}/pipeline-stage`,
+        {
+          body: JSON.stringify({
+            appointmentId: target === "booked" ? evidence[contact.id]?.appointmentId ?? null : null,
+            expectedStage: previousStage,
+            idempotencyKey: makeIdempotencyKey(contact.id, target),
+            reason: null,
+            stage: target,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        },
+      );
+      const payload: unknown = await response.json();
+      // A receipt or nothing: an HTTP 200 with no audit row is not a recorded stage change, and
+      // the release boundary in README.md is explicit that a 200 alone proves nothing.
+      const audit = payload && typeof payload === "object" && "audit" in payload
+        ? (payload as { audit?: { id?: unknown } }).audit
+        : null;
+      if (!response.ok || !audit || !Number.isSafeInteger(audit.id)) {
+        throw new Error("The stage change was refused.");
+      }
+      setNotice(`${displayName(contact.name)} moved to ${stageLabel(target)}. Logged.`);
+    } catch (error) {
+      if (moveGenerationRef.current.get(contact.id) === generation) {
+        setContacts((rows) => rows.map((row) => (
+          row.id === contact.id ? { ...row, pipelineStage: previousStage } : row
+        )));
+      }
+      const message = error instanceof Error ? error.message : "The stage change was refused.";
+      setNotice(`${displayName(contact.name)} stayed in ${stageLabel(previousStage)}. ${message}`);
+    } finally {
+      if (moveGenerationRef.current.get(contact.id) === generation) {
+        moveGenerationRef.current.delete(contact.id);
+        setPendingId(null);
+      }
+    }
   }
 
-  function contactUnmerged(contactId: string) {
-    const restored = initialContacts.find((contact) => contact.id === contactId);
-    if (!restored) return;
-    setContacts((current) =>
-      current.some((contact) => contact.id === contactId) ? current : [restored, ...current],
-    );
+  async function sendRequest() {
+    if (!request || sending) return;
+    const trimmed = note.trim();
+    if (!trimmed) return;
+    setSending(true);
+    try {
+      const response = await fetch(
+        `/api/contacts/${encodeURIComponent(request.contact.id)}/support-request`,
+        {
+          body: JSON.stringify({ note: trimmed, type: request.kind }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        },
+      );
+      if (!response.ok) throw new Error("That request did not reach support. Try again.");
+      // The one thing that happened, said once. Nothing on the lead changed and the words do not
+      // suggest otherwise.
+      setNotice("Sent to support.");
+      setRequest(null);
+      setNote("");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "That request did not reach support.");
+    } finally {
+      setSending(false);
+    }
   }
 
-  function contactDeleted(contactId: string) {
-    setContacts((current) => current.filter((contact) => contact.id !== contactId));
-  }
+  const page = visible.slice(0, shown);
 
   return (
-    <div className="flex min-w-0 flex-col gap-[var(--s-5)]">
-      <div className="flex min-w-0 flex-wrap items-end gap-[var(--s-5)]">
+    <div className="flex min-w-0 flex-col gap-[20px]">
+      <div className="flex min-w-0 flex-wrap items-end justify-between gap-[20px]">
         <div className="min-w-0">
-          <h1 className="coach-page-title m-0">Leads</h1>
-          <p className={`m-0 mt-[var(--s-2)] ${COACH_EYEBROW_CLASS}`} data-slot="leads-month-status">
-            {status.label}
-          </p>
+          <h1 className="coach-page-title m-0">Your leads</h1>
+          {provenance ? (
+            <p className={`m-0 mt-[8px] ${COACH_EYEBROW_CLASS}`} data-slot="leads-provenance">
+              {provenance}
+            </p>
+          ) : null}
         </div>
-        <div className="ml-auto flex min-w-0 items-center gap-[var(--s-3)]">
-          <SegmentedControl
-            ariaLabel="Leads view"
-            onValueChange={(next) => query.set("view", next === defaultView ? null : next)}
-            scale="coach"
-            segments={[
-              {
-                count: contacts.length,
-                icon: <Menu aria-hidden className="size-[18px]" />,
-                key: "table",
-                label: "List",
-              },
-              {
-                count: contacts.length,
-                icon: <Columns aria-hidden className="size-[18px]" />,
-                key: "board",
-                label: "Board",
-              },
-            ]}
-            value={activeView}
-          />
+        <div className="flex min-w-0 flex-wrap items-center gap-[12px]">
+          <div
+            aria-label="Leads view"
+            className="flex shrink-0 gap-[4px] rounded-[12px] border border-[var(--line)] bg-[var(--well)] p-[4px]"
+            role="group"
+          >
+            {([
+              { key: "list", label: "List" },
+              { key: "board", label: "Board" },
+            ] as const).map((option) => {
+              const active = view === option.key;
+              return (
+                <button
+                  aria-pressed={active}
+                  className={`h-[48px] rounded-[9px] border px-[18px] text-[16px] whitespace-nowrap ${
+                    active
+                      ? "border-[var(--accent-edge)] bg-[var(--accent-wash-strong)] font-semibold text-[color:var(--ink)]"
+                      : "border-transparent bg-transparent font-medium text-[color:var(--muted)]"
+                  }`}
+                  data-view={option.key}
+                  key={option.key}
+                  onClick={() => query.set("view", option.key === defaultView ? null : option.key)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
           <ExportMenu
-            className="h-[48px] px-[var(--s-4)] text-[16px]"
+            className={CONTROL_CLASS}
             filename="setterfi-coach-leads"
             label="Export"
             mode="local"
             rows={exportRows}
           />
-          <ContextEye
-            copy={LEADS_EYE_COPY}
-            placement="header"
-            scale="coach"
-            screen="coach-leads"
-          />
+          <ContextEye copy={LEADS_EYE_COPY} placement="header" scale="coach" screen="coach-leads" />
         </div>
       </div>
 
-      {activeView === "board" ? (
+      <div className="flex min-w-0 flex-wrap items-center gap-[16px]">
+        <div className="flex h-[48px] min-w-0 flex-grow basis-[260px] items-center gap-[10px] rounded-[9px] border border-[var(--line-input)] bg-[var(--well)] px-[16px] sm:max-w-[460px]">
+          <svg aria-hidden className="size-[18px] shrink-0 text-[color:var(--faint)]" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.75" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <input
+            aria-label="Search leads"
+            className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--faint)]"
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setShown(PAGE_SIZE);
+            }}
+            placeholder={LEAD_SEARCH_PLACEHOLDER}
+            type="search"
+            value={search}
+          />
+        </div>
+        <Select
+          onValueChange={(next) => {
+            setStage(next === ALL_STAGES ? "" : String(next));
+            setShown(PAGE_SIZE);
+          }}
+          value={stage || ALL_STAGES}
+        >
+          <SelectTrigger
+            aria-label="Stage"
+            className="h-[48px] shrink-0 gap-[12px] rounded-[9px] border-[var(--line-input)] bg-[var(--well)] px-[16px] text-[16px] text-[color:var(--ink)]"
+          >
+            <span className="text-[color:var(--muted)]">Stage</span>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <CoachScale>
+              <SelectItem className="min-h-[44px] text-[16px]" value={ALL_STAGES}>
+                All stages
+              </SelectItem>
+              {board.columns.map((column) => (
+                <SelectItem className="min-h-[44px] text-[16px]" key={column.key} value={column.key}>
+                  {column.label}
+                </SelectItem>
+              ))}
+            </CoachScale>
+          </SelectContent>
+        </Select>
+        <span className="ml-auto text-[16px] text-[color:var(--muted)]" data-slot="leads-count">
+          {visible.length === contacts.length
+            ? `${contacts.length} leads`
+            : `${visible.length} of ${contacts.length} leads`}
+        </span>
+      </div>
+
+      <p
+        aria-live="polite"
+        className={`m-0 min-h-[22px] ${COACH_EYEBROW_CLASS}`}
+        data-slot="leads-notice"
+      >
+        {notice}
+      </p>
+
+      {view === "board" ? (
         <div className="min-w-0">
+          {moveBlocked ? (
+            <p
+              className={`m-0 mb-[12px] ${COACH_EYEBROW_CLASS}`}
+              data-slot="leads-move-blocked"
+            >
+              {moveBlocked}
+            </p>
+          ) : null}
           <div
-            className="grid min-w-0 gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]"
+            className="flex min-w-0 items-start gap-[16px] overflow-x-auto pb-[8px]"
             data-slot="leads-board"
           >
             {board.columns.map((column) => (
               <section
                 aria-label={column.label}
-                className="flex min-w-0 flex-col gap-[10px] rounded-[16px] bg-[var(--well)] p-[14px]"
+                className="flex w-[300px] max-w-[86vw] shrink-0 flex-col gap-[12px]"
                 data-board-column={column.key}
                 key={column.key}
+                onDragOver={(event) => {
+                  if (!canMove || !dragging) return;
+                  event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  if (!canMove || !dragging) return;
+                  event.preventDefault();
+                  const moved = contacts.find((row) => row.id === dragging);
+                  setDragging(null);
+                  if (moved) void moveLead(moved, column.key);
+                }}
               >
-                <div className="flex items-center gap-[8px] px-[4px]">
+                <div className="flex min-h-[44px] items-center gap-[10px] px-[6px]">
                   <span
                     aria-hidden
-                    className="size-[8px] shrink-0 rounded-[var(--r-full)]"
+                    className="size-[10px] shrink-0 rounded-full"
                     style={{ background: column.dot }}
                   />
-                  <h2 className="m-0 text-[15px] leading-[1.3] font-[600] text-[color:var(--ink)]">
+                  <h2 className="m-0 min-w-0 truncate text-[18px] leading-[1.3] font-semibold text-[color:var(--ink)]">
                     {column.label}
                   </h2>
-                  <Figure className="ml-auto text-[14px]" data-board-count={column.key} size="sm">
+                  <span
+                    className="ml-auto font-mono text-[17px] text-[color:var(--muted)] tabular-nums"
+                    data-board-count={column.key}
+                  >
                     {column.contacts.length}
-                  </Figure>
+                  </span>
                 </div>
-                <div className="flex max-h-[560px] min-w-0 flex-col gap-[10px] overflow-y-auto">
-                  {column.contacts.map((contact) => (
-                    <LeadCard
-                      contact={contact}
+                <div className="flex max-h-[calc(100vh-320px)] min-h-0 flex-col gap-[12px] overflow-y-auto pr-[2px]">
+                {column.contacts.length ? (
+                  column.contacts.map((contact) => (
+                    <article
+                      className="flex flex-col gap-[10px] rounded-[16px_16px_13px_13px] border border-[var(--line)] bg-[linear-gradient(180deg,var(--card-top),var(--card))] px-[16px] pt-[16px] pb-[12px] shadow-[var(--shadow-card)]"
+                      data-lead-card={contact.id}
+                      draggable={canMove}
                       key={contact.id}
-                      meta={leadCardMeta(contact, {
-                        evidence,
-                        nextSetterTouch,
-                        nowMs,
-                      })}
-                      spent={column.spent}
-                    />
-                  ))}
+                      onDragEnd={() => setDragging(null)}
+                      onDragStart={() => setDragging(contact.id)}
+                      style={{ opacity: dragging === contact.id ? 0.6 : 1 }}
+                    >
+                      <Link
+                        className={`inline-flex min-h-[44px] items-center ${COACH_ROW_NAME_CLASS}`}
+                        href={conversationHref(contact.id)}
+                      >
+                        {displayName(contact.name)}
+                      </Link>
+                      <div className="text-[15px] text-[color:var(--muted)]">
+                        {`${channelLabel(contact)}, ${lastActivityLabel(contact, nowMs).toLocaleLowerCase()}`}
+                      </div>
+                      <p className="m-0 text-[16px] leading-[1.45] text-[color:var(--body)]">
+                        {leadSentence(contact, evidence)}
+                      </p>
+                      <div>
+                        <span className="inline-flex h-[32px] items-center gap-[8px] rounded-full border border-[var(--line)] bg-[var(--control-fill)] px-[12px] text-[15px] font-medium whitespace-nowrap text-[color:var(--muted)]">
+                          <span
+                            aria-hidden
+                            className="size-[8px] shrink-0 rounded-full"
+                            style={{
+                              background: contact.outcome === "BOOK" ? "var(--good)" : "var(--faint)",
+                            }}
+                          />
+                          {outcomeLabel(contact.outcome)}
+                        </span>
+                      </div>
+                      {canMove ? (
+                        <MoveMenu
+                          contact={contact}
+                          evidence={evidence}
+                          evidenceChecked={evidenceChecked}
+                          onMove={moveLead}
+                          pending={pendingId === contact.id}
+                        />
+                      ) : null}
+                    </article>
+                  ))
+                ) : (
+                  <p className={`m-0 px-[6px] ${COACH_EYEBROW_CLASS}`}>No leads in this stage.</p>
+                )}
                 </div>
               </section>
             ))}
           </div>
           {board.unplaced.length ? (
-            <p className="mt-[var(--s-3)]" data-slot="leads-board-unplaced">
-              {board.unplaced.map((entry) => (
-                <MonoMeta className="mr-[var(--s-3)]" key={entry.stage}>
-                  {`${entry.count} in ${entry.stage}, which has no column`}
-                </MonoMeta>
-              ))}
+            <p className={`m-0 mt-[12px] ${COACH_EYEBROW_CLASS}`} data-slot="leads-board-unplaced">
+              {board.unplaced
+                .map((entry) => `${entry.count} in ${entry.stage}, which has no column`)
+                .join(". ")}
+              .
             </p>
           ) : null}
         </div>
       ) : (
-        <div className="flex min-w-0 flex-col gap-[var(--s-4)]">
-          <ul
-            className="m-0 grid min-w-0 list-none grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-[var(--s-3)] p-0"
-            data-slot="leads-stat-strip"
-          >
-            {strip.map((entry) => (
-              <li className="min-w-0" key={entry.key}>
-                <Surface className="min-w-0" variant="well">
-                  <div className="text-[15px] leading-[1.35] font-[500] text-[color:var(--ink)]">
-                    {entry.label}
-                  </div>
-                  <Figure className="mt-[var(--s-1)] block" data-stat={entry.key} size="lg">
-                    {entry.value}
-                  </Figure>
-                </Surface>
-              </li>
-            ))}
-          </ul>
-          <CoachContacts
-            contacts={contacts}
-            impersonation={impersonation}
-            onContactDeleted={contactDeleted}
-            onContactMerged={contactMerged}
-            onContactUnmerged={contactUnmerged}
-            onSelectedChange={setSelectedId}
-            selectedId={selectedId}
-          />
+        <div className="min-w-0 overflow-hidden rounded-[24px_24px_17px_17px] border border-[var(--line)] bg-[linear-gradient(180deg,var(--card-top),var(--card))] shadow-[var(--shadow-card)]">
+          <div className="min-w-0 overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-left">
+              <thead>
+                <tr className="bg-[var(--band)]">
+                  {["Name", "Channel", "Stage", "Last activity", "Outcome"].map((heading) => (
+                    <th
+                      className="px-[26px] py-[14px] text-[15px] font-semibold whitespace-nowrap text-[color:var(--muted)]"
+                      key={heading}
+                      scope="col"
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                  {/* `relative` is load-bearing: `sr-only` positions absolutely, and with no
+                      positioned ancestor its containing block is the page itself, which pushed
+                      the document's scroll width to 846px at a 390px viewport. */}
+                  <th className="relative w-[60px] px-[26px] py-[14px]" scope="col">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {page.map((contact) => (
+                  <tr className="border-t border-[var(--line-soft)]" data-lead-row={contact.id} key={contact.id}>
+                    <td className="h-[48px] px-[26px]">
+                      <Link
+                        className={`inline-flex min-h-[48px] items-center ${COACH_ROW_NAME_CLASS}`}
+                        href={conversationHref(contact.id)}
+                      >
+                        {displayName(contact.name)}
+                      </Link>
+                    </td>
+                    <td className={`${CELL_CLASS} whitespace-nowrap text-[color:var(--body)]`}>
+                      {channelLabel(contact)}
+                    </td>
+                    <td className={`${CELL_CLASS} whitespace-nowrap`}>
+                      <StageWord stage={contact.pipelineStage} />
+                    </td>
+                    <td className={`${CELL_CLASS} whitespace-nowrap text-[color:var(--muted)]`}>
+                      {lastActivityLabel(contact, nowMs)}
+                    </td>
+                    <td className={`${CELL_CLASS} text-[color:var(--body)]`}>
+                      {outcomeLabel(contact.outcome)}
+                    </td>
+                    <td className="py-[6px] pr-[16px] pl-0">
+                      <div className="flex justify-end">
+                        <LeadMenu contact={contact} onRequest={(row, kind) => {
+                          setNote("");
+                          setRequest({ contact: row, kind });
+                        }} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {page.length === 0 ? (
+                  <tr>
+                    <td className="px-[26px] py-[24px] text-[16px] text-[color:var(--muted)]" colSpan={6}>
+                      {contacts.length
+                        ? "No lead matches that search."
+                        : "Nobody has messaged you yet."}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+          {page.length ? (
+            <div className="flex flex-wrap items-center justify-between gap-[12px] border-t border-[var(--line-soft)] px-[26px] py-[16px]">
+              <span className={COACH_EYEBROW_CLASS} data-slot="leads-page-note">
+                {`Showing ${page.length} of ${visible.length}, newest activity first.`}
+              </span>
+              {page.length < visible.length ? (
+                <button
+                  className={CONTROL_CLASS}
+                  onClick={() => setShown((current) => current + PAGE_SIZE)}
+                  type="button"
+                >
+                  More leads
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
 
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setRequest(null);
+        }}
+        open={request !== null}
+      >
+        <DialogContent className="sm:max-w-[520px]" showCloseButton={false}>
+          <CoachScale>
+            {/* The request dialog is a bandless surface with no eyebrow over it, which is the role
+                `COACH_SURFACE_TITLE_CLASS` names. Cited rather than respelled: the constant carries
+                the `-0.015em` this heading had lost, and it is safe inside a portal because that
+                one keeps its size as a literal instead of a `--coach-*` token. */}
+            <DialogTitle className={COACH_SURFACE_TITLE_CLASS}>
+              {request?.kind === "deletion" ? "Request deletion" : "Report a duplicate"}
+            </DialogTitle>
+            <DialogDescription className="mt-[8px] text-[16px] leading-[1.5] text-[color:var(--muted)]">
+              {`This opens a message to support about ${displayName(request?.contact.name ?? "this lead")}. Nothing on the lead changes.`}
+            </DialogDescription>
+            <label className="mt-[20px] block text-[16px] text-[color:var(--muted)]" htmlFor="lead-request-note">
+              What should support know?
+            </label>
+            <textarea
+              className="mt-[8px] min-h-[112px] w-full rounded-[9px] border border-[var(--line-input)] bg-[var(--well)] px-[14px] py-[12px] text-[16px] leading-[1.5] text-[color:var(--ink)] outline-none"
+              id="lead-request-note"
+              onChange={(event) => setNote(event.target.value)}
+              value={note}
+            />
+            <div className="mt-[20px] flex flex-wrap justify-end gap-[12px]">
+              <DialogClose
+                render={
+                  <button className={CONTROL_CLASS} type="button">
+                    Cancel
+                  </button>
+                }
+              />
+              <button
+                className={CONTROL_CLASS}
+                disabled={sending || !note.trim()}
+                onClick={() => void sendRequest()}
+                type="button"
+              >
+                {sending ? "Sending" : "Send to support"}
+              </button>
+            </div>
+          </CoachScale>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
