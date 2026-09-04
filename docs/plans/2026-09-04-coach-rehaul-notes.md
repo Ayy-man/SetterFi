@@ -1252,3 +1252,37 @@ Two rulings made at integration rather than by a lane:
 Codex's mid-round `git stash` swept every lane's tracked edits once; the restore was file by file
 from `stash@{0}` and nothing was lost. The rule for Codex rounds is now written into the prompt:
 no git command that writes, on a shared checkout.
+
+## Note 7 (2026-09-04): Setup, second pass
+
+The three setup lists (the `/onboarding` overview, Setup's steps and Home's first-run rail)
+disagreed on order, wording and who was meant to act, so they were torn down to one derivation.
+The design record is `docs/plans/2026-09-04-coach-setup-and-thread-design.md`; the Mobbin
+references it leans on are the one-open-step accordion (Klaviyo, Graphite, Outseta), the
+timeline for a wait nobody controls (Mercury, Gusto, Hims) and the unavailable row that keeps its
+place and swaps the button for a sentence (Etsy, Pinterest).
+
+- `coachSetupRows(read, now)` gives every step an owner (`you`, `us`, `carriers`) and only rows
+  owned by the coach carry a button. The list runs business, channels, calendar, offer, carrier
+  review, any stopped provisioning step, the safe test, then go live. Go live only gets its
+  button once every row above it is done; until then its receipt names what it waits on.
+- One open row at a time, and that row holds the page's single accent fill. A repair on a
+  finished row is offered inline and never opens.
+- Setup (`/coach/get-started`, titled "Getting you live") draws the full list under one
+  sentence beside "Ask a person" and the technical record. Home draws the same rows compact on
+  first run under "Yours to do" and "Then, with us and the carriers", and links across.
+  `/onboarding` redirects to Setup; `setup-overview.tsx` is gone.
+- Landed as `00e27b8`. Screens at 1440 and 390, light and dark: no overflow, nothing under
+  14px, one fill per page.
+
+Still open: the canvas artboards (Setup, HomeFirstRun) draw the old anatomy and need a redraw
+once the copy settles.
+
+## Note 8 (2026-09-04): Inbox, second pass
+
+The thread was built to the workspace's 16px density and a coach reads it for minutes, so it
+strays from the app's type scale on purpose. Bubbles are 18px on 1.6, capped at 60ch. The day is
+said once, above the first message of each day, and the stamp under a bubble carries the clock
+alone at 14px. Turns get 12px of air, same-speaker follow-ups less. In dark the lead's bubble
+lifts two lightness steps (`--thread-lead` 0.375, edge 0.45) so the two sides separate by tone
+as well as hue. Landed as `e5a9652`; the Inbox artboard still shows the old thread.
