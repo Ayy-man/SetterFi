@@ -230,8 +230,9 @@ Four things and nothing else, in the artboard's order.
 2. **"Does N look wrong?"**, top right. The band holds one secondary button, "This count looks
    wrong", which opens a labelled text box and a "Send to support" button. Nothing else.
 3. **"How did these appointments go?"**, full width. One row per unanswered appointment, name over
-   the time, with **Showed** and **No-show** at 48px each. One footer line says every answer is
-   logged and that it never changes the bill.
+   the time, with **Showed** and **No-show** at 48px each, then the calls the coach already
+   answered this period in the same row shape with the answer where the buttons were, read only.
+   One footer line says every answer is logged and that it never changes the bill.
 4. **One notice line inside the plan card**, and only when something is outstanding.
 
 ### Deliberate departures from the artboard
@@ -250,9 +251,6 @@ Four things and nothing else, in the artboard's order.
   anything outside the three ordinary cadences is named "each period". On the seeded demo coach
   the period reads Oct 24 2025 to Oct 3 2026, so the card honestly says "each period". That is a
   seed defect worth fixing rather than a phrasing to paper over.
-- **Answered rows are not drawn.** The artboard shows "Grant Okafor, Showed" as a settled row.
-  `outcomePrompts` is the unanswered queue only; a booking whose attendance is recorded leaves the
-  projection, so there is nothing to draw those rows from.
 - **Skip is gone.** A row a coach does not want to answer is already answered by leaving it alone,
   and a third button on a two-button question is the form asking about itself. `skip_attendance`
   is untouched on the route.
@@ -281,6 +279,27 @@ subscription; the checkout is now invisible plumbing that surfaces one line only
 offer a coach can act on or a Stripe return still resolving, and says nothing at all when the route
 answers 404 or fails.
 
+### The answered rows, closed the same day
+
+"Grant Okafor, Showed" was a gap in this section's first draft: `outcomePrompts` is the unanswered
+queue, and a booking whose attendance was recorded left the projection entirely. Migration
+`20261012000010` added `settled_attendance` and the repository maps it to
+`snapshot.settledAttendance`, most recent first, at most twenty, current period only, so the card
+now lists them under the queue in the same row shape with the answer in the slot the two buttons
+occupied.
+
+Three decisions worth keeping. A no-show reads **neutral, never warning**: amber is this product's
+one persistent status colour and it means somebody has to act, so putting it on a call the coach
+has already told us about would leave a standing alarm on the record of an answer they gave. The
+rows carry **no control at all**, because changing an answer is a correction request and that is
+the card beside this one. And the word is **"No-show" in both places**, matching the button and the
+artboard, rather than the button saying one thing and the record another.
+
+Answering also moves the row across in the same step. `resolveOutcomePrompt` is shared with the
+live surface and only drops the prompt, so the settled row is added here from the row the handler
+already holds, after the receipt is checked. The next read replaces the whole snapshot with the
+projection's own copy.
+
 ### The demo tenant's empty list, stated rather than seeded
 
 Every billable row on a demo tenant carries `is_test` and the projections exclude it, so the
@@ -301,8 +320,6 @@ with nothing waiting gets the plain sentence instead. Nothing was seeded to fill
   the third stat from an absence into the number the artboard drew.
 - **The billing interval.** The projection carries no interval, so the cadence is inferred from
   the period boundaries. One field removes the inference.
-- **Settled attendance rows.** The projection returns unanswered prompts only, so the list cannot
-  show recent bookings a coach already answered, which is half of what the artboard draws.
 - **Seed defect, not a backend gap:** the login coach's `billing_subscriptions` period reads
   2025-10-24 to 2026-10-03 on the hosted project, so the plan card cannot call the price monthly.
 

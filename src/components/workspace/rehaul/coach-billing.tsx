@@ -22,10 +22,12 @@
  *     prints its absence in words rather than a number nobody can check.
  *   - "The card ending 4429 expires next month". There is no saved-card record and no coach
  *     reachable route to one, so the notice line carries only the notices the record does hold.
- *   - The answered rows ("Grant Okafor, Showed"). `outcomePrompts` is the unanswered queue only;
- *     a booking whose attendance is already recorded leaves the projection entirely.
  *   - "Calls from the last two weeks". No window is stated by the read, so the footer says what
  *     the list is for instead of asserting a range.
+ *
+ * The answered rows ("Grant Okafor, Showed") were a gap here until 2026-09-04 and are not one any
+ * more: `coach_billing_projection` returns `settledAttendance` as of migration `20261012000010`,
+ * so the card lists what the coach already answered under the queue, read only.
  *
  * The anatomy is spelled with `coach.css`'s own `.coach-panel*` classes rather than through
  * `DeckPanel`, because the artboard puts a real button in two of the three header bands and
@@ -101,6 +103,9 @@ const ROW_NAME_CLASS = "m-0 text-[18px] leading-[1.35] font-medium text-[color:v
 const ROW_META_CLASS = "m-0 text-[16px] leading-[1.45] text-[color:var(--muted)]";
 const FOOTNOTE_CLASS = "m-0 text-[15px] leading-[1.5] text-[color:var(--muted)]";
 const FIELD_LABEL_CLASS = "text-[16px] leading-[1.5] text-[color:var(--muted)]";
+/* The queue's own cleared line: body size, not the footnote's 15px, and written once rather
+   than appended over FOOTNOTE_CLASS, which would spell font-size twice in one class list. */
+const CLEARED_CLASS = "m-0 text-[16px] leading-[1.5] text-[color:var(--muted)]";
 const TEXTAREA_CLASS =
   "min-h-[120px] w-full resize-y rounded-[9px] border border-[var(--line-input)] bg-[var(--well)] "
   + "px-[16px] py-[12px] text-[16px] leading-[1.5] text-[color:var(--ink)] "
@@ -537,9 +542,14 @@ function CorrectionCard({
  * row a coach does not want to answer is already answered by leaving it alone, and a third button
  * on a two-button question is the form asking about itself.
  *
- * The list is the unanswered queue. On the demo workspace it is empty by design rather than by
- * accident -- every billable row on a demo tenant carries `is_test` and the projections exclude
- * it -- so the absence names that reason instead of reading as a screen that failed to load.
+ * The card is two lists in one: the unanswered queue, then what the coach already answered this
+ * period, read only. They share a row shape and a run of hairlines because the artboard draws
+ * them as one list, and because the second is the first a moment later.
+ *
+ * With neither, the absence is stated in words. On the demo workspace it is empty by design
+ * rather than by accident -- every billable row on a demo tenant carries `is_test` and the
+ * projections exclude it -- so the sentence names that reason instead of reading as a screen that
+ * failed to load.
  */
 function AttendanceCard({
   onRecord,
@@ -553,6 +563,7 @@ function AttendanceCard({
   snapshot: CoachBillingSnapshot;
 }) {
   const prompts = snapshot.outcomePrompts;
+  const settled = snapshot.settledAttendance;
 
   return (
     <section
@@ -581,7 +592,20 @@ function AttendanceCard({
         ) : null}
       </div>
 
-      {prompts.length > 0 ? (
+      {/*
+        Nothing to answer, but something to read. The queue being empty is not the same fact as
+        the card being empty, so when the coach has already answered every call in the period the
+        sentence says only that and the record stays on the page under it.
+      */}
+      {prompts.length === 0 && settled.length > 0 ? (
+        <div className="coach-panel__body pb-0">
+          <p className={CLEARED_CLASS} data-slot="billing-attendance-cleared">
+            Nothing is waiting for an answer.
+          </p>
+        </div>
+      ) : null}
+
+      {prompts.length > 0 || settled.length > 0 ? (
         <ul className="m-0 list-none p-0">
           {prompts.map((prompt) => (
             <li
@@ -610,6 +634,34 @@ function AttendanceCard({
                   No-show
                 </button>
               </div>
+            </li>
+          ))}
+          {/*
+            What the coach already answered, so a press on Showed leaves a record instead of making
+            the row vanish. Read only: changing an answer is a correction request, which is the
+            card beside this one. The same row shape as the queue above it, with the answer in the
+            slot the two buttons occupied, which is how the artboard draws Grant Okafor.
+          */}
+          {settled.map((row) => (
+            <li
+              className="flex flex-wrap items-center gap-x-[24px] gap-y-[12px] border-t border-[var(--line-soft)] px-[20px] py-[16px] first:border-t-0"
+              data-slot="billing-attendance-settled"
+              key={row.appointmentId}
+            >
+              <div className="min-w-0 flex-1 basis-[min(100%,20ch)]">
+                <p className={ROW_NAME_CLASS}>{displayName(row.label)}</p>
+                <p className={ROW_META_CLASS}>{formatAppointment(row.occurredAt)}</p>
+              </div>
+              {/*
+                Neutral for a no-show, never warning. Amber is this product's one persistent status
+                colour and it means somebody has to act; a call the coach has already told us about
+                is settled, and colouring it amber would put a standing alarm on the record of an
+                answer they gave.
+              */}
+              <Status
+                label={row.outcome === "completed" ? "Showed" : "No-show"}
+                tone={row.outcome === "completed" ? "good" : "neutral"}
+              />
             </li>
           ))}
         </ul>
@@ -804,7 +856,35 @@ export function CoachBillingRehaul({
       if (typeof result?.auditId !== "number" || typeof result.billableQuantity !== "number") {
         throw new Error("ATTENDANCE_RECEIPT_INVALID");
       }
-      setSnapshot((current) => current ? resolveOutcomePrompt(current, appointmentId) : current);
+      /*
+       * The answer moves from the queue into the settled list in the same step, so a coach who
+       * pressed Showed sees their answer rather than a row that disappeared.
+       * `resolveOutcomePrompt` drops the prompt and does not add the settled row, because it is
+       * shared with the live surface, so the second half is done here against the row this
+       * handler already holds. It is not a guess about the write: the receipt above is checked
+       * first, and the next read replaces the whole snapshot with the projection's own copy.
+       */
+      setSnapshot((current) => {
+        if (!current) return current;
+        const answered = current.outcomePrompts.find(
+          (prompt) => prompt.appointmentId === appointmentId,
+        );
+        const resolved = resolveOutcomePrompt(current, appointmentId);
+        return answered
+          ? {
+            ...resolved,
+            settledAttendance: [
+              {
+                appointmentId,
+                label: answered.label,
+                occurredAt: answered.occurredAt,
+                outcome: status,
+              },
+              ...resolved.settledAttendance,
+            ],
+          }
+          : resolved;
+      });
       setActionReceipt(AUDIT_ACTIONS["appointment.attendance_set"].microcopy);
     } catch {
       setActionError("The attendance update was refused. Nothing changed.");

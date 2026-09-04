@@ -200,6 +200,59 @@ describe("CoachBillingRehaul, against Billing.dc.html", () => {
     expect(screen.queryByRole("button", { name: /Skip/ })).not.toBeInTheDocument();
   });
 
+  /*
+   * `coach_billing_projection` returns `settledAttendance` as of migration `20261012000010`, so
+   * the answers a coach already gave stay on the page. They are a record, not a control.
+   */
+  it("lists the answered calls under the queue, with no button on them", () => {
+    const { container } = draw({
+      outcomePrompts: [],
+      settledAttendance: [
+        {
+          appointmentId: "appt-9",
+          label: "Grant Okafor",
+          occurredAt: "2026-08-29T13:30:00.000Z",
+          outcome: "completed",
+        },
+        {
+          appointmentId: "appt-8",
+          label: "Sylvia Nunez",
+          occurredAt: "2026-08-28T20:00:00.000Z",
+          outcome: "no_show",
+        },
+      ],
+    });
+
+    const rows = container.querySelectorAll('[data-slot="billing-attendance-settled"]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain("Grant Okafor");
+    expect(rows[0].textContent).toContain("Showed");
+    expect(rows[1].textContent).toContain("Sylvia Nunez");
+    expect(rows[1].textContent).toContain("No-show");
+    for (const row of rows) expect(row.querySelector("button")).toBeNull();
+    // Amber means somebody has to act. A call the coach has already told us about is settled.
+    expect(rows[1].querySelector('[data-tone="warning"]')).toBeNull();
+    expect(rows[1].querySelector('[data-tone="neutral"]')).not.toBeNull();
+  });
+
+  it("says nothing is waiting without hiding the answers already given", () => {
+    const { container } = draw({
+      outcomePrompts: [],
+      settledAttendance: [{
+        appointmentId: "appt-9",
+        label: "Grant Okafor",
+        occurredAt: "2026-08-29T13:30:00.000Z",
+        outcome: "completed",
+      }],
+    });
+
+    expect(container.querySelector('[data-slot="billing-attendance-cleared"]')?.textContent)
+      .toBe("Nothing is waiting for an answer.");
+    // The absence sentence is for a card with nothing in it at all, which this is not.
+    expect(container.querySelector('[data-slot="billing-attendance-absent"]')).toBeNull();
+    expect(container.querySelectorAll('[data-slot="billing-attendance-settled"]')).toHaveLength(1);
+  });
+
   it("records an answer and drops the row it answered", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => new Response(
       JSON.stringify(
@@ -215,6 +268,11 @@ describe("CoachBillingRehaul, against Billing.dc.html", () => {
 
     await waitFor(() => expect(screen.getByText("Attendance logged")).toBeVisible());
     expect(screen.queryByRole("button", { name: "Showed" })).not.toBeInTheDocument();
+    // And the answer stays on the page as a record rather than the row disappearing.
+    const settled = document.querySelectorAll('[data-slot="billing-attendance-settled"]');
+    expect(settled).toHaveLength(1);
+    expect(settled[0].textContent).toContain("Maria Pena");
+    expect(settled[0].textContent).toContain("Showed");
   });
 
   /*
