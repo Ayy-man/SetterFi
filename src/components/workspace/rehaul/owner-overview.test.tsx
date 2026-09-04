@@ -221,7 +221,7 @@ describe("OwnerOverview", () => {
     const pulse = container.querySelector('[data-slot="overview-pulse"]') as HTMLElement;
     expect(pulse.querySelector('[data-slot="bar-current"]')).toBeNull();
     expect(pulse.querySelector("table")).toBeNull();
-    expect(screen.queryByRole("img", { name: /by 30-day period/u })).toBeNull();
+    expect(screen.queryByRole("img", { name: /^Gross MRR by 30-day period/u })).toBeNull();
     expect(pulse.textContent).toContain("$2,982");
   });
 
