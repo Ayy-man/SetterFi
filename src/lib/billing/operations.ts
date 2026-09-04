@@ -87,6 +87,16 @@ export function createBillingOperations(
         requestAuditId: receipt.auditId,
       };
     },
+    requestPeriodCorrection: async (
+      input: Parameters<BillingRepository["requestPeriodCorrection"]>[0],
+    ): Promise<BillingCorrectionResult> => {
+      const receipt = await repository.requestPeriodCorrection(input);
+      return {
+        state: "requested",
+        requestId: receipt.requestId,
+        requestAuditId: receipt.auditId,
+      };
+    },
     decideCorrection: async (
       input: Parameters<BillingRepository["decideCorrection"]>[0],
     ): Promise<BillingCorrectionResult> => {

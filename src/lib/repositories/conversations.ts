@@ -104,6 +104,15 @@ export type ConversationRead = {
    * this jsonb column: a malformed proposal reads as absent rather than as a guess at its slots.
    */
   proposedSlots?: ProposedSlotSet | null;
+  /**
+   * The count of enabled questions in the tenant's own question set, off `read_coach_questions`
+   * (`src/lib/repositories/coach-questions.ts`). The rail's "questions answered" count already
+   * reads a denominator of 4 off the fixed `qualification` block; the artboard's "N of M answered"
+   * needs this instead, since a tenant's enabled set is rarely exactly four. Optional in the type
+   * for source compatibility with fixtures written before this field existed -- `getConversation`
+   * always populates it.
+   */
+  questionSetSize?: number;
   messages: ConversationMessageRead[];
 };
 
@@ -195,6 +204,43 @@ export function conversationViewStatuses(
 ): readonly ConversationStatus[] | null {
   if (view === "everything") return null;
   return CONVERSATION_VIEW_STATUSES[view];
+}
+
+export type ConversationViewCounts = Record<CoachConversationView, number>;
+
+export type ConversationStatusListSource = (tenantId: string) => Promise<readonly ConversationStatus[]>;
+
+async function loadAllConversationStatuses(tenantId: string): Promise<readonly ConversationStatus[]> {
+  const client = createSupabaseServiceClient();
+  const { data, error } = await client
+    .from("conversations")
+    .select("status")
+    .eq("tenant_id", tenantId);
+  if (error) throw new Error(`CONVERSATION_READ_FAILED:${error.message}`);
+  return (data ?? []).map((row) => row.status as ConversationStatus);
+}
+
+/**
+ * The Inbox prints the size of the two lanes it is not showing, which a filtered read cannot
+ * answer without a second and third round trip. One read of every status in the tenant, counted
+ * in memory against the same `CONVERSATION_VIEW_STATUSES` lookup the filtered reads use, keeps
+ * this at the one round trip `listConversationSet` already pays for its own lane.
+ */
+export async function countConversationsByView(
+  tenantId: string,
+  source: ConversationStatusListSource = loadAllConversationStatuses,
+): Promise<ConversationViewCounts> {
+  const expectedTenant = requiredTenant(tenantId);
+  const statuses = await source(expectedTenant);
+  const needsYouSet = new Set(CONVERSATION_VIEW_STATUSES.needs_you);
+  const agentHandlingSet = new Set(CONVERSATION_VIEW_STATUSES.agent_handling);
+  let needsYou = 0;
+  let agentHandling = 0;
+  for (const status of statuses) {
+    if (needsYouSet.has(status)) needsYou += 1;
+    if (agentHandlingSet.has(status)) agentHandling += 1;
+  }
+  return { needs_you: needsYou, agent_handling: agentHandling, everything: statuses.length };
 }
 
 /**
@@ -984,10 +1030,27 @@ export async function listConversations(
  * inbox page. The identifier stays addressable when a filter hides the thread or its activity
  * moves it beyond a pagination cursor.
  */
+export type QuestionSetSizeSource = (tenantId: string) => Promise<number>;
+
+async function loadEnabledQuestionSetSize(tenantId: string): Promise<number> {
+  const client = createSupabaseServiceClient();
+  const { data, error } = await client.rpc("read_coach_questions", { p_expected_tenant: tenantId });
+  if (error) throw new Error(`COACH_QUESTION_READ_FAILED:${error.message}`);
+  const snapshot = data as { tenantId?: string; questions?: unknown } | null;
+  if (!snapshot || snapshot.tenantId !== tenantId || !Array.isArray(snapshot.questions)) {
+    throw new Error("COACH_QUESTION_SNAPSHOT_INVALID");
+  }
+  return snapshot.questions.filter((question) => (
+    Boolean(question) && typeof question === "object" &&
+    (question as { enabled?: unknown }).enabled === true
+  )).length;
+}
+
 export async function getConversation(
   tenantId: string,
   conversationId: string,
   source: ConversationByIdSource = loadLiveConversation,
+  questionSetSizeSource: QuestionSetSizeSource = loadEnabledQuestionSetSize,
 ): Promise<ConversationRead | null> {
   const expectedTenant = requiredTenant(tenantId);
   const expectedConversationId = conversationId.trim();
@@ -997,7 +1060,8 @@ export async function getConversation(
   if (row.id !== expectedConversationId || row.tenant_id !== expectedTenant) {
     throw new Error("CONVERSATION_TENANT_MISMATCH");
   }
-  return mapConversation(row);
+  const questionSetSize = await questionSetSizeSource(expectedTenant);
+  return { ...mapConversation(row), questionSetSize };
 }
 
 export type ConversationReadAcknowledgement = {

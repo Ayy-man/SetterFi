@@ -223,7 +223,7 @@ export async function loadCoachMeasurement(
   const input = validateOptions(options);
   const raw = evidenceObject(await source(actor, tenantId, input), [
     "tenantId", "window", "timezone", "windowStart", "windowEnd", "metrics", "funnel",
-    "responses", "keywords", "pipeline", "allowance", "isDemo",
+    "responses", "keywords", "pipeline", "allowance", "isDemo", "keywordConversationTotal",
   ], "COACH_MEASUREMENT_SNAPSHOT_INVALID");
   if (typeof raw.isDemo !== "boolean") {
     throw new MeasurementEvidenceError("COACH_MEASUREMENT_SNAPSHOT_INVALID");
@@ -343,22 +343,27 @@ export async function loadCoachMeasurement(
       dataLabel: evidenceString(row.dataLabel, "COACH_MEASUREMENT_KEYWORDS_INVALID"),
     };
   });
-  const keywordMetric = metrics.find((metric) => metric.metricKey === "coach.keyword.conversations");
   /*
-   * Conservation remains the invariant: the keyword rows must sum to the metric the page prints
-   * beside them. `read_coach_measurement` (20260823000001_phase7_measurement.sql:1371-1390)
-   * already groups conversations by `coalesce(nullif(btrim(first_touch_keyword), ''), 'No
-   * keyword')`, computed with the same per-group counts as every named keyword, so a window with
-   * at least one unattributed conversation arrives here carrying that row already -- this
-   * repository accepts whatever rows the RPC produced, it does not filter one out or add one.
-   * What it deliberately does not do is manufacture a `No keyword` row client-side when the RPC's
-   * own grouping produced none, e.g. an empty window (`keywords: []`, see the test below): a
-   * placeholder row with nothing to bucket would be an opt-in count invented on this side of the
-   * wire, not a fact read from the database, and doing that once already took the coach home page
-   * down in production (digest 211570165).
+   * Conservation remains the invariant: the keyword rows must sum to the window's own conversation
+   * total, which `read_coach_measurement` (20261012000009_keyword_table_whole_population.sql)
+   * computes independently of the `coach.keyword.conversations` metric tile. As of round 3 the
+   * `keywords` table is the whole population grouped by first-touch keyword with "No keyword" last
+   * -- not only the conversations attributed to an active keyword goal -- while the metric tile
+   * stays scoped to goal-attributed conversations for the summary figure beside it, so the two are
+   * no longer the same number and cannot be checked against each other. This repository accepts
+   * whatever rows the RPC produced, it does not filter one out or add one. What it deliberately
+   * does not do is manufacture a `No keyword` row client-side when the RPC's own grouping produced
+   * none, e.g. an empty window (`keywords: []`, see the test below): a placeholder row with nothing
+   * to bucket would be an opt-in count invented on this side of the wire, not a fact read from the
+   * database, and doing that once already took the coach home page down in production
+   * (digest 211570165).
    */
+  const keywordConversationTotal = coachCount(
+    raw.keywordConversationTotal,
+    "COACH_MEASUREMENT_KEYWORD_CONSERVATION_FAILED",
+  );
   const keywordTotal = keywords.reduce((total, row) => total + row.conversations, 0);
-  if (keywordTotal !== keywordMetric?.value) {
+  if (keywordTotal !== keywordConversationTotal) {
     throw new MeasurementEvidenceError("COACH_MEASUREMENT_KEYWORD_CONSERVATION_FAILED");
   }
 

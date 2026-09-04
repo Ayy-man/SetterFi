@@ -50,10 +50,46 @@ describe("coach billing corrections route", () => {
     const response = await createBillingCorrectionsHandler({
       enabled: () => true,
       session: async () => coach,
-      operations: { requestCorrection, recordAttendance: vi.fn(), skipAttendance: vi.fn() },
+      operations: {
+        requestCorrection,
+        requestPeriodCorrection: vi.fn(),
+        recordAttendance: vi.fn(),
+        skipAttendance: vi.fn(),
+      },
     })(request({ action: "request_correction", eventId: "event", quantityDelta: -1, reason: "duplicate" }));
     expect(response.status).toBe(200);
     expect(requestCorrection).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "tenant" }));
+  });
+
+  it("files a period-level correction with a reason only, no event and no quantity delta", async () => {
+    const requestPeriodCorrection = vi.fn()
+      .mockResolvedValue({ state: "requested", requestId: "period-r", requestAuditId: 1 });
+    const response = await createBillingCorrectionsHandler({
+      enabled: () => true,
+      session: async () => coach,
+      operations: {
+        requestCorrection: vi.fn(),
+        requestPeriodCorrection,
+        recordAttendance: vi.fn(),
+        skipAttendance: vi.fn(),
+      },
+    })(request({ action: "request_period_correction", reason: "this period looks wrong" }));
+    expect(response.status).toBe(200);
+    expect(requestPeriodCorrection).toHaveBeenCalledWith({
+      tenantId: "tenant", reason: "this period looks wrong",
+    });
+
+    const refused = await createBillingCorrectionsHandler({
+      enabled: () => true,
+      session: async () => coach,
+      operations: {
+        requestCorrection: vi.fn(),
+        requestPeriodCorrection: vi.fn(),
+        recordAttendance: vi.fn(),
+        skipAttendance: vi.fn(),
+      },
+    })(request({ action: "request_period_correction", reason: "  " }));
+    expect(refused.status).toBe(409);
   });
 
   it("is neither public nor tenant-selectable", async () => {
@@ -62,6 +98,7 @@ describe("coach billing corrections route", () => {
       session: async () => null,
       operations: {
         requestCorrection: vi.fn(),
+        requestPeriodCorrection: vi.fn(),
         recordAttendance: vi.fn(),
         skipAttendance: vi.fn(),
       },
@@ -79,6 +116,7 @@ describe("coach billing corrections route", () => {
       session: async () => coach,
       operations: {
         requestCorrection: vi.fn(),
+        requestPeriodCorrection: vi.fn(),
         recordAttendance: vi.fn(),
         skipAttendance,
       },
@@ -141,6 +179,7 @@ describe("coach billing corrections route", () => {
       session: async () => coach,
       operations: {
         requestCorrection: vi.fn(),
+        requestPeriodCorrection: vi.fn(),
         recordAttendance: vi.fn(),
         skipAttendance: repository.skipAttendance,
       },
@@ -177,6 +216,7 @@ describe("coach billing corrections route", () => {
       session: async () => coach,
       operations: {
         requestCorrection: vi.fn(),
+        requestPeriodCorrection: vi.fn(),
         recordAttendance: vi.fn(),
         skipAttendance: vi.fn().mockRejectedValue(new Error("ATTENDANCE_SKIP_REFUSED")),
       },

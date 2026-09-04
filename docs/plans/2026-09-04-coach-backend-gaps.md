@@ -327,3 +327,183 @@ total.
 rate and billing interval on the read, settled attendance rows). Any gaps the remaining lanes
 record under their "what shipped" sections in `docs/plans/2026-09-04-coach-rehaul-notes.md` join
 this round.
+
+## Round 3 (2026-09-04)
+
+### 1. Keyword table scope - GAP CLOSED
+
+`supabase/migrations/20261012000009_keyword_table_whole_population.sql` replaces
+`public.read_coach_measurement`. It keeps `app.phase13_keyword_measurement`'s per-keyword figures
+(CAPI attribution, `senderCount`) for keywords that have a keyword goal, and unions in every
+remaining first-touch keyword plus the "No keyword" row from the pre-phase-13 grouping, so the row
+set is the whole population and `senderCount` is populated on every row, not only the
+goal-attributed ones. "No keyword" sorts last. The metric tile `coach.keyword.conversations` stays
+goal-scoped, per the round-3 ruling, so it and the table's own row sum are legitimately different
+numbers now; the RPC also returns a new `keywordConversationTotal` (the population's own total),
+and `loadCoachMeasurement` (`src/lib/repositories/analytics.ts`) was moved onto it for the table's
+conservation check instead of the metric. `read_coach_measurement_pre_phase13` and
+`app.phase13_keyword_measurement` are untouched. Tests: `supabase/tests/keyword-goals-capi.test.ts`
+(two goal keywords, one stray keyword, one no-keyword conversation - four rows, "No keyword" last,
+conservation against `keywordConversationTotal`), `supabase/tests/phase7-measurement.test.ts`
+(key-set assertions), `src/lib/repositories/analytics.test.ts`.
+
+**Known, not fixed here (flagged in `20261012000007_keyword_sender_count.sql`'s own comment,
+confirmed again this round):** `app.phase13_keyword_measurement` hard-excludes `is_demo` tenants
+and `is_test` conversations with no visibility override, unlike every other measurement read on
+this tenant. A demo tenant's keyword rows can never carry goal-attribution figures no matter what
+`platform_demo_visible()` or `app.phase7_demo_tenant` say; they always fall back to the
+population-only figures this round's migration adds. This is a real product inconsistency, not
+introduced by this round, and needs its own migration once someone decides whether demo tenants
+should see goal-attributed keyword rows at all.
+
+### 2. Billing intake - GAP CLOSED (request side); decision side explicitly refused, not silently broken
+
+`supabase/migrations/20261012000010_billing_period_correction_and_settled_attendance.sql`:
+
+- `billing_correction_requests` now accepts a period-level shape (`period_start`/`period_end`, no
+  `billable_event_id`/`quantity_delta`) alongside the existing event-level shape; a check
+  constraint requires exactly one of the two shapes.
+- New RPC `request_period_billing_correction(p_expected_tenant, p_reason)` for the coach-facing
+  "something about this period looks wrong" flow that carries no event id and no quantity delta.
+- `decide_billable_correction` (the platform-side approve/reject RPC) now refuses a period-level
+  request with a named error, `BILLING_CORRECTION_PERIOD_LEVEL_DECISION_NOT_SUPPORTED`, instead of
+  hitting an opaque constraint violation. Deciding a period-level request needs a "floating" credit
+  not anchored to a real `billable_events` row, which `billable_events_shape_chk` forbids outright;
+  making that work is a real schema change and was judged out of scope for this round. Flagging as
+  the next round's item: either give period-level corrections their own settlement path, or fold
+  them into event-level ones at intake time.
+- `coach_billing_projection(uuid)` gained a `settled_attendance` output: up to 20 current-period
+  appointments with `attendance_source is not null`, most recent first.
+
+**Overage rate and billing interval - deliberately not added.** Neither has a stored field or a
+write path anywhere in the schema; `20261005000002_signup_tier_call_allowance.sql`'s own comment
+says both are pending Alec's commercial decision. Adding either to a read this round would mean
+inventing a number with nothing behind it, which the engineering brief's honest-states rule
+forbids. Once a tier's overage rate and billing interval have a real column and a real write path,
+`coach_billing_projection` is the function to extend.
+
+`src/lib/repositories/billing.ts`, `src/lib/billing/operations.ts`, and
+`src/app/api/billing/corrections/handler.ts` all carry the new period-level request path end to
+end (`requestPeriodCorrection`), with tests in `billing.test.ts`, `operations.test.ts`, and
+`corrections/route.test.ts`.
+
+### 3. Inbox - GAP CLOSED
+
+- `countConversationsByView(tenantId, source)` (`src/lib/repositories/conversations.ts`) returns
+  the three `CONVERSATION_VIEWS` counts (needs-you, agent-handling, everything) off one status
+  read, so the tab figures no longer cost a full-set read.
+- `getConversation` gained a `questionSetSize` field, sourced from `read_coach_questions` (already
+  granted directly to service_role, no actor needed), so the rail can say "3 of 6 answered" instead
+  of "3 of 4."
+
+Tests: `src/lib/repositories/conversations.test.ts` (two new `describe` blocks, five tests).
+
+### 4. Setup and onboarding - GAP CLOSED
+
+- `supabase/migrations/20261012000011_a2p_registration_approved_at.sql` adds `approved_at` to
+  `read_coach_a2p_registration`, sourced from `provisioning_steps.completed_at` on the `sms_live`
+  step (the same clock every other finished Setup step already ticks on), null unless that step is
+  actually `done`. `CoachA2pRegistrationProjection.approvedAt` is optional
+  (`src/lib/repositories/onboarding-evidence.ts`) so the two UI fixtures outside this round's write
+  scope (`src/components/onboarding/*.test.ts`) that predate the field stay green.
+- New `src/lib/repositories/coach-profile.ts`: `readCoachOwnEmail(actor, source)`, a
+  tenant-and-user-scoped read of the coach's own `users.email`, for Settings' "Sent to the address
+  on your account." Wired into `GET /api/coach/notification-preference`
+  (`src/app/api/coach/notification-preference/handler.ts` and `route.ts`), which now returns
+  `{ preference, email }` in one round trip.
+
+Tests: `src/lib/repositories/coach-profile.test.ts` (new, four tests),
+`src/lib/repositories/onboarding-evidence.test.ts`, `src/app/api/coach/notification-preference/route.test.ts`.
+
+### 5. Seeding - written, not run
+
+`scripts/seed-coach-rebuild-demo.mjs` (new, not run per the brief). Targets the login demo coach's
+tenant, `87000000-0000-4000-8000-000000000001`, which `seed-phase7-demo.mjs` already owns for
+measurement fixtures but never gave a published offer, a keyword table, a business profile, a
+mid-review A2P registration, an expired channel connection, or a support thread - exactly what this
+round's brief named. (The brief's literal id,
+`87000000-0000-0000-0000-000000000001`, does not exist anywhere in the codebase or match any
+tenant convention; the real login demo tenant at that first segment is
+`87000000-0000-4000-8000-000000000001`, `seed-phase7-demo.mjs`'s `PHASE7_DEMO_IDS.tenant`, "Avery
+Morgan (demo)" - treated as the intended target.)
+
+The script refuses to run against anything but that already-seeded tenant, writes every new id
+under its own `92000000-0000-4000-8000-` namespace (checked empty against `scripts/`, `src/`,
+`supabase/` before use), and is idempotent the same way the other demo seeders are (`on conflict`
+upserts, or a lookup-then-reuse check before any RPC with no natural upsert path). It adds:
+
+- A business profile row (direct insert, same shape as `seed-phase5-demo.mjs`'s).
+- `sms_live` and `a2p_campaign` provisioning steps in `awaiting_provider` state, the campaign's
+  `external_ref->>'submittedAt'` dated 14 days back, so `read_coach_a2p_registration` reads a real
+  mid-review registration with no `approved_at`.
+- One `channel_connections` row, `instagram`/`meta_direct`, `state = 'expired'`, with a past
+  `token_expires_at`.
+- Two keyword goals (`funding`, `credit`, mode `book`) via `save_keyword_goal`, and four new
+  contacts/conversations/messages carrying matching `first_touch_keyword` and `keyword_goal_id`, so
+  the Home keyword table has real rows to render. (Goal-attributed figures on those rows are
+  subject to the known phase13/demo-tenant gap in item 1 above; the whole-population side of the
+  table renders regardless.)
+- A support thread via `create_support_thread`, assigned to a named "success" responder
+  (`set_support_thread_assignee`) with a reply message and a `waiting_on_coach` status
+  (`set_support_thread_status`) - a plain pricing-copy question, unrelated to the trainings
+  surface, so it does not read as a stand-in for the (unbuilt) trainings feature.
+- A published offer layer via `save_offer_draft`/`publish_offer_draft`: two qualifier-shaped
+  fields (`creditMin`, `fundingGoalMinCents`/`fundingGoalMaxCents`, `monthlyRevenueMinCents`,
+  `creditRepair`), a closed-vocabulary `products` selection, and two prices. `contentHash` is a
+  real sha256 hex digest (`offer_layers_content_hash_chk` requires the 64-hex-character shape);
+  `products`/`creditRepair` are drawn from the closed vocabularies
+  `offer_layers_products_chk`/`credit_repair`'s check constraint actually allow, not free text.
+
+Every billable or analytics-visible row (`contacts`, `conversations`, `messages`,
+`support_threads`, `support_messages`) is `is_test = true`; the tenant itself is `is_demo = true`.
+
+Run order: `node scripts/seed-phase7-demo.mjs --acknowledge-stale-rollups`, then
+`node scripts/seed-coach-rebuild-demo.mjs [--target <url>] [--confirm-hosted]`.
+
+### 6. Other lane gaps reviewed
+
+- **No SMS delivery** (`claim_notification_deliveries` claims email only) - needs a real delivery
+  worker; out of scope for a backend-only round.
+- **No coach guide catalogue** / **no trainings store** - both need real authored content (guide
+  text, training videos) the intake never captured, not just a repository and a route; a schema
+  with nothing behind it would be worse than no schema. Left open.
+- **Support threads have no unread state** - real gap, but genuinely ambiguous without a product
+  call: unread since the coach last opened the thread, since their last reply, or since the
+  responder's last reply, and marking-as-read needs its own write path. Left open rather than
+  guessing the semantics; needs one line in `docs/PRODUCT.md` or `docs/BACKEND-SPEC.md` before a
+  migration is worth writing.
+- **Leads lane** reported "nothing was blocked" in its own "what shipped" section - no backend
+  action needed.
+
+### File list
+
+Migrations (apply in this order):
+
+1. `supabase/migrations/20261012000009_keyword_table_whole_population.sql`
+2. `supabase/migrations/20261012000010_billing_period_correction_and_settled_attendance.sql`
+3. `supabase/migrations/20261012000011_a2p_registration_approved_at.sql`
+
+Repositories / lib: `src/lib/repositories/analytics.ts`, `src/lib/repositories/billing.ts`,
+`src/lib/billing/operations.ts`, `src/lib/repositories/conversations.ts`,
+`src/lib/repositories/onboarding-evidence.ts`, `src/lib/repositories/coach-profile.ts` (new).
+
+API routes: `src/app/api/billing/corrections/handler.ts`,
+`src/app/api/coach/notification-preference/handler.ts`,
+`src/app/api/coach/notification-preference/route.ts`.
+
+Scripts: `scripts/seed-coach-rebuild-demo.mjs` (new, not run).
+
+Tests touched: `src/lib/repositories/analytics.test.ts`,
+`supabase/tests/keyword-goals-capi.test.ts`, `supabase/tests/phase7-measurement.test.ts`,
+`src/lib/repositories/billing.test.ts`, `src/lib/billing/operations.test.ts`,
+`src/app/api/billing/corrections/route.test.ts`, `src/lib/repositories/conversations.test.ts`,
+`src/lib/repositories/onboarding-evidence.test.ts`, `src/lib/repositories/coach-profile.test.ts`
+(new), `src/app/api/coach/notification-preference/route.test.ts`.
+
+### Verification
+
+`npx tsc --noEmit -p .`: zero errors. `npx vitest run src/lib src/app/api`: 352 files passed, 4
+pre-existing skips, 3604 tests passed, 13 pre-existing skips, zero failures. A scoped run of every
+file this round touched plus the two `supabase/tests` files and `src/app/em-dash.test.ts`: 9 files,
+117 tests, all passed. No migration in this round was applied to any database; all three are
+written only, for the team lead to apply in the listed order.

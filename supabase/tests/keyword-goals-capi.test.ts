@@ -133,7 +133,7 @@ describe("Phase 13 schema custody", () => {
     await db.query("rollback to savepoint test_event_left_sendable");
   });
 
-  it("counts exact attributed conversations and their first fixed-event enqueues only", async () => {
+  it("counts exact attributed conversations and reports the whole-population keyword table", async () => {
     const funding = await db.query<{ keyword_goal_id: string }>(`
       select keyword_goal_id::text from public.save_keyword_goal(
         $1, $2, null, 'FUNDING', 'book', null, null, null, null
@@ -165,6 +165,7 @@ describe("Phase 13 schema custody", () => {
       goalId: referral.rows[0].keyword_goal_id, keyword: "REFERRAL",
     });
     const unattributed = await conversation({});
+    const stray = await conversation({ keyword: "STRAY" });
     const appointment = await db.query<{ id: string }>(`
       insert into public.appointments
         (tenant_id, contact_id, conversation_id, provider, external_id, start_at, end_at, timezone)
@@ -192,24 +193,49 @@ describe("Phase 13 schema custody", () => {
 
     const measurement = await db.query<{ snapshot: {
       keywords: Array<Record<string, unknown>>;
+      keywordConversationTotal: number;
       metrics: Array<{ metricKey: string; value: number }>;
     } }>(`
       select public.read_coach_measurement_for_actor(
         $1, $2, 'all', null, null, now()
       ) snapshot
     `, [COACH_A, TENANT_A]);
+    // Round 3 (docs/plans/2026-09-04-coach-backend-gaps.md, "Round 3 intake"): the `keywords`
+    // table is the whole population grouped by first-touch keyword, "No keyword" row last, with
+    // the phase 13 CAPI-attributed figures kept for keywords that carry an active goal. FUNDING
+    // and REFERRAL keep their goal-attributed figures (CAPI events, not pipeline stage); STRAY and
+    // "No keyword" are population-only rows with no CAPI attribution behind them.
     expect(measurement.rows[0].snapshot.keywords).toEqual([
       expect.objectContaining({
-        keyword: "FUNDING", conversations: 1, qualifiedContacts: 1, bookedContacts: 1,
+        keyword: "FUNDING", conversations: 1, senderCount: 1,
+        qualifiedContacts: 1, bookedContacts: 1,
       }),
       expect.objectContaining({
-        keyword: "REFERRAL", conversations: 1, qualifiedContacts: 0, bookedContacts: 0,
+        keyword: "REFERRAL", conversations: 1, senderCount: 1,
+        qualifiedContacts: 0, bookedContacts: 0,
+      }),
+      expect.objectContaining({
+        keyword: "STRAY", conversations: 1, senderCount: 1,
+        qualifiedContacts: 0, bookedContacts: 0,
+      }),
+      expect.objectContaining({
+        keyword: "No keyword", conversations: 1, senderCount: 1,
+        qualifiedContacts: 0, bookedContacts: 0,
       }),
     ]);
+    // The renamed keyword goal must not rewrite the immutable first-touch label on old
+    // conversations: FUNDING's conversation stays keyed as FUNDING, not CAPITAL.
     expect(measurement.rows[0].snapshot.keywords).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ keyword: "CAPITAL" }),
-      expect.objectContaining({ keyword: "No keyword" }),
     ]));
+    // Every row carries a distinct-sender count, the whole-population row set sums to the window's
+    // four conversations, and the "coach.keyword.conversations" metric tile stays scoped to
+    // goal-attributed conversations (FUNDING + REFERRAL only) -- a deliberately different number
+    // from the table's own total, per the round 3 ruling.
+    expect(measurement.rows[0].snapshot.keywords.every(
+      (row) => typeof row.senderCount === "number",
+    )).toBe(true);
+    expect(measurement.rows[0].snapshot.keywordConversationTotal).toBe(4);
     expect(measurement.rows[0].snapshot.metrics.find(
       (metric) => metric.metricKey === "coach.keyword.conversations",
     )?.value).toBe(2);
@@ -217,6 +243,7 @@ describe("Phase 13 schema custody", () => {
     // Keep the variable live in the test: the second attributed conversation owns the denominator
     // even without either conversion event.
     expect(optInOnly.conversationId).toBeTruthy();
+    expect(stray.conversationId).toBeTruthy();
   });
 
   it("provisions one tenant-bound dataset with a safe receipt and atomic human audit", async () => {

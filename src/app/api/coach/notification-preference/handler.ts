@@ -12,6 +12,7 @@ type AuditChange = { ruleId: string; destination: "email" | "sms"; enabled: bool
 type Dependencies = {
   session(): Promise<RouteActor | null>;
   read(userId: string, role: RouteActor["role"]): Promise<CoachNotificationPreference | null>;
+  readEmail(actor: { userId: string; tenantId: string }): Promise<string | null>;
   write(
     userId: string,
     role: RouteActor["role"],
@@ -38,8 +39,11 @@ export function createCoachNotificationPreferenceHandlers(dependencies: Dependen
     const actor = await actorOrForbidden();
     if (!actor) return Response.json({ error: "Forbidden." }, { status: 403, headers });
     try {
-      const preference = await dependencies.read(actor.userId, actor.role);
-      return Response.json({ preference }, { headers });
+      const [preference, email] = await Promise.all([
+        dependencies.read(actor.userId, actor.role),
+        dependencies.readEmail({ userId: actor.userId, tenantId: actor.tenantId }),
+      ]);
+      return Response.json({ preference, email }, { headers });
     } catch (error) {
       console.error(
         "/api/coach/notification-preference unavailable.",

@@ -4,6 +4,8 @@ import {
   CONVERSATION_STATUSES,
   CONVERSATION_VIEWS,
   conversationViewStatuses,
+  countConversationsByView,
+  getConversation,
   listConversations,
   listConversationSet,
   persistDeferredWithAudit,
@@ -274,6 +276,61 @@ describe("listConversations", () => {
       "scope_blocked",
       "opted_out",
     ]);
+  });
+});
+
+describe("getConversation", () => {
+  it("carries the tenant's enabled question-set size alongside the qualification block", async () => {
+    const conversation = await getConversation(
+      "tenant-a",
+      "conversation-a",
+      async () => row("conversation-a"),
+      async (tenantId) => {
+        expect(tenantId).toBe("tenant-a");
+        return 6;
+      },
+    );
+    expect(conversation).toMatchObject({ id: "conversation-a", questionSetSize: 6 });
+  });
+
+  it("returns null without reading the question set for a conversation that does not exist", async () => {
+    let questionSetSizeCalls = 0;
+    const conversation = await getConversation(
+      "tenant-a",
+      "conversation-a",
+      async () => null,
+      async () => { questionSetSizeCalls += 1; return 6; },
+    );
+    expect(conversation).toBeNull();
+    expect(questionSetSizeCalls).toBe(0);
+  });
+});
+
+describe("countConversationsByView", () => {
+  it("counts every lane from one status read, summing to everything", async () => {
+    const statuses = [
+      "agent", "agent", "needs_human", "human", "human", "scope_blocked", "nurture", "closed",
+      "opted_out",
+    ] as const;
+    const counts = await countConversationsByView("tenant-a", async (tenantId) => {
+      expect(tenantId).toBe("tenant-a");
+      return statuses;
+    });
+    expect(counts).toEqual({
+      needs_you: 4, // needs_human, human, human, scope_blocked
+      agent_handling: 2, // agent, agent
+      everything: statuses.length,
+    });
+  });
+
+  it("counts a quiet tenant as zero in every lane, not an absent read", async () => {
+    const counts = await countConversationsByView("tenant-a", async () => []);
+    expect(counts).toEqual({ needs_you: 0, agent_handling: 0, everything: 0 });
+  });
+
+  it("requires a non-blank tenant", async () => {
+    await expect(countConversationsByView("  ", async () => []))
+      .rejects.toThrow("EXPECTED_TENANT_REQUIRED");
   });
 });
 

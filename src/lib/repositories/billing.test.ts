@@ -261,6 +261,12 @@ describe("billing repository", () => {
         label: "Synthetic booked call",
         occurredAt: "2026-08-20T00:00:00.000Z",
       }],
+      settled_attendance: [{
+        appointmentId: "appointment-2",
+        label: "Synthetic answered call",
+        occurredAt: "2026-08-18T00:00:00.000Z",
+        outcome: "completed",
+      }],
       is_demo: true,
     };
     const repository = createBillingRepository(dependencies({
@@ -307,7 +313,7 @@ describe("billing repository", () => {
       timezone: "America/New_York", booked_count: 18, call_allowance: 25,
       subscription_state: "active", invoice_state: "active", account_state: "active",
       pending_tier_name: null, pending_price_cents: null, pending_effective_at: null,
-      notices: [], correction_candidates: [], outcome_prompts: [], is_demo: true,
+      notices: [], correction_candidates: [], outcome_prompts: [], settled_attendance: [], is_demo: true,
     };
     const repository = () => createBillingRepository(dependencies({
       projectOwnBilling: vi.fn().mockResolvedValue([projection]),
@@ -336,7 +342,7 @@ describe("billing repository", () => {
       timezone: "America/New_York", booked_count: 4, call_allowance: 25,
       subscription_state: "canceled", invoice_state: "canceled", account_state: "churned",
       pending_tier_name: null, pending_price_cents: null, pending_effective_at: null,
-      notices: [], correction_candidates: [], outcome_prompts: [], is_demo: true,
+      notices: [], correction_candidates: [], outcome_prompts: [], settled_attendance: [], is_demo: true,
     };
     const repository = createBillingRepository(dependencies({
       projectOwnBilling: vi.fn().mockResolvedValue([projection]),
@@ -382,6 +388,37 @@ describe("billing repository", () => {
     }));
     await expect(repository.decideCorrection({ actorId: "owner", tenantId: "tenant", requestId: "request", decision: "approved", reason: "verified" }))
       .resolves.toEqual({ decisionId: "decision", offsetEventId: "offset", requestAuditId: 11, decisionAuditId: 22 });
+  });
+
+  it("files a period-level correction request through the coach-scoped RPC, no event or delta", async () => {
+    const userRpc = vi.fn().mockResolvedValue({ request_id: "period-request", audit_id: 5 });
+    const readCorrectionRequest = vi.fn().mockResolvedValue({ id: "period-request", audit_id: 5 });
+    const repository = createBillingRepository(dependencies({ userRpc, readCorrectionRequest }));
+    await expect(repository.requestPeriodCorrection({ tenantId: "tenant", reason: "the count looks wrong" }))
+      .resolves.toEqual({ requestId: "period-request", auditId: 5 });
+    expect(userRpc).toHaveBeenCalledWith("request_period_billing_correction", {
+      p_expected_tenant: "tenant", p_reason: "the count looks wrong",
+    });
+  });
+
+  it("carries a period-level correction request's null event and quantity, and its period bounds", async () => {
+    const repository = createBillingRepository(dependencies({
+      projectCorrections: vi.fn().mockResolvedValue([{
+        id: "period-request", tenant_id: "tenant", billable_event_id: null, quantity_delta: null,
+        period_start: "2026-08-01T00:00:00.000Z", period_end: "2026-09-01T00:00:00.000Z",
+        reason: "the count looks wrong", audit_id: 5, created_at: "2026-08-20T00:00:00.000Z",
+        tenants: { name: "Synthetic Coaching", is_demo: false },
+        billing_correction_decisions: [],
+      }]),
+    }));
+    await expect(repository.listCorrections()).resolves.toEqual([expect.objectContaining({
+      requestId: "period-request",
+      billableEventId: null,
+      quantityDelta: null,
+      periodStart: "2026-08-01T00:00:00.000Z",
+      periodEnd: "2026-09-01T00:00:00.000Z",
+      decision: null,
+    })]);
   });
 
   it("proves every attendance choice leaves the persisted billable sum unchanged", async () => {

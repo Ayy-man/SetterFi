@@ -465,8 +465,8 @@ describe("measurement readers", () => {
       `select public.read_coach_measurement($1,'1m',null,null,now()) snapshot`, [TENANT_A],
     );
     expect(Object.keys(result.rows[0].snapshot).sort()).toEqual([
-      "allowance","funnel","keywords","metrics","pipeline","responses","tenantId",
-      "timezone","window","windowEnd","windowStart",
+      "allowance","funnel","keywordConversationTotal","keywords","metrics","pipeline","responses",
+      "tenantId","timezone","window","windowEnd","windowStart",
     ].sort());
     const metrics = result.rows[0].snapshot.metrics as Array<{ metricKey: string }>;
     expect(metrics).toHaveLength(20);
@@ -1179,8 +1179,8 @@ describe("measurement reader actor seam", () => {
     // set this returns is deliberately one wider than read_coach_measurement's own, asserted
     // unchanged elsewhere in this suite.
     expect(Object.keys(result.rows[0].snapshot).sort()).toEqual([
-      "allowance","funnel","isDemo","keywords","metrics","pipeline","responses","tenantId",
-      "timezone","window","windowEnd","windowStart",
+      "allowance","funnel","isDemo","keywordConversationTotal","keywords","metrics","pipeline",
+      "responses","tenantId","timezone","window","windowEnd","windowStart",
     ].sort());
     expect(result.rows[0].snapshot.tenantId).toBe(TENANT_A);
     expect(result.rows[0].snapshot.metrics as unknown[]).toHaveLength(20);

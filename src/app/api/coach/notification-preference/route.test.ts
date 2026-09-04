@@ -22,6 +22,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
   return {
     session: vi.fn(async () => actor),
     read: vi.fn(async () => "email" as const),
+    readEmail: vi.fn(async () => "coach@synthetic.test"),
     write: vi.fn(async () => "text" as const),
     audit: vi.fn(async () => {}),
     ...overrides,
@@ -50,13 +51,22 @@ describe("coach notification preference API", () => {
     expect((await handlers.GET()).status).toBe(403);
   });
 
-  it("reads the coach's own preference", async () => {
+  it("reads the coach's own preference and account email in one round trip", async () => {
     const deps = dependencies();
     const handlers = createCoachNotificationPreferenceHandlers(deps);
     const response = await handlers.GET();
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ preference: "email" });
+    expect(await response.json()).toEqual({ preference: "email", email: "coach@synthetic.test" });
     expect(deps.read).toHaveBeenCalledWith("coach-1", "coach");
+    expect(deps.readEmail).toHaveBeenCalledWith({ userId: "coach-1", tenantId: "tenant-session" });
+  });
+
+  it("carries a null email honestly rather than guessing one", async () => {
+    const deps = dependencies({ readEmail: vi.fn(async () => null) });
+    const handlers = createCoachNotificationPreferenceHandlers(deps);
+    const response = await handlers.GET();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ preference: "email", email: null });
   });
 
   it("writes a valid preference and returns the settled value", async () => {

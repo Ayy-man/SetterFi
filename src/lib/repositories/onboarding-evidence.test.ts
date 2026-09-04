@@ -108,12 +108,14 @@ describe("onboarding evidence repository", () => {
       calls.push(tenantId);
       return [{
         submitted_at: "2026-08-17T12:00:00.000Z",
+        approved_at: null,
         registration_state: "awaiting_provider",
         terminal_rejection: false,
         terminal_code: null,
       }];
     })).resolves.toEqual({
       submittedAt: "2026-08-17T12:00:00.000Z",
+      approvedAt: null,
       registrationState: "awaiting_provider",
       terminalRejection: false,
       terminalCode: null,
@@ -122,6 +124,7 @@ describe("onboarding evidence repository", () => {
 
     await expect(loadCoachA2pRegistration("tenant-synthetic", async () => [{
       submitted_at: "2026-08-17T12:00:00.000Z",
+      approved_at: null,
       registration_state: "blocked",
       terminal_rejection: true,
       terminal_code: "CARRIER_TERMINAL",
@@ -129,6 +132,26 @@ describe("onboarding evidence repository", () => {
       terminalRejection: true,
       terminalCode: "CARRIER_TERMINAL",
     });
+  });
+
+  it("carries the carrier's decision date only once the step is actually done", async () => {
+    await expect(loadCoachA2pRegistration("tenant-synthetic", async () => [{
+      submitted_at: "2026-08-17T12:00:00.000Z",
+      approved_at: "2026-09-02T09:00:00.000Z",
+      registration_state: "done",
+      terminal_rejection: false,
+      terminal_code: null,
+    }])).resolves.toMatchObject({ approvedAt: "2026-09-02T09:00:00.000Z" });
+
+    // A date attached to a state word other than "done" is not a fact the database would ever
+    // emit honestly -- refused rather than rendered as if the carrier had decided.
+    await expect(loadCoachA2pRegistration("tenant-synthetic", async () => [{
+      submitted_at: "2026-08-17T12:00:00.000Z",
+      approved_at: "2026-09-02T09:00:00.000Z",
+      registration_state: "awaiting_provider",
+      terminal_rejection: false,
+      terminal_code: null,
+    }])).rejects.toThrow("COACH_A2P_REGISTRATION_ROW_INVALID");
   });
 
   it("passes the exact Phase 3 validator payload into the one-use consent RPC", async () => {

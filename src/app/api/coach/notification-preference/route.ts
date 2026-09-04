@@ -4,6 +4,7 @@ import {
   writeCoachNotificationPreference,
   type AuditChange,
 } from "@/lib/repositories/coach-notification-preference";
+import { readCoachOwnEmail } from "@/lib/repositories/coach-profile";
 import { writePreferenceAuditEvent } from "@/app/api/notification-preferences/handler";
 import type { NotificationDestination } from "@/lib/notifications/events";
 
@@ -28,6 +29,7 @@ async function auditCoachPreferenceChange(actorId: string, change: AuditChange) 
 const handlers = createCoachNotificationPreferenceHandlers({
   session: loadRouteActor,
   read: readCoachNotificationPreference,
+  readEmail: readCoachOwnEmail,
   write: writeCoachNotificationPreference,
   audit: auditCoachPreferenceChange,
 });

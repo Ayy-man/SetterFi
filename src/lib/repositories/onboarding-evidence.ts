@@ -60,6 +60,16 @@ export type HostedArtifactProjection = {
 
 export type CoachA2pRegistrationProjection = {
   submittedAt: string | null;
+  /**
+   * When the carrier decided, straight off `provisioning_steps.completed_at` for the `sms_live`
+   * step -- the same receipt-timestamp convention every other Setup step ticks on. Null unless
+   * `registrationState` is `"done"`, never a date implied by the state word alone.
+   *
+   * Optional in the type only for source compatibility with fixtures written before this field
+   * existed (several UI test files outside this repository's write scope) -- `loadCoachA2pRegistration`
+   * always populates it from the RPC, which requires it on every row it accepts.
+   */
+  approvedAt?: string | null;
   registrationState: ProvisioningState;
   terminalRejection: boolean;
   terminalCode: string | null;
@@ -77,6 +87,7 @@ type HostedArtifactRow = Record<
 
 type CoachA2pRegistrationRow = {
   submitted_at: unknown;
+  approved_at: unknown;
   registration_state: unknown;
   terminal_rejection: unknown;
   terminal_code: unknown;
@@ -202,8 +213,13 @@ function mapCoachA2pRegistration(
   if (row.terminal_rejection !== Boolean(terminalCode)) {
     throw new Error("COACH_A2P_REGISTRATION_ROW_INVALID");
   }
+  const approvedAt = nullableString(row.approved_at, "COACH_A2P_REGISTRATION_ROW_INVALID");
+  if (approvedAt !== null && row.registration_state !== "done") {
+    throw new Error("COACH_A2P_REGISTRATION_ROW_INVALID");
+  }
   return {
     submittedAt: nullableString(row.submitted_at, "COACH_A2P_REGISTRATION_ROW_INVALID"),
+    approvedAt,
     registrationState: row.registration_state as ProvisioningState,
     terminalRejection: row.terminal_rejection,
     terminalCode,

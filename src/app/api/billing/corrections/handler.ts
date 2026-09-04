@@ -13,7 +13,9 @@ const headers = { "Cache-Control": "no-store" };
 type Dependencies = {
   enabled(): boolean;
   session(): Promise<RouteActor | null>;
-  operations: Pick<BillingOperations, "requestCorrection" | "recordAttendance"> & {
+  operations: Pick<
+    BillingOperations, "requestCorrection" | "requestPeriodCorrection" | "recordAttendance"
+  > & {
     skipAttendance: BillingRepository["skipAttendance"];
   };
 };
@@ -53,6 +55,17 @@ export function createBillingCorrectionsHandler(dependencies: Dependencies) {
           tenantId: actor.tenantId,
           eventId: body.eventId,
           quantityDelta: body.quantityDelta as number,
+          reason: body.reason,
+        });
+        return Response.json({ result }, { headers });
+      }
+      if (body.action === "request_period_correction") {
+        if (
+          !hasExactKeys(body, ["action", "reason"])
+          || typeof body.reason !== "string" || !body.reason.trim()
+        ) throw new Error("INVALID_BODY");
+        const result = await dependencies.operations.requestPeriodCorrection({
+          tenantId: actor.tenantId,
           reason: body.reason,
         });
         return Response.json({ result }, { headers });

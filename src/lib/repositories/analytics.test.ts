@@ -79,6 +79,11 @@ function snapshot() {
       bookedContacts: 2,
       dataLabel: "Database truth",
     }],
+    // Round 3: the keyword table's own conservation check is against this total, computed by the
+    // RPC over the whole population independently of the (still goal-scoped) `coach.keyword.
+    // conversations` metric tile -- see `read_coach_measurement`
+    // (20261012000009_keyword_table_whole_population.sql) and the check in `loadCoachMeasurement`.
+    keywordConversationTotal: 5,
     pipeline: [{
       contactId: "contact-synthetic",
       displayName: "Synthetic lead",
@@ -229,6 +234,7 @@ describe("coach measurement repository", () => {
      */
     const quiet = snapshot();
     quiet.keywords = [];
+    quiet.keywordConversationTotal = 0;
     const keywordIndex = quiet.metrics.findIndex(
       (row) => row.metricKey === "coach.keyword.conversations",
     );

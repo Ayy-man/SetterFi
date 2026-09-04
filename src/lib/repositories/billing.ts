@@ -35,8 +35,16 @@ export type BillingCorrectionProjection = {
    * moves money. It reads off the `tenants` embed the projection already joined for `businessName`.
    */
   dataLabel: string | null;
-  billableEventId: string;
-  quantityDelta: number;
+  /**
+   * Null on a period-level request (`request_period_billing_correction`): a coach describing a
+   * problem in words against the whole billing period, not one billable event. Exactly one of
+   * (`billableEventId`, `quantityDelta`) or (`periodStart`, `periodEnd`) is populated, matching the
+   * database's own `billing_correction_requests_shape_chk`.
+   */
+  billableEventId: string | null;
+  quantityDelta: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
   reason: string;
   requestedAt: string;
   requestAuditId: number;
@@ -82,6 +90,18 @@ export type CoachBillingRead = {
   }[];
   correctionCandidates: readonly { eventId: string; label: string }[];
   outcomePrompts: readonly { appointmentId: string; label: string; occurredAt: string }[];
+  /**
+   * Recent bookings in the current period whose attendance has already been answered
+   * (`appointment.attendance_source is not null`), the opposite state from `outcomePrompts`. Round
+   * 3 backend gap: the attendance panel could only show the unanswered queue, never a booking the
+   * coach already settled.
+   */
+  settledAttendance: readonly {
+    appointmentId: string;
+    label: string;
+    occurredAt: string;
+    outcome: "completed" | "no_show";
+  }[];
   isDemo: boolean;
 };
 
@@ -217,6 +237,16 @@ export type BillingRepository = {
     tenantId: string;
     eventId: string;
     quantityDelta: number;
+    reason: string;
+  }): Promise<{ requestId: string; auditId: number }>;
+  /**
+   * A period-level correction: a coach describing the problem in words against the current
+   * billing period, with no event and no quantity delta. `decide_billable_correction` refuses to
+   * decide the resulting request (`BILLING_CORRECTION_PERIOD_LEVEL_DECISION_NOT_SUPPORTED`) --
+   * deciding one needs its own round, see the migration's own comment.
+   */
+  requestPeriodCorrection(input: {
+    tenantId: string;
     reason: string;
   }): Promise<{ requestId: string; auditId: number }>;
   decideCorrection(input: {
@@ -471,7 +501,7 @@ const COACH_BILLING_KEYS = [
   "account_state", "booked_count", "call_allowance", "correction_candidates",
   "invoice_state", "is_demo", "notices", "outcome_prompts", "pending_effective_at",
   "pending_price_cents", "pending_tier_name", "period_end", "period_start", "price_cents",
-  "subscription_state", "tier_name", "timezone",
+  "settled_attendance", "subscription_state", "tier_name", "timezone",
 ] as const;
 
 function parseCoachBilling(value: unknown): CoachBillingRead | null {
@@ -552,6 +582,24 @@ function parseCoachBilling(value: unknown): CoachBillingRead | null {
       occurredAt: string(prompt.occurredAt, "COACH_BILLING_PROJECTION_INVALID"),
     };
   });
+  const settledAttendance = array(
+    projection.settled_attendance,
+    "COACH_BILLING_PROJECTION_INVALID",
+  ).map((value) => {
+    const settled = row(value, "COACH_BILLING_PROJECTION_INVALID");
+    if (
+      Object.keys(settled).sort().join(",") !== "appointmentId,label,occurredAt,outcome"
+      || (settled.outcome !== "completed" && settled.outcome !== "no_show")
+    ) {
+      throw new BillingRepositoryError("COACH_BILLING_PROJECTION_INVALID");
+    }
+    return {
+      appointmentId: string(settled.appointmentId, "COACH_BILLING_PROJECTION_INVALID"),
+      label: string(settled.label, "COACH_BILLING_PROJECTION_INVALID"),
+      occurredAt: string(settled.occurredAt, "COACH_BILLING_PROJECTION_INVALID"),
+      outcome: settled.outcome as "completed" | "no_show",
+    };
+  });
   if (typeof projection.is_demo !== "boolean") {
     throw new BillingRepositoryError("COACH_BILLING_PROJECTION_INVALID");
   }
@@ -576,6 +624,7 @@ function parseCoachBilling(value: unknown): CoachBillingRead | null {
     notices,
     correctionCandidates,
     outcomePrompts,
+    settledAttendance,
     isDemo: projection.is_demo,
   };
 }
@@ -1101,7 +1150,7 @@ async function liveDependencies(): Promise<BillingRepositoryDependencies> {
     },
     projectCorrections: async () => {
       const { data, error } = await service.from("billing_correction_requests")
-        .select("id,tenant_id,billable_event_id,quantity_delta,reason,audit_id,created_at,tenants(name,is_demo),billing_correction_decisions(id,decision,reason,offset_event_id,audit_id)")
+        .select("id,tenant_id,billable_event_id,quantity_delta,period_start,period_end,reason,audit_id,created_at,tenants(name,is_demo),billing_correction_decisions(id,decision,reason,offset_event_id,audit_id)")
         .order("created_at", { ascending: false });
       if (error) throw new BillingRepositoryError("BILLING_CORRECTIONS_READ_FAILED");
       return data ?? [];
@@ -1255,6 +1304,20 @@ export function createBillingRepository(
       }
       return { requestId, auditId };
     },
+    requestPeriodCorrection: async (input) => {
+      const deps = await dependencies();
+      const receipt = row(await deps.userRpc("request_period_billing_correction", {
+        p_expected_tenant: input.tenantId,
+        p_reason: input.reason,
+      }), "BILLING_CORRECTION_REQUEST_RECEIPT_INVALID");
+      const requestId = string(receipt.request_id, "BILLING_CORRECTION_REQUEST_RECEIPT_INVALID");
+      const auditId = integer(receipt.audit_id, "BILLING_CORRECTION_REQUEST_RECEIPT_INVALID");
+      const persisted = await deps.readCorrectionRequest(requestId, auditId);
+      if (!persisted || persisted.id !== requestId || integer(persisted.audit_id, "BILLING_CORRECTION_REQUEST_READBACK_INVALID") !== auditId) {
+        throw new BillingRepositoryError("BILLING_CORRECTION_REQUEST_READBACK_MISMATCH");
+      }
+      return { requestId, auditId };
+    },
     decideCorrection: async (input) => {
       const deps = await dependencies();
       const receipt = row(await deps.serviceRpc("decide_billable_correction", {
@@ -1371,8 +1434,18 @@ export function createBillingRepository(
           tenantId: string(request.tenant_id, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
           businessName: correctionBusinessName(request.tenants),
           dataLabel: correctionSeedLabel(request.tenants),
-          billableEventId: string(request.billable_event_id, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
-          quantityDelta: integer(request.quantity_delta, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
+          billableEventId: request.billable_event_id === null
+            ? null
+            : string(request.billable_event_id, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
+          quantityDelta: request.quantity_delta === null
+            ? null
+            : integer(request.quantity_delta, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
+          periodStart: request.period_start === null
+            ? null
+            : string(request.period_start, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
+          periodEnd: request.period_end === null
+            ? null
+            : string(request.period_end, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
           reason: string(request.reason, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
           requestedAt: string(request.created_at, "BILLING_CORRECTIONS_RECEIPT_INVALID"),
           requestAuditId: integer(request.audit_id, "BILLING_CORRECTIONS_RECEIPT_INVALID"),

@@ -4,7 +4,8 @@ import type { BillingRepository } from "@/lib/repositories/billing";
 
 function repository(overrides: Partial<BillingRepository> = {}): BillingRepository {
   return {
-    updateTier: vi.fn(), setTenantOverride: vi.fn(), requestCorrection: vi.fn(), decideCorrection: vi.fn(),
+    updateTier: vi.fn(), setTenantOverride: vi.fn(), requestCorrection: vi.fn(),
+    requestPeriodCorrection: vi.fn(), decideCorrection: vi.fn(),
     setTenantStatus: vi.fn(), recordAttendance: vi.fn(), listCorrections: vi.fn(), loadSubscription: vi.fn(),
     loadCheckoutTenant: vi.fn(), loadCheckoutTierPrices: vi.fn(), listAllowedPriceIds: vi.fn(), persistCheckout: vi.fn(),
     ...overrides,
@@ -21,6 +22,17 @@ describe("billing operations", () => {
       .resolves.toEqual({ state: "approved", requestId: "r1", decisionId: "d1", offsetEventId: "o1", requestAuditId: 1, decisionAuditId: 2 });
     await expect(operations.decideCorrection({ actorId: "a", tenantId: "t", requestId: "r2", decision: "rejected", reason: "no" }))
       .resolves.toEqual({ state: "rejected", requestId: "r2", decisionId: "d2", requestAuditId: 3, decisionAuditId: 4 });
+  });
+
+  it("reports a period-level correction as requested, same shape as an event-level one", async () => {
+    const requestPeriodCorrection = vi.fn()
+      .mockResolvedValue({ requestId: "period-r1", auditId: 9 });
+    const operations = createBillingOperations(
+      repository({ requestPeriodCorrection }), { emit: vi.fn() },
+    );
+    await expect(operations.requestPeriodCorrection({ tenantId: "t", reason: "period looks wrong" }))
+      .resolves.toEqual({ state: "requested", requestId: "period-r1", requestAuditId: 9 });
+    expect(requestPeriodCorrection).toHaveBeenCalledWith({ tenantId: "t", reason: "period looks wrong" });
   });
 
   it("does not complete suspension until its durable notice receipt exists", async () => {
