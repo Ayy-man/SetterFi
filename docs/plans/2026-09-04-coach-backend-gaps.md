@@ -507,3 +507,22 @@ pre-existing skips, 3604 tests passed, 13 pre-existing skips, zero failures. A s
 file this round touched plus the two `supabase/tests` files and `src/app/em-dash.test.ts`: 9 files,
 117 tests, all passed. No migration in this round was applied to any database; all three are
 written only, for the team lead to apply in the listed order.
+
+### Round 3 follow-up, 2026-09-04: the seeder ran against the hosted demo tenant
+
+`scripts/seed-coach-rebuild-demo.mjs` ran twice against the hosted database (`d7a08e2`, then
+`d90d68c` with readable names), idempotently. Two things it found are worth knowing beyond the
+demo:
+
+- **The shared question list was empty platform-wide.** `questionSetSize` and the Agent page's
+  question list read `brain_knowledge_entries` where `status = 'published'` and
+  `disposition = 'shared'`, through `app.coach_question_defaults`, and the hosted database held no
+  such row for any tenant. The path has no per-tenant or per-goal scoping, so the four questions the
+  seeder adds (credit range, funding goal, timeline, monthly revenue) now show for every tenant, not
+  only the demo. That is the product's designed question set, but it was seeded rather than decided;
+  if a narrower list is wanted, it is one delete of those four rows.
+- **The client parser rejected the new billing payload.** `coach_billing_projection` gained
+  `settled_attendance` in migration `000010` and the repository mapped it, but
+  `parseCoachBillingSnapshot` checks the exact key set, so every coach saw "Billing details could
+  not load" until `d4b35c4`. A projection column and the client key list have to move in the same
+  commit.
