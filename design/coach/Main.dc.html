@@ -114,7 +114,7 @@
     </div>
 
     <!-- Six bubbles. One is drenched: the outcome the coach opens the page for. -->
-    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; margin-bottom: 24px;">
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; margin-bottom: 24px;">
       <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid transparent; background: var(--drench); color: var(--on-drench); overflow: hidden; ">
     <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--drench-line);">
       <div style="min-width: 0;">
@@ -125,9 +125,20 @@
     </div>
         <div style="padding: 22px 20px 20px;">
           <div class="mono" style="font-size: 62px; font-weight: 500; letter-spacing: -0.075em; line-height: 0.92; color: var(--on-drench);">18</div>
-          <p style="max-width: 34ch; margin-top: 12px; font-size: 16px; line-height: 1.5; color: rgba(255, 255, 255, 0.9);">Qualified leads who booked a call on your calendar.</p>
+          <p style="max-width: 34ch; min-height: 48px; margin-top: 12px; font-size: 16px; line-height: 1.5; color: rgba(255, 255, 255, 0.9);">Qualified leads who booked a call on your calendar.</p>
         </div>
-        
+        <div style="padding: 0 20px 8px; margin-top: auto;">
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--drench-line);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.55);"></span>
+            <span style="font-size: 16px; color: rgba(255, 255, 255, 0.9);">A month ago</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: rgba(255, 255, 255, 0.9);">12</strong>
+          </div>
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--drench-line);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.55);"></span>
+            <span style="font-size: 16px; color: rgba(255, 255, 255, 0.9);">Showed up so far</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: rgba(255, 255, 255, 0.9);">15</strong>
+          </div>
+        </div>
       </div>
       <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--card-top), var(--card)); box-shadow: var(--shadow-card); overflow: hidden; ">
     <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--line);">
@@ -139,7 +150,7 @@
     </div>
         <div style="padding: 22px 20px 20px;">
           <div class="mono" style="font-size: 62px; font-weight: 500; letter-spacing: -0.075em; line-height: 0.92; color: var(--ink);">31</div>
-          <p style="max-width: 34ch; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">Leads your agent is actively trying to book.</p>
+          <p style="max-width: 34ch; min-height: 48px; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">Leads your agent is actively trying to book.</p>
         </div>
                 <div style="padding: 0 20px 8px; margin-top: auto;">
           <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
@@ -164,9 +175,20 @@
     </div>
         <div style="padding: 22px 20px 20px;">
           <div class="mono" style="font-size: 62px; font-weight: 500; letter-spacing: -0.075em; line-height: 0.92; color: var(--ink);">214</div>
-          <p style="max-width: 34ch; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">People who messaged you for the first time.</p>
+          <p style="max-width: 34ch; min-height: 48px; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">People who messaged you for the first time.</p>
         </div>
-        
+        <div style="padding: 0 20px 8px; margin-top: auto;">
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint);"></span>
+            <span style="font-size: 16px; color: var(--body);">Instagram</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: var(--body);">140</strong>
+          </div>
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint);"></span>
+            <span style="font-size: 16px; color: var(--body);">Messenger</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: var(--body);">74</strong>
+          </div>
+        </div>
       </div>
       <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--card-top), var(--card)); box-shadow: var(--shadow-card); overflow: hidden; ">
     <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--line);">
@@ -178,9 +200,20 @@
     </div>
         <div style="padding: 22px 20px 20px;">
           <div class="mono" style="font-size: 62px; font-weight: 500; letter-spacing: -0.075em; line-height: 0.92; color: var(--ink);">37</div>
-          <p style="max-width: 34ch; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">Poor fit due to credit, finances or timing. The reason stays on each one.</p>
+          <p style="max-width: 34ch; min-height: 48px; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">Poor fit due to credit, finances or timing. The reason stays on each one.</p>
         </div>
-        
+        <div style="padding: 0 20px 8px; margin-top: auto;">
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint);"></span>
+            <span style="font-size: 16px; color: var(--body);">Credit</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: var(--body);">21</strong>
+          </div>
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint);"></span>
+            <span style="font-size: 16px; color: var(--body);">Finances or timing</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: var(--body);">16</strong>
+          </div>
+        </div>
       </div>
       <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--card-top), var(--card)); box-shadow: var(--shadow-card); overflow: hidden; ">
     <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--line);">
@@ -192,9 +225,20 @@
     </div>
         <div style="padding: 22px 20px 20px;">
           <div class="mono" style="font-size: 62px; font-weight: 500; letter-spacing: -0.075em; line-height: 0.92; color: var(--ink);">8.4%</div>
-          <p style="max-width: 34ch; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">18 booked calls out of the 214 new leads.</p>
+          <p style="max-width: 34ch; min-height: 48px; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">18 booked calls out of the 214 new leads.</p>
         </div>
-        
+        <div style="padding: 0 20px 8px; margin-top: auto;">
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint);"></span>
+            <span style="font-size: 16px; color: var(--body);">A month ago</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: var(--body);">7.1%</strong>
+          </div>
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint);"></span>
+            <span style="font-size: 16px; color: var(--body);">Best keyword, Funds</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: var(--body);">15%</strong>
+          </div>
+        </div>
       </div>
       <div style="display: flex; flex-direction: column; border-radius: 24px 24px 17px 17px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--card-top), var(--card)); box-shadow: var(--shadow-card); overflow: hidden; ">
     <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 78px; padding: 19px 20px; border-bottom: 1px solid var(--line);">
@@ -206,9 +250,20 @@
     </div>
         <div style="padding: 22px 20px 20px;">
           <div class="mono" style="font-size: 62px; font-weight: 500; letter-spacing: -0.075em; line-height: 0.92; color: var(--ink);">5.2h</div>
-          <p style="max-width: 34ch; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">From a lead's first message to a call on your calendar.</p>
+          <p style="max-width: 34ch; min-height: 48px; margin-top: 12px; font-size: 16px; line-height: 1.5; color: var(--muted);">From a lead's first message to a call on your calendar.</p>
         </div>
-        
+        <div style="padding: 0 20px 8px; margin-top: auto;">
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint);"></span>
+            <span style="font-size: 16px; color: var(--body);">A month ago</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: var(--body);">6.4h</strong>
+          </div>
+          <div style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line-soft);">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--faint);"></span>
+            <span style="font-size: 16px; color: var(--body);">Fastest</span>
+            <strong class="mono" style="font-size: 17px; font-weight: 500; color: var(--body);">40 min</strong>
+          </div>
+        </div>
       </div>
     </div>
 
