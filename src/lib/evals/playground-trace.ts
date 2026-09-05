@@ -219,7 +219,11 @@ function moderatorStep(trace: EngineTrace): PlaygroundStep {
         : state === "not_run"
           ? "The moderator was not asked on this turn."
           : "A second model reviewed the draft independently and had no objection.",
-    readings: trace.moderatorReason ? [trace.moderatorReason] : [],
+    readings: [
+      ...(trace.moderatorClass ? [`Class · ${trace.moderatorClass}`] : []),
+      ...(trace.moderatorRuleId ? [`Rule · ${trace.moderatorRuleId}`] : []),
+      ...(trace.moderatorReason ? [trace.moderatorReason] : []),
+    ],
   };
 }
 

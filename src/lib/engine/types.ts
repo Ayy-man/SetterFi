@@ -23,6 +23,11 @@ export type OutputCheckClass = (typeof OUTPUT_CHECK_CLASSES)[number];
 export const MODERATOR_CLASSES = [...OUTPUT_CHECK_CLASSES, "JUDGE", "REVOKE"] as const;
 export type ModeratorClass = (typeof MODERATOR_CLASSES)[number];
 
+// REVOKE is an approved held-reply class, not a verdict a moderator may emit. Keeping the
+// persisted evidence narrower makes the database contract match the moderator envelope.
+export const MODERATOR_EVIDENCE_CLASSES = [...OUTPUT_CHECK_CLASSES, "JUDGE"] as const;
+export type ModeratorEvidenceClass = (typeof MODERATOR_EVIDENCE_CLASSES)[number];
+
 export const CONVERSATION_STATES = [
   "agent",
   "needs_human",
@@ -178,6 +183,9 @@ export type EngineTrace = {
   cost: number | null;
   moderator: ModeratorState;
   moderatorReason: string | null;
+  moderatorClass: ModeratorEvidenceClass | null;
+  moderatorRuleId: string | null;
+  moderatorModelConfigId: string | null;
 };
 
 export type BookingResponse = {

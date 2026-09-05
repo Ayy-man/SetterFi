@@ -35,6 +35,9 @@ const trace: MessageTrace = {
   usage: { totalTokens: 12 },
   cost: null,
   moderatorState: "allowed",
+  moderatorClass: "JUDGE",
+  moderatorRuleId: null,
+  moderatorModelConfigId: "10000000-0000-4000-8000-000000000002",
   objection: null,
 };
 
@@ -76,6 +79,9 @@ function dependencies(tenantId = "tenant-a") {
         usage: row.usage,
         cost: row.cost as number | null,
         moderatorState: row.moderator_state as string | null,
+        moderatorClass: row.moderator_class as string | null,
+        moderatorRuleId: row.moderator_rule_id as string | null,
+        moderatorModelConfigId: row.moderator_model_config_id as string | null,
         objectionSnapshotId: (row.objection_snapshot_id as string | undefined) ?? null,
         objectionId: (row.objection_id as string | undefined) ?? null,
         objectionHandlingOutcome: (row.objection_handling_outcome as string | undefined) ?? null,
@@ -128,6 +134,9 @@ describe("writeMessageTrace", () => {
       usage: { totalTokens: 12 },
       cost: null,
       moderator_state: "allowed",
+      moderator_class: "JUDGE",
+      moderator_rule_id: null,
+      moderator_model_config_id: "10000000-0000-4000-8000-000000000002",
       trace: { outcome, brain_content_hash: "a".repeat(64) },
     });
   });
@@ -181,6 +190,21 @@ describe("writeMessageTrace", () => {
         conversationId: "conversation-1",
         messageId: "message-1",
       },
+      trace,
+      deps,
+    )).rejects.toThrow("TRACE_WRITE_READBACK_MISMATCH");
+  });
+
+  it("refuses an optimistic success when the persisted moderator receipt differs", async () => {
+    const deps = dependencies();
+    const insertTrace = deps.insertTrace;
+    deps.insertTrace = async (row) => ({
+      ...(await insertTrace(row)),
+      moderatorRuleId: "CLAIM-001",
+    });
+    await expect(writeMessageTrace(
+      "tenant-a",
+      { kind: "existing_message", conversationId: "conversation-1", messageId: "message-1" },
       trace,
       deps,
     )).rejects.toThrow("TRACE_WRITE_READBACK_MISMATCH");

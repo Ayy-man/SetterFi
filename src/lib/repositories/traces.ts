@@ -7,6 +7,7 @@
  */
 
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import type { ModeratorEvidenceClass } from "@/lib/engine/types";
 
 export const TRACE_OUTCOMES = [
   "successful",
@@ -46,6 +47,9 @@ export type MessageTrace = {
   usage: Record<string, unknown> | null;
   cost: number | null;
   moderatorState: "allowed" | "blocked" | "unavailable" | null;
+  moderatorClass: ModeratorEvidenceClass | null;
+  moderatorRuleId: string | null;
+  moderatorModelConfigId: string | null;
   /**
    * Null unless the turn genuinely used a published snapshot objection. When it is set, the
    * database validates the declared gate against `brain_snapshot_objections` and then creates the
@@ -99,6 +103,9 @@ type TraceReadback = {
   usage: unknown;
   cost: number | null;
   moderatorState: string | null;
+  moderatorClass: string | null;
+  moderatorRuleId: string | null;
+  moderatorModelConfigId: string | null;
   objectionSnapshotId: string | null;
   objectionId: string | null;
   objectionHandlingOutcome: string | null;
@@ -135,7 +142,7 @@ async function liveDependencies(): Promise<TraceDependencies> {
       };
     },
     insertTrace: async (row) => {
-      const columns = "message_id, tenant_id, brain_version, offer_version, prompt_hash, rule_fired, retrieved_entry_ids, number_sources, checks, violations, rejected_drafts, model, params, latency_ms, usage, cost, moderator_state, offer_content_hash, retrieval_candidates, declared_entry_id, citation_verified, dropped_entry_ids, objection_snapshot_id, objection_id, objection_handling_outcome, objection_hard_gate, trace";
+      const columns = "message_id, tenant_id, brain_version, offer_version, prompt_hash, rule_fired, retrieved_entry_ids, number_sources, checks, violations, rejected_drafts, model, params, latency_ms, usage, cost, moderator_state, moderator_class, moderator_rule_id, moderator_model_config_id, offer_content_hash, retrieval_candidates, declared_entry_id, citation_verified, dropped_entry_ids, objection_snapshot_id, objection_id, objection_handling_outcome, objection_hard_gate, trace";
       const inserted = await client
         .from("message_traces")
         .insert(row)
@@ -173,6 +180,9 @@ async function liveDependencies(): Promise<TraceDependencies> {
         usage: data.usage,
         cost: data.cost === null ? null : Number(data.cost),
         moderatorState: data.moderator_state,
+        moderatorClass: data.moderator_class,
+        moderatorRuleId: data.moderator_rule_id,
+        moderatorModelConfigId: data.moderator_model_config_id,
         objectionSnapshotId: data.objection_snapshot_id,
         objectionId: data.objection_id,
         objectionHandlingOutcome: data.objection_handling_outcome,
@@ -249,6 +259,9 @@ export async function writeMessageTrace(
     usage: trace.usage,
     cost: trace.cost,
     moderator_state: trace.moderatorState,
+    moderator_class: trace.moderatorClass,
+    moderator_rule_id: trace.moderatorRuleId,
+    moderator_model_config_id: trace.moderatorModelConfigId,
     // Spread only when the turn used one, so a flag-off insert is the same object literal it was
     // before Phase 10 — the four keys are absent, not present as nulls.
     ...(trace.objection
@@ -278,6 +291,9 @@ export async function writeMessageTrace(
     !sameJson(persisted.params, trace.params) || persisted.latencyMs !== trace.latencyMs ||
     !sameJson(persisted.usage, trace.usage) || persisted.cost !== trace.cost ||
     persisted.moderatorState !== trace.moderatorState ||
+    persisted.moderatorClass !== trace.moderatorClass ||
+    persisted.moderatorRuleId !== trace.moderatorRuleId ||
+    persisted.moderatorModelConfigId !== trace.moderatorModelConfigId ||
     persisted.objectionSnapshotId !== (trace.objection?.snapshotId ?? null) ||
     persisted.objectionId !== (trace.objection?.objectionId ?? null) ||
     persisted.objectionHandlingOutcome !== (trace.objection?.handlingOutcome ?? null) ||

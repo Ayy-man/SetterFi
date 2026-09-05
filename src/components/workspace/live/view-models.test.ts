@@ -102,6 +102,9 @@ describe("honest row labels", () => {
       checks: { sourceSupported: true },
       violations: [],
       moderatorState: "allowed" as const,
+      moderatorClass: "JUDGE",
+      moderatorRuleId: null,
+      moderatorModelConfigId: "10000000-0000-4000-8000-000000000002",
       createdAt: "2026-08-17T00:00:00.000Z",
     };
     const grounded = deriveTestingView({ moderatorUnavailableCount: 0, arms: [{ id: "real", label: "Candidate", role: "Generator", selector: "real", hasUsableKey: true, persistedTrace: trace }] });

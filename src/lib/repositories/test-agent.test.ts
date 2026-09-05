@@ -52,6 +52,9 @@ const engineResult = {
     cost: 0,
     moderator: "allowed",
     moderatorReason: null,
+    moderatorClass: "JUDGE",
+    moderatorRuleId: null,
+    moderatorModelConfigId: "10000000-0000-4000-8000-000000000002",
   },
 } satisfies EngineTurnResult;
 
@@ -162,6 +165,12 @@ describe("persisted test-agent repository", () => {
       p_resolved_driver_arm: "mock",
       p_answered_step_key: "credit",
       p_asked_step_key: "goal",
+      p_trace: expect.objectContaining({
+        moderator: "allowed",
+        moderatorClass: "JUDGE",
+        moderatorRuleId: null,
+        moderatorModelConfigId: "10000000-0000-4000-8000-000000000002",
+      }),
     }));
   });
 

@@ -311,7 +311,7 @@ async function renderEvalsTab(claims: AppClaims) {
 
   const supabase = await createSupabaseServerClient();
   const [{ data: traceRow, error: traceError }, { data: configRows, error: configError }] = await Promise.all([
-    supabase.from("message_traces").select("message_id, tenant_id, rule_fired, retrieved_entry_ids, checks, violations, model, moderator_state, created_at, tenant:tenants!inner(name,is_demo)").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("message_traces").select("message_id, tenant_id, rule_fired, retrieved_entry_ids, checks, violations, model, moderator_state, moderator_class, moderator_rule_id, moderator_model_config_id, created_at, tenant:tenants!inner(name,is_demo)").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("model_configs").select("id, label, openrouter_model, role, moderator_unavailable_count").eq("active", true).order("role", { ascending: true }),
   ]);
   if (traceError) throw new Error(`TESTING_TRACE_READ_FAILED:${traceError.message}`);
@@ -326,6 +326,11 @@ async function renderEvalsTab(claims: AppClaims) {
     checks: normalizeChecks(traceRow.checks),
     violations: violationLabels(traceRow.violations),
     moderatorState: traceRow.moderator_state === "allowed" || traceRow.moderator_state === "blocked" || traceRow.moderator_state === "unavailable" ? traceRow.moderator_state : "not_recorded",
+    moderatorClass: typeof traceRow.moderator_class === "string" ? traceRow.moderator_class : null,
+    moderatorRuleId: typeof traceRow.moderator_rule_id === "string" ? traceRow.moderator_rule_id : null,
+    moderatorModelConfigId: typeof traceRow.moderator_model_config_id === "string"
+      ? traceRow.moderator_model_config_id
+      : null,
     createdAt: traceRow.created_at,
   } : null;
   const selector = driverSelection("openrouter", "SETTERFI_OPENROUTER_DRIVER");

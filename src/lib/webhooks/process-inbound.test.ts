@@ -1430,6 +1430,21 @@ describe("traceForPersistence objection mapping", () => {
     return traceForPersistence({ ...result, trace: { ...result.trace, ...overrides } }, flag);
   }
 
+  it("passes the moderator verdict receipt through to the trace writer", async () => {
+    const persisted = await mapped({
+      moderator: "blocked",
+      moderatorClass: "CLAIM",
+      moderatorRuleId: "CLAIM-001",
+      moderatorModelConfigId: "10000000-0000-4000-8000-000000000002",
+    });
+    expect(persisted).toMatchObject({
+      moderatorState: "blocked",
+      moderatorClass: "CLAIM",
+      moderatorRuleId: "CLAIM-001",
+      moderatorModelConfigId: "10000000-0000-4000-8000-000000000002",
+    });
+  });
+
   it("records a non-hard match as answered on an ordinary turn and held_safely on a held one",
     async () => {
       const answered = await mapped({ objection: matched(false) });

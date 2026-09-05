@@ -846,14 +846,38 @@ describe("test-agent persistence and eval promotion", () => {
       values ('${COACH_A}','coach-a@synthetic.test','coach','${TENANT_A}');
     `);
     const session = await db.query<{ id: string }>(`select public.create_test_agent_session($1,$2) id`,[TENANT_A,COACH_A]);
+    const moderatorConfig = await db.query<{ id: string }>(
+      `select id from public.model_configs where role='moderator' order by created_at limit 1`,
+    );
+    expect(moderatorConfig.rows).toHaveLength(1);
+    const trace = JSON.stringify({
+      outcome: "successful",
+      moderator: "blocked",
+      moderatorClass: "CLAIM",
+      moderatorRuleId: "CLAIM-001",
+      moderatorModelConfigId: moderatorConfig.rows[0].id,
+    });
     const turn = await db.query<Record<string, unknown>>(`select * from public.persist_test_agent_turn(
-      $1,$2,$3,'Synthetic question','Synthetic answer','{"outcome":"successful"}','mock',null,'q1')`,
-      [TENANT_A,COACH_A,session.rows[0].id]);
+      $1,$2,$3,'Synthetic question','Synthetic answer',$4,'mock',null,'q1')`,
+      [TENANT_A,COACH_A,session.rows[0].id,trace]);
     expect(turn.rows[0]).toMatchObject({
       resolved_driver_arm:"mock",contact_is_test:true,conversation_is_test:true,
       lead_is_test:true,agent_is_test:true,trace_is_test:true,step_rows_is_test:true,
       appointment_rows:"0",billable_rows:"0",followup_rows:"0",
     });
+    const stored = await db.query<{
+      moderator_state: string | null;
+      moderator_class: string | null;
+      moderator_rule_id: string | null;
+      moderator_model_config_id: string | null;
+    }>(`select moderator_state, moderator_class, moderator_rule_id, moderator_model_config_id
+       from public.message_traces where message_id=$1`, [turn.rows[0].agent_message_id]);
+    expect(stored.rows).toEqual([{
+      moderator_state: "blocked",
+      moderator_class: "CLAIM",
+      moderator_rule_id: "CLAIM-001",
+      moderator_model_config_id: moderatorConfig.rows[0].id,
+    }]);
   });
 
   it("locks promotion provenance and rejects bad suite, tenant, hash, and residual PII", async () => {

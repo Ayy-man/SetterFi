@@ -65,6 +65,9 @@ function trace(overrides: Partial<EngineTrace> = {}): EngineTrace {
     cost: 0.0184,
     moderator: "allowed",
     moderatorReason: null,
+    moderatorClass: null,
+    moderatorRuleId: null,
+    moderatorModelConfigId: null,
     ...overrides,
   };
 }
@@ -224,7 +227,11 @@ describe("derivePlaygroundRun", () => {
   });
 
   it("marks only an unreachable moderator as a warning, never a block", () => {
-    const blocked = derivePlaygroundRun({ reply: "", trace: trace({ moderator: "blocked" }) })
+    const blocked = derivePlaygroundRun({ reply: "", trace: trace({
+      moderator: "blocked",
+      moderatorClass: "CLAIM",
+      moderatorRuleId: "CLAIM-001",
+    }) })
       .steps[3];
     const missing = derivePlaygroundRun({
       reply: "",
@@ -232,6 +239,7 @@ describe("derivePlaygroundRun", () => {
     }).steps[3];
 
     expect(blocked.tone).toBe("good");
+    expect(blocked.readings).toEqual(["Class · CLAIM", "Rule · CLAIM-001"]);
     expect(missing.tone).toBe("warning");
     expect(missing.sentence).toContain("Nothing was caught here because nothing ran.");
     expect(missing.readings).toEqual(["gateway timeout"]);

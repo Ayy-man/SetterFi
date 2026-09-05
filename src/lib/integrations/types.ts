@@ -254,7 +254,7 @@ export interface ModeratorDriver {
     roleBoundary: string;
   }): Promise<{
     verdict: "allow" | "block";
-    class: "NUM" | "CLAIM" | "ECHO" | "LINK" | "SCOPE" | "LEN" | "JUDGE" | "REVOKE";
+    class: "NUM" | "CLAIM" | "ECHO" | "LINK" | "SCOPE" | "LEN" | "JUDGE";
     rule_id?: string;
     reason: string;
   }>;

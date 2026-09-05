@@ -9,7 +9,7 @@ import type { ActiveModelConfiguration } from "./selector";
 import type { ModelDriver, ModeratorDriver } from "./types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODERATOR_CLASSES = ["NUM", "CLAIM", "ECHO", "LINK", "SCOPE", "LEN", "JUDGE"] as const;
+const MODERATOR_EVIDENCE_CLASSES = ["NUM", "CLAIM", "ECHO", "LINK", "SCOPE", "LEN", "JUDGE"] as const;
 
 type JsonObject = Record<string, unknown>;
 type FetchLike = typeof fetch;
@@ -145,7 +145,9 @@ function parseModeratorEnvelope(content: string) {
     verdict === "allow" ? "allow" : verdict === "block" ? "block" : null;
   if (
     !normalizedVerdict ||
-    !MODERATOR_CLASSES.includes(moderationClass as (typeof MODERATOR_CLASSES)[number]) ||
+    !MODERATOR_EVIDENCE_CLASSES.includes(
+      moderationClass as (typeof MODERATOR_EVIDENCE_CLASSES)[number],
+    ) ||
     !reason ||
     (row?.rule_id !== undefined && !ruleId)
   ) {
@@ -153,7 +155,7 @@ function parseModeratorEnvelope(content: string) {
   }
   return {
     verdict: normalizedVerdict,
-    class: moderationClass as (typeof MODERATOR_CLASSES)[number],
+    class: moderationClass as (typeof MODERATOR_EVIDENCE_CLASSES)[number],
     ...(ruleId ? { rule_id: ruleId } : {}),
     reason,
   };

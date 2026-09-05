@@ -273,7 +273,9 @@ describe("Phase 2 catalog and custody", () => {
         ('brain_knowledge_entries','embedding'), ('offer_layers','status'),
         ('offer_cadence_purposes','offer_id'), ('eval_cases','turns'),
         ('eval_runs','brain_draft_version_id'), ('eval_case_results','case_key'),
-        ('message_traces','retrieval_candidates'), ('tenant_settings','link_whitelist')
+        ('message_traces','moderator_class'), ('message_traces','moderator_model_config_id'),
+        ('message_traces','moderator_rule_id'), ('message_traces','retrieval_candidates'),
+        ('tenant_settings','link_whitelist')
       ) order by table_name, column_name
     `);
     expect(columns.rows).toEqual([
@@ -281,6 +283,9 @@ describe("Phase 2 catalog and custody", () => {
       { table_name: "eval_case_results", column_name: "case_key" },
       { table_name: "eval_cases", column_name: "turns" },
       { table_name: "eval_runs", column_name: "brain_draft_version_id" },
+      { table_name: "message_traces", column_name: "moderator_class" },
+      { table_name: "message_traces", column_name: "moderator_model_config_id" },
+      { table_name: "message_traces", column_name: "moderator_rule_id" },
       { table_name: "message_traces", column_name: "retrieval_candidates" },
       { table_name: "offer_cadence_purposes", column_name: "offer_id" },
       { table_name: "offer_layers", column_name: "status" },

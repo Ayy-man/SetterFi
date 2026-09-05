@@ -120,7 +120,7 @@ function dependencies(drafts: readonly string[], moderator: "allow" | "block" | 
 function expectCompleteTrace(trace: EngineTrace) {
   expect(Object.keys(trace).sort()).toEqual([
     "attempts", "brainContentHash", "brainVersion", "checks", "cost", "declaredEntryId", "declaredEntryVerified",
-    "droppedEntryIds", "knowledgeMode", "latencyMs", "model", "moderator", "moderatorReason", "numberAllowlist",
+    "droppedEntryIds", "knowledgeMode", "latencyMs", "model", "moderator", "moderatorClass", "moderatorModelConfigId", "moderatorReason", "moderatorRuleId", "numberAllowlist",
     "objection", "offerContentHash", "offerVersion", "paramsHash", "promptHash", "rejectedDrafts", "retrievalTopThree",
     "ruleFired", "screen", "sources", "usage", "violations",
   ]);
@@ -346,6 +346,11 @@ describe("runEngineTurn", () => {
     expect(result.response.state).toBe("needs_human");
     expect(result.trace.attempts).toBe(2);
     expect(result.trace.moderator).toBe("blocked");
+    expect(result.trace).toMatchObject({
+      moderatorClass: "JUDGE",
+      moderatorRuleId: null,
+      moderatorModelConfigId: "m",
+    });
     expect(result.trace.rejectedDrafts).toEqual(["A safe draft.", "A second safe draft."]);
     expectCompleteTrace(result.trace);
   });
@@ -362,7 +367,13 @@ describe("runEngineTurn", () => {
       kind: "transition", state: "needs_human", reason: "output_check_failed",
     });
     expect(result.response).toEqual({ reply: HELD.JUDGE, state: "needs_human", booking: null });
-    expect(result.trace).toMatchObject({ moderator: "unavailable", moderatorReason: "MODERATOR_DOWN" });
+    expect(result.trace).toMatchObject({
+      moderator: "unavailable",
+      moderatorReason: "MODERATOR_DOWN",
+      moderatorClass: null,
+      moderatorRuleId: null,
+      moderatorModelConfigId: "m",
+    });
     expectCompleteTrace(result.trace);
   });
 
@@ -900,6 +911,65 @@ describe("runEngineTurn", () => {
       expect(held.commands.some((command) =>
         command.kind === "send" && command.body !== HELD.NUM)).toBe(false);
     });
+
+  // An essay in an SMS is past the hard cap. Its first sentence is not the reply the lead was
+  // owed, so neither the generator loop nor the gated path may truncate it into one.
+  const ESSAY = "We look at your file first, then we map the next steps together. ".repeat(8).trim();
+
+  it("truncates a soft-cap draft on the first attempt without a second generator call", async () => {
+    const long = "We look at your file first, then we map the next steps together. ".repeat(3).trim();
+    const deps = dependencies([long, "should not run"]);
+    const result = await runEngineTurn(BASE, deps);
+
+    expect(deps.model.generate).toHaveBeenCalledTimes(1);
+    // Two of the three sentences fit the 160-character SMS soft cap; the third is dropped.
+    expect(result.response.reply).toBe(
+      "We look at your file first, then we map the next steps together. "
+      + "We look at your file first, then we map the next steps together.",
+    );
+    expect(result.trace.ruleFired).toBe("LEN-001");
+    expect(result.trace.screen.verdict).toBe("continue");
+    expect(result.trace.checks.filter((check) => check.class === "LEN" && !check.passed)).toHaveLength(1);
+  });
+
+  it("holds an essay from the generator with class LEN instead of truncating it", async () => {
+    const deps = dependencies([ESSAY, ESSAY]);
+    const result = await runEngineTurn(BASE, deps);
+
+    expect(deps.model.generate).toHaveBeenCalledTimes(2);
+    expect(result.response).toEqual({ reply: HELD.LEN, state: "needs_human", booking: null });
+    expect(result.commands.filter((command) => command.kind === "send"))
+      .toEqual([{ kind: "send", body: HELD.LEN, approvedInput: true }]);
+    expect(result.commands).toContainEqual({
+      kind: "transition", state: "needs_human", reason: "output_check_failed",
+    });
+    expect(deps.moderator.moderate).not.toHaveBeenCalled();
+    expect(result.trace.screen).toEqual({ verdict: "held", reason: "output_check_failed" });
+    expect(result.trace.ruleFired).toBe("LEN-002");
+    expect(result.trace.moderator).toBe("not_run");
+    expect(result.trace.rejectedDrafts).toEqual([ESSAY, ESSAY]);
+    expect(result.trace.violations).toContainEqual({
+      class: "LEN", ruleId: "LEN-002", evidence: `sms reply length ${ESSAY.length} exceeds hard cap 320`,
+    });
+    expect(result.trace.checks.filter((check) => check.class === "LEN" && !check.passed)).toHaveLength(2);
+    expectCompleteTrace(result.trace);
+  });
+
+  it("holds an essay-length published hard-gate response with class LEN", async () => {
+    const deps = dependencies(["should not run"]);
+    const result = await gatedTurn(deps, ESSAY);
+
+    expect(deps.model.generate).not.toHaveBeenCalled();
+    expect(deps.moderator.moderate).not.toHaveBeenCalled();
+    expect(result.response.reply).toBe(HELD.LEN);
+    expect(result.commands.some((command) => command.kind === "send" && command.body !== HELD.LEN))
+      .toBe(false);
+    expect(result.trace.screen.verdict).toBe("held");
+    expect(result.trace.ruleFired).toBe("LEN-002");
+    expect(result.trace.rejectedDrafts).toEqual([ESSAY]);
+    expect(result.trace.checks.some((check) =>
+      check.class === "LEN" && !check.passed && check.evidence[0]?.includes("hard cap"))).toBe(true);
+  });
 
   it("verifies a declared objection id the same way it verifies a declared entry id", async () => {
     const deps = dependencies([JSON.stringify({

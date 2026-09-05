@@ -114,6 +114,9 @@ export type TestAgentTurnReceipt = {
     promptHash: string | null;
     ruleFired: string | null;
     moderator: EngineTurnResult["trace"]["moderator"];
+    moderatorClass: EngineTurnResult["trace"]["moderatorClass"];
+    moderatorRuleId: EngineTurnResult["trace"]["moderatorRuleId"];
+    moderatorModelConfigId: EngineTurnResult["trace"]["moderatorModelConfigId"];
     sourceIds: readonly string[];
     checks: readonly { class: string; passed: boolean; ruleIds: readonly string[] }[];
   };
@@ -210,6 +213,9 @@ function boundedTrace(result: EngineTurnResult) {
     promptHash: result.trace.promptHash,
     ruleFired: result.trace.ruleFired,
     moderator: result.trace.moderator,
+    moderatorClass: result.trace.moderatorClass,
+    moderatorRuleId: result.trace.moderatorRuleId,
+    moderatorModelConfigId: result.trace.moderatorModelConfigId,
     sourceIds: result.trace.sources.slice(0, 6).map((source) => source.entryId),
     checks: result.trace.checks.slice(0, 8).map((check) => ({
       class: check.class,

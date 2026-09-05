@@ -509,6 +509,9 @@ export function traceForPersistence(
     usage: result.trace.usage,
     cost: result.trace.cost,
     moderatorState: result.trace.moderator === "not_run" ? null : result.trace.moderator,
+    moderatorClass: result.trace.moderatorClass,
+    moderatorRuleId: result.trace.moderatorRuleId,
+    moderatorModelConfigId: result.trace.moderatorModelConfigId,
   };
 }
 

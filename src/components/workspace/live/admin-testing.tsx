@@ -147,6 +147,9 @@ function TraceEvidence({ trace, grounded }: { trace: MessageTraceRead; grounded:
           layout="stacked"
           value={<Status label={moderator.label} tone={STATE_TONE_TO_TONE[moderator.tone]} />}
         />
+        <KeyValue label="Moderator class" layout="stacked" value={trace.moderatorClass ?? "Not recorded"} />
+        <KeyValue label="Moderator rule" layout="stacked" value={trace.moderatorRuleId ?? "Not recorded"} />
+        <KeyValue label="Moderator config" layout="stacked" value={trace.moderatorModelConfigId ?? "Not recorded"} />
         <KeyValue label="Recorded" layout="stacked" value={displayTime(trace.createdAt)} />
       </dl>
       <TechnicalDetail

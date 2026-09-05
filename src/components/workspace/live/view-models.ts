@@ -119,6 +119,9 @@ export type MessageTraceRead = {
   checks: Record<string, boolean>;
   violations: string[];
   moderatorState: "allowed" | "blocked" | "unavailable" | "not_recorded";
+  moderatorClass: string | null;
+  moderatorRuleId: string | null;
+  moderatorModelConfigId: string | null;
   createdAt: string;
 };
 

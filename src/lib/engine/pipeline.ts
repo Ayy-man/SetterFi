@@ -470,6 +470,9 @@ function baseTrace(input: EnginePipelineInput): EngineTrace {
     cost: null,
     moderator: "not_run",
     moderatorReason: null,
+    moderatorClass: null,
+    moderatorRuleId: null,
+    moderatorModelConfigId: null,
   };
 }
 
@@ -604,6 +607,7 @@ async function hardGatedObjectionTurn({
   prompt,
   retrieval,
   moderator,
+  moderatorModelConfigId,
   qualificationDecision,
 }: {
   input: EnginePipelineInput;
@@ -617,6 +621,7 @@ async function hardGatedObjectionTurn({
   prompt: ReturnType<typeof assemblePrompt>;
   retrieval: TurnRetrievalResult | null;
   moderator: { moderate: ModeratorCall };
+  moderatorModelConfigId: string;
   qualificationDecision: RuntimeQualificationDecision | null;
 }): Promise<EngineTurnResult> {
   // `model` and `paramsHash` stay null because no generator ran: naming the configured model on a
@@ -653,6 +658,8 @@ async function hardGatedObjectionTurn({
     result: first,
     channel: input.channel,
   });
+  // A hard-cap LEN breach also lands here: the published text is an essay for this channel, and
+  // its first sentence is not the answer the lead was owed, so it holds with class LEN.
   if (decision.action === "hold") {
     return heldResult({
       input,
@@ -716,6 +723,9 @@ async function hardGatedObjectionTurn({
         rejectedDrafts: [body],
         moderator: "blocked",
         moderatorReason: moderation.verdict.reason,
+        moderatorClass: moderation.verdict.class,
+        moderatorRuleId: moderation.verdict.rule_id ?? null,
+        moderatorModelConfigId,
       },
     });
   }
@@ -735,6 +745,9 @@ async function hardGatedObjectionTurn({
         rejectedDrafts: [body],
         moderator: "unavailable",
         moderatorReason: moderation.trace.reason,
+        moderatorClass: null,
+        moderatorRuleId: null,
+        moderatorModelConfigId,
       },
     });
   }
@@ -778,6 +791,9 @@ async function hardGatedObjectionTurn({
       ruleFired: violations[0]?.ruleId ?? null,
       moderator: "allowed",
       moderatorReason: moderation.verdict.reason,
+      moderatorClass: moderation.verdict.class,
+      moderatorRuleId: moderation.verdict.rule_id ?? null,
+      moderatorModelConfigId,
     },
   };
 }
@@ -938,6 +954,7 @@ export async function runEngineTurn(
   // A hard-gated objection answers from the published snapshot. The gate is the retrieval result,
   // never an env read: `retrieveForTurn` populates `objection` only when the objection flag is on,
   // so a flag-off turn cannot reach this branch and this module stays free of flag reads.
+  const models = loadActiveModelPair(input.modelConfigs);
   const gated = retrieval?.objection && retrieval.objection.hardGate ? retrieval.objection : null;
   if (gated) {
     return hardGatedObjectionTurn({
@@ -952,11 +969,11 @@ export async function runEngineTurn(
       prompt,
       retrieval,
       moderator: dependencies.moderator,
+      moderatorModelConfigId: models.moderator.id,
       qualificationDecision: runtimeQualification?.decision ?? null,
     });
   }
 
-  const models = loadActiveModelPair(input.modelConfigs);
   let messages = [...prompt.messages];
   let attempts = 0;
   let regenerationUsed = false;
@@ -966,6 +983,9 @@ export async function runEngineTurn(
   let usage: EngineTrace["usage"] = null;
   let moderatorState: EngineTrace["moderator"] = "not_run";
   let moderatorReason: string | null = null;
+  let moderatorClass: EngineTrace["moderatorClass"] = null;
+  let moderatorRuleId: string | null = null;
+  let moderatorModelConfigId: string | null = null;
   let finalDraft = "";
   let declaredEntryId = input.runtimeBundle ? null : input.declaredEntryId ?? null;
   let declaredEntryVerified = false;
@@ -1027,6 +1047,9 @@ export async function runEngineTurn(
       }];
       continue;
     }
+    // A second draft still over the channel's hard cap holds with class LEN rather than being
+    // truncated: `decideCheckAttempt` only offers `pass_truncated` for a soft breach, and the
+    // trace below records the LEN check, its hard-cap evidence and rule id like any other hold.
     if (checkDecision.action === "hold") {
       const checkClass = checked.violations[0]?.class ?? "JUDGE";
       return heldResult({
@@ -1054,6 +1077,9 @@ export async function runEngineTurn(
           cost: lastCost,
           moderator: moderatorState,
           moderatorReason,
+          moderatorClass,
+          moderatorRuleId,
+          moderatorModelConfigId,
         },
       });
     }
@@ -1084,6 +1110,9 @@ export async function runEngineTurn(
           cost: lastCost,
           moderator: moderatorState,
           moderatorReason,
+          moderatorClass,
+          moderatorRuleId,
+          moderatorModelConfigId,
         } });
       }
     }
@@ -1119,6 +1148,9 @@ export async function runEngineTurn(
           cost: lastCost,
           moderator: moderatorState,
           moderatorReason,
+          moderatorClass,
+          moderatorRuleId,
+          moderatorModelConfigId,
         },
       });
     }
@@ -1140,6 +1172,9 @@ export async function runEngineTurn(
     if (moderation.kind === "blocked") {
       moderatorState = "blocked";
       moderatorReason = moderation.verdict.reason;
+      moderatorClass = moderation.verdict.class;
+      moderatorRuleId = moderation.verdict.rule_id ?? null;
+      moderatorModelConfigId = models.moderator.id;
       if (!regenerationUsed) {
         rejectedDrafts = [...rejectedDrafts, candidate];
         regenerationUsed = true;
@@ -1177,6 +1212,9 @@ export async function runEngineTurn(
           cost: lastCost,
           moderator: moderatorState,
           moderatorReason,
+          moderatorClass,
+          moderatorRuleId,
+          moderatorModelConfigId,
         },
       });
     }
@@ -1209,11 +1247,17 @@ export async function runEngineTurn(
           cost: lastCost,
           moderator: "unavailable",
           moderatorReason: moderation.trace.reason,
+          moderatorClass: null,
+          moderatorRuleId: null,
+          moderatorModelConfigId: models.moderator.id,
         },
       });
     }
     moderatorState = "allowed";
     moderatorReason = moderation.verdict.reason;
+    moderatorClass = moderation.verdict.class;
+    moderatorRuleId = moderation.verdict.rule_id ?? null;
+    moderatorModelConfigId = models.moderator.id;
     finalDraft = candidate;
     break;
   }
@@ -1273,6 +1317,9 @@ export async function runEngineTurn(
       cost: lastCost,
       moderator: moderatorState,
       moderatorReason,
+      moderatorClass,
+      moderatorRuleId,
+      moderatorModelConfigId,
     },
   };
 }
