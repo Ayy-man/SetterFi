@@ -18,6 +18,9 @@ import {
 } from "@/lib/evals/comparison";
 import { runOutputChecks } from "@/lib/engine/output-checks";
 import { loadSafetyCorpus, type SafetyCorpusCase } from "@/lib/evals/corpus";
+import { moderatorJudge, scoreEngineCase } from "@/lib/evals/engine-case-scoring";
+import { loadPublishedEngineSnapshot } from "@/lib/evals/nightly-engine-evals";
+import { engineSystemPrompt, type PublishedEngineSnapshot } from "@/lib/evals/openrouter-engine-executor";
 import { runAndRecordEval, type EngineCaseExecutor } from "@/lib/evals/runner";
 import {
   parseJudgmentCases,
@@ -39,6 +42,7 @@ import {
 import {
   createMockModelDriver,
   createRealModelDriver,
+  createRealModeratorDriver,
 } from "@/lib/integrations/openrouter";
 import type { ActiveModelConfiguration } from "@/lib/integrations/selector";
 import {
@@ -67,6 +71,8 @@ export type ComparisonContext = {
   draft: { id: string; contentHash: string };
   configA: ComparisonModelConfig;
   configB: ComparisonModelConfig;
+  /** The published snapshot whose platform prompt every arm runs on; absent, arms run on the corpus canary alone. */
+  snapshot?: PublishedEngineSnapshot | null;
 };
 
 export type EvalComparisonDependencies = {
@@ -84,6 +90,7 @@ export type EvalComparisonDependencies = {
     cases: readonly SafetyCorpusCase[];
     judgmentCases: readonly JudgmentCase[];
     judgeConfig: JudgeModelConfig | null;
+    snapshot?: PublishedEngineSnapshot | null;
   }): Promise<EvalRunReceipt>;
   /** Promoted judgement cases, and the moderator row that scores them. Both may be empty. */
   loadJudgmentCases(): Promise<readonly JudgmentCase[]>;
@@ -185,16 +192,12 @@ export function resolveComparisonDriver(
   return { arm, apiKey: values.OPENROUTER_API_KEY };
 }
 
-function executionPassed(testCase: SafetyCorpusCase, actual: ReturnType<typeof runOutputChecks>) {
-  if (testCase.expectation.verdict === "pass") return actual.passed;
-  const ruleIds = new Set(actual.violations.map((violation) => violation.ruleId));
-  return actual.violations.some((violation) => violation.class === testCase.expectation.class) &&
-    testCase.expectation.ruleIds.every((ruleId) => ruleIds.has(ruleId));
-}
 
 function engineExecutor(
   config: ComparisonModelConfig,
   driver: ComparisonDriver,
+  snapshot: PublishedEngineSnapshot | null,
+  judgeConfig: JudgeModelConfig | null,
 ): EngineCaseExecutor {
   const activeConfig: ActiveModelConfiguration = {
     role: "generator",
@@ -204,11 +207,20 @@ function engineExecutor(
   const model = driver.arm === "real"
     ? createRealModelDriver(driver.apiKey!)
     : createMockModelDriver(activeConfig);
+  // The real arm judges uncaught replies with the active moderator row, the way production would.
+  const judge = driver.arm === "real" && judgeConfig
+    ? moderatorJudge(createRealModeratorDriver(driver.apiKey!, {
+        role: "moderator", model: judgeConfig.model, params: { ...judgeConfig.params },
+      }))
+    : undefined;
   return async (testCase) => {
     const messages = [
       {
         role: "system" as const,
-        content: `${testCase.context.systemText}\n\n${testCase.context.roleBoundary}`,
+        // Without a published snapshot the arm runs on the corpus canary alone, and says so.
+        content: snapshot
+          ? engineSystemPrompt(snapshot.compiledPlatform, testCase.context)
+          : `${testCase.context.systemText}\n\n${testCase.context.roleBoundary}`,
       },
       ...testCase.turns.map((turn) => ({
         role: turn.role === "lead" ? "user" as const : "assistant" as const,
@@ -221,12 +233,19 @@ function engineExecutor(
     });
     const actual = runOutputChecks(generated.draft, testCase.context);
     const ruleIds = [...new Set(actual.violations.map((violation) => violation.ruleId))];
+    const score = await scoreEngineCase({ testCase, actual, draft: generated.draft, judge });
     return {
-      passed: executionPassed(testCase, actual),
+      passed: score.passed,
       response: generated.draft,
       ruleIds,
       trace: {
         driverArm: driver.arm,
+        outcome: score.outcome,
+        scoredBy: score.scoredBy,
+        judge: score.judge,
+        promptSource: snapshot ? "published" : "corpus",
+        publishedSnapshotId: snapshot?.snapshotId ?? null,
+        publishedVersion: snapshot?.version ?? null,
         expected: testCase.expectation,
         actualPassed: actual.passed,
         checks: actual.checks,
@@ -401,10 +420,11 @@ async function liveEvalComparisonDependencies(): Promise<EvalComparisonDependenc
   const client = createSupabaseServiceClient();
   return {
     loadContext: async (input) => {
-      const [{ data: draft, error: draftError }, { data: configs, error: configError }] = await Promise.all([
+      const [{ data: draft, error: draftError }, { data: configs, error: configError }, snapshot] = await Promise.all([
         client.from("brain_draft_versions").select("id,content_hash").eq("id", input.draftId).maybeSingle(),
         client.from("model_configs").select("id,openrouter_model,params,role,active")
           .in("id", [input.modelConfigAId, input.modelConfigBId]),
+        loadPublishedEngineSnapshot(),
       ]);
       if (draftError || !draft) throw new Error("EVAL_COMPARISON_DRAFT_NOT_FOUND");
       if (configError) throw new Error(`EVAL_COMPARISON_CONFIG_READ_FAILED:${configError.message}`);
@@ -419,6 +439,7 @@ async function liveEvalComparisonDependencies(): Promise<EvalComparisonDependenc
         draft: { id: String(draft.id), contentHash: String(draft.content_hash) },
         configA,
         configB,
+        snapshot,
       };
     },
     start: async (args) => {
@@ -433,7 +454,7 @@ async function liveEvalComparisonDependencies(): Promise<EvalComparisonDependenc
       contentHash: input.contentHash,
       kind: "engine",
       modelConfigId: input.config.id,
-      engineExecutor: engineExecutor(input.config, input.driver),
+      engineExecutor: engineExecutor(input.config, input.driver, input.snapshot ?? null, input.judgeConfig),
       judgmentSuites: await runJudgmentSuites({
         arm: input.driver.arm,
         cases: input.judgmentCases,
@@ -536,9 +557,9 @@ export async function runEvalComparison(
   });
   const [runA, runB] = await Promise.all([
     deps.runArm({ draftId: context.draft.id, contentHash: context.draft.contentHash,
-      config: context.configA, driver, cases, judgmentCases: judged, judgeConfig }),
+      config: context.configA, driver, cases, judgmentCases: judged, judgeConfig, snapshot: context.snapshot ?? null }),
     deps.runArm({ draftId: context.draft.id, contentHash: context.draft.contentHash,
-      config: context.configB, driver, cases, judgmentCases: judged, judgeConfig }),
+      config: context.configB, driver, cases, judgmentCases: judged, judgeConfig, snapshot: context.snapshot ?? null }),
   ]);
   const expectedKeys = expectedResultKeys(cases, judged, judgeConfig !== null);
   assertPreFinishRun(runA, {

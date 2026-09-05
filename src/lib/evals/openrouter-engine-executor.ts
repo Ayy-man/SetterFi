@@ -1,9 +1,9 @@
 /** OpenRouter-backed executor for evidence-bound published-snapshot engine cases. */
 
 import { withPlatformGuardrails } from "@/lib/engine/guardrails";
-import { runOutputChecks } from "@/lib/engine/output-checks";
+import { type OutputCheckContext, runOutputChecks } from "@/lib/engine/output-checks";
+import { type EngineCaseJudge, scoreEngineCase } from "@/lib/evals/engine-case-scoring";
 import type { EnvironmentSource } from "@/lib/env-contract";
-import type { SafetyCorpusCase } from "@/lib/evals/corpus";
 import type { EngineCaseExecutor } from "@/lib/evals/runner";
 import { createRealModelDriver } from "@/lib/integrations/openrouter";
 import type { ModelDriver } from "@/lib/integrations/types";
@@ -28,11 +28,13 @@ export type OpenRouterEngineCaseExecutorSelection =
   | { state: "ready"; executor: EngineCaseExecutor }
   | { state: "unavailable"; code: typeof ENGINE_EVAL_UNAVAILABLE; reason: string };
 
-function executionPassed(testCase: SafetyCorpusCase, actual: ReturnType<typeof runOutputChecks>) {
-  if (testCase.expectation.verdict === "pass") return actual.passed;
-  const ruleIds = new Set(actual.violations.map((violation) => violation.ruleId));
-  return actual.violations.some((violation) => violation.class === testCase.expectation.class)
-    && testCase.expectation.ruleIds.every((ruleId) => ruleIds.has(ruleId));
+/**
+ * The system prompt every engine case runs on: the code-owned invariants, the published platform
+ * prompt, then the corpus's canary sentence (what the ECHO check watches for) and role boundary.
+ * Both eval paths render exactly this, so a bench arm sees what production sees.
+ */
+export function engineSystemPrompt(compiledPlatform: string, context: OutputCheckContext) {
+  return `${withPlatformGuardrails(compiledPlatform)}\n\n${context.systemText}\n\n${context.roleBoundary}`;
 }
 
 export function createOpenRouterEngineCaseExecutor(input: {
@@ -40,6 +42,8 @@ export function createOpenRouterEngineCaseExecutor(input: {
   configuration: EngineModelConfiguration;
   environment?: EnvironmentSource;
   createModel?: (apiKey: string) => ModelDriver;
+  /** Judges replies the checker did not catch; absent, those score as uncaught. */
+  judge?: EngineCaseJudge;
 }): OpenRouterEngineCaseExecutorSelection {
   const environment = input.environment ?? process.env;
   const selector = environment.SETTERFI_OPENROUTER_DRIVER?.trim();
@@ -58,7 +62,7 @@ export function createOpenRouterEngineCaseExecutor(input: {
     const generated = await model.generate([
       {
         role: "system",
-        content: `${withPlatformGuardrails(input.snapshot.compiledPlatform)}\n\n${testCase.context.roleBoundary}`,
+        content: engineSystemPrompt(input.snapshot.compiledPlatform, testCase.context),
       },
       ...testCase.turns.map((turn) => ({
         role: turn.role === "lead" ? "user" as const : "assistant" as const,
@@ -67,12 +71,17 @@ export function createOpenRouterEngineCaseExecutor(input: {
     ], { model: input.configuration.model, params: { ...input.configuration.params } });
     const actual = runOutputChecks(generated.draft, testCase.context);
     const ruleIds = [...new Set(actual.violations.map((violation) => violation.ruleId))];
+    const score = await scoreEngineCase({ testCase, actual, draft: generated.draft, judge: input.judge });
     return {
-      passed: executionPassed(testCase, actual),
+      passed: score.passed,
       response: generated.draft,
       ruleIds,
       trace: {
         driverArm: "real",
+        outcome: score.outcome,
+        scoredBy: score.scoredBy,
+        judge: score.judge,
+        promptSource: "published",
         expected: testCase.expectation,
         actualPassed: actual.passed,
         checks: actual.checks,

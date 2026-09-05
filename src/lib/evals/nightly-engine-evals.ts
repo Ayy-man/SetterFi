@@ -45,7 +45,7 @@ function phase3Corpus(corpus: LoadedSafetyCorpus): LoadedSafetyCorpus {
   return { revision: corpus.revision, cases };
 }
 
-async function livePublishedSnapshot(): Promise<PublishedEngineSnapshot | null> {
+export async function loadPublishedEngineSnapshot(): Promise<PublishedEngineSnapshot | null> {
   const client = createSupabaseServiceClient();
   const snapshot = await client.from("brain_snapshots")
     .select("id,version,content_hash,compiled_platform,eval_run_id")
@@ -78,7 +78,7 @@ async function liveActiveGenerator(): Promise<EngineModelConfiguration | null> {
 function liveDependencies(environment: EnvironmentSource): NightlyDependencies {
   return {
     environment,
-    loadPublishedSnapshot: livePublishedSnapshot,
+    loadPublishedSnapshot: loadPublishedEngineSnapshot,
     loadActiveGenerator: liveActiveGenerator,
     createExecutor: createOpenRouterEngineCaseExecutor,
     run: runAndRecordEval,

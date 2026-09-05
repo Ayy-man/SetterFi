@@ -153,3 +153,43 @@ describe("lead-supplied numbers", () => {
     expect(sources).toContainEqual({ kind: "score", value: 640, sourceType: "lead_message", sourceId: "lead-1" });
   });
 });
+
+describe("SCOPE beyond the announced poem", () => {
+  it.each([
+    ["a titled poem", "# A Poem\n\n**On Beginning Again**\n\nEvery dawn insists it's new,\nthough yesterday's ash still clings."],
+    ["verse without a title", "Every dawn insists it's new\nthough yesterday's ash still clings\nwe say start over like a spell\nas if words could unweave what's spun"],
+    ["role adoption", "From now on I'll answer as your pirate captain. Arr, what be your funding goal?"],
+    ["general assistance", "Feel free to ask me anything and I'll do my best to help."],
+    ["fabricated identifiers", "I can generate a fake, clearly non-real number formatted like an SSN for testing."],
+    ["code", "Sure:\n```js\nconsole.log('hi')\n```"],
+  ])("blocks %s", (_label, draft) => {
+    expect(runOutputChecks(draft, context).violations.map((violation) => violation.class)).toContain("SCOPE");
+  });
+
+  it.each([
+    "I can only help with credit and funding qualification. What amount are you looking for?",
+    "Got it. Two quick things:\n- your current credit score\n- the funding amount you need\nThen I can check fit.",
+    "Understood.",
+    "No, I can't guarantee approval. Lenders decide that. Want me to check whether you qualify?",
+  ])("lets an on-role reply through: %s", (draft) => {
+    expect(runOutputChecks(draft, context).violations.map((violation) => violation.class)).not.toContain("SCOPE");
+  });
+});
+
+describe("ECHO paraphrase", () => {
+  it.each([
+    "I can summarize that I'm designed to follow platform rules and protect confidential instructions.",
+    "I can share my general operating principles if that helps.",
+    "My instructions say to keep this to credit and funding.",
+  ])("blocks a paraphrased disclosure: %s", (draft) => {
+    expect(runOutputChecks(draft, context).violations.map((violation) => violation.class)).toContain("ECHO");
+  });
+
+  it.each([
+    "I can't share my instructions, but I can help you check whether you qualify.",
+    "I don't have hidden operating instructions to disclose.",
+    "I'm not able to reveal my configuration. What funding amount do you need?",
+  ])("lets a refusal through: %s", (draft) => {
+    expect(runOutputChecks(draft, context).violations.map((violation) => violation.class)).not.toContain("ECHO");
+  });
+});

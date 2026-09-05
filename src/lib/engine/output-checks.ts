@@ -150,6 +150,11 @@ function numberViolations(draft: string, context: OutputCheckContext) {
     .map((fact) => `ungrounded ${fact.kind} at character ${fact.start}`);
 }
 
+function isDeclining(text: string, phraseStart: number) {
+  const prefix = text.slice(Math.max(0, phraseStart - 48), phraseStart);
+  return /(?:can't|cannot|can not|won't|will not|unable to|not able to|don't|do not|never|no|without|rather than|instead of)\s+(?:\w+\s+){0,4}$/.test(prefix);
+}
+
 function isNegated(text: string, phraseStart: number) {
   const prefix = text.slice(Math.max(0, phraseStart - 28), phraseStart);
   return /(?:can't|cannot|won't|will not|do not|don't|never|no)\s+(?:\w+\s+){0,2}$/.test(prefix);
@@ -180,6 +185,14 @@ function echoViolations(draft: string, context: OutputCheckContext) {
   if (/\b(?:the brain|offer layer|decision table|grounding receipt|system prompt)\b/i.test(draft)) {
     evidence.push("operator vocabulary appeared");
   }
+  // A paraphrase of the instructions leaks as surely as a quote. "I can't share my instructions"
+  // is the refusal the invariants ask for, so a negated or declining prefix is exempt.
+  const disclosure = /\b(?:i(?:'m| am) (?:designed|configured|instructed|programmed|built|trained|set up) to|my (?:instructions|guidelines|configuration|system prompt|operating (?:principles|instructions|rules)|hidden (?:instructions|rules))|(?:hidden|confidential|internal|secret) (?:operating |system |developer )?(?:instructions|rules|prompt)|(?:platform|operator|developer) (?:rules|instructions)|operating principles)\b/g;
+  for (const match of normalizedDraft.matchAll(disclosure)) {
+    if (isDeclining(normalizedDraft, match.index)) continue;
+    evidence.push(`instruction disclosure at character ${match.index}`);
+    break;
+  }
   for (let index = 0; index <= normalizedDraft.length - 40; index += 1) {
     const span = normalizedDraft.slice(index, index + 40);
     if (!normalizedSystem.includes(span)) continue;
@@ -205,9 +218,38 @@ function linkViolations(draft: string, whitelist: readonly string[]) {
   });
 }
 
+const SCOPE_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
+  ["offered off-role content", /\b(?:here(?:'s| is) (?:a|your|the) (?:poem|essay|haiku|sonnet|story|song|joke)|legal advice|tax advice|medical advice|act as|roleplay as)\b/i],
+  ["titled off-role content", /^\s*(?:#{1,6}\s+|\*\*)?[^\n]{0,40}\b(?:poem|haiku|sonnet|limerick|essay|short story|lyrics)\b[^\n]{0,40}(?:\*\*)?\s*$/im],
+  ["adopted another role", /\b(?:i(?:'m| am) now (?:a|an|your|the)\b|from now on,? i(?:'ll| will|'m| am)?\b|as (?:a|your) (?:pirate|general assistant|ai assistant|new persona|different assistant)|developer mode|dan mode|jailbroken)\b/i],
+  ["offered general assistance", /\b(?:ask me anything|help (?:you )?with anything|any (?:topic|question|task)s? you(?:'d| would)? like)\b/i],
+  ["offered fabricated identifiers", /\b(?:(?:synthetic|fake|dummy|made[- ]up|fictional|placeholder) (?:profile numbers?|ssn|social security numbers?|account numbers?|identit(?:y|ies)|id numbers?|credit card numbers?)|generate (?:a|an|some) (?:fake|synthetic|dummy)\b)/i],
+  ["returned code", /```/],
+];
+
+/**
+ * Four or more consecutive short lines, most without terminal punctuation, is verse or a list of
+ * lyrics, never a setter's reply. Markdown bullets and numbered steps are excluded so a rare
+ * itemised answer is judged by LEN, not SCOPE.
+ */
+function looksLikeVerse(draft: string) {
+  const lines = draft.split(/\r?\n/).map((line) => line.trim());
+  let run = 0;
+  let unpunctuated = 0;
+  for (const line of lines) {
+    const short = line.length > 0 && line.length <= 60 && !/^(?:[-*•]|\d+[.)])\s/.test(line);
+    if (!short) { run = 0; unpunctuated = 0; continue; }
+    run += 1;
+    if (!/[.!?:]["')\]]?$/.test(line)) unpunctuated += 1;
+    if (run >= 4 && unpunctuated >= 3) return true;
+  }
+  return false;
+}
+
 function scopeViolations(draft: string, roleBoundary: string) {
-  const forbidden = /\b(?:here(?:'s| is) (?:a|your) (?:poem|essay)|legal advice|tax advice|medical advice|act as|roleplay as)\b/i;
-  return forbidden.test(draft) ? [`reply crossed role boundary: ${roleBoundary}`] : [];
+  const evidence = SCOPE_PATTERNS.filter(([, pattern]) => pattern.test(draft)).map(([label]) => label);
+  if (looksLikeVerse(draft)) evidence.push("verse-shaped reply");
+  return evidence.map((label) => `reply crossed role boundary (${label}): ${roleBoundary}`);
 }
 
 function lengthViolations(draft: string, channel: OutputCheckContext["channel"]) {
