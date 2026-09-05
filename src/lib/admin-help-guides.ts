@@ -905,7 +905,7 @@ export const ADMIN_GUIDE_SURFACES: Record<string, readonly string[]> = {
  * Route -> guide for the eight destinations the admin rail still carries.
  *
  * The rail folded on 2026-09-02 and the routes that left it are tabs and sheet sections now, not
- * pages: Evals is `/admin/brain?tab=evals`, the agent roster and channel health are tabs on
+ * pages: Evals is `/admin/brain?tab=suite`, the agent roster and channel health are tabs on
  * `/admin/platform-clients`, tiers, affiliates and corrections are tabs on `/admin/billing`, and
  * the account terms registry is the Terms section of `/account`. A key here has to be a canonical
  * rail destination -- `assertAdminGuideCoverage` compares this map's keys against the rail exactly

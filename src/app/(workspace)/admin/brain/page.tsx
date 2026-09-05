@@ -13,7 +13,11 @@ import {
   type MessageTraceRead,
   type TestingArmInput,
 } from "@/components/workspace/live/view-models";
-import { OwnerBrain } from "@/components/workspace/rehaul/owner-brain";
+import {
+  OwnerBrain,
+  type OwnerBrainCoach,
+  type OwnerBrainModel,
+} from "@/components/workspace/rehaul/owner-brain";
 import type {
   AdminBrainInitialState,
   BrainEvalView,
@@ -240,6 +244,31 @@ async function loadAdminBrainStateValue(): Promise<AdminBrainInitialState> {
   };
 }
 
+/**
+ * The coach and model lists the redesigned Brain needs beside the draft: the test conversation
+ * and the assembled prompt run against one coach, and the Models section shows every configured
+ * model with its role. Both reads degrade to an empty list rather than blanking the page.
+ */
+async function loadBrainContext(): Promise<{ coaches: OwnerBrainCoach[]; models: OwnerBrainModel[] }> {
+  const client = createSupabaseServiceClient();
+  const [tenantsResult, modelsResult] = await Promise.all([
+    client.from("tenants").select("id,name,is_demo,status").order("is_demo", { ascending: false }).order("name", { ascending: true }),
+    client.from("model_configs").select("id,label,openrouter_model,role,active,moderator_unavailable_count").order("active", { ascending: false }).order("label", { ascending: true }),
+  ]);
+  const coaches: OwnerBrainCoach[] = (tenantsResult.data ?? [])
+    .filter((row) => row.status !== "archived")
+    .map((row) => ({ id: row.id, name: row.name, isDemo: row.is_demo === true }));
+  const models: OwnerBrainModel[] = (modelsResult.data ?? []).map((row) => ({
+    id: row.id,
+    label: row.label,
+    model: row.openrouter_model,
+    role: row.role === "generator" || row.role === "moderator" ? row.role : null,
+    active: row.active === true,
+    moderatorUnavailableCount: persistedCounter(row.moderator_unavailable_count),
+  }));
+  return { coaches, models };
+}
+
 type AdminBrainStateResult =
   | { ok: true; value: AdminBrainInitialState }
   | { ok: false; code: "ADMIN_BRAIN_READ_FAILED"; reason: string };
@@ -259,7 +288,7 @@ async function loadAdminBrainState(): Promise<AdminBrainStateResult> {
 /* --------------------------------------------------------------------------------------------
  * The Evals tab, folded in from /admin/brain/testing.
  *
- * `foldedRouteFor` sends `/admin/brain/testing` to `/admin/brain?tab=evals`, so the reads that
+ * `foldedRouteFor` sends `/admin/brain/testing` to `/admin/brain?tab=suite`, so the reads that
  * page performs have to happen here for that tab to have anything in it. Nothing below is a new
  * query: it is the same pair of selects `admin/brain/testing/page.tsx` runs, in the same order,
  * and it only runs when the reader is actually on that tab.
@@ -416,11 +445,14 @@ export default async function AdminBrainPage({ searchParams }: PageProps) {
   const params = (await searchParams) ?? {};
   const requested = params.tab;
   const tab = ownerBrainTab(Array.isArray(requested) ? requested[0] : requested);
+  const context = await loadBrainContext();
   return (
     <BrainShell>
       <OwnerBrain
-        evals={tab === "evals" ? await renderEvalsTab(claims) : undefined}
+        coaches={context.coaches}
+        evals={tab === "suite" ? await renderEvalsTab(claims) : undefined}
         initialState={initialStateResult.value}
+        models={context.models}
         tab={tab}
       />
     </BrainShell>

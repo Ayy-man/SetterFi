@@ -20,20 +20,41 @@ export const OWNER_MONEY_TABS = ["billing", "costs", "tiers", "affiliates", "cor
 
 export type OwnerMoneyTab = (typeof OWNER_MONEY_TABS)[number];
 
+/**
+ * The Brain's sections, 2026-09-06 redesign.
+ *
+ * Five configuration sections share one editor with the test conversation beside it; the other
+ * three are full-width working views reached from the header or from Knowledge. The old tab ids
+ * are still accepted so a bookmarked `?tab=versions` or the route fold's `?tab=evals` lands on
+ * the view that replaced it rather than on the first section.
+ */
 export const OWNER_BRAIN_TABS = [
-  "overview",
-  "review",
-  "defaults",
+  "behavior",
+  "qualification",
   "knowledge",
-  "versions",
-  "evals",
-  "diagnostics",
+  "safety",
+  "models",
+  "review",
+  "suite",
+  "prompt",
 ] as const;
 
 export type OwnerBrainTab = (typeof OWNER_BRAIN_TABS)[number];
 
+/** The five sections on the Configure rail, in rail order. */
+export const OWNER_BRAIN_SECTIONS = OWNER_BRAIN_TABS.slice(0, 5) as readonly OwnerBrainTab[];
+
+const LEGACY_BRAIN_TABS: Readonly<Record<string, OwnerBrainTab>> = {
+  overview: "behavior",
+  defaults: "behavior",
+  versions: "behavior",
+  evals: "suite",
+  diagnostics: "suite",
+};
+
 export function ownerBrainTab(value: string | null | undefined): OwnerBrainTab {
-  return OWNER_BRAIN_TABS.includes(value as OwnerBrainTab) ? (value as OwnerBrainTab) : "overview";
+  if (OWNER_BRAIN_TABS.includes(value as OwnerBrainTab)) return value as OwnerBrainTab;
+  return (value && LEGACY_BRAIN_TABS[value]) || "behavior";
 }
 
 /**

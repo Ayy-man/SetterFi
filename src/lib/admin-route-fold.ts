@@ -17,7 +17,7 @@ export const foldedRouteFor: Readonly<Record<string, FoldedRoute>> = {
   "/admin/channel-health": { pathname: "/admin/platform-clients", param: "tab", value: "health" },
   "/admin/provisioning": { pathname: "/admin/platform-clients", param: "tab", value: "setup" },
   "/admin/support-team": { pathname: "/admin/platform-clients", param: "tab", value: "team" },
-  "/admin/brain/testing": { pathname: "/admin/brain", param: "tab", value: "evals" },
+  "/admin/brain/testing": { pathname: "/admin/brain", param: "tab", value: "suite" },
   "/admin/account-terms": { pathname: "/account", param: "section", value: "terms" },
   "/admin/help": { pathname: "/account", param: "section", value: "help" },
 };

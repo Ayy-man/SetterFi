@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -10,9 +10,11 @@ vi.mock("next/navigation", () => ({
 import {
   OwnerBrain,
   brainSectionRows,
+  type OwnerBrainProps,
 } from "@/components/workspace/rehaul/owner-brain";
+import type { OwnerBrainApi, TestTurnResult } from "@/components/workspace/rehaul/owner-brain-api";
 import type { AdminBrainInitialState } from "@/components/workspace/live/brain-view-models";
-import { ownerBrainTab } from "@/lib/console-tabs";
+import { OWNER_BRAIN_TABS, ownerBrainTab } from "@/lib/console-tabs";
 
 /** One sentence the live surface printed under a heading. It must not survive the rehaul. */
 const OLD_EXPLAINER =
@@ -85,12 +87,66 @@ function state(overrides: Partial<AdminBrainInitialState> = {}): AdminBrainIniti
   };
 }
 
+const COACHES = [
+  { id: "tenant-demo", name: "Demo Coach", isDemo: true },
+  { id: "tenant-real", name: "Real Coach", isDemo: false },
+];
+
+function turn(overrides: Partial<TestTurnResult> = {}): TestTurnResult {
+  return {
+    reply: "Happy to help. What are you earning per month right now?",
+    held: false,
+    heldClass: null,
+    evidence: {
+      citations: [{ entryId: "entry-1", question: "What does entry-1 cost?" }],
+      qualification: { ruleId: "REV-001", outcome: "BOOK", step: 1, of: 4 },
+      safety: {
+        checks: [{ class: "NUM", passed: true, ruleId: null }, { class: "CLAIM", passed: true, ruleId: null }],
+        moderator: { verdict: "allowed", ms: 900 },
+      },
+      promptHash: "abcdef1234567890",
+      tokens: 2100,
+      channelLength: { chars: 54, soft: 160, hard: 320 },
+    },
+    ...overrides,
+  };
+}
+
+function fakeApi(overrides: Partial<OwnerBrainApi> = {}): OwnerBrainApi {
+  const never = () => new Promise<never>(() => {});
+  return {
+    runTestTurn: vi.fn(async () => turn()),
+    readPlatformContent: vi.fn(never),
+    savePlatformContentDraft: vi.fn(never),
+    approvePlatformContent: vi.fn(never),
+    readAssembledPrompt: vi.fn(never),
+    acceptImportItem: vi.fn(async () => ({})),
+    rejectImportItem: vi.fn(async () => ({})),
+    ...overrides,
+  };
+}
+
+function renderBrain(props: Partial<OwnerBrainProps> = {}) {
+  return render(
+    <OwnerBrain
+      api={fakeApi()}
+      coaches={COACHES}
+      initialState={state()}
+      tab="behavior"
+      {...props}
+    />,
+  );
+}
+
 describe("ownerBrainTab", () => {
-  it("accepts the seven tab ids and falls back to the overview", () => {
-    expect(ownerBrainTab("versions")).toBe("versions");
-    expect(ownerBrainTab("evals")).toBe("evals");
-    expect(ownerBrainTab("not-a-tab")).toBe("overview");
-    expect(ownerBrainTab(undefined)).toBe("overview");
+  it("accepts the eight tab ids, folds the old ones, and falls back to Behavior", () => {
+    for (const tab of OWNER_BRAIN_TABS) expect(ownerBrainTab(tab)).toBe(tab);
+    expect(ownerBrainTab("overview")).toBe("behavior");
+    expect(ownerBrainTab("versions")).toBe("behavior");
+    expect(ownerBrainTab("evals")).toBe("suite");
+    expect(ownerBrainTab("diagnostics")).toBe("suite");
+    expect(ownerBrainTab("not-a-tab")).toBe("behavior");
+    expect(ownerBrainTab(undefined)).toBe("behavior");
   });
 });
 
@@ -113,73 +169,133 @@ describe("brainSectionRows", () => {
   });
 });
 
-describe("OwnerBrain", () => {
-  it("renders the title, the published version and the live knowledge figure", () => {
-    render(<OwnerBrain initialState={state()} tab="overview" />);
+describe("OwnerBrain, frame", () => {
+  it("renders the title, the live version pill, the rail and the header actions", () => {
+    renderBrain();
 
     expect(screen.getByRole("heading", { level: 1, name: "The Brain" })).toBeInTheDocument();
-    expect(screen.getByText(/Published v12/)).toBeInTheDocument();
-    const tile = screen.getByText("Live knowledge").parentElement!;
-    expect(within(tile).getByText("2")).toBeInTheDocument();
-    expect(within(tile).getByText(/entries/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Live v12/).length).toBeGreaterThan(0);
+    const rail = screen.getByRole("navigation", { name: "Configure" });
+    for (const label of ["Behavior", "Qualification", "Knowledge", "Safety", "Models"]) {
+      expect(within(rail).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    }
+    expect(within(rail).getByText("HOW SETTINGS APPLY")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
+    expect(screen.getByText("Inspect prompt").closest("a")).toHaveAttribute("href", expect.stringContaining("tab=prompt"));
+    expect(screen.getByRole("button", { name: "Review & publish" })).toBeInTheDocument();
+  });
+
+  it("tags every editable field with who it reaches", () => {
+    renderBrain();
+
+    const tags = document.querySelectorAll('[data-slot="scope-tag"][data-scope="ALL"]');
+    expect(tags.length).toBeGreaterThan(0);
   });
 
   it("prints no explainer sentence the live surface carried under a heading", () => {
-    render(<OwnerBrain initialState={state()} tab="overview" />);
+    renderBrain();
 
     expect(screen.queryByText(OLD_EXPLAINER)).not.toBeInTheDocument();
     expect(screen.queryByText(OLD_SUBTITLE)).not.toBeInTheDocument();
   });
 
-  it("says why publishing is blocked instead of leaving a dead control", () => {
-    render(<OwnerBrain initialState={state()} tab="overview" />);
-
-    expect(screen.getByText("Create a saved draft first.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Publish to all agents/ })).toBeDisabled();
-  });
-
-  it("renders the folded Evals surface on the evals tab and nothing of it elsewhere", () => {
-    const evals = <p>Folded evals surface</p>;
-    const { rerender } = render(
-      <OwnerBrain evals={evals} initialState={state()} tab="evals" />,
-    );
-    expect(screen.getByText("Folded evals surface")).toBeInTheDocument();
-
-    rerender(<OwnerBrain evals={evals} initialState={state()} tab="overview" />);
-    expect(screen.queryByText("Folded evals surface")).not.toBeInTheDocument();
-  });
-});
-
-describe("OwnerBrain, review fixes", () => {
-  it("gives the publish preview table an export", () => {
-    render(<OwnerBrain initialState={state()} tab="overview" />);
-
-    expect(screen.getByRole("button", { name: /Export publish preview/ })).toBeInTheDocument();
-  });
-
   it("shows the logged microcopy beside the draft save", () => {
-    render(<OwnerBrain initialState={state()} tab="overview" />);
+    renderBrain();
 
-    const save = screen.getByRole("button", { name: /Save draft from current rows/ });
+    const save = screen.getByRole("button", { name: /Save draft/ });
     expect(within(save.parentElement!).getByText("Logged")).toBeInTheDocument();
   });
 
   it("shows the logged microcopy beside the import", () => {
-    render(<OwnerBrain initialState={state()} tab="review" />);
+    renderBrain({ tab: "knowledge" });
 
-    const importNow = screen.getByRole("button", { name: /Import now/ });
+    const importNow = screen.getByRole("button", { name: /^Import/ });
     expect(within(importNow.parentElement!).getByText("Logged")).toBeInTheDocument();
   });
 
-  it("starts the synthetic turn empty rather than prefilling an invented question", () => {
-    render(<OwnerBrain initialState={state()} tab="overview" />);
+  it("says why publishing is blocked instead of leaving a dead control", async () => {
+    renderBrain();
 
-    const input = screen.getByLabelText("Synthetic test turn") as HTMLInputElement;
+    fireEvent.click(screen.getByRole("button", { name: "Review & publish" }));
+
+    await waitFor(() => expect(screen.getByText("Create a saved draft first.")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Publish v13/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Export publish preview/ })).toBeInTheDocument();
+  });
+});
+
+describe("OwnerBrain, test conversation", () => {
+  it("starts the lead reply empty rather than prefilling an invented question", () => {
+    renderBrain();
+
+    const input = screen.getByLabelText("Reply as the lead") as HTMLInputElement;
     expect(input.value).toBe("");
-    expect(input.placeholder).toBe("Type a message a lead might send");
+    expect(input.placeholder).toBe("Reply as the lead");
   });
 
-  it("keeps green off an unsaved flag decision and off the synthetic-turn explainer", () => {
+  it("runs a turn against the chosen coach on the draft and shows the evidence under the reply", async () => {
+    const api = fakeApi();
+    render(<OwnerBrain api={api} coaches={COACHES} initialState={state()} tab="behavior" />);
+
+    fireEvent.change(screen.getByLabelText("Reply as the lead"), { target: { value: "How much is it?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(screen.getByText(/What are you earning per month/)).toBeInTheDocument());
+    expect(api.runTestTurn).toHaveBeenCalledWith(expect.objectContaining({
+      coachTenantId: "tenant-demo",
+      revision: "draft",
+      channel: "sms",
+      message: "How much is it?",
+      history: [],
+    }));
+    expect(screen.getByText(/Rule: REV-001/)).toBeInTheDocument();
+    expect(screen.getByText(/Safety: 2 checks passed/)).toBeInTheDocument();
+    expect(screen.getByText(/Knowledge: /)).toBeInTheDocument();
+  });
+
+  it("prints a held reply as held, with its class", async () => {
+    const api = fakeApi({
+      runTestTurn: vi.fn(async () => turn({
+        reply: "",
+        held: true,
+        heldClass: "NUM",
+        evidence: { ...turn().evidence, safety: { checks: [{ class: "NUM", passed: false, ruleId: "NUM-001" }], moderator: { verdict: "blocked", ms: 400 } } },
+      })),
+    });
+    render(<OwnerBrain api={api} coaches={COACHES} initialState={state()} tab="behavior" />);
+
+    fireEvent.change(screen.getByLabelText("Reply as the lead"), { target: { value: "Guarantee me 10k" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(screen.getByText(/Held · NUM/)).toBeInTheDocument());
+    expect(screen.getByText(/Safety: NUM-001/)).toBeInTheDocument();
+  });
+
+  it("prints the route failure honestly when the turn cannot run", async () => {
+    const api = fakeApi({ runTestTurn: vi.fn(async () => { throw new Error("TEST_TURN_FAILED"); }) });
+    render(<OwnerBrain api={api} coaches={COACHES} initialState={state()} tab="behavior" />);
+
+    fireEvent.change(screen.getByLabelText("Reply as the lead"), { target: { value: "hi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("TEST_TURN_FAILED"));
+  });
+});
+
+describe("OwnerBrain, full-width views", () => {
+  it("renders the folded evals surface on the suite view and nothing of it elsewhere", () => {
+    const evals = <p>Folded evals surface</p>;
+    const { rerender } = render(
+      <OwnerBrain api={fakeApi()} coaches={COACHES} evals={evals} initialState={state()} tab="suite" />,
+    );
+    expect(screen.getByText("Folded evals surface")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Configure" })).not.toBeInTheDocument();
+
+    rerender(<OwnerBrain api={fakeApi()} coaches={COACHES} evals={evals} initialState={state()} tab="behavior" />);
+    expect(screen.queryByText("Folded evals surface")).not.toBeInTheDocument();
+  });
+
+  it("keeps green off an unsaved flag decision and blocks approval until the answer is edited", () => {
     const withFlag = state({
       importRows: [{
         id: "row-1",
@@ -201,16 +317,66 @@ describe("OwnerBrain, review fixes", () => {
         }],
       }],
     });
-    render(<OwnerBrain initialState={withFlag} tab="review" />);
+    renderBrain({ initialState: withFlag, tab: "review" });
 
     expect(screen.getByText("Blocking")).toBeInTheDocument();
     expect(screen.queryByText("Resolved")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve to draft/ })).toBeDisabled();
+    expect(screen.getByText(/Edit the answer before approving/)).toBeInTheDocument();
   });
 
-  it("titles the objection callout without the explainer sentence", () => {
-    render(<OwnerBrain initialState={state()} tab="knowledge" />);
+  it("lists every import row in the master list and shows the selected one", () => {
+    renderBrain({ tab: "review" });
 
-    expect(screen.getByText("Hard-gated objections")).toBeInTheDocument();
-    expect(screen.queryByText("The agent cannot invent a number")).not.toBeInTheDocument();
+    expect(screen.getByText("Review imports")).toBeInTheDocument();
+    expect(screen.getByText("Clean, ready to approve")).toBeInTheDocument();
+    expect((screen.getByLabelText("Agent answers") as HTMLTextAreaElement).value).toBe("Response row-1");
+    expect(screen.getByRole("button", { name: /Export import rows/ })).toBeInTheDocument();
+  });
+
+  it("assembles the prompt for the chosen coach and revision", async () => {
+    const api = fakeApi({
+      readAssembledPrompt: vi.fn(async () => ({
+        blocks: [
+          { label: "[A0]", title: "System frame", source: "system" as const, text: "You are the coach's assistant." },
+          { label: "[C]", title: "Coach offer", source: "coach" as const, text: "Programme: 12 weeks." },
+        ],
+        promptHash: "0123456789abcdef",
+        tokens: 1800,
+        knowledgeMode: "inline",
+      })),
+    });
+    render(<OwnerBrain api={api} coaches={COACHES} initialState={state()} tab="prompt" />);
+
+    await waitFor(() => expect(screen.getByText("System frame")).toBeInTheDocument());
+    expect(api.readAssembledPrompt).toHaveBeenCalledWith({ coachTenantId: "tenant-demo", revision: "draft" });
+    expect(screen.getByText("You are the coach's assistant.")).toBeInTheDocument();
+    expect(screen.getByText(/1,800 tokens/)).toBeInTheDocument();
+  });
+});
+
+describe("OwnerBrain, knowledge and objections", () => {
+  it("lists answers with their publish state and a hard-gated objection with its gate", () => {
+    renderBrain({
+      initialState: state({
+        objections: [{
+          id: "obj-1",
+          label: "Too expensive",
+          category: "pricing",
+          hardGate: true,
+          matchKeywords: ["expensive"],
+          response: "Totally fair. What would make it worth it?",
+          status: "published",
+          updatedAt: null,
+          publishedAt: null,
+        }],
+      }),
+      tab: "knowledge",
+    });
+
+    expect(screen.getByText("What does entry-3 cost?")).toBeInTheDocument();
+    expect(screen.getAllByText("Draft").length).toBeGreaterThan(0);
+    expect(screen.getByText("Too expensive")).toBeInTheDocument();
+    expect(screen.getByText("Hard-gated")).toBeInTheDocument();
   });
 });
