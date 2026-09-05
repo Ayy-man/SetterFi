@@ -5,6 +5,7 @@ import { AppShell } from "@/components/kit/app-shell";
 import { AlertSettings } from "@/components/workspace/live/alert-settings";
 import { AdminInboxUnavailable } from "@/components/workspace/live/admin-inbox";
 import { inboxLanes } from "@/components/workspace/live/inbox-lanes";
+import { FollowupCopyApprovals } from "@/components/workspace/rehaul/followup-copy-approvals";
 import { OwnerInbox } from "@/components/workspace/rehaul/owner-inbox";
 import { phase8AlertsLive } from "@/lib/env-contract";
 import { loadAttentionQueue, type AttentionQueue } from "@/lib/operations/attention-queue";
@@ -13,6 +14,7 @@ import {
   readPlatformHumanConversationQueue,
   type PlatformHumanConversation,
 } from "@/lib/platform/conversation-projection";
+import { listPendingFollowupCopy } from "@/lib/repositories/followup-copy";
 import { listPlatformSupportThreads } from "@/lib/repositories/support";
 
 export const metadata: Metadata = { title: "Inbox" };
@@ -70,9 +72,14 @@ export default async function AdminAlertsPage() {
     clientRequests,
   });
 
+  // Follow-up copy waiting on a platform decision is a queue an operator works down, so it
+  // lives in the Inbox rather than as its own rail destination. A read failure hides nothing
+  // silently: the panel renders empty and the approvals page at /admin/followup-copy still works.
+  const pendingCopy = await listPendingFollowupCopy().catch(() => []);
   return (
     <InboxShell>
       <OwnerInbox actorId={actor.userId} lanes={lanes} queue={result.value} />
+      {pendingCopy.length > 0 ? <FollowupCopyApprovals initialItems={pendingCopy} /> : null}
     </InboxShell>
   );
 }

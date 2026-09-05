@@ -10,6 +10,7 @@ import {
   CoachAgent,
   type CoachAgentObjections,
 } from "@/components/workspace/rehaul/coach-agent";
+import { FollowupCopyAuthoring } from "@/components/workspace/rehaul/followup-copy-authoring";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
 import type { MessagingChannel } from "@/lib/booking/types";
 import { coachNavCounts } from "@/lib/coach-nav-counts";
@@ -28,6 +29,7 @@ import {
 } from "@/lib/repositories/channel-connections";
 import { readCoachQuestions } from "@/lib/repositories/coach-questions";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
+import { listFollowupCopy } from "@/lib/repositories/followup-copy";
 import { resolveChannelCapability } from "@/lib/sends/channel-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -180,7 +182,7 @@ export default async function CoachAgentPage() {
   const repository = createOfferLayerRepository();
   const cadenceEnabled = phase1Live() && phase3Live();
 
-  const [draft, published, channelRows, questions, objections, allowedHosts] = await Promise.all([
+  const [draft, published, channelRows, questions, objections, allowedHosts, followupCopy] = await Promise.all([
     repository.loadOffer({ tenantId, status: "draft" }),
     repository.loadOffer({ tenantId, status: "published" }),
     /*
@@ -200,6 +202,7 @@ export default async function CoachAgentPage() {
     coachObjections(actorId, tenantId),
     // The hosts a link may point at, so the links card can refuse on the row rather than on save.
     repository.loadAllowedHosts(tenantId).catch(() => undefined),
+    cadenceEnabled ? listFollowupCopy(tenantId).catch(() => null) : Promise.resolve([]),
   ]);
 
   return (
@@ -216,6 +219,11 @@ export default async function CoachAgentPage() {
         questions={questions}
         supportEnabled={phase8SupportLive()}
         testEnabled={phase7MeetAgentLive()}
+      />
+      <FollowupCopyAuthoring
+        channels={cadenceEnabled ? cadenceChannels(channelRows) : []}
+        enabled={cadenceEnabled}
+        initialItems={followupCopy}
       />
     </CoachAgentShell>
   );

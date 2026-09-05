@@ -126,6 +126,10 @@ const POST_SEED_UI_ACTION_SOURCES = [
   ["coach.question.enabled.changed", "20261009000004_tenant_question_settings.sql"],
   ["coach.question_order.saved", "20261009000004_tenant_question_settings.sql"],
   ["conversation.rehearsal.played", "20261013000005_rehearsal_audit.sql"],
+  ["followup_copy.approved", "20261013000009_followup_copy_authoring.sql"],
+  ["followup_copy.draft.saved", "20261013000009_followup_copy_authoring.sql"],
+  ["followup_copy.rejected", "20261013000009_followup_copy_authoring.sql"],
+  ["followup_copy.submitted", "20261013000009_followup_copy_authoring.sql"],
   ["notification.preference.changed", "20261010000001_notification_preference_audit_action.sql"],
   ["offer.draft.saved", "20260929000001_offer_change_trail.sql"],
 ] as const;

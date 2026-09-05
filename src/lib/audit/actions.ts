@@ -459,6 +459,10 @@ const SEED_AUDIT_ACTIONS = {
  * running the processor on it, so the line is logged before it has any effect. The Inbox shows
  * the receipt under the "Rehearse as the lead" control. Tenant scope and coach visible, because
  * the coach on the demo workspace is the one rehearsing.
+ *
+ * `followup_copy.*` is seeded by `20261013000009_followup_copy_authoring.sql`. The coach's draft
+ * and submission controls, and the platform approval controls, all return the persisted receipt
+ * from the same RPC that wrote the row, so these are the words each control is allowed to claim.
  */
 const POST_SEED_UI_ACTIONS = {
   "auth.signed_out": {
@@ -479,6 +483,22 @@ const POST_SEED_UI_ACTIONS = {
     actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
     microcopy: "Rehearsal logged",
     ariaLabel: "Rehearsal turn recorded in the audit log",
+  },
+  "followup_copy.approved": {
+    actorKind: "human", scope: "tenant", reasonRequired: true, coachVisible: true,
+    microcopy: "Follow-up copy approval logged", ariaLabel: "Follow-up copy approval recorded in the audit log",
+  },
+  "followup_copy.draft.saved": {
+    actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
+    microcopy: "Follow-up copy draft logged", ariaLabel: "Follow-up copy draft recorded in the audit log",
+  },
+  "followup_copy.rejected": {
+    actorKind: "human", scope: "tenant", reasonRequired: true, coachVisible: true,
+    microcopy: "Follow-up copy rejection logged", ariaLabel: "Follow-up copy rejection recorded in the audit log",
+  },
+  "followup_copy.submitted": {
+    actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
+    microcopy: "Follow-up copy submission logged", ariaLabel: "Follow-up copy submission recorded in the audit log",
   },
   "notification.preference.changed": {
     actorKind: "human", scope: "platform", reasonRequired: false, coachVisible: true,

@@ -109,6 +109,10 @@ only from a persisted receipt for one of these registered actions.
 | followup.completed | system | tenant | No | No | Follow-up completion logged | Follow-up completion recorded in the audit log |
 | followup.deferred.quiet_hours | system | tenant | No | No | Follow-up deferral logged | Quiet-hours deferral recorded in the audit log |
 | followup.discarded.window_closed | system | tenant | No | No | Follow-up discard logged | Provider-window discard recorded in the audit log |
+| followup_copy.approved | human | tenant | Yes | Yes | Follow-up copy approval logged | Follow-up copy approval recorded in the audit log |
+| followup_copy.draft.saved | human | tenant | No | Yes | Follow-up copy draft logged | Follow-up copy draft recorded in the audit log |
+| followup_copy.rejected | human | tenant | Yes | Yes | Follow-up copy rejection logged | Follow-up copy rejection recorded in the audit log |
+| followup_copy.submitted | human | tenant | No | Yes | Follow-up copy submission logged | Follow-up copy submission recorded in the audit log |
 | impersonation.ended | human | tenant | No | No | View-as session end logged | View-as session end recorded in the audit log |
 | impersonation.started | human | tenant | Yes | No | View-as session logged | View-as session recorded in the audit log |
 | keyword_goal.deactivated | human | tenant | No | Yes | Keyword goal deactivation logged | Keyword goal deactivation recorded in the audit log |

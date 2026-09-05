@@ -1,0 +1,16 @@
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { OFFER_CADENCE_PURPOSE_LABELS } from "@/lib/offer/types";
+import type { FollowupCopy } from "@/lib/repositories/followup-copy";
+
+export function FollowupCopyApprovals({ initialItems }: { initialItems: readonly FollowupCopy[] }) {
+  const [items, setItems] = useState(initialItems); const [reason, setReason] = useState<Record<string, string>>({}); const [busy, setBusy] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null);
+  async function decide(item: FollowupCopy, decision: "approved" | "rejected") {
+    const explanation = reason[item.id]?.trim() ?? ""; if (!explanation) { setMessage("Add a reason before recording this decision."); return; }
+    setBusy(item.id); setMessage(null);
+    try { const response = await fetch("/api/admin/followup-copy", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tenantId: item.tenantId, templateId: item.id, decision, reason: explanation }) }); if (!response.ok) throw new Error("FOLLOWUP_COPY_DECISION_REFUSED"); setItems((current) => current.filter((entry) => entry.id !== item.id)); setMessage(`Copy ${decision} and logged.`); } catch { setMessage("The decision could not be recorded. Nothing changed."); } finally { setBusy(null); }
+  }
+  return <div className="flex flex-col gap-[16px]"><div><h1 className="m-0 text-[28px] font-semibold tracking-[-0.02em]">Follow-up copy approvals</h1><p className="mt-2 mb-0 max-w-[var(--measure-prose)] text-[16px] text-[color:var(--muted)]">Review the exact words before any follow-up can send. Every decision needs a reason and is logged.</p></div>{items.length === 0 ? <p className="rounded-[12px] border border-[var(--line)] bg-[var(--well)] p-4 text-[15px] text-[color:var(--muted)]">No follow-up copy is waiting for approval.</p> : items.map((item) => <article className="rounded-[14px] border border-[var(--line)] bg-[var(--surface)] p-5" key={item.id}><div className="flex flex-wrap justify-between gap-2"><h2 className="m-0 text-[18px] font-semibold">{item.tenantName ?? "Workspace unavailable"}</h2><span className="text-[13px] text-[color:var(--muted)]">{item.channel} · {OFFER_CADENCE_PURPOSE_LABELS[item.purpose]}</span></div><p className="mt-3 mb-4 whitespace-pre-wrap text-[15px] leading-[1.5] text-[color:var(--body)]">{item.body}</p><label className="block text-[14px] font-medium">Reason<textarea className="mt-1 min-h-[72px] w-full rounded-[9px] border border-[var(--line)] bg-[var(--well)] p-2 text-[15px]" disabled={busy === item.id} maxLength={500} onChange={(event) => { const value = event.currentTarget.value; setReason((current) => ({ ...current, [item.id]: value })); }} value={reason[item.id] ?? ""} /></label><div className="mt-3 flex gap-2"><Button disabled={busy === item.id} onClick={() => void decide(item, "approved")} type="button">Approve</Button><Button disabled={busy === item.id} onClick={() => void decide(item, "rejected")} type="button" variant="destructive">Reject</Button></div></article>)}{message ? <p role="status" className="m-0 text-[14px] text-[color:var(--muted)]">{message}</p> : null}</div>;
+}
