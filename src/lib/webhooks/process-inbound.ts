@@ -509,6 +509,9 @@ export function traceForPersistence(
     usage: result.trace.usage,
     cost: result.trace.cost,
     moderatorState: result.trace.moderator === "not_run" ? null : result.trace.moderator,
+    moderatorClass: result.trace.moderatorClass,
+    moderatorRuleId: result.trace.moderatorRuleId,
+    moderatorModelConfigId: result.trace.moderatorModelConfigId,
   };
 }
 
@@ -1562,7 +1565,12 @@ async function loadLiveCadenceMaterialization(input: {
   };
 }
 
-function validProviderSlotId(value: string) {
+/**
+ * A slot id travels through the lead's reply and back into the proposal read-back, so it is held
+ * to a provider-id shape: letters, digits and ._~- only. The simulated calendar mints its slot ids
+ * to pass this same check; only its appointment ids carry the `simulated:` prefix.
+ */
+export function validProviderSlotId(value: string) {
   return /^[A-Za-z0-9._~-]{1,200}$/u.test(value);
 }
 

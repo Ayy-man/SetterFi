@@ -126,6 +126,50 @@ describe("rehearseLeadTurn", () => {
     expect(outcome.audit).toEqual(audit);
   });
 
+  it("reports a replay the claim refused as in flight while the first submit still holds the lease", async () => {
+    const leased = {
+      id: "r-leased", provider: "meta" as const, providerEventId: "x", tenantId: "t1",
+      eventType: "InboundMessage", payload: {}, status: "received" as const,
+    };
+    const dependencies = harness({
+      findReceipt: vi.fn(async () => leased as never),
+      // The claim RPC hands out nothing while the original request's lease is live.
+      processReceipt: vi.fn(async () => null),
+      readOutcome: vi.fn(async () => ({
+        receiptStatus: "received" as const, error: null, conversationStatus: "agent", reply: null,
+      })),
+    });
+    const outcome = await rehearseLeadTurn({ ...input, idempotencyKey: "0f2c9d3e-1b6a-4c8d-9e0f-123456789abc" }, dependencies);
+    expect(outcome).toMatchObject({
+      receiptId: "r-leased", replayed: true, inFlight: true, receiptStatus: "received", turn: null, error: null,
+    });
+    expect(dependencies.persistReceipt).not.toHaveBeenCalled();
+  });
+
+  it("does not call a replay in flight once its receipt is terminal, even though the claim refused it", async () => {
+    const finished = {
+      id: "r-done", provider: "meta" as const, providerEventId: "x", tenantId: "t1",
+      eventType: "InboundMessage", payload: {}, status: "processed" as const,
+    };
+    const dependencies = harness({
+      findReceipt: vi.fn(async () => finished as never),
+      processReceipt: vi.fn(async () => null),
+    });
+    const outcome = await rehearseLeadTurn({ ...input, idempotencyKey: "0f2c9d3e-1b6a-4c8d-9e0f-123456789abc" }, dependencies);
+    expect(outcome).toMatchObject({ replayed: true, inFlight: false, receiptStatus: "processed" });
+  });
+
+  it("does not call a first submit in flight when its own claim came back empty; that is a failure to report", async () => {
+    const dependencies = harness({
+      processReceipt: vi.fn(async () => null),
+      readOutcome: vi.fn(async () => ({
+        receiptStatus: "received" as const, error: null, conversationStatus: "agent", reply: null,
+      })),
+    });
+    const outcome = await rehearseLeadTurn(input, dependencies);
+    expect(outcome).toMatchObject({ replayed: false, inFlight: false, receiptStatus: "received", turn: null });
+  });
+
   it("logs the line against its receipt before the processor runs, and returns the audit read back", async () => {
     const order: string[] = [];
     const dependencies = harness({

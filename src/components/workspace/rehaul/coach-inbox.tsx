@@ -760,6 +760,7 @@ export function CoachInbox({
       const outcome = record.rehearsal && typeof record.rehearsal === "object"
         ? record.rehearsal as {
             receiptStatus?: string;
+            inFlight?: boolean;
             turn?: { kind: string; reason: string | null } | null;
             error?: string | null;
             conversationStatus?: string | null;
@@ -768,10 +769,14 @@ export function CoachInbox({
         : null;
       // The draft and its key survive until the receipt is terminal, so a submit that raced an
       // earlier one still in flight can be sent again and replay instead of playing a new line.
-      if (outcome && (outcome.receiptStatus === "processed" || outcome.receiptStatus === "failed" || outcome.receiptStatus === "skipped")) {
+      // The route says so with `inFlight`; a receipt read back as merely received is treated the
+      // same way, since neither is a result.
+      const stillRunning = outcome?.inFlight === true || outcome?.receiptStatus === "received";
+      if (outcome && !stillRunning
+        && (outcome.receiptStatus === "processed" || outcome.receiptStatus === "failed" || outcome.receiptStatus === "skipped")) {
         setRehearsalDraftState(null);
       }
-      if (outcome?.receiptStatus === "received") {
+      if (stillRunning) {
         setRehearsalOutcome({
           audit,
           tone: "warning",

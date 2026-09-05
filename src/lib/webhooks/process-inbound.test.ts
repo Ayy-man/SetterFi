@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { PublishedRuntimeBundle } from "@/lib/brain/contracts";
+import { createSimulatedCalendarDriver, SIMULATED_CALENDAR_ID_PREFIX } from "@/lib/integrations/calendar";
 import { runEngineTurn, type EnginePipelineInput } from "@/lib/engine/pipeline";
 import type { EngineTurnResult, ModeratorClass } from "@/lib/engine/types";
 import type { InboundSafetyInput } from "@/lib/engine/inbound-safety";
@@ -26,6 +27,7 @@ import {
   traceForPersistence,
   withBookingSlotOffer,
   withNoBookingSlotsFallback,
+  validProviderSlotId,
   BOOKING_NO_SLOTS_REPLY,
   type DurableInboundReceipt,
   type ClaimedWebhookReceipt,
@@ -1897,5 +1899,26 @@ describe("runLivePreviewTurn published runtime", () => {
       state: "agent",
       booking: null,
     });
+  });
+});
+
+describe("validProviderSlotId", () => {
+  it("accepts the simulated calendar's slot ids, so a rehearsal that reaches direct booking can read its proposal back", async () => {
+    const driver = createSimulatedCalendarDriver();
+    const slots = await driver.fetchSlots({
+      locationId: "loc", calendarId: "cal",
+      startAt: "2026-09-06T17:00:00.000Z", endAt: "2026-09-06T18:00:00.000Z",
+      timezone: "America/Los_Angeles",
+    });
+    expect(slots.length).toBeGreaterThan(0);
+    for (const slot of slots) expect(validProviderSlotId(slot.id)).toBe(true);
+  });
+
+  it("still refuses the prefixed shape a simulated appointment id carries, and provider ids outside the charset", () => {
+    expect(validProviderSlotId(`${SIMULATED_CALENDAR_ID_PREFIX}appointment-0000abcd`)).toBe(false);
+    expect(validProviderSlotId("slot id")).toBe(false);
+    expect(validProviderSlotId("")).toBe(false);
+    expect(validProviderSlotId("a".repeat(201))).toBe(false);
+    expect(validProviderSlotId("ghl_slot.2026-09-06T17~00")).toBe(true);
   });
 });

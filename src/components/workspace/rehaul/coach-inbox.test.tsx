@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CoachInbox } from "@/components/workspace/rehaul/coach-inbox";
 import type { ConversationRead } from "@/lib/repositories/conversations";
@@ -551,5 +551,154 @@ describe("CoachInbox", () => {
     render(<CoachInbox enabled={false} initialConversations={[]} />);
 
     expect(screen.getByText("Conversations are not enabled")).toBeInTheDocument();
+  });
+});
+
+/*
+ * The rehearsal arm on a demo tenant's test thread. Two rules from the route's contract: a reply
+ * that says the earlier send is still running is not a result, so the draft and its idempotency
+ * key stay put and the next submit replays the same line; a terminal receipt clears both.
+ */
+describe("CoachInbox rehearsal", () => {
+  const REHEARSABLE = conversation({
+    id: "demo-one",
+    contactId: "contact-demo",
+    contactName: "Priya Nair",
+    status: "agent",
+    statusReason: null,
+    isDemo: true,
+    isTest: true,
+  });
+
+  const audit = {
+    auditId: "a1",
+    actionKey: "conversation.rehearsal.played",
+    label: "Rehearsal logged",
+    ariaLabel: "Rehearsal turn recorded in the audit log",
+  };
+
+  function reply(rehearsal: Record<string, unknown>) {
+    return new Response(JSON.stringify({ conversation: REHEARSABLE, audit, rehearsal }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  function sentKey(call: unknown[]) {
+    const init = call[1] as RequestInit;
+    return (JSON.parse(String(init.body)) as { body: string; idempotencyKey?: string });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the draft and its key while the earlier send is still running, and replays the same line on the next submit", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(reply({
+        receiptId: "r1", replayed: true, inFlight: true, receiptStatus: "received",
+        error: null, turn: null, conversationStatus: "agent", reply: null,
+      }))
+      .mockResolvedValueOnce(reply({
+        receiptId: "r1", replayed: true, inFlight: false, receiptStatus: "processed",
+        error: null, turn: { kind: "sent", reason: null }, conversationStatus: "agent",
+        reply: { messageId: "m2", body: "Hi", providerMessageId: "simulated:abc", simulated: true },
+      }));
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    render(
+      <CoachInbox
+        initialConversations={[REHEARSABLE]}
+        nowIso={NOW}
+        rehearsal
+        view="agent-handling"
+        viewCounts={{ needsYou: 0, agentHandling: 1 }}
+        viewerId="coach-1"
+        viewIds={[REHEARSABLE.id]}
+      />,
+    );
+
+    const field = screen.getByRole("textbox", { name: "Send as Priya" });
+    await user.type(field, "Is this legit?");
+    await user.click(screen.getByRole("button", { name: "Send as Priya" }));
+
+    expect(await screen.findByText(/still answering an earlier send of this line/)).toBeInTheDocument();
+    expect(field).toHaveValue("Is this legit?");
+    expect(screen.getByRole("button", { name: "Send as Priya" })).toBeEnabled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const first = sentKey(fetch.mock.calls[0]);
+    expect(first.body).toBe("Is this legit?");
+    expect(first.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+
+    await user.click(screen.getByRole("button", { name: "Send as Priya" }));
+    expect(await screen.findByText(/Your agent replied\. The send was simulated/)).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sentKey(fetch.mock.calls[1])).toEqual(first);
+    expect(field).toHaveValue("");
+  });
+
+  it("treats a receipt read back as merely received the same way, even without the flag", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(reply({
+      receiptId: "r1", replayed: true, receiptStatus: "received",
+      error: null, turn: null, conversationStatus: "agent", reply: null,
+    }));
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    render(
+      <CoachInbox
+        initialConversations={[REHEARSABLE]}
+        nowIso={NOW}
+        rehearsal
+        view="agent-handling"
+        viewCounts={{ needsYou: 0, agentHandling: 1 }}
+        viewerId="coach-1"
+        viewIds={[REHEARSABLE.id]}
+      />,
+    );
+
+    const field = screen.getByRole("textbox", { name: "Send as Priya" });
+    await user.type(field, "Still there?");
+    await user.click(screen.getByRole("button", { name: "Send as Priya" }));
+
+    expect(await screen.findByText(/Send it again in a moment/)).toBeInTheDocument();
+    expect(field).toHaveValue("Still there?");
+  });
+
+  it("clears the draft and key once the receipt is terminal, so the next line is a new turn", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(reply({
+        receiptId: "r1", replayed: false, inFlight: false, receiptStatus: "failed",
+        error: "ENGINE_TURN_FAILED", turn: null, conversationStatus: "agent", reply: null,
+      }))
+      .mockResolvedValueOnce(reply({
+        receiptId: "r2", replayed: false, inFlight: false, receiptStatus: "processed",
+        error: null, turn: { kind: "no_send", reason: null }, conversationStatus: "agent", reply: null,
+      }));
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    render(
+      <CoachInbox
+        initialConversations={[REHEARSABLE]}
+        nowIso={NOW}
+        rehearsal
+        view="agent-handling"
+        viewCounts={{ needsYou: 0, agentHandling: 1 }}
+        viewerId="coach-1"
+        viewIds={[REHEARSABLE.id]}
+      />,
+    );
+
+    const field = screen.getByRole("textbox", { name: "Send as Priya" });
+    await user.type(field, "First line");
+    await user.click(screen.getByRole("button", { name: "Send as Priya" }));
+    expect(await screen.findByText(/finished failed: ENGINE_TURN_FAILED/)).toBeInTheDocument();
+    expect(field).toHaveValue("");
+
+    await user.type(field, "First line");
+    await user.click(screen.getByRole("button", { name: "Send as Priya" }));
+    expect(await screen.findByText(/the engine chose not to reply/)).toBeInTheDocument();
+    const [first, second] = fetch.mock.calls.map(sentKey);
+    expect(first.body).toBe(second.body);
+    expect(first.idempotencyKey).not.toBe(second.idempotencyKey);
   });
 });

@@ -39,6 +39,12 @@ export type RehearsalOutcome = {
   receiptId: string;
   /** True when the caller's idempotency key matched a receipt already written. */
   replayed: boolean;
+  /**
+   * True when the replayed receipt is still leased to the request that first wrote it: the claim
+   * refused this attempt and the receipt has not reached a terminal status. The caller should
+   * keep its draft and key and ask again, since nothing here is the turn's result yet.
+   */
+  inFlight: boolean;
   /** The registry-backed audit row for this receipt, read back after the RPC wrote it. */
   audit: AuditReceipt;
   receiptStatus: WebhookReceiptRead["status"];
@@ -94,7 +100,7 @@ export type RehearsalDependencies = {
     receiptId: string;
     /** The inbound event this turn wrote, for callers that correlate by message rather than attempt. */
     eventId: string;
-  }): Promise<Omit<RehearsalOutcome, "receiptId" | "turn" | "replayed" | "audit">>;
+  }): Promise<Omit<RehearsalOutcome, "receiptId" | "turn" | "replayed" | "inFlight" | "audit">>;
   now?: () => Date;
 };
 
@@ -184,8 +190,10 @@ export async function rehearseLeadTurn(
   });
   let processingError: string | null = null;
   let turn: RehearsalOutcome["turn"] = null;
+  let claimed = false;
   try {
     const processed = await dependencies.processReceipt(receipt);
+    claimed = processed !== null;
     const first = processed?.events.find((entry) => entry.eventId === eventId) ?? processed?.events[0] ?? null;
     if (first) {
       // The processor folds a quiet-hours deferral into `refused`, since from its seat nothing
@@ -206,9 +214,14 @@ export async function rehearseLeadTurn(
     receiptId: receipt.id,
     eventId,
   });
+  const terminal = outcome.receiptStatus === "processed" || outcome.receiptStatus === "failed"
+    || outcome.receiptStatus === "skipped";
   return {
     receiptId: receipt.id,
     replayed: existing !== null,
+    // A replay the claim refused while the receipt is still open is the first submit's turn in
+    // progress, not a result: the lease is the original request's until it finishes.
+    inFlight: existing !== null && !claimed && processingError === null && !terminal,
     audit,
     ...outcome,
     turn,

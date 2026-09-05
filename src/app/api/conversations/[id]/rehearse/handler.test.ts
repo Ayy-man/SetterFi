@@ -38,6 +38,7 @@ function handler(overrides: Partial<Parameters<typeof createRehearseHandler>[0]>
     rehearse: async () => ({
       receiptId: "r1",
       replayed: false,
+      inFlight: false,
       audit,
       receiptStatus: "processed",
       error: null,
@@ -81,7 +82,7 @@ describe("rehearse handler", () => {
 
   it("accepts a UUID idempotency key beside the body and nothing else", async () => {
     const rehearse = vi.fn(async () => ({
-      receiptId: "r1", replayed: false, audit, receiptStatus: "processed" as const, error: null, turn: null, conversationStatus: "agent", reply: null,
+      receiptId: "r1", replayed: false, inFlight: false, audit, receiptStatus: "processed" as const, error: null, turn: null, conversationStatus: "agent", reply: null,
     }));
     const key = "0f2c9d3e-1b6a-4c8d-9e0f-123456789abc";
     const accepted = await handler({ rehearse })(post({ body: "hi", idempotencyKey: key }), context);
@@ -95,6 +96,7 @@ describe("rehearse handler", () => {
     const rehearse = vi.fn(async () => ({
       receiptId: "r1",
       replayed: false,
+      inFlight: false,
       audit,
       receiptStatus: "processed" as const,
       error: null,
@@ -126,6 +128,25 @@ describe("rehearse handler", () => {
       ariaLabel: "Rehearsal turn recorded in the audit log",
     });
     expect("audit" in payload.rehearsal).toBe(false);
+  });
+
+  it("carries the in-flight fact through to the Inbox, so a replay of a leased receipt is not read as a result", async () => {
+    const response = await handler({
+      rehearse: async () => ({
+        receiptId: "r1",
+        replayed: true,
+        inFlight: true,
+        audit,
+        receiptStatus: "received",
+        error: null,
+        turn: null,
+        conversationStatus: "agent",
+        reply: null,
+      }),
+    })(post({ body: "hi", idempotencyKey: "0f2c9d3e-1b6a-4c8d-9e0f-123456789abc" }), context);
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.rehearsal).toMatchObject({ replayed: true, inFlight: true, receiptStatus: "received" });
   });
 
   it("names the refusal when the thread is not rehearsable, and the code when processing fails", async () => {
