@@ -24,6 +24,13 @@ const conversation: ConversationRead = {
 
 const actor = { userId: "u1", tenantId: "t1", role: "coach" } as never;
 
+const audit = {
+  auditId: "a1",
+  actionKey: "conversation.rehearsal.played" as const,
+  label: "Rehearsal logged",
+  ariaLabel: "Rehearsal turn recorded in the audit log",
+};
+
 function handler(overrides: Partial<Parameters<typeof createRehearseHandler>[0]> = {}) {
   return createRehearseHandler({
     enabled: () => true,
@@ -31,6 +38,7 @@ function handler(overrides: Partial<Parameters<typeof createRehearseHandler>[0]>
     rehearse: async () => ({
       receiptId: "r1",
       replayed: false,
+      audit,
       receiptStatus: "processed",
       error: null,
       turn: { kind: "sent", reason: null },
@@ -73,7 +81,7 @@ describe("rehearse handler", () => {
 
   it("accepts a UUID idempotency key beside the body and nothing else", async () => {
     const rehearse = vi.fn(async () => ({
-      receiptId: "r1", replayed: false, receiptStatus: "processed" as const, error: null, turn: null, conversationStatus: "agent", reply: null,
+      receiptId: "r1", replayed: false, audit, receiptStatus: "processed" as const, error: null, turn: null, conversationStatus: "agent", reply: null,
     }));
     const key = "0f2c9d3e-1b6a-4c8d-9e0f-123456789abc";
     const accepted = await handler({ rehearse })(post({ body: "hi", idempotencyKey: key }), context);
@@ -87,6 +95,7 @@ describe("rehearse handler", () => {
     const rehearse = vi.fn(async () => ({
       receiptId: "r1",
       replayed: false,
+      audit,
       receiptStatus: "processed" as const,
       error: null,
       turn: { kind: "no_send", reason: null },
@@ -104,6 +113,19 @@ describe("rehearse handler", () => {
     const payload = await response.json();
     expect(payload.conversation.id).toBe("c1");
     expect(payload.rehearsal.receiptId).toBe("r1");
+  });
+
+  it("returns the audit receipt the rehearsal read back, at the top level where the Inbox reads it", async () => {
+    const response = await handler()(post({ body: "hi" }), context);
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.audit).toEqual({
+      auditId: "a1",
+      actionKey: "conversation.rehearsal.played",
+      label: "Rehearsal logged",
+      ariaLabel: "Rehearsal turn recorded in the audit log",
+    });
+    expect("audit" in payload.rehearsal).toBe(false);
   });
 
   it("names the refusal when the thread is not rehearsable, and the code when processing fails", async () => {

@@ -518,6 +518,8 @@ export function CoachInbox({
     threadId: string;
     tone: "good" | "warning" | "critical";
     text: string;
+    /** The audit row the route read back for this turn; absent on a refusal. */
+    audit: AuditReceipt | null;
   } | null>(null);
   const [quietHours, setQuietHours] = useState(false);
   const [audit, setAudit] = useState<AuditReceipt | null>(null);
@@ -587,8 +589,12 @@ export function CoachInbox({
       attempted: reuse ? current.attempted : null,
     });
   };
-  const setRehearsalOutcome = (outcome: { tone: "good" | "warning" | "critical"; text: string } | null) => {
-    if (selected) setRehearsalOutcomeState(outcome ? { threadId: selected.id, ...outcome } : null);
+  const setRehearsalOutcome = (
+    outcome: { tone: "good" | "warning" | "critical"; text: string; audit?: AuditReceipt | null } | null,
+  ) => {
+    if (selected) {
+      setRehearsalOutcomeState(outcome ? { threadId: selected.id, audit: null, ...outcome } : null);
+    }
   };
 
   /*
@@ -748,6 +754,9 @@ export function CoachInbox({
         return;
       }
       setPersisted((rows) => rows.map((row) => row.id === selected.id ? readBack.conversation : row));
+      // The route only answers 200 once the audit row has read back, so the receipt it returns
+      // is the one the "Logged" line names.
+      const audit = readBack.audit;
       const outcome = record.rehearsal && typeof record.rehearsal === "object"
         ? record.rehearsal as {
             receiptStatus?: string;
@@ -764,16 +773,19 @@ export function CoachInbox({
       }
       if (outcome?.receiptStatus === "received") {
         setRehearsalOutcome({
+          audit,
           tone: "warning",
           text: "Your agent is still answering an earlier send of this line. Send it again in a moment to see the result.",
         });
       } else if (!outcome || outcome.receiptStatus !== "processed") {
         setRehearsalOutcome({
+          audit,
           tone: "critical",
           text: `The inbound receipt finished ${outcome?.receiptStatus ?? "unknown"}: ${outcome?.error ?? "no error recorded"}.`,
         });
       } else if (outcome.reply) {
         setRehearsalOutcome({
+          audit,
           tone: "good",
           text: outcome.reply.simulated
             ? "Your agent replied. The send was simulated and recorded as evidence; no message left the platform."
@@ -795,6 +807,7 @@ export function CoachInbox({
                   ? `the processor reported ${turn.kind}`
                   : "the processor reported nothing";
         setRehearsalOutcome({
+          audit,
           tone: turn?.kind === "refused" ? "critical" : "warning",
           text: `Received, and your agent did not reply: ${because}. The thread is ${outcome.conversationStatus ?? "unchanged"}${outcome.error ? ` (${outcome.error})` : ""}.`,
         });
@@ -1498,6 +1511,15 @@ export function CoachInbox({
                         role="status"
                       >
                         {rehearsalOutcome.text}
+                      </p>
+                    ) : null}
+                    {rehearsalOutcome?.audit ? (
+                      <p
+                        aria-label={rehearsalOutcome.audit.ariaLabel}
+                        className="m-0 mt-[6px] text-[14px] font-medium text-[color:var(--good-text)]"
+                        role="status"
+                      >
+                        {rehearsalOutcome.audit.label}
                       </p>
                     ) : null}
                   </form>

@@ -2,8 +2,9 @@
  * "Send as the lead" on a demo tenant's test thread.
  *
  * The body carries only the lead's words. Tenant, actor, thread eligibility, the receipt and the
- * engine run are all server-owned, and the response is the reloaded conversation plus a receipt
- * that says exactly what happened, including the processor's error code when it did not finish.
+ * engine run are all server-owned, and the response is the reloaded conversation, the audit
+ * receipt the rehearsal wrote, and a rehearsal receipt that says exactly what happened, including
+ * the processor's error code when it did not finish.
  */
 
 import { loadRouteActor, type RouteActor } from "@/lib/auth/actors";
@@ -100,10 +101,11 @@ export function createRehearseHandler(dependencies: RehearseDependencies) {
       }, { status: refusal?.status ?? 500, headers: noStoreHeaders });
     }
     const conversation = await dependencies.loadConversation(actor.tenantId, id, actor.userId);
+    const { audit, ...rehearsal } = outcome;
     return Response.json({
       conversation: conversationResponse(conversation),
-      audit: null,
-      rehearsal: outcome,
+      audit,
+      rehearsal,
     }, { headers: noStoreHeaders });
   };
 }

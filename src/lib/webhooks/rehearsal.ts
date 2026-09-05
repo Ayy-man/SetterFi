@@ -10,10 +10,16 @@
  * It is loud on purpose. A receipt that finishes `failed` is returned with its error code, and a
  * turn that produced no reply says why, so a person testing the platform sees the same fact the
  * recovery worker would have seen in the job receipts.
+ *
+ * Playing a line is a privileged action, so it is audited: `record_rehearsal_turn` writes the
+ * `conversation.rehearsal.played` row against the receipt after the receipt exists and before the
+ * processor runs. A line that cannot be logged is not played.
  */
 
 import { randomUUID } from "node:crypto";
 
+import type { AuditReceipt } from "@/lib/audit";
+import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 import type { NormalizedInboundMessage } from "@/lib/integrations/types";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import {
@@ -27,10 +33,14 @@ import {
 
 export const REHEARSAL_MAX_BODY = 1_000;
 
+export const REHEARSAL_AUDIT_ACTION = "conversation.rehearsal.played" as const;
+
 export type RehearsalOutcome = {
   receiptId: string;
   /** True when the caller's idempotency key matched a receipt already written. */
   replayed: boolean;
+  /** The registry-backed audit row for this receipt, read back after the RPC wrote it. */
+  audit: AuditReceipt;
   receiptStatus: WebhookReceiptRead["status"];
   /** The processor's own error code when the receipt did not finish `processed`. */
   error: string | null;
@@ -67,6 +77,16 @@ export type RehearsalDependencies = {
   persistReceipt(input: WebhookReceiptWrite): Promise<WebhookReceiptRead>;
   /** The receipt an earlier submit with the same key wrote, if any. Absent means never replayed. */
   findReceipt?(input: { provider: "ghl" | "meta"; providerEventId: string; tenantId: string }): Promise<WebhookReceiptRead | null>;
+  /**
+   * Writes the audit row for this receipt and returns it read back. Idempotent per receipt, so a
+   * replayed submit reads the row the first submit wrote.
+   */
+  recordAudit(input: {
+    tenantId: string;
+    conversationId: string;
+    actorId: string;
+    receiptId: string;
+  }): Promise<AuditReceipt>;
   processReceipt(receipt: WebhookReceiptRead): Promise<ProcessedInboundBatch | null>;
   readOutcome(input: {
     tenantId: string;
@@ -74,7 +94,7 @@ export type RehearsalDependencies = {
     receiptId: string;
     /** The inbound event this turn wrote, for callers that correlate by message rather than attempt. */
     eventId: string;
-  }): Promise<Omit<RehearsalOutcome, "receiptId" | "turn" | "replayed">>;
+  }): Promise<Omit<RehearsalOutcome, "receiptId" | "turn" | "replayed" | "audit">>;
   now?: () => Date;
 };
 
@@ -155,6 +175,13 @@ export async function rehearseLeadTurn(
       normalized: { events: [event] },
     },
   });
+  // Logged before it has any effect: the processor does not run until the audit row reads back.
+  const audit = await dependencies.recordAudit({
+    tenantId: input.tenantId,
+    conversationId: input.conversationId,
+    actorId: input.actorId,
+    receiptId: receipt.id,
+  });
   let processingError: string | null = null;
   let turn: RehearsalOutcome["turn"] = null;
   try {
@@ -182,6 +209,7 @@ export async function rehearseLeadTurn(
   return {
     receiptId: receipt.id,
     replayed: existing !== null,
+    audit,
     ...outcome,
     turn,
     error: outcome.error ?? processingError,
@@ -241,6 +269,42 @@ export function liveRehearsalDependencies(): RehearsalDependencies {
         eventType: String(data.event_type),
         payload: (data.payload ?? {}) as Record<string, unknown>,
         status: data.status as WebhookReceiptRead["status"],
+      };
+    },
+    recordAudit: async ({ tenantId, conversationId, actorId, receiptId }) => {
+      const { data, error } = await client.rpc("record_rehearsal_turn", {
+        p_expected_tenant: tenantId,
+        p_actor_id: actorId,
+        p_conversation_id: conversationId,
+        p_receipt_id: receiptId,
+      });
+      if (error) throw new Error(`REHEARSAL_AUDIT_REFUSED:${error.message}`);
+      if ((typeof data !== "string" && typeof data !== "number") || String(data).length === 0) {
+        throw new Error("REHEARSAL_AUDIT_ID_MISSING");
+      }
+      const auditId = String(data);
+      // Registry-backed read-back: success is the persisted row and its registered words, never
+      // the RPC's return value alone.
+      const [auditResult, actionResult] = await Promise.all([
+        client.from("audit_log").select("id,tenant_id,action,target_type,target_id").eq("id", auditId).maybeSingle(),
+        client.from("audit_actions").select("key,microcopy,aria_label").eq("key", REHEARSAL_AUDIT_ACTION).maybeSingle(),
+      ]);
+      const row = auditResult.data;
+      const action = actionResult.data;
+      if (auditResult.error || !row || row.tenant_id !== tenantId || row.action !== REHEARSAL_AUDIT_ACTION
+        || row.target_type !== "webhook_event" || row.target_id !== receiptId) {
+        throw new Error("REHEARSAL_AUDIT_READBACK_FAILED");
+      }
+      const registry = AUDIT_ACTIONS[REHEARSAL_AUDIT_ACTION];
+      if (actionResult.error || !action || action.key !== REHEARSAL_AUDIT_ACTION
+        || action.microcopy !== registry.microcopy || action.aria_label !== registry.ariaLabel) {
+        throw new Error(`AUDIT_REGISTRY_DRIFT:${REHEARSAL_AUDIT_ACTION}`);
+      }
+      return {
+        auditId: String(row.id),
+        actionKey: REHEARSAL_AUDIT_ACTION,
+        label: action.microcopy,
+        ariaLabel: action.aria_label,
       };
     },
     processReceipt: (receipt) => processLiveWebhookReceipt(receipt),

@@ -137,6 +137,7 @@ const AUDIT_KEYS = [
   "conversation.message.sent.human",
   "conversation.outbound_send.reconciled",
   "conversation.outbound_send.reconciliation_required",
+  "conversation.rehearsal.played",
   "conversation.scope_blocked",
   "conversation.takeover.claimed",
   "conversation.takeover.released",

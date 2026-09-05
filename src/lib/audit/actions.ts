@@ -453,6 +453,12 @@ const SEED_AUDIT_ACTIONS = {
  * one upserts. They stay two keys rather than one because a coach reading their own log needs to
  * tell a reordering apart from a question being switched off, which are different decisions about
  * what a lead is asked. Tenant scope, because the settings row is per tenant.
+ *
+ * `conversation.rehearsal.played` is seeded by `20261013000005_rehearsal_audit.sql` and written by
+ * `record_rehearsal_turn`, which the rehearsal calls between persisting the lead's receipt and
+ * running the processor on it, so the line is logged before it has any effect. The Inbox shows
+ * the receipt under the "Rehearse as the lead" control. Tenant scope and coach visible, because
+ * the coach on the demo workspace is the one rehearsing.
  */
 const POST_SEED_UI_ACTIONS = {
   "auth.signed_out": {
@@ -468,6 +474,11 @@ const POST_SEED_UI_ACTIONS = {
     actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
     microcopy: "Question order logged",
     ariaLabel: "Qualification-question order recorded in the audit log",
+  },
+  "conversation.rehearsal.played": {
+    actorKind: "human", scope: "tenant", reasonRequired: false, coachVisible: true,
+    microcopy: "Rehearsal logged",
+    ariaLabel: "Rehearsal turn recorded in the audit log",
   },
   "notification.preference.changed": {
     actorKind: "human", scope: "platform", reasonRequired: false, coachVisible: true,

@@ -125,6 +125,7 @@ const POST_SEED_UI_ACTION_SOURCES = [
   ["auth.signed_out", "20260909000001_auth_recovery_audit_actions.sql"],
   ["coach.question.enabled.changed", "20261009000004_tenant_question_settings.sql"],
   ["coach.question_order.saved", "20261009000004_tenant_question_settings.sql"],
+  ["conversation.rehearsal.played", "20261013000005_rehearsal_audit.sql"],
   ["notification.preference.changed", "20261010000001_notification_preference_audit_action.sql"],
   ["offer.draft.saved", "20260929000001_offer_change_trail.sql"],
 ] as const;

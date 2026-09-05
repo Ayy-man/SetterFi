@@ -95,6 +95,7 @@ only from a persisted receipt for one of these registered actions.
 | conversation.message.sent.human | human | tenant | No | Yes | Message sent | Human-authored message recorded in the audit log |
 | conversation.outbound_send.reconciled | human | tenant | Yes | Yes | Outbound send reconciled | Uncertain provider send reconciled in the audit log |
 | conversation.outbound_send.reconciliation_required | system | tenant | No | Yes | Outbound send needs reconciliation | Uncertain provider send recorded for evidence-backed reconciliation |
+| conversation.rehearsal.played | human | tenant | No | Yes | Rehearsal logged | Rehearsal turn recorded in the audit log |
 | conversation.scope_blocked | system | tenant | No | No | Scope block logged | Scope block recorded in the audit log |
 | conversation.takeover.claimed | human | tenant | No | Yes | Takeover logged | Takeover recorded in the audit log |
 | conversation.takeover.released | human | tenant | No | Yes | Hand-back logged | Hand-back recorded in the audit log |

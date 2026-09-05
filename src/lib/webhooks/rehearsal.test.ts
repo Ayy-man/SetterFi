@@ -29,6 +29,7 @@ function harness(overrides: Partial<RehearsalDependencies> = {}) {
   const dependencies: RehearsalDependencies = {
     loadThread: vi.fn(async () => thread),
     persistReceipt: vi.fn(async () => receipt as never),
+    recordAudit: vi.fn(async () => audit),
     processReceipt: vi.fn(async () => ({ kind: "batch" as const, events: [] })),
     readOutcome: vi.fn(async () => ({
       receiptStatus: "processed" as const,
@@ -41,6 +42,13 @@ function harness(overrides: Partial<RehearsalDependencies> = {}) {
   };
   return dependencies;
 }
+
+const audit = {
+  auditId: "a1",
+  actionKey: "conversation.rehearsal.played" as const,
+  label: "Rehearsal logged",
+  ariaLabel: "Rehearsal turn recorded in the audit log",
+};
 
 const input = { tenantId: "t1", conversationId: "c1", actorId: "u1", body: "Is this legit?" };
 
@@ -111,6 +119,35 @@ describe("rehearseLeadTurn", () => {
     });
     expect(outcome.receiptId).toBe("r-existing");
     expect(outcome.replayed).toBe(true);
+    // The replay still reads its audit row back; the RPC returns the row the first submit wrote.
+    expect(dependencies.recordAudit).toHaveBeenCalledWith({
+      tenantId: "t1", conversationId: "c1", actorId: "u1", receiptId: "r-existing",
+    });
+    expect(outcome.audit).toEqual(audit);
+  });
+
+  it("logs the line against its receipt before the processor runs, and returns the audit read back", async () => {
+    const order: string[] = [];
+    const dependencies = harness({
+      recordAudit: vi.fn(async () => { order.push("audit"); return audit; }),
+      processReceipt: vi.fn(async () => { order.push("process"); return { kind: "batch" as const, events: [] }; }),
+    });
+    const outcome = await rehearseLeadTurn(input, dependencies);
+    expect(dependencies.recordAudit).toHaveBeenCalledWith({
+      tenantId: "t1", conversationId: "c1", actorId: "u1", receiptId: "r1",
+    });
+    expect(order).toEqual(["audit", "process"]);
+    expect(outcome.audit).toEqual(audit);
+    expect(outcome.audit.auditId).toBe("a1");
+  });
+
+  it("does not play a line it could not log", async () => {
+    const dependencies = harness({
+      recordAudit: vi.fn(async () => { throw new Error("REHEARSAL_AUDIT_REFUSED:denied"); }),
+    });
+    await expect(rehearseLeadTurn(input, dependencies)).rejects.toThrow("REHEARSAL_AUDIT_REFUSED");
+    expect(dependencies.processReceipt).not.toHaveBeenCalled();
+    expect(dependencies.readOutcome).not.toHaveBeenCalled();
   });
 
   it("reads the outcome back by the event it wrote, not by whatever was newest", async () => {

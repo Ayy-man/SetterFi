@@ -68,6 +68,7 @@ const EVENT_PHRASES: Record<AuditActionKey, EventPhrase> = {
   "conversation.guardrail.cleared": { verb: "cleared", object: "a guardrail hold" },
   "conversation.internal_note.added": { verb: "added", object: "an internal note" },
   "conversation.message.sent.human": { verb: "sent", object: "a message by hand" },
+  "conversation.rehearsal.played": { verb: "rehearsed", object: "a lead's message on a test thread" },
   "conversation.scope_blocked": { verb: "blocked", object: "a reply outside the agent's scope" },
   "conversation.takeover.claimed": { verb: "took over", object: "a conversation" },
   "conversation.takeover.released": { verb: "handed back", object: "a conversation" },
