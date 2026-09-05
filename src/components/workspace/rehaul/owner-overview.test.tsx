@@ -139,6 +139,7 @@ function measurement(): PlatformMeasurement {
       },
     ],
     deliveriesByDay: [],
+    evidenceIssues: [],
     textingRegistrationByTenant: [],
   };
 }
@@ -154,6 +155,27 @@ describe("OwnerOverview", () => {
     expect(screen.getAllByText("$2,982")).toHaveLength(1);
     // The trialing row has collected nothing, so it is named apart rather than counted active.
     expect(screen.getByText("across 1 active subscription · 1 trialing")).toBeInTheDocument();
+  });
+
+  it("keeps valid figures visible and names a rejected evidence section", () => {
+    const base = measurement();
+    render(
+      <OwnerOverview
+        measurement={{
+          ...base,
+          evidenceIssues: [{
+            section: "provisioningPerformance",
+            code: "PLATFORM_PROVISIONING_ROWS_INVALID",
+          }],
+          provisioningPerformance: [],
+        }}
+        role="owner"
+      />,
+    );
+
+    expect(screen.getByText("This figure was rejected:")).toBeInTheDocument();
+    expect(screen.getByText("PLATFORM_PROVISIONING_ROWS_INVALID")).toBeInTheDocument();
+    expect(screen.getAllByText("$2,982")).toHaveLength(1);
   });
 
   it("counts the past due subscription into the decision queue", () => {

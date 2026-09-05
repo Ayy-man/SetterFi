@@ -447,6 +447,7 @@ export type OwnerOverviewProps = {
 
 export function OwnerOverview({ historyWindow, measurement, role }: OwnerOverviewProps) {
   const [openMetric, setOpenMetric] = useState<string | null>(null);
+  const evidenceIssues = measurement.evidenceIssues ?? [];
   const projected = useMemo(() => adminMeasurementView(measurement, role), [measurement, role]);
   const byKey = useMemo(() => {
     const map = new Map<string, PlatformMetricView>();
@@ -522,6 +523,20 @@ export function OwnerOverview({ historyWindow, measurement, role }: OwnerOvervie
           />
         </div>
       </header>
+
+      {evidenceIssues.length > 0 ? (
+        <div className="flex flex-wrap gap-x-[var(--s-3)] gap-y-[var(--s-1)]" data-slot="rejected-figures">
+          {evidenceIssues.map((issue) => (
+            <p
+              className="m-0 text-[12px] text-[var(--warning-text)]"
+              data-slot="rejected-figure"
+              key={`${issue.section}:${issue.code}`}
+            >
+              This figure was rejected: <code>{issue.code}</code>
+            </p>
+          ))}
+        </div>
+      ) : null}
 
       {/* The one drenched surface the screen is allowed: the figure it is opened for. */}
       <section

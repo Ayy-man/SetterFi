@@ -39,6 +39,29 @@ export const PLATFORM_HISTORY_PERIODS = 12;
 
 export type PlatformMeasurementSource = (actorId: string, asOf: string) => Promise<unknown>;
 export type PlatformMeasurementOrigin = "real_analytics" | "synthetic_preview";
+export type PlatformMeasurementSection =
+  | "metrics"
+  | "subscriptions"
+  | "tenantPerformance"
+  | "guardrailRules"
+  | "followupPerformance"
+  | "provisioningPerformance"
+  | "history"
+  | "activeSubscriptionsByPeriod"
+  | "revenueByPeriod"
+  | "deliveriesByDay"
+  | "textingRegistrationByTenant";
+
+export type PlatformMeasurementEvidenceIssue = {
+  section: PlatformMeasurementSection;
+  code: string;
+};
+
+const PLATFORM_SNAPSHOT_KEYS = [
+  "asOf", "metrics", "subscriptions", "tenantPerformance", "guardrailRules",
+  "followupPerformance", "provisioningPerformance", "history", "activeSubscriptionsByPeriod",
+  "revenueByPeriod", "deliveriesByDay", "textingRegistrationByTenant",
+] as const;
 
 export type PlatformHistoryPeriod = {
   periodStart: string;
@@ -65,6 +88,8 @@ export class PlatformMeasurementUnavailableError extends Error {
 export type PlatformMeasurement = {
   origin?: PlatformMeasurementOrigin;
   asOf: string;
+  /** Sections whose source evidence was rejected rather than shown as a made-up figure. */
+  evidenceIssues?: readonly PlatformMeasurementEvidenceIssue[];
   metrics: readonly MetricEvidence[];
   subscriptions: readonly {
     tenantId: string;
@@ -165,6 +190,21 @@ function sourceEnvelope(value: unknown): { origin: PlatformMeasurementOrigin; sn
   throw new MeasurementEvidenceError("PLATFORM_MEASUREMENT_SOURCE_INVALID");
 }
 
+function snapshotObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new MeasurementEvidenceError("PLATFORM_MEASUREMENT_SNAPSHOT_INVALID");
+  }
+  const snapshot = value as Record<string, unknown>;
+  // A missing known section can be represented as unavailable below, but a widened envelope is
+  // not an RPC contract we understand and remains a top-level refusal.
+  if (Object.keys(snapshot).some((key) => !PLATFORM_SNAPSHOT_KEYS.includes(
+    key as (typeof PLATFORM_SNAPSHOT_KEYS)[number],
+  ))) {
+    throw new MeasurementEvidenceError("PLATFORM_MEASUREMENT_SNAPSHOT_INVALID");
+  }
+  return snapshot;
+}
+
 export async function loadPlatformMeasurement(
   actorId: string,
   asOf: string,
@@ -173,29 +213,43 @@ export async function loadPlatformMeasurement(
   const actor = evidenceString(actorId, "MEASUREMENT_ACTOR_REQUIRED");
   const requestedAsOf = evidenceIso(asOf, "PLATFORM_MEASUREMENT_AS_OF_INVALID");
   const envelope = sourceEnvelope(await source(actor, requestedAsOf));
-  const raw = evidenceObject(envelope.snapshot, [
-    "asOf", "metrics", "subscriptions", "tenantPerformance", "guardrailRules",
-    "followupPerformance", "provisioningPerformance", "history", "activeSubscriptionsByPeriod",
-    "revenueByPeriod", "deliveriesByDay", "textingRegistrationByTenant",
-  ], "PLATFORM_MEASUREMENT_SNAPSHOT_INVALID");
+  const raw = snapshotObject(envelope.snapshot);
   const persistedAsOf = evidenceIso(raw.asOf, "PLATFORM_MEASUREMENT_SNAPSHOT_INVALID");
   // Instant equality, not string equality: the RPC serializes timestamptz as +00:00 while the
   // caller requests with a trailing Z, and the same moment must not read as a mismatch.
   if (Date.parse(persistedAsOf) !== Date.parse(requestedAsOf)) {
     throw new MeasurementEvidenceError("PLATFORM_MEASUREMENT_AS_OF_MISMATCH");
   }
-  const metrics = parseMetricEvidenceRows(raw.metrics, PLATFORM_METRIC_KEYS, {
-    code: "PLATFORM_METRIC_SET_INVALID",
-    window: null,
-  });
-  // The row has to be present, but it is allowed to say the projection does not exist yet. Its
-  // own state carries that, and the parser already refuses an available row with no value, so a
-  // second veto here only turned a platform without a cost rollup into a dead page.
-  if (!metrics.some((metric) => metric.metricKey === "platform.margin")) {
-    throw new MeasurementEvidenceError("PLATFORM_MARGIN_EVIDENCE_INCOMPLETE");
+  const evidenceIssues: PlatformMeasurementEvidenceIssue[] = [];
+  function section<T>(
+    name: PlatformMeasurementSection,
+    unavailable: T,
+    validate: () => T,
+  ): T {
+    try {
+      return validate();
+    } catch (error) {
+      if (!(error instanceof MeasurementEvidenceError)) throw error;
+      evidenceIssues.push({ section: name, code: error.code });
+      return unavailable;
+    }
   }
 
-  const subscriptions = evidenceArray(
+  const metrics = section("metrics", [], () => {
+    const rows = parseMetricEvidenceRows(raw.metrics, PLATFORM_METRIC_KEYS, {
+      code: "PLATFORM_METRIC_SET_INVALID",
+      window: null,
+    });
+    // The row has to be present, but it is allowed to say the projection does not exist yet. Its
+    // own state carries that, and the parser already refuses an available row with no value, so a
+    // second veto here only turned a platform without a cost rollup into a dead page.
+    if (!rows.some((metric) => metric.metricKey === "platform.margin")) {
+      throw new MeasurementEvidenceError("PLATFORM_MARGIN_EVIDENCE_INCOMPLETE");
+    }
+    return rows;
+  });
+
+  const subscriptions = section("subscriptions", [], () => evidenceArray(
     raw.subscriptions,
     "PLATFORM_SUBSCRIPTIONS_INVALID",
   ).map((value) => {
@@ -213,9 +267,9 @@ export async function loadPlatformMeasurement(
       periodStart,
       periodEnd,
     };
-  });
+  }));
 
-  const tenantPerformance = evidenceArray(
+  const tenantPerformance = section("tenantPerformance", [], () => evidenceArray(
     raw.tenantPerformance,
     "PLATFORM_TENANT_PERFORMANCE_INVALID",
   ).map((value) => {
@@ -249,9 +303,9 @@ export async function loadPlatformMeasurement(
         : evidenceNumber(row.marginCents, "PLATFORM_TENANT_PERFORMANCE_INVALID"),
       marginState,
     };
-  });
+  }));
 
-  const guardrailRules = evidenceArray(
+  const guardrailRules = section("guardrailRules", [], () => evidenceArray(
     raw.guardrailRules,
     "PLATFORM_GUARDRAIL_ROWS_INVALID",
   ).map((value) => {
@@ -271,9 +325,9 @@ export async function loadPlatformMeasurement(
       blocks,
       holds,
     };
-  });
+  }));
 
-  const followupPerformance = evidenceArray(
+  const followupPerformance = section("followupPerformance", [], () => evidenceArray(
     raw.followupPerformance,
     "PLATFORM_FOLLOWUP_ROWS_INVALID",
   ).map((value) => {
@@ -284,19 +338,20 @@ export async function loadPlatformMeasurement(
     const replied = count(row.replied, "PLATFORM_FOLLOWUP_ROWS_INVALID");
     const crossChannel = count(row.crossChannel, "PLATFORM_FOLLOWUP_ROWS_INVALID");
     const exhausted = count(row.exhausted, "PLATFORM_FOLLOWUP_ROWS_INVALID");
-    if (replied > sent || crossChannel > sent) {
+    const touchNo = count(row.touchNo, "PLATFORM_FOLLOWUP_ROWS_INVALID");
+    if (touchNo < 1 || replied > sent || crossChannel > sent) {
       throw new MeasurementEvidenceError("PLATFORM_FOLLOWUP_ROWS_INVALID");
     }
     return {
-      touchNo: count(row.touchNo, "PLATFORM_FOLLOWUP_ROWS_INVALID"),
+      touchNo,
       sent,
       replied,
       crossChannel,
       exhausted,
     };
-  });
+  }));
 
-  const provisioningPerformance = evidenceArray(
+  const provisioningPerformance = section("provisioningPerformance", [], () => evidenceArray(
     raw.provisioningPerformance,
     "PLATFORM_PROVISIONING_ROWS_INVALID",
   ).map((value) => {
@@ -321,7 +376,7 @@ export async function loadPlatformMeasurement(
       failures,
       medianDaysToClear,
     };
-  });
+  }));
 
   function historySeries(
     value: unknown,
@@ -364,40 +419,44 @@ export async function loadPlatformMeasurement(
     return history;
   }
 
-  const history = historySeries(raw.history, "PLATFORM_HISTORY_INVALID");
-  const activeSubscriptionsByPeriod = historySeries(
+  const history = section("history", [], () => historySeries(raw.history, "PLATFORM_HISTORY_INVALID"));
+  const activeSubscriptionsByPeriod = section("activeSubscriptionsByPeriod", [], () => historySeries(
     raw.activeSubscriptionsByPeriod,
     "PLATFORM_ACTIVE_SUBSCRIPTIONS_HISTORY_INVALID",
-  );
-  const revenueByPeriod = historySeries(raw.revenueByPeriod, "PLATFORM_REVENUE_HISTORY_INVALID");
+  ));
+  const revenueByPeriod = section("revenueByPeriod", [], () => historySeries(
+    raw.revenueByPeriod,
+    "PLATFORM_REVENUE_HISTORY_INVALID",
+  ));
 
-  const deliveriesByDay = evidenceArray(
-    raw.deliveriesByDay,
-    "PLATFORM_DELIVERY_ROWS_INVALID",
-  ).map((value) => {
-    const row = evidenceObject(value, ["day", "delivered", "failed"], "PLATFORM_DELIVERY_ROWS_INVALID");
-    const day = evidenceString(row.day, "PLATFORM_DELIVERY_ROWS_INVALID");
-    if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) {
+  const deliveriesByDay = section("deliveriesByDay", [], () => {
+    const rows = evidenceArray(raw.deliveriesByDay, "PLATFORM_DELIVERY_ROWS_INVALID").map((value) => {
+      const row = evidenceObject(value, ["day", "delivered", "failed"], "PLATFORM_DELIVERY_ROWS_INVALID");
+      const day = evidenceString(row.day, "PLATFORM_DELIVERY_ROWS_INVALID");
+      if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) {
+        throw new MeasurementEvidenceError("PLATFORM_DELIVERY_ROWS_INVALID");
+      }
+      return {
+        day,
+        delivered: count(row.delivered, "PLATFORM_DELIVERY_ROWS_INVALID"),
+        failed: count(row.failed, "PLATFORM_DELIVERY_ROWS_INVALID"),
+      };
+    });
+    if (rows.length !== 30 || new Set(rows.map((row) => row.day)).size !== 30) {
       throw new MeasurementEvidenceError("PLATFORM_DELIVERY_ROWS_INVALID");
     }
-    return {
-      day,
-      delivered: count(row.delivered, "PLATFORM_DELIVERY_ROWS_INVALID"),
-      failed: count(row.failed, "PLATFORM_DELIVERY_ROWS_INVALID"),
-    };
+    return rows;
   });
-  if (deliveriesByDay.length !== 30 || new Set(deliveriesByDay.map((row) => row.day)).size !== 30) {
-    throw new MeasurementEvidenceError("PLATFORM_DELIVERY_ROWS_INVALID");
-  }
 
   const registrationStates = [
     "pending", "running", "awaiting_coach", "awaiting_platform", "awaiting_provider",
     "done", "failed", "blocked",
   ] as const;
-  const textingRegistrationByTenant = evidenceArray(
-    raw.textingRegistrationByTenant,
-    "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID",
-  ).map((value) => {
+  const textingRegistrationByTenant = section("textingRegistrationByTenant", [], () => {
+    const rows = evidenceArray(
+      raw.textingRegistrationByTenant,
+      "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID",
+    ).map((value) => {
     const row = evidenceObject(value, [
       "tenantId", "registrationState", "submittedAt", "daysElapsed",
     ], "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
@@ -430,15 +489,18 @@ export async function loadPlatformMeasurement(
       submittedAt,
       daysElapsed,
     };
+    });
+    if (new Set(rows.map((row) => row.tenantId)).size !== rows.length) {
+      throw new MeasurementEvidenceError("PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
+    }
+    return rows;
   });
-  if (new Set(textingRegistrationByTenant.map((row) => row.tenantId)).size !== textingRegistrationByTenant.length) {
-    throw new MeasurementEvidenceError("PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID");
-  }
 
   return {
     origin: envelope.origin,
     // The requested spelling is the caller's canonical form; the persisted value proved equal.
     asOf: requestedAsOf,
+    evidenceIssues,
     metrics,
     subscriptions,
     tenantPerformance,

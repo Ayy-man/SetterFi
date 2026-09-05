@@ -198,11 +198,12 @@ describe("platform measurement repository", () => {
 
     expect(source).toHaveBeenCalledWith(ACTOR, AS_OF);
     expect(Object.keys(result).sort()).toEqual([
-      "activeSubscriptionsByPeriod", "asOf", "deliveriesByDay", "followupPerformance",
-      "guardrailRules", "history", "metrics", "origin", "provisioningPerformance",
+      "activeSubscriptionsByPeriod", "asOf", "deliveriesByDay", "evidenceIssues",
+      "followupPerformance", "guardrailRules", "history", "metrics", "origin", "provisioningPerformance",
       "revenueByPeriod", "subscriptions", "tenantPerformance", "textingRegistrationByTenant",
     ]);
     expect(result.origin).toBe("real_analytics");
+    expect(result.evidenceIssues).toEqual([]);
     expect(result.metrics.map((row) => row.metricKey)).toEqual(PLATFORM_METRIC_KEYS);
     expect(Object.keys(result.subscriptions[0]).sort()).toEqual([
       "periodEnd", "periodStart", "status", "stripePriceId", "subscriptionId", "tenantId",
@@ -268,16 +269,62 @@ describe("platform measurement repository", () => {
     }))).rejects.toThrow("PLATFORM_MEASUREMENT_SOURCE_INVALID");
   });
 
-  it("rejects missing arrays and unexpected metric keys before rendering", async () => {
-    const missing = snapshot() as Record<string, unknown>;
-    delete missing.guardrailRules;
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => missing))
-      .rejects.toThrow("PLATFORM_MEASUREMENT_SNAPSHOT_INVALID");
+  it.each([
+    ["metrics", "PLATFORM_METRIC_SET_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.metrics[0] = { ...value.metrics[0], metricKey: "eval.suite_pass_rate" } as never;
+    }],
+    ["subscriptions", "PLATFORM_SUBSCRIPTIONS_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.subscriptions = [{}] as never;
+    }],
+    ["tenantPerformance", "PLATFORM_TENANT_PERFORMANCE_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.tenantPerformance[0] = { ...value.tenantPerformance[0], marginState: "unknown" } as never;
+    }],
+    ["guardrailRules", "PLATFORM_GUARDRAIL_ROWS_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.guardrailRules[0] = { ...value.guardrailRules[0], blocks: 11 };
+    }],
+    ["followupPerformance", "PLATFORM_FOLLOWUP_ROWS_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.followupPerformance[0] = { ...value.followupPerformance[0], touchNo: 0 };
+    }],
+    ["provisioningPerformance", "PLATFORM_PROVISIONING_ROWS_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.provisioningPerformance[0] = {
+        ...value.provisioningPerformance[0],
+        medianDaysToClear: -1,
+      } as never;
+    }],
+    ["history", "PLATFORM_HISTORY_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.history = value.history.slice(0, 1);
+    }],
+    ["activeSubscriptionsByPeriod", "PLATFORM_ACTIVE_SUBSCRIPTIONS_HISTORY_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.activeSubscriptionsByPeriod = value.activeSubscriptionsByPeriod.slice(0, 1);
+    }],
+    ["revenueByPeriod", "PLATFORM_REVENUE_HISTORY_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.revenueByPeriod = value.revenueByPeriod.slice(0, 1);
+    }],
+    ["deliveriesByDay", "PLATFORM_DELIVERY_ROWS_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.deliveriesByDay = [];
+    }],
+    ["textingRegistrationByTenant", "PLATFORM_TEXTING_REGISTRATION_ROWS_INVALID", (value: ReturnType<typeof snapshot>) => {
+      value.textingRegistrationByTenant[0] = {
+        ...value.textingRegistrationByTenant[0],
+        submittedAt: null,
+      } as never;
+    }],
+  ] as const)("degrades invalid %s evidence while retaining independent sections", async (section, code, corrupt) => {
+    const raw = snapshot();
+    corrupt(raw);
 
-    const widened = snapshot();
-    widened.metrics[0] = { ...widened.metrics[0], metricKey: "eval.suite_pass_rate" } as never;
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => widened))
-      .rejects.toThrow("PLATFORM_METRIC_SET_INVALID");
+    const result = await loadPlatformMeasurement(ACTOR, AS_OF, async () => raw);
+
+    expect(result.evidenceIssues).toEqual([{ section, code }]);
+    expect(result).toMatchObject({ [section]: [] });
+    expect(result.metrics.length + result.subscriptions.length).toBeGreaterThan(0);
+  });
+
+  it("keeps a widened snapshot envelope fail-closed", async () => {
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => ({
+      ...snapshot(),
+      untrustedSection: [],
+    }))).rejects.toThrow("PLATFORM_MEASUREMENT_SNAPSHOT_INVALID");
   });
 
   it("carries an unavailable margin through rather than taking the whole page down", async () => {
@@ -302,8 +349,10 @@ describe("platform measurement repository", () => {
 
     const claimed = snapshot();
     claimed.metrics[index] = { ...claimed.metrics[index], value: null } as never;
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => claimed))
-      .rejects.toThrow("MEASUREMENT_AVAILABLE_VALUE_REQUIRED");
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => claimed)).resolves.toMatchObject({
+      evidenceIssues: [{ section: "metrics", code: "MEASUREMENT_AVAILABLE_VALUE_REQUIRED" }],
+      metrics: [],
+    });
   });
 
   it("renders a tenant with no margin projection instead of refusing the whole table", async () => {
@@ -326,16 +375,20 @@ describe("platform measurement repository", () => {
       ...incoherent.tenantPerformance[0],
       marginCents: null,
     } as never;
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => incoherent))
-      .rejects.toThrow("PLATFORM_MARGIN_EVIDENCE_INCOMPLETE");
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => incoherent)).resolves.toMatchObject({
+      evidenceIssues: [{ section: "tenantPerformance", code: "PLATFORM_MARGIN_EVIDENCE_INCOMPLETE" }],
+      tenantPerformance: [],
+    });
 
     const unknownState = snapshot();
     unknownState.tenantPerformance[0] = {
       ...unknownState.tenantPerformance[0],
       marginState: "still_filling",
     } as never;
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => unknownState))
-      .rejects.toThrow("PLATFORM_TENANT_PERFORMANCE_INVALID");
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => unknownState)).resolves.toMatchObject({
+      evidenceIssues: [{ section: "tenantPerformance", code: "PLATFORM_TENANT_PERFORMANCE_INVALID" }],
+      tenantPerformance: [],
+    });
   });
 
   it("renders a tenant with no priced subscription rather than refusing the whole table", async () => {
@@ -366,7 +419,7 @@ describe("platform measurement repository", () => {
     expect(result.history.map((row) => row.value)).toEqual([0, 1, 3, 4, 5]);
   });
 
-  it("refuses a series with a gap between two periods", async () => {
+  it("marks a series with a gap as unavailable", async () => {
     const gapped = snapshot();
     gapped.history = [
       { periodStart: "2026-05-21T12:00:00.000Z", periodEnd: "2026-06-19T12:00:00.000Z", value: 3, state: "available" },
@@ -375,18 +428,22 @@ describe("platform measurement repository", () => {
       { periodStart: "2026-07-19T12:00:00.000Z", periodEnd: AS_OF, value: 5, state: "available" },
     ];
 
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => gapped))
-      .rejects.toThrow("PLATFORM_HISTORY_INVALID");
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => gapped)).resolves.toMatchObject({
+      evidenceIssues: [{ section: "history", code: "PLATFORM_HISTORY_INVALID" }],
+      history: [],
+    });
   });
 
-  it("still refuses a single-period history, because one point is not a trend", async () => {
+  it("marks a single-period history unavailable, because one point is not a trend", async () => {
     const single = snapshot();
     single.history = [
       { periodStart: "2026-07-19T12:00:00.000Z", periodEnd: AS_OF, value: 5, state: "available" },
     ];
 
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => single))
-      .rejects.toThrow("PLATFORM_HISTORY_INVALID");
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => single)).resolves.toMatchObject({
+      evidenceIssues: [{ section: "history", code: "PLATFORM_HISTORY_INVALID" }],
+      history: [],
+    });
   });
 
   it("rejects history with no count and zero metric denominators", async () => {
@@ -399,21 +456,27 @@ describe("platform measurement repository", () => {
     // then supplies no number for it, because the chart would draw a gap it cannot explain.
     const history = snapshot();
     history.history[0] = { ...history.history[0], state: "needs_more_history", value: null } as never;
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => history))
-      .rejects.toThrow("PLATFORM_HISTORY_INVALID");
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => history)).resolves.toMatchObject({
+      evidenceIssues: [{ section: "history", code: "PLATFORM_HISTORY_INVALID" }],
+      history: [],
+    });
 
     const unknown = snapshot();
     unknown.history[0] = { ...unknown.history[0], state: "unavailable", value: 0 } as never;
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => unknown))
-      .rejects.toThrow("PLATFORM_HISTORY_UNAVAILABLE");
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => unknown)).resolves.toMatchObject({
+      evidenceIssues: [{ section: "history", code: "PLATFORM_HISTORY_UNAVAILABLE" }],
+      history: [],
+    });
 
     // A rate still cannot be rendered over nobody. The metric moved from index 0 to a percent
     // key because a count of zero over zero is now evidence the platform genuinely has none.
     const zero = snapshot();
     const rate = zero.metrics.findIndex((row) => row.metricKey === "platform.churn_rate");
     zero.metrics[rate] = { ...zero.metrics[rate], numerator: 0, denominator: 0, value: 0 };
-    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => zero))
-      .rejects.toThrow("MEASUREMENT_DENOMINATOR_REQUIRED");
+    await expect(loadPlatformMeasurement(ACTOR, AS_OF, async () => zero)).resolves.toMatchObject({
+      evidenceIssues: [{ section: "metrics", code: "MEASUREMENT_DENOMINATOR_REQUIRED" }],
+      metrics: [],
+    });
   });
 
   it("preserves an empty resolved-identity denominator as unavailable evidence", async () => {
