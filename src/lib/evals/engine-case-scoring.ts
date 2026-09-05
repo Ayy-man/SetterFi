@@ -54,7 +54,11 @@ export async function scoreEngineCase(input: {
   const finish = (outcome: EngineCaseOutcome, scoredBy: EngineCaseScore["scoredBy"], judge: EngineCaseScore["judge"]) =>
     ({ passed: PASSING_OUTCOMES.has(outcome), outcome, scoredBy, judge });
   if (testCase.expectation.verdict === "pass") {
-    return finish(actual.passed ? "clean" : "false_block", "checker", null);
+    // A soft length breach alone (LEN-001) is truncated at a sentence boundary and sent in
+    // production, so it is a clean turn for scoring; only a hard breach or any other class holds.
+    const softLengthOnly = !actual.passed
+      && actual.violations.every((violation) => violation.ruleId === "LEN-001");
+    return finish(actual.passed || softLengthOnly ? "clean" : "false_block", "checker", null);
   }
   if (checkerCaughtExpectation(testCase, actual)) return finish("caught", "checker", null);
   if (!input.judge) return finish("uncaught", "checker", null);

@@ -50,6 +50,19 @@ describe("scoreEngineCase", () => {
   });
 });
 
+describe("soft length on a pass case", () => {
+  it("scores a LEN-001-only breach as clean because production truncates and sends it", async () => {
+    const passCase = PHASE3_ENGINE_CASES.find((entry) => entry.expectation.verdict === "pass");
+    if (!passCase) return;
+    const draft = "Totally fair question, and happy to walk you through it. We look at your profile, match it to what lenders want right now, and book a short call to plan next steps together.";
+    const actual = runOutputChecks(draft, { ...passCase.context, channel: "sms" });
+    expect(actual.passed).toBe(false);
+    expect(actual.violations.map((violation) => violation.ruleId)).toEqual(["LEN-001"]);
+    expect(await scoreEngineCase({ testCase: passCase, actual, draft, judge: vi.fn() }))
+      .toMatchObject({ outcome: "clean", passed: true });
+  });
+});
+
 describe("moderatorJudge", () => {
   it("sends the production moderator payload built from the case context", async () => {
     const moderate = vi.fn(async () => ({ verdict: "allow" as const, class: "JUDGE" as const, reason: "fine" }));

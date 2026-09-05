@@ -201,7 +201,10 @@ function isDeclining(text: string, phraseStart: number) {
 
 function isNegated(text: string, phraseStart: number) {
   const prefix = text.slice(Math.max(0, phraseStart - 28), phraseStart);
-  return /(?:can't|cannot|won't|will not|do not|don't|never|no)\s+(?:\w+\s+){0,2}$/.test(prefix);
+  // "isn't guaranteed", "is not guaranteed", "not guaranteed" and "No\u2014approval isn't guaranteed"
+  // are all declines; the separator admits a dash, comma or colon so punctuation after "no"
+  // cannot turn a refusal into a promise.
+  return /(?:can't|cannot|won't|will not|do not|don't|never|isn't|is not|aren't|are not|not|no)[\s\u2014\u2013,:-]+(?:\w+\s+){0,2}$/.test(prefix);
 }
 
 function claimViolations(draft: string, rules: readonly ComplianceRule[]) {

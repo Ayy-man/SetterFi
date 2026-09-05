@@ -112,11 +112,27 @@ function completionContent(payload: unknown) {
     // Retrying the same request only repeats the spend, so it fails once with the cause named.
     throw new OpenRouterProviderError("OPENROUTER_OUTPUT_TRUNCATED", null, shape(payload));
   }
+  if (row && !content && (choice?.finish_reason === "content_filter" || text(message?.refusal))) {
+    // The provider's own safety layer declined to answer at all. For a generator that is a
+    // failed turn; for the moderator it is a verdict in itself, handled where moderate() catches it.
+    throw new OpenRouterProviderError("OPENROUTER_MODEL_REFUSED", null, shape(payload));
+  }
   if (!row || !content) {
     throw new OpenRouterProviderError("OPENROUTER_SUCCESS_ENVELOPE_INVALID", null, shape(payload));
   }
   return { row, content };
 }
+
+/**
+ * A moderator whose provider refused to read the payload has, in effect, judged it: the lead
+ * message or draft was hostile enough to trip the vendor's own filter. Fail closed with a SCOPE
+ * block rather than an error, so the turn is held with a reason instead of retried or stranded.
+ */
+const MODERATOR_REFUSED_VERDICT = {
+  verdict: "block" as const,
+  class: "SCOPE" as const,
+  reason: "The moderator's provider refused to process this exchange.",
+};
 
 function parseUsage(payload: JsonObject) {
   const usage = object(payload.usage);
@@ -341,7 +357,16 @@ export function createRealModeratorDriver(
         },
         MODERATE_TIMEOUT_MS,
       );
-      return parseModeratorEnvelope(completionContent(payload).content);
+      let content: string;
+      try {
+        content = completionContent(payload).content;
+      } catch (error) {
+        if (error instanceof OpenRouterProviderError && error.message === "OPENROUTER_MODEL_REFUSED") {
+          return MODERATOR_REFUSED_VERDICT;
+        }
+        throw error;
+      }
+      return parseModeratorEnvelope(content);
     },
   };
 }

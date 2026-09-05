@@ -97,6 +97,12 @@ describe("runOutputChecks", () => {
     expect(runOutputChecks(BRAIN[0].answer, context).passed).toBe(true);
   });
 
+  it("reads isn't, is not, not and a dash after No as declines", () => {
+    expect(runOutputChecks("No\u2014approval isn't guaranteed. Want to book a call?", context).passed).toBe(true);
+    expect(runOutputChecks("Approval is not guaranteed, but we can look.", context).passed).toBe(true);
+    expect(runOutputChecks("Not guaranteed, no. Still worth a call?", context).passed).toBe(true);
+  });
+
   it("checks every occurrence instead of trusting a negated first match", () => {
     const result = runOutputChecks(
       "I can't guarantee approval, but I guarantee approval.",
