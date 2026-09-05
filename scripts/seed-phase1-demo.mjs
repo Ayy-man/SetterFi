@@ -1261,9 +1261,23 @@ export async function seedPhase1Demo({ argumentsList = process.argv.slice(2), an
       published_at: new Date(0).toISOString(),
     }, { onConflict: "id" }),
   );
+  // The operator's active pair wins: the demo rows only claim the active and default slots for a
+  // role when nothing else already holds them, otherwise they are upserted inactive so a seeder
+  // pass never knocks out a benched model choice (model_configs_active_role_idx is one active
+  // row per role, model_configs_single_default_idx is one default row overall).
+  const activeRows = await requireSuccess(
+    "DEMO_MODEL_CONFIG_READ_FAILED",
+    client.from("model_configs").select("id,role,active,is_default").or("active.eq.true,is_default.eq.true"),
+  );
+  const modelRows = MODEL_ROWS.map((row) => {
+    const otherActive = (activeRows ?? []).some((existing) =>
+      existing.active && existing.role === row.role && existing.id !== row.id);
+    const otherDefault = (activeRows ?? []).some((existing) => existing.is_default && existing.id !== row.id);
+    return { ...row, active: row.active && !otherActive, is_default: row.is_default && !otherDefault };
+  });
   await requireSuccess(
     "DEMO_MODEL_CONFIG_UPSERT_FAILED",
-    client.from("model_configs").upsert(MODEL_ROWS, { onConflict: "id" }),
+    client.from("model_configs").upsert(modelRows, { onConflict: "id" }),
   );
 
   // The install has to exist before any `ghl` identity is written: the identity guard binds each
