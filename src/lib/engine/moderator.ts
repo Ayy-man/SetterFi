@@ -6,14 +6,19 @@
  */
 
 import type { ModeratorDriver } from "@/lib/integrations/types";
-import { MODERATOR_CLASSES, type ModeratorClass } from "@/lib/engine/types";
+import {
+  MODERATOR_EVIDENCE_CLASSES,
+  type ModeratorEvidenceClass,
+} from "@/lib/engine/types";
 
 export type ModeratorPayload = Parameters<ModeratorDriver["moderate"]>[0];
 export type ModeratorCall = (inputs: ModeratorPayload) => Promise<unknown>;
 
+export type ModeratorMode = "production" | "test" | "eval";
+
 export type ModeratorVerdict = {
   verdict: "allow" | "block";
-  class: ModeratorClass;
+  class: ModeratorEvidenceClass;
   rule_id?: string;
   reason: string;
 };
@@ -45,7 +50,10 @@ export function parseModeratorVerdict(value: unknown): ModeratorVerdict {
   if (value.verdict !== "allow" && value.verdict !== "block") {
     throw new Error("MODERATOR_VERDICT_INVALID");
   }
-  if (typeof value.class !== "string" || !MODERATOR_CLASSES.includes(value.class as ModeratorClass)) {
+  if (
+    typeof value.class !== "string" ||
+    !MODERATOR_EVIDENCE_CLASSES.includes(value.class as ModeratorEvidenceClass)
+  ) {
     throw new Error("MODERATOR_CLASS_INVALID");
   }
   if (typeof value.reason !== "string" || !value.reason.trim()) {
@@ -56,7 +64,7 @@ export function parseModeratorVerdict(value: unknown): ModeratorVerdict {
   }
   return {
     verdict: value.verdict,
-    class: value.class as ModeratorClass,
+    class: value.class as ModeratorEvidenceClass,
     ...(typeof value.rule_id === "string" ? { rule_id: value.rule_id } : {}),
     reason: value.reason,
   };
@@ -76,14 +84,22 @@ async function within<T>(promise: Promise<T>, timeoutMs: number) {
   }
 }
 
+/**
+ * `mode` never changes what the driver is asked or how its answer is judged: an eval verdict and
+ * a production verdict go through the same payload, timeout and closed-schema parse. It is
+ * stamped onto the result so a persisted or logged verdict says which kind of turn produced it,
+ * which is what stops an eval run's refusals from being read as production outages and vice
+ * versa.
+ */
 export async function moderateDraft({
   driver,
   inputs,
+  mode,
   timeoutMs = 30_000,
 }: {
   driver: { moderate: ModeratorCall };
   inputs: ModeratorPayload;
-  mode: "production" | "test" | "eval";
+  mode: ModeratorMode;
   // Matches the real driver's transport abort: the configured moderator is a reasoning model
   // (gpt-5: ~6s at minimal effort, 18s at default), so a shorter race here turns every verdict
   // into a refusal before the provider answers.
@@ -93,15 +109,16 @@ export async function moderateDraft({
   try {
     const verdict = parseModeratorVerdict(await within(driver.moderate(payload), timeoutMs));
     return verdict.verdict === "allow"
-      ? { kind: "allowed" as const, verdict, payload }
-      : { kind: "blocked" as const, verdict, payload };
+      ? { kind: "allowed" as const, mode, verdict, payload }
+      : { kind: "blocked" as const, mode, verdict, payload };
   } catch (error) {
     const reason = error instanceof Error ? error.message : "MODERATOR_PROVIDER_ERROR";
     return {
       kind: "refused" as const,
+      mode,
       proceed: false as const,
       moderatorUnavailableIncrement: 1 as const,
-      trace: { moderator: "unavailable" as const, reason },
+      trace: { moderator: "unavailable" as const, mode, reason },
       payload,
     };
   }

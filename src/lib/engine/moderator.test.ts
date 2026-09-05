@@ -16,8 +16,8 @@ const INPUTS = {
 };
 
 describe("parseModeratorVerdict", () => {
-  it("accepts the six deterministic classes plus JUDGE and REVOKE", () => {
-    for (const value of ["NUM", "CLAIM", "ECHO", "LINK", "SCOPE", "LEN", "JUDGE", "REVOKE"]) {
+  it("accepts the six deterministic classes plus JUDGE", () => {
+    for (const value of ["NUM", "CLAIM", "ECHO", "LINK", "SCOPE", "LEN", "JUDGE"]) {
       expect(parseModeratorVerdict({ verdict: "block", class: value, rule_id: "RULE-001", reason: "unsafe" }).class)
         .toBe(value);
     }
@@ -27,6 +27,7 @@ describe("parseModeratorVerdict", () => {
     { verdict: "allow", class: "JUDGE", reason: "safe", replacement: "rewrite" },
     { verdict: "maybe", class: "JUDGE", reason: "unclear" },
     { verdict: "block", class: "OTHER", reason: "unsafe" },
+    { verdict: "block", class: "REVOKE", reason: "unsafe" },
     { verdict: "block", class: "JUDGE", reason: "", rule_id: "JUDGE-001" },
   ])("rejects open or malformed verdict output", (value) => {
     expect(() => parseModeratorVerdict(value)).toThrow();
@@ -71,9 +72,33 @@ describe("moderateDraft", () => {
     });
     expect(result).toMatchObject({
       kind: "refused",
+      mode: "eval",
       proceed: false,
       moderatorUnavailableIncrement: 1,
-      trace: { moderator: "unavailable", reason: "NO_PROVIDER" },
+      trace: { moderator: "unavailable", mode: "eval", reason: "NO_PROVIDER" },
     });
   });
+
+  it.each(["production", "test", "eval"] as const)(
+    "stamps %s mode on every verdict kind without changing the driver call",
+    async (mode) => {
+      const allow = vi.fn<(inputs: typeof INPUTS) => Promise<unknown>>(async () => ({
+        verdict: "allow", class: "JUDGE", reason: "safe",
+      }));
+      const block = vi.fn<(inputs: typeof INPUTS) => Promise<unknown>>(async () => ({
+        verdict: "block", class: "CLAIM", rule_id: "CLAIM-001", reason: "guarantee",
+      }));
+      const allowed = await moderateDraft({ driver: { moderate: allow }, inputs: INPUTS, mode });
+      const blocked = await moderateDraft({ driver: { moderate: block }, inputs: INPUTS, mode });
+      const refused = await moderateDraft({
+        driver: { moderate: async () => { throw new Error("DOWN"); } }, inputs: INPUTS, mode,
+      });
+      expect(allowed).toMatchObject({ kind: "allowed", mode });
+      expect(blocked).toMatchObject({ kind: "blocked", mode });
+      expect(refused).toMatchObject({ kind: "refused", mode, trace: { mode } });
+      // The mode reaches the record, never the provider: the payload stays the six named fields.
+      expect(allow.mock.calls[0][0]).toEqual(INPUTS);
+      expect(block.mock.calls[0][0]).toEqual(INPUTS);
+    },
+  );
 });
