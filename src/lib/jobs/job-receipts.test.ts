@@ -1,12 +1,31 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DriverConfigurationError } from "@/lib/env-contract";
 
 import {
   DRIVER_NOT_CONFIGURED_COUNTERS,
   createJobReceiptExecution,
+  parseMissingVariableNames,
+  readLatestJobReceipts,
   type JobReceiptStore,
 } from "./job-receipts";
+
+const supabase = vi.hoisted(() => ({ rows: [] as unknown[] }));
+
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServiceClient: () => ({
+    from: () => {
+      const query = {
+        select: () => query,
+        in: () => query,
+        order: () => query,
+        then: (resolve: (value: { data: unknown[]; error: null }) => unknown) =>
+          resolve({ data: supabase.rows, error: null }),
+      };
+      return query;
+    },
+  }),
+}));
 
 function store(): JobReceiptStore {
   return {
@@ -52,7 +71,8 @@ describe("job receipt execution", () => {
     expect(receipts.finish).toHaveBeenCalledWith(expect.objectContaining({
       outcome: "skipped",
       errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
-      counters: DRIVER_NOT_CONFIGURED_COUNTERS,
+      // The scheduler's marker stays, and the names ride beside it as their own field.
+      counters: { ...DRIVER_NOT_CONFIGURED_COUNTERS, missing_variables: ["SETTERFI_GHL_PROVISIONING_DRIVER"] },
     }));
   });
 
@@ -100,5 +120,93 @@ describe("job receipt execution", () => {
     await expect(execute("stripe-webhooks", async () => {
       throw new Error("WEBHOOK_INBOX_UNAVAILABLE");
     })).rejects.toThrow("WEBHOOK_INBOX_UNAVAILABLE");
+  });
+});
+
+describe("missing variable names on a skipped receipt", () => {
+  it("reads the structured counter first and drops anything that is not a variable name", () => {
+    expect(parseMissingVariableNames({
+      counters: { skipped: "driver_not_configured", missing_variables: ["STRIPE_SECRET_KEY", "sk_live_value", 3, "STRIPE_SECRET_KEY"] },
+      errorDetail: "something else entirely",
+    })).toEqual(["STRIPE_SECRET_KEY"]);
+  });
+
+  it("falls back to the comma-joined error detail an older receipt carries", () => {
+    expect(parseMissingVariableNames({
+      counters: { skipped: "driver_not_configured" },
+      errorDetail: "GHL_CLIENT_ID, GHL_CLIENT_SECRET",
+    })).toEqual(["GHL_CLIENT_ID", "GHL_CLIENT_SECRET"]);
+  });
+
+  it("yields no names from a free-text detail rather than fragments of a sentence", () => {
+    expect(parseMissingVariableNames({ counters: null, errorDetail: "fetch failed: ENOTFOUND db.example, retrying" }))
+      .toEqual([]);
+    expect(parseMissingVariableNames({ counters: undefined, errorDetail: null })).toEqual([]);
+  });
+});
+
+describe("latest receipts with missing configuration", () => {
+  const NOW = new Date("2026-09-06T06:00:00.000Z");
+
+  function row(input: {
+    id: string; job_key: string; at: string; outcome: "succeeded" | "failed" | "skipped";
+    error_detail?: string | null; counters?: unknown;
+  }) {
+    return {
+      id: input.id, job_key: input.job_key, started_at: input.at, finished_at: input.at,
+      outcome: input.outcome, error_detail: input.error_detail ?? null, counters: input.counters ?? {},
+    };
+  }
+
+  beforeEach(() => { supabase.rows = []; });
+
+  it("dates the wait from the first receipt of the unbroken run of identical skips", async () => {
+    const skip = (id: string, at: string, names = ["SETTERFI_GHL_PROVISIONING_DRIVER"]) => row({
+      id, job_key: "a2p-probe", at, outcome: "skipped", error_detail: names.join(", "),
+      counters: { skipped: "driver_not_configured", missing_variables: names },
+    });
+    supabase.rows = [
+      skip("r5", "2026-09-06T03:45:00.000Z"),
+      skip("r4", "2026-09-05T03:45:00.000Z"),
+      skip("r3", "2026-09-04T03:45:00.000Z"),
+      // A different missing set ends the run, even though it is also a skip.
+      skip("r2", "2026-09-03T03:45:00.000Z", ["GHL_CLIENT_ID"]),
+      row({ id: "r1", job_key: "a2p-probe", at: "2026-09-02T03:45:00.000Z", outcome: "succeeded" }),
+    ];
+
+    const receipts = await readLatestJobReceipts({ now: NOW });
+    expect(receipts.find((receipt) => receipt.jobKey === "a2p-probe")).toMatchObject({
+      id: "r5",
+      outcome: "skipped",
+      missingConfiguration: {
+        variables: ["SETTERFI_GHL_PROVISIONING_DRIVER"],
+        since: "2026-09-04T03:45:00.000Z",
+      },
+    });
+  });
+
+  it("stops the run at a success or failure in between, and reads older receipts from their detail", async () => {
+    supabase.rows = [
+      row({ id: "r3", job_key: "tier-change-reconcile", at: "2026-09-06T04:00:00.000Z", outcome: "skipped", error_detail: "STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET", counters: { skipped: "driver_not_configured" } }),
+      row({ id: "r2", job_key: "tier-change-reconcile", at: "2026-09-05T04:00:00.000Z", outcome: "failed", error_detail: "STRIPE_UNAVAILABLE" }),
+      row({ id: "r1", job_key: "tier-change-reconcile", at: "2026-09-04T04:00:00.000Z", outcome: "skipped", error_detail: "STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET" }),
+    ];
+
+    const receipts = await readLatestJobReceipts({ now: NOW });
+    expect(receipts.find((receipt) => receipt.jobKey === "tier-change-reconcile")?.missingConfiguration).toEqual({
+      variables: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+      since: "2026-09-06T04:00:00.000Z",
+    });
+  });
+
+  it("carries no missing configuration on a succeeded, failed or absent receipt", async () => {
+    supabase.rows = [
+      row({ id: "r2", job_key: "followups", at: "2026-09-06T05:55:00.000Z", outcome: "succeeded" }),
+      row({ id: "r1", job_key: "followups", at: "2026-09-06T05:35:00.000Z", outcome: "skipped", error_detail: "OPENROUTER_API_KEY" }),
+      row({ id: "f1", job_key: "engine-evals", at: "2026-09-06T05:00:00.000Z", outcome: "failed", error_detail: "ENGINE_EVAL_UNAVAILABLE" }),
+    ];
+
+    const receipts = await readLatestJobReceipts({ now: NOW });
+    expect(receipts.every((receipt) => receipt.missingConfiguration === null)).toBe(true);
   });
 });

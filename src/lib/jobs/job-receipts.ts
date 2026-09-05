@@ -24,7 +24,7 @@ export const JOB_RECEIPT_KEYS = [
 
 export type JobReceiptKey = typeof JOB_RECEIPT_KEYS[number];
 export type JobReceiptOutcome = "succeeded" | "failed" | "skipped";
-export type JobReceiptCounters = Record<string, number | string>;
+export type JobReceiptCounters = Record<string, number | string | readonly string[]>;
 
 /**
  * Returned to the scheduler after a deliberate no-driver skip. It is deliberately a normal 200
@@ -33,9 +33,54 @@ export type JobReceiptCounters = Record<string, number | string>;
  */
 export const DRIVER_NOT_CONFIGURED_COUNTERS = { skipped: "driver_not_configured" } as const;
 
+/** The counters key under which a skipped receipt stores the missing variable names, as an array. */
+export const MISSING_VARIABLES_COUNTER = "missing_variables";
+
 export function isDriverNotConfiguredResult(value: unknown): value is typeof DRIVER_NOT_CONFIGURED_COUNTERS {
   return value === DRIVER_NOT_CONFIGURED_COUNTERS;
 }
+
+/**
+ * What a skipped receipt persists: the scheduler's marker plus the variable names as their own
+ * JSON array, so the operator surface reads a field rather than splitting `error_detail`.
+ */
+export function driverNotConfiguredCounters(variableNames: readonly string[]): JobReceiptCounters {
+  return { ...DRIVER_NOT_CONFIGURED_COUNTERS, [MISSING_VARIABLES_COUNTER]: [...variableNames] };
+}
+
+/** Environment variable names are upper-case identifiers; anything else is not a name. */
+const VARIABLE_NAME = /^[A-Z][A-Z0-9_]*$/u;
+
+/**
+ * The variable names a skipped receipt is waiting on.
+ *
+ * The structured counter is authoritative. Receipts written before it existed carry only
+ * `error_detail`, which `DriverConfigurationError` writes as the names joined with ", ", so that
+ * is split on commas and filtered to identifiers; a free-text detail yields no names rather than
+ * fragments of a sentence.
+ */
+export function parseMissingVariableNames(input: {
+  counters: unknown;
+  errorDetail: string | null;
+}): string[] {
+  const counters = input.counters;
+  if (counters && typeof counters === "object" && !Array.isArray(counters)) {
+    const stored = (counters as Record<string, unknown>)[MISSING_VARIABLES_COUNTER];
+    if (Array.isArray(stored)) {
+      const names = stored.filter((name): name is string => typeof name === "string" && VARIABLE_NAME.test(name));
+      if (names.length > 0) return [...new Set(names)];
+    }
+  }
+  const detail = input.errorDetail?.trim() ?? "";
+  return [...new Set(detail.split(",").map((part) => part.trim()).filter((part) => VARIABLE_NAME.test(part)))];
+}
+
+export type MissingConfiguration = {
+  /** Names only, never values. */
+  variables: string[];
+  /** When the current unbroken run of skipped receipts for this job began. */
+  since: string;
+};
 
 type StartedReceipt = { id: string; started_at: string };
 
@@ -68,6 +113,8 @@ export type LatestJobReceipt = {
   outcome: JobReceiptOutcome | null;
   errorDetail: string | null;
   counters: JobReceiptCounters;
+  /** Set only on a skipped receipt: which variables the driver is waiting on, and since when. */
+  missingConfiguration: MissingConfiguration | null;
   freshness: "fresh" | "stale" | "in_progress" | "missing";
   ageMs: number | null;
   freshnessWindowMs: number;
@@ -125,6 +172,30 @@ function parseCounters(value: unknown): JobReceiptCounters {
   return numericCounters(value);
 }
 
+function sameNames(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((name, index) => name === right[index]);
+}
+
+/**
+ * `since` is the start of the current unbroken run of skipped receipts naming the same variables,
+ * walking back from the newest row (the rows arrive newest first). A job skipped nightly for a
+ * month has been waiting a month, not since last night; a change in the missing set, a failure
+ * or a success in between ends the run.
+ */
+function missingConfiguration(rows: readonly ReceiptRow[]): MissingConfiguration | null {
+  const newest = rows[0];
+  if (!newest || newest.outcome !== "skipped") return null;
+  const variables = parseMissingVariableNames({ counters: newest.counters, errorDetail: newest.error_detail });
+  let since = newest.finished_at ?? newest.started_at;
+  for (const row of rows.slice(1)) {
+    if (row.outcome !== "skipped") break;
+    const names = parseMissingVariableNames({ counters: row.counters, errorDetail: row.error_detail });
+    if (!sameNames(names, variables)) break;
+    since = row.finished_at ?? row.started_at;
+  }
+  return { variables, since };
+}
+
 function serviceStore(): JobReceiptStore {
   return {
     async start(input) {
@@ -176,7 +247,7 @@ export function createJobReceiptExecution(
             finishedAt: now().toISOString(),
             outcome: "skipped",
             errorDetail: cause.variableNames.join(", "),
-            counters: DRIVER_NOT_CONFIGURED_COUNTERS,
+            counters: driverNotConfiguredCounters(cause.variableNames),
           });
           return DRIVER_NOT_CONFIGURED_COUNTERS as never;
         }
@@ -210,10 +281,14 @@ export async function readLatestJobReceipts(input: {
     .order("id", { ascending: false });
   if (error) throw new Error("JOB_RECEIPT_READ_FAILED");
 
-  const latest = new Map<JobReceiptKey, ReceiptRow>();
+  const history = new Map<JobReceiptKey, ReceiptRow[]>();
   for (const row of (data ?? []) as ReceiptRow[]) {
-    if (!latest.has(row.job_key)) latest.set(row.job_key, row);
+    const rows = history.get(row.job_key);
+    if (rows) rows.push(row);
+    else history.set(row.job_key, [row]);
   }
+  const latest = new Map<JobReceiptKey, ReceiptRow>();
+  for (const [jobKey, rows] of history) latest.set(jobKey, rows[0]);
   const now = input.now ?? new Date();
   return JOB_RECEIPT_KEYS.map((jobKey) => {
     const row = latest.get(jobKey);
@@ -221,7 +296,8 @@ export async function readLatestJobReceipts(input: {
     if (!row) {
       return {
         id: null, jobKey, startedAt: null, finishedAt: null, outcome: null, errorDetail: null,
-        counters: {}, freshness: "missing" as const, ageMs: null, freshnessWindowMs,
+        counters: {}, missingConfiguration: null, freshness: "missing" as const, ageMs: null,
+        freshnessWindowMs,
       };
     }
     const referenceAt = row.finished_at ?? row.started_at;
@@ -234,6 +310,7 @@ export async function readLatestJobReceipts(input: {
       outcome: row.outcome,
       errorDetail: row.error_detail,
       counters: parseCounters(row.counters),
+      missingConfiguration: missingConfiguration(history.get(jobKey) ?? [row]),
       freshness: row.finished_at === null
         ? Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= freshnessWindowMs
           ? "in_progress"

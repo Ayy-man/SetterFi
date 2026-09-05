@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
+import { useState } from "react";
 
 import {
   FigureStrip,
@@ -28,6 +29,10 @@ import type {
   SystemHealth,
   SystemHealthState,
 } from "@/lib/operations/system-health";
+import {
+  missingConfigurationSummary,
+  missingSinceLabel,
+} from "@/lib/operations/system-health-configuration";
 import { withWorkspaceNavCounts, workspaceNavigationFor } from "@/lib/workspace-navigation";
 
 const CRUMBS = [
@@ -497,10 +502,49 @@ function jobExportRows(health: SystemHealth) {
     receiptId: job.receiptId ?? "",
     reason: job.reason ?? "",
     lastError: job.errorDetail ?? "",
+    // Names only. A value never reaches this read, so none can reach the file.
+    missingConfiguration: job.missingConfiguration?.variables.join(", ") ?? "",
+    missingSince: job.missingConfiguration?.since ?? "",
   }));
 }
 
-function JobsTab({ health }: { health: SystemHealth }) {
+/**
+ * Under the amber badge: the variable names the driver is waiting on, and how long it has been
+ * waiting. Names are what an operator types into the deployment's settings, so they stay verbatim
+ * and mono rather than sentence-cased into "Setterfi ghl provisioning driver"; values are never on
+ * this read, so none can be printed. The "since" is relative because the question is "this
+ * morning or last month", which a full timestamp makes the reader compute.
+ */
+function MissingConfiguration({
+  configuration,
+  nowMs,
+}: {
+  configuration: NonNullable<SystemHealth["jobs"][number]["missingConfiguration"]>;
+  nowMs: number;
+}) {
+  return (
+    <div
+      className="flex flex-col items-start gap-[2px] @min-[520px]:items-end"
+      data-testid="system-job-missing-configuration"
+    >
+      {configuration.variables.length > 0 ? (
+        <ul className="m-0 flex list-none flex-wrap gap-x-[var(--s-2)] gap-y-[2px] p-0 @min-[520px]:justify-end">
+          {configuration.variables.map((name) => (
+            <li key={name}><MonoMeta>{name}</MonoMeta></li>
+          ))}
+        </ul>
+      ) : (
+        <span className="text-[12px] text-[color:var(--muted)]">Variable names were not recorded</span>
+      )}
+      <span className="text-[12px] text-[color:var(--muted)]">
+        {missingSinceLabel(configuration, nowMs)}
+      </span>
+    </div>
+  );
+}
+
+function JobsTab({ health, nowMs }: { health: SystemHealth; nowMs: number }) {
+  const waiting = missingConfigurationSummary(health.jobs);
   const jobTechnicalDetail = health.jobs.flatMap((job) => [
     ...(job.receiptId ? [{ label: `${job.label} receipt`, value: job.receiptId }] : []),
     // Verbatim, because this is the string to paste into a log search; the row above reads it.
@@ -525,8 +569,20 @@ function JobsTab({ health }: { health: SystemHealth }) {
           />
         )}
       />
+      {/*
+        One line above the rows, so an operator who came to find out what to set does not read
+        eighteen rows to collect the names. Counted off the same rows, so it cannot disagree.
+      */}
+      {waiting ? (
+        <Prose
+          className="border-b border-[var(--line-soft)] px-[var(--s-4)] py-[var(--s-3)] text-[12.5px] leading-[1.5] text-[color:var(--ink)]"
+          data-testid="system-jobs-waiting-on-configuration"
+        >
+          {waiting.label}
+        </Prose>
+      ) : null}
       <ul className="m-0 list-none p-0">
-        {health.jobs.map((job, index) => {
+        {health.jobs.map((job) => {
           const state = jobState(job.state);
           return (
             <li
@@ -563,7 +619,7 @@ function JobsTab({ health }: { health: SystemHealth }) {
                     and the row stays on the muted ink because the state beside it spends the
                     colour.
                   */}
-                  {job.errorDetail ? (
+                  {job.errorDetail && !job.missingConfiguration ? (
                     <Prose className="mt-[var(--s-1)] text-[12.5px] leading-[1.5] text-[color:var(--muted)]">
                       <span className="font-medium text-[color:var(--ink)]">Last error</span>
                       {" "}
@@ -574,14 +630,18 @@ function JobsTab({ health }: { health: SystemHealth }) {
                 {/*
                   One treatment for the column. A list of pills reads as a column of lozenges, so
                   the state is the bare dot plus its words, which is what the roster and the client
-                  book already do.
+                  book already do. A not-configured row carries the names it waits on under it.
                 */}
-                <Status
-                  className="shrink-0"
-                  label={state.label}
-                  tone={STATE_TONE_TO_TONE[state.tone]}
-                  treatment="bare"
-                />
+                <div className="flex shrink-0 flex-col items-start gap-[var(--s-1)] @min-[520px]:items-end">
+                  <Status
+                    label={state.label}
+                    tone={STATE_TONE_TO_TONE[state.tone]}
+                    treatment="bare"
+                  />
+                  {job.missingConfiguration ? (
+                    <MissingConfiguration configuration={job.missingConfiguration} nowMs={nowMs} />
+                  ) : null}
+                </div>
               </article>
             </li>
           );
@@ -640,10 +700,19 @@ function IntegrationsTab({ health }: { health: SystemHealth }) {
 export function AdminSystemHealth({
   enabled = true,
   health,
+  nowIso,
 }: {
   enabled?: boolean;
   health?: SystemHealth;
+  /**
+   * The instant "since 3 days ago" is measured from. Sample it once where the health was read so
+   * the server and the client agree; without it the wall clock at render stands in.
+   */
+  nowIso?: string;
 }) {
+  // Sampled once per mount when the caller passes no instant, so a re-render cannot move "since".
+  const [mountedAtMs] = useState(() => Date.now());
+  const nowMs = nowIso ? Date.parse(nowIso) : mountedAtMs;
   /*
    * Counts sit in the tab strip's own faint mono slot, and each one is omitted rather than zeroed:
    * an empty queue says so in the tab body, where a grey 0 in the strip reads as a counter that
@@ -661,7 +730,7 @@ export function AdminSystemHealth({
       id: "jobs",
       label: "Jobs",
       count: health.jobs.length || undefined,
-      content: <JobsTab health={health} />,
+      content: <JobsTab health={health} nowMs={nowMs} />,
     },
     {
       id: "integrations",

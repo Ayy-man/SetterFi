@@ -16,6 +16,7 @@ function latest(overrides: Partial<LatestJobReceipt> = {}): LatestJobReceipt {
     outcome: "succeeded",
     errorDetail: null,
     counters: { queued: 2 },
+    missingConfiguration: null,
     freshness: "fresh",
     ageMs: 1_000,
     freshnessWindowMs: 20 * 60_000,
@@ -34,6 +35,7 @@ describe("job receipt repository", () => {
       finishedAt: "2026-08-18T05:55:01.000Z",
       receiptId: "receipt-1",
       errorDetail: null,
+      missingConfiguration: null,
       freshness: "fresh",
       freshnessWindowMs: 20 * 60_000,
     }]);

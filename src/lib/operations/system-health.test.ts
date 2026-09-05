@@ -7,6 +7,11 @@ import {
   loadSystemHealth,
   type SystemHealthSource,
 } from "./system-health";
+import {
+  missingConfigurationSummary,
+  missingSinceLabel,
+  relativeTimeLabel,
+} from "./system-health-configuration";
 
 const NOW = new Date("2026-08-18T06:00:00.000Z");
 const SCHEDULED_JOB_KEYS: SystemJobReceipt["job"][] = [
@@ -26,6 +31,7 @@ function receipt(input: Partial<SystemJobReceipt> & Pick<SystemJobReceipt, "job"
     finishedAt: "2026-08-18T05:40:00.000Z",
     receiptId: `receipt-${input.job}`,
     errorDetail: null,
+    missingConfiguration: null,
     freshness: "fresh",
     freshnessWindowMs: 26 * 60 * 60_000,
     ...input,
@@ -121,6 +127,48 @@ describe("read-only system health", () => {
     });
   });
 
+  it("puts the runner's missing variables and their start on a not-configured row, names only", async () => {
+    const result = await loadSystemHealth({
+      source: source({ readJobReceipts: async () => [
+        receipt({
+          job: "tier-change-reconcile",
+          outcome: "skipped",
+          errorDetail: "STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET",
+          missingConfiguration: {
+            variables: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+            since: "2026-08-10T04:00:00.000Z",
+          },
+        }),
+        // An older runner wrote no structured field: the names come from the detail and the wait
+        // is dated from the run itself.
+        receipt({ job: "a2p-probe", outcome: "skipped", errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER" }),
+        // A stale skip is reported as stale, so it names nothing to wait on.
+        receipt({
+          job: "engine-evals", outcome: "skipped", errorDetail: "OPENROUTER_API_KEY", freshness: "stale",
+          finishedAt: "2026-08-15T03:15:00.000Z",
+          missingConfiguration: { variables: ["OPENROUTER_API_KEY"], since: "2026-08-01T03:15:00.000Z" },
+        }),
+        receipt({ job: "followups" }),
+      ] }),
+      environment: {}, now: NOW,
+    });
+
+    expect(result.jobs.find((job) => job.id === "tier-change-reconcile")).toMatchObject({
+      state: "not-configured",
+      missingConfiguration: {
+        variables: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+        since: "2026-08-10T04:00:00.000Z",
+      },
+    });
+    expect(result.jobs.find((job) => job.id === "a2p-probe")).toMatchObject({
+      state: "not-configured",
+      missingConfiguration: { variables: ["SETTERFI_GHL_PROVISIONING_DRIVER"], since: "2026-08-18T05:40:00.000Z" },
+    });
+    expect(result.jobs.find((job) => job.id === "engine-evals")).toMatchObject({ state: "stale", missingConfiguration: null });
+    expect(result.jobs.find((job) => job.id === "followups")).toMatchObject({ state: "healthy", missingConfiguration: null });
+    expect(result.jobs.filter((job) => job.state !== "not-configured").every((job) => job.missingConfiguration === null)).toBe(true);
+  });
+
   it("uses the receipt reader's explicit per-job freshness rather than inventing one", async () => {
     const result = await loadSystemHealth({
       source: source({ readJobReceipts: async () => [
@@ -152,7 +200,7 @@ describe("read-only system health", () => {
     const jobs = [{
       id: "followups", label: "Followups", schedule: "*/5 * * * *", state: "healthy" as const,
       lastRunAt: "2026-08-18T05:55:00.000Z", reportedSinceYesterday: true,
-      receiptId: "receipt-followups", reason: null, errorDetail: null,
+      receiptId: "receipt-followups", reason: null, errorDetail: null, missingConfiguration: null,
     }];
 
     expect(deriveSystemReportingState({ queueState: "available", jobs })).toEqual({ state: "healthy", reason: null });
@@ -209,5 +257,43 @@ describe("read-only system health", () => {
     const projection = JSON.stringify(result.providers);
     expect(projection).not.toMatch(/[A-Z][A-Z0-9]{2,}(_[A-Z0-9]+)+/);
     expect(projection).not.toContain("secret");
+  });
+});
+
+describe("missing configuration presentation", () => {
+  const NOW_MS = Date.parse("2026-09-06T12:00:00.000Z");
+  const job = (state: string, variables: string[] | null) => ({
+    state,
+    missingConfiguration: variables ? { variables, since: "2026-09-01T00:00:00.000Z" } : null,
+  });
+
+  it("summarises the waiting jobs and names each variable once", () => {
+    expect(missingConfigurationSummary([
+      job("not-configured", ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"]),
+      job("not-configured", ["STRIPE_SECRET_KEY"]),
+      job("not-configured", ["SETTERFI_GHL_PROVISIONING_DRIVER"]),
+      job("healthy", null),
+      // A failed row is not waiting on configuration even if it once was.
+      job("failed", ["OPENROUTER_API_KEY"]),
+    ])).toEqual({
+      count: 3,
+      variables: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "SETTERFI_GHL_PROVISIONING_DRIVER"],
+      label: "3 jobs waiting on configuration: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SETTERFI_GHL_PROVISIONING_DRIVER",
+    });
+    expect(missingConfigurationSummary([job("not-configured", ["OPENROUTER_API_KEY"])])?.label)
+      .toBe("1 job waiting on configuration: OPENROUTER_API_KEY");
+    expect(missingConfigurationSummary([job("not-configured", [])])?.label).toBe("1 job waiting on configuration");
+    expect(missingConfigurationSummary([job("healthy", null), job("stale", null)])).toBeNull();
+  });
+
+  it("says since when in coarse relative time", () => {
+    expect(relativeTimeLabel("2026-09-06T11:59:30.000Z", NOW_MS)).toBe("just now");
+    expect(relativeTimeLabel("2026-09-06T11:35:00.000Z", NOW_MS)).toBe("25 minutes ago");
+    expect(relativeTimeLabel("2026-09-06T09:00:00.000Z", NOW_MS)).toBe("3 hours ago");
+    expect(relativeTimeLabel("2026-09-05T12:00:00.000Z", NOW_MS)).toBe("yesterday");
+    expect(relativeTimeLabel("2026-09-03T12:00:00.000Z", NOW_MS)).toBe("3 days ago");
+    expect(relativeTimeLabel("2026-07-06T12:00:00.000Z", NOW_MS)).toBe("2 months ago");
+    expect(relativeTimeLabel("not a date", NOW_MS)).toBe("an unknown time");
+    expect(missingSinceLabel({ variables: [], since: "2026-09-03T12:00:00.000Z" }, NOW_MS)).toBe("since 3 days ago");
   });
 });

@@ -1,6 +1,7 @@
 /** Read-only, receipt-derived system health projection for the platform console. */
 
 import type { EnvironmentName, EnvironmentSource } from "@/lib/env-contract";
+import { parseMissingVariableNames } from "@/lib/jobs/job-receipts";
 import {
   EMAIL_CONFIGURATION_NAMES,
   META_CONFIGURATION_NAMES,
@@ -12,6 +13,11 @@ import {
 } from "@/lib/repositories/job-receipts";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import cronTopology from "../../../vercel.json";
+
+import type { JobMissingConfiguration } from "./system-health-configuration";
+
+export type { JobMissingConfiguration } from "./system-health-configuration";
+export { missingConfigurationSummary, missingSinceLabel, relativeTimeLabel } from "./system-health-configuration";
 
 export type SystemHealthState = "healthy" | "failed" | "not-configured" | "stale" | "never-ran" | "in-progress" | "unavailable";
 
@@ -66,6 +72,12 @@ export type SystemHealth = {
      * receipt carrying a detail is a writer bug rather than something to report.
      */
     errorDetail: string | null;
+    /**
+     * Only on a `not-configured` row: the variable names the driver is waiting on (names, never
+     * values) and when the current run of skipped receipts began. Null on every other state for
+     * the same reason `errorDetail` is: a stale skip is reported as stale, not as a current wait.
+     */
+    missingConfiguration: JobMissingConfiguration | null;
   }[];
   providers: readonly {
     id: string;
@@ -209,6 +221,21 @@ function providerInventory(environment: EnvironmentSource): SystemHealth["provid
   });
 }
 
+/**
+ * The runner's own projection when it has one; otherwise the names are parsed from the receipt's
+ * detail and the wait dated from the run itself, so a reader of an older row still sees which
+ * variables are missing rather than an empty block.
+ */
+function missingConfigurationFor(
+  receipt: SystemJobReceipt,
+  lastRunAt: string | null,
+): JobMissingConfiguration | null {
+  if (receipt.missingConfiguration) return receipt.missingConfiguration;
+  const variables = parseMissingVariableNames({ counters: null, errorDetail: receipt.errorDetail });
+  if (!lastRunAt) return null;
+  return { variables, since: lastRunAt };
+}
+
 function jobInventory(
   receipts: readonly SystemJobReceipt[],
   now: Date,
@@ -227,6 +254,7 @@ function jobInventory(
         receiptId: null,
         reason: "Job receipts could not be read.",
         errorDetail: null,
+        missingConfiguration: null,
       };
     }
     if (!receipt) {
@@ -238,6 +266,7 @@ function jobInventory(
         receiptId: null,
         reason: "No run report has been recorded.",
         errorDetail: null,
+        missingConfiguration: null,
       };
     }
     const lastRunAt = receipt.finishedAt ?? receipt.startedAt;
@@ -254,6 +283,7 @@ function jobInventory(
         receiptId: null,
         reason: "No run report has been recorded.",
         errorDetail: null,
+        missingConfiguration: null,
       };
     }
     if (receipt.freshness === "stale") {
@@ -265,6 +295,7 @@ function jobInventory(
         receiptId: receipt.receiptId,
         reason: "The latest run report is outside its expected window.",
         errorDetail: null,
+        missingConfiguration: null,
       };
     }
     if (receipt.freshness === "in_progress") {
@@ -276,6 +307,7 @@ function jobInventory(
         receiptId: receipt.receiptId,
         reason: "The latest run has not recorded a terminal outcome.",
         errorDetail: null,
+        missingConfiguration: null,
       };
     }
     const skipped = receipt.outcome === "skipped";
@@ -290,6 +322,7 @@ function jobInventory(
         ? "The job driver is not configured in this environment."
         : failed ? "The latest run report says this job failed." : null,
       errorDetail: (failed || skipped) ? receipt.errorDetail?.trim() || null : null,
+      missingConfiguration: skipped ? missingConfigurationFor(receipt, lastRunAt) : null,
     };
   });
 }

@@ -60,6 +60,7 @@ const health: SystemHealth = {
       receiptId: "receipt-1",
       reason: null,
       errorDetail: null,
+      missingConfiguration: null,
     },
     {
       id: "a2p-probe",
@@ -71,6 +72,7 @@ const health: SystemHealth = {
       receiptId: "receipt-2",
       reason: "The latest run report is outside its expected window.",
       errorDetail: null,
+      missingConfiguration: null,
     },
     {
       id: "ghl-install-reconcile",
@@ -82,6 +84,7 @@ const health: SystemHealth = {
       receiptId: "receipt-3",
       reason: null,
       errorDetail: null,
+      missingConfiguration: null,
     },
   ],
   providers: [
@@ -190,24 +193,75 @@ describe("OwnerSystem", () => {
     expect(row.querySelector('[data-slot="pill"]')?.getAttribute("data-tone")).toBe("neutral");
   });
 
-  it("shows a skipped driver as not configured in amber", () => {
-    const notConfigured: SystemHealth = {
-      ...health,
-      jobs: [{
+  const notConfigured: SystemHealth = {
+    ...health,
+    jobs: [
+      {
         ...health.jobs[0]!,
         state: "not-configured",
         reason: "The job driver is not configured in this environment.",
-        errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
-      }],
-      reporting: { state: "not-configured", reason: "At least one scheduled job driver is not configured." },
-    };
+        errorDetail: "OPENROUTER_API_KEY",
+        missingConfiguration: { variables: ["OPENROUTER_API_KEY"], since: "2026-08-31T09:30:00.000Z" },
+      },
+      {
+        ...health.jobs[1]!,
+        state: "not-configured",
+        lastRunAt: "2026-09-03T03:00:00.000Z",
+        reason: "The job driver is not configured in this environment.",
+        errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER, GHL_CLIENT_ID",
+        missingConfiguration: {
+          variables: ["SETTERFI_GHL_PROVISIONING_DRIVER", "GHL_CLIENT_ID"],
+          since: "2026-09-03T03:00:00.000Z",
+        },
+      },
+      health.jobs[2]!,
+    ],
+    reporting: { state: "not-configured", reason: "At least one scheduled job driver is not configured." },
+  };
+
+  it("shows a skipped driver as not configured in amber", () => {
     navigation.searchParams = new URLSearchParams("?tab=jobs");
     render(<OwnerSystem health={notConfigured} nowIso={NOW_ISO} />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Job driver not configured");
-    const row = screen.getByTestId("owner-system-job-row");
+    const row = screen.getAllByTestId("owner-system-job-row")[0]!;
     expect(within(row).getByText("Not configured")).toBeInTheDocument();
     expect(row.querySelector('[data-slot="pill"]')?.getAttribute("data-tone")).toBe("amber");
+  });
+
+  it("names the missing variables verbatim under the pill, with how long they have been missing", () => {
+    navigation.searchParams = new URLSearchParams("?tab=jobs");
+    render(<OwnerSystem health={notConfigured} nowIso={NOW_ISO} />);
+
+    const rows = screen.getAllByTestId("owner-system-job-row");
+    const followups = within(rows[0]!).getByTestId("owner-system-missing-configuration");
+    expect(within(followups).getByText("OPENROUTER_API_KEY")).toBeInTheDocument();
+    expect(within(followups).getByText("since 3 days ago")).toBeInTheDocument();
+    expect(within(rows[0]!).queryByText("Last error")).not.toBeInTheDocument();
+
+    const probe = within(rows[1]!).getByTestId("owner-system-missing-configuration");
+    expect(within(probe).getByText("SETTERFI_GHL_PROVISIONING_DRIVER")).toBeInTheDocument();
+    expect(within(probe).getByText("GHL_CLIENT_ID")).toBeInTheDocument();
+    expect(within(probe).getByText("since 9 hours ago")).toBeInTheDocument();
+
+    // The healthy third row carries no such block.
+    expect(screen.getAllByTestId("owner-system-missing-configuration")).toHaveLength(2);
+  });
+
+  it("sums the waiting jobs into one line at the top of the jobs section", () => {
+    navigation.searchParams = new URLSearchParams("?tab=jobs");
+    render(<OwnerSystem health={notConfigured} nowIso={NOW_ISO} />);
+
+    expect(screen.getByTestId("owner-system-jobs-waiting-on-configuration")).toHaveTextContent(
+      "2 jobs waiting on configuration: OPENROUTER_API_KEY, SETTERFI_GHL_PROVISIONING_DRIVER, GHL_CLIENT_ID",
+    );
+  });
+
+  it("prints no configuration line when nothing is waiting", () => {
+    renderAt("?tab=jobs");
+
+    expect(screen.queryByTestId("owner-system-jobs-waiting-on-configuration")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("owner-system-missing-configuration")).not.toBeInTheDocument();
   });
 
   it("draws the seven-day delivery bars from the snapshot", () => {

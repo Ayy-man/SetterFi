@@ -55,7 +55,7 @@ describe("tier-change reconciliation job", () => {
     expect(finished).toEqual([expect.objectContaining({
       outcome: "skipped",
       errorDetail: "SETTERFI_STRIPE_DRIVER",
-      counters: { skipped: "driver_not_configured" },
+      counters: { skipped: "driver_not_configured", missing_variables: ["SETTERFI_STRIPE_DRIVER"] },
     })]);
   });
 });

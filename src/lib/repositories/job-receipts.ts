@@ -18,6 +18,8 @@ export type SystemJobReceipt = {
   receiptId: string | null;
   /** What the runner recorded when the run failed; null on every other outcome. */
   errorDetail: string | null;
+  /** Which variables a skipped driver is waiting on, and since when; null unless skipped. */
+  missingConfiguration?: LatestJobReceipt["missingConfiguration"];
   freshness: LatestJobReceipt["freshness"];
   freshnessWindowMs: number;
 };
@@ -44,6 +46,7 @@ function receiptProjection(receipt: LatestJobReceipt): SystemJobReceipt {
     finishedAt: receipt.finishedAt,
     receiptId: receipt.id,
     errorDetail: receipt.errorDetail,
+    missingConfiguration: receipt.missingConfiguration ?? null,
     freshness: receipt.freshness,
     freshnessWindowMs: receipt.freshnessWindowMs,
   };

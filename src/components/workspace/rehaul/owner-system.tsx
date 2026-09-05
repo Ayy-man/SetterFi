@@ -41,6 +41,10 @@ import type {
   SystemHealth,
   SystemHealthState,
 } from "@/lib/operations/system-health";
+import {
+  missingConfigurationSummary,
+  missingSinceLabel,
+} from "@/lib/operations/system-health-configuration";
 import type { PlatformMeasurement } from "@/lib/repositories/platform-analytics";
 import { cn } from "@/lib/utils";
 
@@ -547,8 +551,14 @@ function incidents(health: SystemHealth, span: WindowKey, now: number): Incident
       title: `${jobName(job)}: ${jobPill(job.state).label.toLowerCase()}`,
       // The reason says the run failed; the receipt's own detail says why, and an operator
       // reading the rail is the reader who needs the second half.
-      detail: [job.reason, job.errorDetail ? displayErrorDetail(job.errorDetail) : null]
-        .filter(Boolean).join(" "),
+      detail: [
+        job.reason,
+        job.missingConfiguration
+          ? (job.missingConfiguration.variables.length > 0
+            ? `Waiting on ${job.missingConfiguration.variables.join(", ")}.`
+            : null)
+          : job.errorDetail ? displayErrorDetail(job.errorDetail) : null,
+      ].filter(Boolean).join(" "),
       tone: job.state === "failed" ? ("bad" as const) : ("amber" as const),
     }));
 
@@ -605,7 +615,40 @@ function IncidentsRail({ incidents: rows }: { incidents: readonly Incident[] }) 
 /* Tabs                                                                                         */
 /* ------------------------------------------------------------------------------------------- */
 
-function JobsTab({ health }: { health: SystemHealth }) {
+/**
+ * Under the amber pill: the variable names the driver is waiting on and how long it has waited.
+ * Names verbatim and mono, because they are what an operator types into the deployment settings;
+ * values are never on this read. Relative time, because the question is "this morning or last
+ * month".
+ */
+function MissingConfiguration({
+  configuration,
+  nowMs,
+}: {
+  configuration: NonNullable<SystemHealth["jobs"][number]["missingConfiguration"]>;
+  nowMs: number;
+}) {
+  return (
+    <div
+      className="flex flex-col items-start gap-[2px] sm:items-end"
+      data-testid="owner-system-missing-configuration"
+    >
+      {configuration.variables.length > 0 ? (
+        <ul className="m-0 flex list-none flex-wrap gap-x-2 gap-y-[2px] p-0 font-mono text-[11.5px] text-[color:var(--muted)] sm:justify-end">
+          {configuration.variables.map((name) => <li key={name}>{name}</li>)}
+        </ul>
+      ) : (
+        <span className="text-[12px] text-[color:var(--muted)]">Variable names were not recorded</span>
+      )}
+      <span className="text-[12px] text-[color:var(--muted)]">
+        {missingSinceLabel(configuration, nowMs)}
+      </span>
+    </div>
+  );
+}
+
+function JobsTab({ health, nowMs }: { health: SystemHealth; nowMs: number }) {
+  const waiting = missingConfigurationSummary(health.jobs);
   return (
     <div className="min-w-0 overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--card)] shadow-[var(--shadow-card)]">
       <div className="flex items-center gap-3 border-b border-[var(--line)] px-[14px] py-[10px]">
@@ -624,10 +667,25 @@ function JobsTab({ health }: { health: SystemHealth }) {
               reason: job.reason ?? "",
               // Verbatim, because this is the string to paste into a log search.
               lastError: job.errorDetail ?? "",
+              // Names only; a value never reaches this read, so none can reach the file.
+              missingConfiguration: job.missingConfiguration?.variables.join(", ") ?? "",
+              missingSince: job.missingConfiguration?.since ?? "",
             }))}
           />
         </span>
       </div>
+      {/*
+        One line above the rows, so an operator who came to find out what to set does not read
+        every row to collect the names. Counted off the same rows, so it cannot disagree.
+      */}
+      {waiting ? (
+        <p
+          className="m-0 border-b border-[var(--line-soft)] px-4 py-3 text-[12.5px] leading-[1.5] text-[color:var(--ink)]"
+          data-testid="owner-system-jobs-waiting-on-configuration"
+        >
+          {waiting.label}
+        </p>
+      ) : null}
       <ul className="m-0 list-none p-0">
         {health.jobs.map((job) => (
           <li
@@ -654,7 +712,7 @@ function JobsTab({ health }: { health: SystemHealth }) {
                 something to act on. It stays on the muted ink: the pill beside it is already
                 the only colour this row spends.
               */}
-              {job.errorDetail ? (
+              {job.errorDetail && !job.missingConfiguration ? (
                 <div className="mt-1 text-[12.5px] leading-[1.5] text-[color:var(--muted)]">
                   <span className="font-medium text-[color:var(--ink)]">Last error</span>
                   {" "}
@@ -662,9 +720,14 @@ function JobsTab({ health }: { health: SystemHealth }) {
                 </div>
               ) : null}
             </div>
-            <Pill className="shrink-0" tone={jobPill(job.state).tone}>
-              {jobPill(job.state).label}
-            </Pill>
+            <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
+              <Pill tone={jobPill(job.state).tone}>
+                {jobPill(job.state).label}
+              </Pill>
+              {job.missingConfiguration ? (
+                <MissingConfiguration configuration={job.missingConfiguration} nowMs={nowMs} />
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>
@@ -840,7 +903,7 @@ export function OwnerSystem({ health, nowIso, platform = null }: OwnerSystemProp
           </div>
         </div>
       ) : tab === "jobs" ? (
-        <JobsTab health={health} />
+        <JobsTab health={health} nowMs={Date.parse(nowIso)} />
       ) : (
         <IntegrationsTab health={health} />
       )}

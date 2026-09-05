@@ -20,6 +20,7 @@ const jobs: SystemHealth["jobs"] = [
     receiptId: "receipt-appointment",
     errorDetail: null,
     reason: null,
+    missingConfiguration: null,
   },
   {
     id: "compliance-reconcile",
@@ -31,6 +32,7 @@ const jobs: SystemHealth["jobs"] = [
     receiptId: "receipt-compliance",
     errorDetail: null,
     reason: null,
+    missingConfiguration: null,
   },
   {
     id: "a2p-probe",
@@ -42,6 +44,7 @@ const jobs: SystemHealth["jobs"] = [
     receiptId: null,
     errorDetail: null,
     reason: "No run report has been recorded.",
+    missingConfiguration: null,
   },
   {
     id: "stripe-webhooks",
@@ -53,6 +56,7 @@ const jobs: SystemHealth["jobs"] = [
     receiptId: "receipt-payments",
     errorDetail: null,
     reason: "The latest run report is outside its expected window.",
+    missingConfiguration: null,
   },
   {
     id: "billing-allowances",
@@ -64,6 +68,7 @@ const jobs: SystemHealth["jobs"] = [
     receiptId: "receipt-allowances",
     errorDetail: null,
     reason: null,
+    missingConfiguration: null,
   },
   {
     id: "billing-cost-rollup",
@@ -75,6 +80,7 @@ const jobs: SystemHealth["jobs"] = [
     receiptId: "receipt-rollup",
     errorDetail: null,
     reason: "The latest run report is outside its expected window.",
+    missingConfiguration: null,
   },
   {
     id: "notification-deliveries",
@@ -85,6 +91,7 @@ const jobs: SystemHealth["jobs"] = [
     reportedSinceYesterday: true,
     receiptId: "receipt-delivery",
     reason: "The latest run report says this job failed.",
+    missingConfiguration: null,
     errorDetail: "PROVISIONING_TENANT_READ_FAILED",
   },
   {
@@ -97,6 +104,7 @@ const jobs: SystemHealth["jobs"] = [
     receiptId: "receipt-evaluation",
     errorDetail: null,
     reason: null,
+    missingConfiguration: null,
   },
 ];
 
@@ -381,25 +389,84 @@ describe("AdminSystemHealth", () => {
     expect(within(failedRow!).getByText(detail)).toBeInTheDocument();
   });
 
+  const notConfigured: SystemHealth = {
+    ...health,
+    jobs: jobs.map((job) => job.id === "a2p-probe" ? {
+      ...job,
+      state: "not-configured" as const,
+      errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
+      reason: "The job driver is not configured in this environment.",
+      missingConfiguration: {
+        variables: ["SETTERFI_GHL_PROVISIONING_DRIVER"],
+        since: "2026-08-21T03:45:00.000Z",
+      },
+    } : job.id === "stripe-webhooks" ? {
+      ...job,
+      state: "not-configured" as const,
+      errorDetail: "STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET",
+      reason: "The job driver is not configured in this environment.",
+      missingConfiguration: {
+        variables: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+        since: "2026-08-24T04:30:00.000Z",
+      },
+    } : job),
+    reporting: { state: "not-configured", reason: "At least one scheduled job driver is not configured." },
+  };
+  const NOW_ISO = "2026-08-24T06:00:00.000Z";
+
   it("shows a deliberately unavailable driver as not configured in amber", async () => {
     const user = userEvent.setup();
-    render(<AdminSystemHealth health={{
-      ...health,
-      jobs: jobs.map((job) => job.id === "a2p-probe" ? {
-        ...job,
-        state: "not-configured",
-        errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
-        reason: "The job driver is not configured in this environment.",
-      } : job),
-      reporting: { state: "not-configured", reason: "At least one scheduled job driver is not configured." },
-    }} />);
+    render(<AdminSystemHealth health={notConfigured} nowIso={NOW_ISO} />);
 
     await user.click(screen.getByRole("tab", { name: "Jobs" }));
     const row = screen.getAllByTestId("system-job-row")
       .find((candidate) => within(candidate).queryByText("Carrier registration probe"));
     const status = within(row!).getByText("Not configured");
     expect(status.closest("[data-slot='status']")?.getAttribute("data-tone")).toBe("warning");
-    expect(within(row!).getByText("Setterfi ghl provisioning driver")).toBeInTheDocument();
+  });
+
+  it("names the missing variables verbatim under the badge, with how long they have been missing", async () => {
+    const user = userEvent.setup();
+    render(<AdminSystemHealth health={notConfigured} nowIso={NOW_ISO} />);
+
+    await user.click(screen.getByRole("tab", { name: "Jobs" }));
+    const probe = screen.getAllByTestId("system-job-row")
+      .find((candidate) => within(candidate).queryByText("Carrier registration probe"))!;
+    const probeDetail = within(probe).getByTestId("system-job-missing-configuration");
+    // Verbatim: the name is what an operator types into the deployment, not a sentence.
+    expect(within(probeDetail).getByText("SETTERFI_GHL_PROVISIONING_DRIVER")).toBeInTheDocument();
+    expect(within(probeDetail).getByText("since 3 days ago")).toBeInTheDocument();
+    expect(within(probe).queryByText("Setterfi ghl provisioning driver")).not.toBeInTheDocument();
+    expect(within(probe).queryByText("Last error")).not.toBeInTheDocument();
+
+    const billing = screen.getAllByTestId("system-job-row")
+      .find((candidate) => within(candidate).queryByText("Billing webhook reconcile"))!;
+    const billingDetail = within(billing).getByTestId("system-job-missing-configuration");
+    expect(within(billingDetail).getByText("STRIPE_SECRET_KEY")).toBeInTheDocument();
+    expect(within(billingDetail).getByText("STRIPE_WEBHOOK_SECRET")).toBeInTheDocument();
+    expect(within(billingDetail).getByText("since 2 hours ago")).toBeInTheDocument();
+
+    // Rows in every other state carry no such block.
+    expect(screen.getAllByTestId("system-job-missing-configuration")).toHaveLength(2);
+  });
+
+  it("sums the waiting jobs into one line at the top of the jobs section", async () => {
+    const user = userEvent.setup();
+    render(<AdminSystemHealth health={notConfigured} nowIso={NOW_ISO} />);
+
+    await user.click(screen.getByRole("tab", { name: "Jobs" }));
+    expect(screen.getByTestId("system-jobs-waiting-on-configuration")).toHaveTextContent(
+      "2 jobs waiting on configuration: SETTERFI_GHL_PROVISIONING_DRIVER, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET",
+    );
+  });
+
+  it("prints no configuration line when nothing is waiting", async () => {
+    const user = userEvent.setup();
+    render(<AdminSystemHealth health={health} nowIso={NOW_ISO} />);
+
+    await user.click(screen.getByRole("tab", { name: "Jobs" }));
+    expect(screen.queryByTestId("system-jobs-waiting-on-configuration")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("system-job-missing-configuration")).not.toBeInTheDocument();
   });
 
   /**
