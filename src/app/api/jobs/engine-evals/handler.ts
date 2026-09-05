@@ -1,7 +1,11 @@
 import { accessToken, safeEqual } from "@/lib/access";
 import { phase8EngineEvalLive } from "@/lib/env-contract";
-import { runStoredEngineEvalCases, type NightlyEngineEvalResult } from "@/lib/evals/nightly-engine-evals";
-import { runJobWithReceipt, type JobReceiptExecution } from "@/lib/jobs/job-receipts";
+import { nightlyEngineEvalCounters, runStoredEngineEvalCases, type NightlyEngineEvalResult } from "@/lib/evals/nightly-engine-evals";
+import {
+  DRIVER_NOT_CONFIGURED_COUNTERS,
+  runJobWithReceipt,
+  type JobReceiptExecution,
+} from "@/lib/jobs/job-receipts";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -29,12 +33,13 @@ export function createEngineEvalJobHandler(dependencies: Dependencies) {
     try {
       const work = () => dependencies.run();
       const result = await (dependencies.execute ? dependencies.execute("engine-evals", work, {
-        counters: (value) => value.state === "complete"
-          ? { cases: value.cases }
-          : {} as Record<string, number>,
+        counters: nightlyEngineEvalCounters,
         outcome: (value) => value.state === "complete" ? "succeeded" : "failed",
         errorDetail: (value) => value.state === "complete" ? null : value.code,
       }) : work());
+      if ((result as unknown) === DRIVER_NOT_CONFIGURED_COUNTERS) {
+        return Response.json(result, { status: 200, headers });
+      }
       return Response.json(result, { status: result.state === "complete" ? 200 : 503, headers });
     } catch (error) {
       return Response.json({
