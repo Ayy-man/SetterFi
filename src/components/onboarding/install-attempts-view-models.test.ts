@@ -215,6 +215,7 @@ describe("installEventGloss", () => {
     // uniqueness assertion below is what stops them borrowing one sentence.
     "GHL_INSTALL_TENANT_UNRESOLVED",
     "GHL_INSTALL_LOCATION_BOUND_ELSEWHERE",
+    "GHL_INSTALL_LOCATION_INACTIVE",
     "GHL_INSTALL_START_TENANT_FORBIDDEN",
     "GHL_AGENCY_INSTALL_USER_TYPE_UNEXPECTED",
     "GHL_OAUTH_STATE_ALREADY_COMPLETED",

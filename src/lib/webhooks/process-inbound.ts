@@ -686,10 +686,40 @@ export function resolveReconciledInstallTenant(input: {
   return resolved;
 }
 
+/**
+ * Refusals are facts about the location, not about the attempt, so each names itself in the receipt.
+ * The third one is the provider's: a bulk agency install fires INSTALL for paused and deleted
+ * sub-accounts too, and the location-token mint answers 400 "Location is not active" for those.
+ */
 const INSTALL_RECONCILE_REFUSALS = new Set([
   "GHL_INSTALL_TENANT_UNRESOLVED",
   "GHL_INSTALL_LOCATION_BOUND_ELSEWHERE",
+  "GHL_INSTALL_LOCATION_INACTIVE",
 ]);
+
+const INSTALL_RECONCILE_ERROR_MAX_LENGTH = 200;
+
+/**
+ * What an INSTALL receipt records when its reconcile throws.
+ *
+ * A refusal is stored as its own code. Anything else keeps the blanket `INSTALL_RECONCILE_FAILED`
+ * as a prefix so existing readers still match it, and carries the thrown error's own name behind
+ * a colon, because on 2026-09-02 thirty-eight receipts sat under the bare label for three days
+ * while the cause (a provider 400 for inactive sub-accounts) had to be rediscovered by hand. The
+ * provider error's message is a code plus an HTTP status and never a response body, and the text is
+ * bounded and kept to one line so the column stays greppable.
+ */
+export function installReconcileReceiptError(error: unknown): string {
+  const code = typeof (error as { code?: unknown } | null)?.code === "string"
+    ? (error as { code: string }).code
+    : null;
+  const message = error instanceof Error ? error.message : "";
+  if (code && INSTALL_RECONCILE_REFUSALS.has(code)) return code;
+  if (INSTALL_RECONCILE_REFUSALS.has(message)) return message;
+  const detail = (message || (typeof error === "string" ? error : "")).replace(/\s+/g, " ").trim();
+  if (!detail) return "INSTALL_RECONCILE_FAILED";
+  return `INSTALL_RECONCILE_FAILED:${detail}`.slice(0, INSTALL_RECONCILE_ERROR_MAX_LENGTH);
+}
 
 type ServiceClient = ReturnType<typeof createSupabaseServiceClient>;
 
@@ -747,9 +777,17 @@ export async function processGhlUninstallReceipt(
   }
 }
 
+export type GhlInstallReconcileDependencies = {
+  client?: ServiceClient;
+  driver?: () => ReturnType<typeof selectGhlMessagingDriver>;
+};
+
 /** Bounded lifecycle recovery writes INSTALL custody and durably retires UNINSTALL custody. */
-export async function reconcileGhlInstallReceipts(limit: number) {
-  const client = createSupabaseServiceClient();
+export async function reconcileGhlInstallReceipts(
+  limit: number,
+  dependencies: GhlInstallReconcileDependencies = {},
+) {
+  const client = dependencies.client ?? createSupabaseServiceClient();
   const receiptIds = await claimFairGhlLifecycleReceiptIds(client, limit);
   if (receiptIds.length === 0) return { checked: 0, processed: 0, failed: 0 };
   const { data, error } = await client
@@ -794,11 +832,9 @@ export async function reconcileGhlInstallReceipts(limit: number) {
       continue;
     }
     try {
-      driver ??= selectGhlMessagingDriver({
-        factories: { mock: createMockGhlDriver, real: createRealGhlDriver },
-      });
-      const install = await driver.reconcileInstall({ eventId, locationId });
-      const sealed = sealGhlInstallCredentials(install);
+      // The tenant is decided before the provider is asked for anything. A location no client owns
+      // is refused on a database read alone; minting a location token first, as this used to, spent
+      // one provider call per unowned sub-account every run and threw the token away.
       const { data: existing, error: existingError } = await client
         .from("ghl_installs")
         .select("id, tenant_id")
@@ -809,6 +845,13 @@ export async function reconcileGhlInstallReceipts(limit: number) {
         receiptTenantId: row.tenant_id,
         existingTenantId: existing?.tenant_id,
       });
+      driver ??= dependencies.driver
+        ? dependencies.driver()
+        : selectGhlMessagingDriver({
+          factories: { mock: createMockGhlDriver, real: createRealGhlDriver },
+        });
+      const install = await driver.reconcileInstall({ eventId, locationId });
+      const sealed = sealGhlInstallCredentials(install);
       const { error: writeError } = await client.rpc("persist_ghl_install_credentials_atomic", {
         p_expected_tenant: tenantId,
         p_location_id: locationId,
@@ -822,16 +865,11 @@ export async function reconcileGhlInstallReceipts(limit: number) {
       processed += 1;
     } catch (error) {
       failed += 1;
-      // A refusal names itself in the receipt, so an operator reading `webhook_events` can tell an
-      // unresolved tenant apart from a provider failure without opening this file. `failed` is what
-      // makes the receipt retryable, which is what a deferred tenant binding depends on.
-      const message = error instanceof Error ? error.message : "";
-      await setLifecycleReceiptStatus(
-        client,
-        row.id,
-        "failed",
-        INSTALL_RECONCILE_REFUSALS.has(message) ? message : "INSTALL_RECONCILE_FAILED",
-      );
+      // A refusal names itself in the receipt, and any other failure names the error it hit, so an
+      // operator reading `webhook_events` can tell an unresolved tenant from a provider failure
+      // without opening this file. `failed` is what makes the receipt retryable, which is what a
+      // deferred tenant binding depends on.
+      await setLifecycleReceiptStatus(client, row.id, "failed", installReconcileReceiptError(error));
     }
   }
   return { checked: selected.length, processed, failed };

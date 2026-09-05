@@ -231,6 +231,8 @@ const GLOSSES: Readonly<Record<string, string>> = {
     "Nothing named which client this location belongs to, so the connection could not have carried a message in either direction. Nothing was stored.",
   GHL_INSTALL_LOCATION_BOUND_ELSEWHERE:
     "This location already belongs to another client, and an approval does not get to move it. Nothing was stored.",
+  GHL_INSTALL_LOCATION_INACTIVE:
+    "The provider refused to issue a token for this location because the sub-account is paused or deleted in the agency. Nothing was stored, and nothing will be until the sub-account is reactivated.",
   GHL_INSTALL_START_TENANT_FORBIDDEN:
     "The request named a client other than the one the person signing in belongs to, so no install link was issued.",
   GHL_AGENCY_INSTALL_USER_TYPE_UNEXPECTED:

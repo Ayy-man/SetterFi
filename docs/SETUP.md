@@ -802,11 +802,21 @@ no amount of documentation has settled them and one real install settles all thr
    The other 77 are `installType: "Location"` with 77 distinct `locationId` values, so the agency
    has 77 sub-accounts today, not the 74 counted on 2026-08-22. All 77 sit in `failed`, which is the
    retryable state: 41 as `GHL_INSTALL_TENANT_UNRESOLVED`, the designed refusal for a location no
-   coach tenant is bound to yet, and 36 as `INSTALL_RECONCILE_FAILED`, meaning the driver's
-   `reconcileInstall` step threw during the burst before tenant resolution was reached. The second
-   group's cause was not read on the day. An hour later none of the 78 rows had moved
-   (`attempts = 0`, `processed_at` null) although `/api/jobs/ghl-install-reconcile` is scheduled
-   every fifteen minutes; confirm the job is actually running before relying on the retry.
+   coach tenant is bound to yet, and 36 as `INSTALL_RECONCILE_FAILED` (39 and 38 by 2026-09-05,
+   as sub-accounts changed state). **The second group is explained, read 2026-09-05 by minting
+   against two of its locations directly:** the provider answers `POST /oauth/locationToken` with
+   HTTP 400, body `message: "Location is not active"`, for every sub-account that is paused or
+   deleted in the agency. A bulk install fires an INSTALL webhook for those too, and the old
+   reconcile minted a location token *before* deciding the tenant, so the 400 landed first and the
+   catch relabelled it to the blanket word. Since 2026-09-05 the worker decides the tenant first, so
+   an unowned location is refused on a database read alone and costs no mint, an inactive one is
+   named `GHL_INSTALL_LOCATION_INACTIVE` (`src/lib/integrations/ghl.ts`), and any other throw keeps
+   its own name behind `INSTALL_RECONCILE_FAILED:`. On the next pass all 77 location receipts will
+   read `GHL_INSTALL_TENANT_UNRESOLVED`, which is the first-order truth for every one of them; the
+   inactive set only becomes visible once a coach tenant claims one of those locations. The job
+   *was* running on the day: `attempts` is not touched by the lifecycle writer and `processed_at`
+   stays null on a `failed` row, so `attempts = 0` was never evidence that it had not. `job_receipts`
+   shows a `ghl-install-reconcile` run every fifteen minutes, 25 checked and 25 failed each time.
 3. **The browser was meant to land on `/admin/provisioning`**, the `return_path` on the state row,
    and Alec saw "Installed". Whether the marketplace screen appeared in between was not observed;
    nobody on the call was asked to watch for it.

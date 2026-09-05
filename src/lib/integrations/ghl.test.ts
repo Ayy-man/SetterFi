@@ -227,3 +227,73 @@ describe("GHL drivers", () => {
     })).rejects.toThrow("GHL_INSTALL_REAUTHORIZATION_REQUIRED");
   });
 });
+
+describe("GHL install reconcile", () => {
+  const driver = (fetcher: typeof fetch) => createRealGhlDriver(
+    { clientId: "client", clientSecret: "secret", webhookPublicKey: "invalid" },
+    {
+      fetch: fetcher,
+      now: () => Date.parse("2026-09-05T20:16:22.403Z"),
+      getCompanyInstall: async () => ({ companyId: "company-1", accessToken: "agency-access" }),
+    },
+  );
+
+  it("names a paused or deleted sub-account's 400 as GHL_INSTALL_LOCATION_INACTIVE, keys only", async () => {
+    // The body the provider actually answered on 2026-09-05 for the 38 unexplained receipts.
+    const body = {
+      message: "Location is not active",
+      error: "Bad Request",
+      statusCode: 400,
+      traceId: "723053d5-d35b-4f9a-94b6-fe6f61fd8f6e",
+    };
+    const inactive = driver(async () => new Response(JSON.stringify(body), { status: 400 }));
+    let thrown: unknown;
+    try {
+      await inactive.reconcileInstall({ eventId: "event-1", locationId: "BGdfGG6xjP3JjyeTMVu5" });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(GhlProviderError);
+    expect((thrown as GhlProviderError).code).toBe("GHL_INSTALL_LOCATION_INACTIVE");
+    expect((thrown as GhlProviderError).status).toBe(400);
+    expect((thrown as GhlProviderError).bodyShape).toBe("error,message,statusCode,traceId");
+    expect(String(thrown)).not.toContain("723053d5");
+  });
+
+  it("keeps every other 400 under the general reconcile failure", async () => {
+    const other = driver(async () =>
+      new Response(JSON.stringify({ message: "locationId must be a string" }), { status: 400 }));
+    await expect(
+      other.reconcileInstall({ eventId: "event-1", locationId: "loc-1" }),
+    ).rejects.toMatchObject({ code: "GHL_INSTALL_RECONCILE_FAILED", status: 400 });
+  });
+
+  it("mints a location token from the company grant when the location is active", async () => {
+    const seen: Array<{ url: string; body: string; clientId: string | null }> = [];
+    const active = driver(async (input, init) => {
+      const headers = new Headers(init?.headers);
+      seen.push({
+        url: String(input),
+        body: String(init?.body),
+        clientId: headers.get("X-Client-Id"),
+      });
+      return new Response(JSON.stringify({
+        access_token: "location-access",
+        refresh_token: "location-refresh",
+        expires_in: 86_400,
+        companyId: "company-1",
+      }), { status: 200 });
+    });
+    await expect(active.reconcileInstall({ eventId: "event-1", locationId: "loc-1" })).resolves.toEqual({
+      companyId: "company-1",
+      accessToken: "location-access",
+      refreshToken: "location-refresh",
+      tokenExpiresAt: "2026-09-06T20:16:22.403Z",
+    });
+    expect(seen).toEqual([{
+      url: "https://services.leadconnectorhq.com/oauth/locationToken",
+      body: "companyId=company-1&locationId=loc-1",
+      clientId: "client",
+    }]);
+  });
+});

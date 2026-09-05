@@ -98,7 +98,15 @@ describe("reconcileGhlInstallReceipts source", () => {
   it("writes the refusal's own code into the receipt so an operator can read it", () => {
     expect(source).toContain("GHL_INSTALL_TENANT_UNRESOLVED");
     expect(source).toContain("GHL_INSTALL_LOCATION_BOUND_ELSEWHERE");
+    expect(source).toContain("GHL_INSTALL_LOCATION_INACTIVE");
     expect(source).toContain("INSTALL_RECONCILE_FAILED");
+  });
+
+  it("decides the tenant before it asks the provider to mint a location token", () => {
+    const decision = source.indexOf("resolveReconciledInstallTenant({");
+    const mint = source.indexOf("driver.reconcileInstall({ eventId, locationId })");
+    expect(mint).toBeGreaterThan(-1);
+    expect(decision).toBeLessThan(mint);
   });
 
   it("retries both received and failed INSTALL and UNINSTALL lifecycle receipts", () => {

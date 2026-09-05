@@ -105,7 +105,11 @@ function bodyShape(value: unknown) {
   return record ? Object.keys(record).sort().join(",") : Array.isArray(value) ? "array" : typeof value;
 }
 
-async function responseJson(response: Response, code: string) {
+async function responseJson(
+  response: Response,
+  code: string,
+  classify?: (status: number, payload: unknown) => string | null,
+) {
   let payload: unknown;
   try {
     payload = await response.json();
@@ -113,9 +117,27 @@ async function responseJson(response: Response, code: string) {
     throw new GhlProviderError(`${code}_MALFORMED_JSON`, response.status, "non-json");
   }
   if (!response.ok) {
-    throw new GhlProviderError(code, response.status, bodyShape(payload));
+    throw new GhlProviderError(
+      classify?.(response.status, payload) ?? code,
+      response.status,
+      bodyShape(payload),
+    );
   }
   return payload;
+}
+
+/**
+ * The one location-token refusal worth a name of its own. A bulk agency install fires an INSTALL
+ * webhook for every sub-account the agency has, including the paused and deleted ones, and the
+ * provider then refuses to mint a token for those with a 400 whose body says exactly this. It is a
+ * fact about the sub-account, not about our request, so retrying it changes nothing until someone
+ * reactivates the location in the agency. Matched on the message because the status alone is the
+ * same 400 the endpoint uses for a malformed request.
+ */
+function classifyLocationTokenRefusal(status: number, payload: unknown) {
+  if (status !== 400) return null;
+  const message = text(object(payload)?.message)?.toLowerCase() ?? "";
+  return message.includes("location is not active") ? "GHL_INSTALL_LOCATION_INACTIVE" : null;
 }
 
 function stableId(prefix: string, values: readonly string[]) {
@@ -406,7 +428,11 @@ export function createRealGhlDriver(
         },
         body,
       });
-      const payload = object(await responseJson(response, "GHL_INSTALL_RECONCILE_FAILED"));
+      const payload = object(await responseJson(
+        response,
+        "GHL_INSTALL_RECONCILE_FAILED",
+        classifyLocationTokenRefusal,
+      ));
       const accessToken = text(payload?.access_token) ?? text(payload?.accessToken);
       const refreshToken = text(payload?.refresh_token) ?? text(payload?.refreshToken);
       const companyId = text(payload?.companyId) ?? install.companyId;
