@@ -260,12 +260,19 @@ export function createOwnerBrainApi(fetcher: FetchLike = fetch) {
       sourceRef: string;
       disposition: string;
       tenantId: string | null;
-      responseTemplate: string;
+      /** The reviewer's rewrite, or null when the source text is sent unchanged. */
+      edit: { responseTemplate?: string; category?: string } | null;
       resolvedFlagIds: string[];
       numberBindings: Array<Record<string, unknown>>;
       bareXResolutions: Array<{ offset: number; token: string }>;
     }) {
-      const { batchId, itemId, ...body } = input;
+      const { batchId, itemId, tenantId, edit, ...rest } = input;
+      // The route refuses unknown keys, so the optional two travel only when they carry a value.
+      const body = {
+        ...rest,
+        ...(tenantId ? { tenantId } : {}),
+        ...(edit ? { edit } : {}),
+      };
       return request(
         fetcher,
         `/api/admin/brain/imports/${encodeURIComponent(batchId)}/items/${encodeURIComponent(itemId)}/accept`,

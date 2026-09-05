@@ -607,8 +607,12 @@ export function OwnerBrain({
   const currentVersion = state.snapshots[0]?.version ?? 0;
   const pendingRows = state.importRows.filter((row) => row.decision === "pending" && !decidedRows[row.id]);
   const pendingReviewCount = pendingRows.length;
-  const publishedKnowledgeCount = state.knowledge.filter((row) => row.status === "published").length;
-  const draftKnowledgeCount = state.knowledge.length - publishedKnowledgeCount;
+  // The live count comes from the snapshot's own entries when the page could read them: the
+  // `status` column says "published" for rows the publish RPC never copied.
+  const publishedKnowledgeCount = state.knowledgePublish?.inLiveSnapshot
+    ?? state.knowledge.filter((row) => row.status === "published").length;
+  const draftKnowledgeCount = state.knowledgePublish?.draftAwaitingPublish
+    ?? state.knowledge.length - publishedKnowledgeCount;
   const importSummary = !state.batch
     ? { label: "No import run", tone: "neutral" as StateTone }
     : state.batch.completedAt !== null
@@ -774,7 +778,9 @@ export function OwnerBrain({
         sourceRef: row.sourceRef,
         disposition: decision.disposition!,
         tenantId: decision.disposition === "tenant_specific" ? decision.tenantId : null,
-        responseTemplate: decision.responseTemplate,
+        edit: decision.responseTemplate.trim() !== row.responseTemplate.trim()
+          ? { responseTemplate: decision.responseTemplate.trim() }
+          : null,
         resolvedFlagIds: resolvedFlagIds(row),
         numberBindings,
         bareXResolutions,
