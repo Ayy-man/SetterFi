@@ -40,6 +40,10 @@ export function createBrainApiClient(fetcher: FetchLike = fetch) {
       itemId: string;
       sourceRef: string;
       disposition: ImportDisposition;
+      /** Required when `disposition` is `tenant_specific`; the route refuses it otherwise. */
+      tenantId?: string | null;
+      /** The reviewer's rewrite. Required before a content-flagged row may go to the shared Brain. */
+      edit?: { responseTemplate?: string; category?: string } | null;
       resolvedFlagIds: string[];
       numberBindings: Array<Record<string, unknown>>;
       bareXResolutions: Array<{ offset: number; token: string }>;
@@ -54,7 +58,17 @@ export function createBrainApiClient(fetcher: FetchLike = fetch) {
           resolvedFlagIds: input.resolvedFlagIds,
           numberBindings: input.numberBindings,
           bareXResolutions: input.bareXResolutions,
+          ...(input.tenantId ? { tenantId: input.tenantId } : {}),
+          ...(input.edit ? { edit: input.edit } : {}),
         },
+      );
+    },
+    rejectImportItem(input: { batchId: string; itemId: string; sourceRef: string; reason: string }) {
+      return requestJson(
+        fetcher,
+        `/api/admin/brain/imports/${encodeURIComponent(input.batchId)}/items/${encodeURIComponent(input.itemId)}/reject`,
+        "POST",
+        { sourceRef: input.sourceRef, reason: input.reason },
       );
     },
     createDraft(draft: Readonly<Record<string, unknown>>) {

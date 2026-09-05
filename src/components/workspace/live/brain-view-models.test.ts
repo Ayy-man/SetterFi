@@ -7,6 +7,7 @@ import {
   evalGateView,
   importBatchView,
   importReviewView,
+  knowledgePublishCounts,
   publishReceiptView,
   qualificationMatrixView,
   reasonControlView,
@@ -55,6 +56,54 @@ describe("Brain honest-state view models", () => {
       blockingCodes: [],
       canAccept: true,
     });
+  });
+
+  it("counts what is in the live snapshot and what a publish would change, never the status column", () => {
+    const entry = (id: string, overrides: Partial<{
+      disposition: string; status: string; hasEmbedding: boolean; responseTemplate: string;
+      inboundMessage: string; category: string; matchKeywords: string[];
+    }> = {}) => ({
+      id,
+      disposition: "shared",
+      status: "draft",
+      hasEmbedding: true,
+      category: "Credit",
+      inboundMessage: `Question ${id}`,
+      responseTemplate: `Answer ${id}`,
+      matchKeywords: [] as string[],
+      ...overrides,
+    });
+    const live = (id: string, overrides: Partial<{
+      responseTemplate: string; inboundMessage: string; category: string; matchKeywords: string[];
+    }> = {}) => ({
+      entryId: id,
+      category: "Credit",
+      inboundMessage: `Question ${id}`,
+      responseTemplate: `Answer ${id}`,
+      matchKeywords: [] as string[],
+      ...overrides,
+    });
+
+    // Nothing published yet: every eligible draft awaits, nothing is live.
+    expect(knowledgePublishCounts([entry("a"), entry("b")], null)).toEqual({
+      inLiveSnapshot: 0,
+      draftAwaitingPublish: 2,
+      snapshotVersion: null,
+    });
+
+    const counts = knowledgePublishCounts([
+      entry("a"),                                                   // live and unchanged
+      entry("b", { responseTemplate: "Rewritten answer" }),        // live but edited since
+      entry("c"),                                                   // eligible, never published
+      entry("d", { disposition: "tenant_specific" }),               // routed to a tenant, never shared
+      entry("e", { disposition: "needs_rewrite" }),                 // quarantined
+      entry("f", { hasEmbedding: false }),                          // publish_brain_draft skips it
+      entry("g", { status: "published" }),                          // legacy status, publish ignores it
+    ], {
+      version: 4,
+      entries: [live("a"), live("b"), live("z")],                    // z was deleted from the draft table
+    });
+    expect(counts).toEqual({ inLiveSnapshot: 3, draftAwaitingPublish: 2, snapshotVersion: 4 });
   });
 
   it("distinguishes stale, blocked, and warning-only eval evidence", () => {

@@ -89,6 +89,7 @@ const AUDIT_KEYS = [
   "billing.tier_offer_term.closed",
   "billing.tier_offer_term.recorded",
   "brain.import.accepted",
+  "brain.import.rejected",
   "brain.published",
   "brain.rolled_back",
   "calendar.connected",

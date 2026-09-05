@@ -19,8 +19,10 @@ import {
   allBlockingFlagsResolved,
   FAQ_CATEGORIES,
   flagImportRow,
+  isContentFlag,
   type ImportFigure,
   type ImportFlag,
+  type ImportFlagOptions,
   type NumberBinding,
 } from "./flags";
 
@@ -53,6 +55,8 @@ export type ImportCounts = {
 export type AcceptancePayload = {
   sourceRef: string;
   disposition: ImportDisposition;
+  /** Set exactly when `disposition` is `tenant_specific`. */
+  tenantId: string | null;
   numberBindings: readonly NumberBinding[];
   flags: readonly ImportFlag[];
   afterPayload: NormalizedImportPayload;
@@ -60,10 +64,41 @@ export type AcceptancePayload = {
   platformDraftEligible: boolean;
 };
 
+export type AcceptanceRefusalCode =
+  | "BRAIN_IMPORT_DISPOSITION_REQUIRED"
+  | "BRAIN_IMPORT_SOURCE_SHAPE_INVALID"
+  | "BRAIN_IMPORT_TENANT_REQUIRED"
+  | "BRAIN_IMPORT_TENANT_NOT_ALLOWED"
+  | "BRAIN_IMPORT_EDIT_UNCHANGED"
+  | "BRAIN_IMPORT_EDIT_CATEGORY_INVALID"
+  | "BRAIN_IMPORT_CONTENT_FLAG_UNEDITED"
+  | "BRAIN_IMPORT_CONTENT_FLAGS_REMAIN"
+  | "BRAIN_IMPORT_BARE_X_RESOLUTION_INVALID"
+  | "BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED";
+
+/**
+ * The outcome of review. A refusal is data the route can put in a response body, so the reviewer
+ * learns which rule stopped the acceptance instead of a generic 409.
+ */
+export type AcceptanceDecision =
+  | { ok: true; payload: AcceptancePayload }
+  | { ok: false; code: AcceptanceRefusalCode };
+
+/**
+ * What a reviewer changed before accepting. The accepted text is the edit, never the source, and
+ * the edit is re-scanned with the same detectors that flagged the source.
+ */
+export type AcceptanceEdit = {
+  responseTemplate?: string;
+  category?: string;
+};
+
 export type BareXResolution = {
   offset: number;
   token: "booking_link" | `asset.${string}`;
 };
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function record(value: unknown): UnknownRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -146,6 +181,7 @@ function normalizeTemplate(value: string, registry: PlaceholderRegistry) {
 export function normalizeImport(
   rows: readonly unknown[],
   registry: PlaceholderRegistry = PLACEHOLDER_REGISTRY,
+  flagOptions: ImportFlagOptions = {},
 ): { items: NormalizedImportItem[]; counts: ImportCounts } {
   const items = rows.map((value, index) => {
     const row = record(value) ?? {};
@@ -170,7 +206,7 @@ export function normalizeImport(
       sourceShapeValid,
       proseShape: row.kind === "prose" || (!row.properties && typeof row.content === "string"),
     };
-    const { flags, figures } = flagImportRow(draft);
+    const { flags, figures } = flagImportRow(draft, flagOptions);
     return { ...draft, flags, figures } satisfies NormalizedImportItem;
   });
   return {
@@ -190,32 +226,109 @@ export function embeddingRequests(items: readonly NormalizedImportItem[]) {
     .map((item) => ({ id: item.sourceRef, text: item.inboundMessage }));
 }
 
+function refuse(code: AcceptanceRefusalCode): AcceptanceDecision {
+  return { ok: false, code };
+}
+
+/**
+ * Apply a reviewer's edit to the source row and re-run the detectors on the result.
+ *
+ * Returns the edited row with fresh flags and figures, or a refusal when the edit is not an edit
+ * (identical to the source) or picks a category the source never carried.
+ */
+function applyEdit(
+  item: NormalizedImportItem,
+  edit: AcceptanceEdit,
+  registry: PlaceholderRegistry,
+  flagOptions: ImportFlagOptions,
+): { ok: true; row: NormalizedImportItem } | { ok: false; code: AcceptanceRefusalCode } {
+  const responseTemplate = edit.responseTemplate !== undefined
+    ? normalizeTemplate(edit.responseTemplate.trim(), registry)
+    : item.responseTemplate;
+  const category = edit.category !== undefined ? edit.category.trim() : item.category;
+  if (edit.category !== undefined && !item.categories.includes(category)) {
+    return { ok: false, code: "BRAIN_IMPORT_EDIT_CATEGORY_INVALID" };
+  }
+  const categories = edit.category !== undefined ? [category] : item.categories;
+  if (responseTemplate === item.responseTemplate && categories.length === item.categories.length
+    && category === item.category) {
+    return { ok: false, code: "BRAIN_IMPORT_EDIT_UNCHANGED" };
+  }
+  const row = {
+    ...item,
+    responseTemplate,
+    category,
+    categories,
+    sourceShapeValid: item.sourceShapeValid && responseTemplate.length > 0,
+  };
+  // An edit is typed structured copy; the prose-shape flag describes the provider row, which the
+  // source-shape gate above has already accepted.
+  const { flags, figures } = flagImportRow({ ...row, proseShape: false }, flagOptions);
+  return { ok: true, row: { ...row, flags, figures } };
+}
+
+/**
+ * Decide whether a reviewed import row may become a knowledge entry, and in what shape.
+ *
+ * A content flag (first-person wording, PII, a handle, a brand name, a proof claim, or two
+ * categories) describes the copy itself. For the shared Brain a reviewer cannot resolve one by
+ * ticking it: the row has to be edited, and the edit has to re-scan clean. The quarantine
+ * dispositions may keep the source text because nothing shared is ever built from them.
+ */
 export function buildAcceptancePayload(
   item: NormalizedImportItem,
   input: {
     disposition?: ImportDisposition | null;
+    tenantId?: string | null;
+    edit?: AcceptanceEdit | null;
     numberBindings?: readonly NumberBinding[];
     resolvedFlagIds?: readonly string[];
     bareXResolutions?: readonly BareXResolution[];
   },
-): AcceptancePayload | null {
-  if (!input.disposition || !item.sourceShapeValid) return null;
+  options: { registry?: PlaceholderRegistry; flagOptions?: ImportFlagOptions } = {},
+): AcceptanceDecision {
+  if (!input.disposition) return refuse("BRAIN_IMPORT_DISPOSITION_REQUIRED");
+  if (!item.sourceShapeValid) return refuse("BRAIN_IMPORT_SOURCE_SHAPE_INVALID");
+  const tenantId = typeof input.tenantId === "string" && UUID_PATTERN.test(input.tenantId.trim())
+    ? input.tenantId.trim().toLowerCase()
+    : null;
+  if (input.disposition === "tenant_specific" && tenantId === null) return refuse("BRAIN_IMPORT_TENANT_REQUIRED");
+  if (input.disposition !== "tenant_specific" && input.tenantId) return refuse("BRAIN_IMPORT_TENANT_NOT_ALLOWED");
+
+  const registry = options.registry ?? PLACEHOLDER_REGISTRY;
+  const flagOptions = options.flagOptions ?? {};
+  const edit = input.edit && (input.edit.responseTemplate !== undefined || input.edit.category !== undefined)
+    ? input.edit
+    : null;
+  let working = item;
+  if (edit) {
+    const edited = applyEdit(item, edit, registry, flagOptions);
+    if (!edited.ok) return refuse(edited.code);
+    working = edited.row;
+  }
+  if (input.disposition === "shared") {
+    if (!edit && item.flags.some(isContentFlag)) return refuse("BRAIN_IMPORT_CONTENT_FLAG_UNEDITED");
+    if (working.flags.some(isContentFlag)) return refuse("BRAIN_IMPORT_CONTENT_FLAGS_REMAIN");
+  }
+
   const numberBindings = input.numberBindings ?? [];
-  if (input.disposition === "shared" && item.figures.some((figure) =>
+  if (input.disposition === "shared" && working.figures.some((figure) =>
     !numberBindings.some((binding) => binding.kind === figure.kind && binding.value === figure.value
       && binding.field === figure.field && binding.offset === figure.offset),
-  )) return null;
+  )) return refuse("BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED");
   const bareXResolutions = input.bareXResolutions ?? [];
-  const bareFlags = item.flags.filter((candidate) => candidate.code === "bare_x");
+  const bareFlags = working.flags.filter((candidate) => candidate.code === "bare_x");
   if (bareFlags.some((candidate) => !bareXResolutions.some((resolution) =>
     resolution.offset === candidate.offset && placeholderDefinition(resolution.token),
-  ))) return null;
+  ))) return refuse("BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED");
   const resolvedBareIds = bareFlags.map((candidate) => candidate.id);
-  const reviewableIds = new Set(item.flags
+  const reviewableIds = new Set(working.flags
     .filter((candidate) => !["unknown_placeholder", "unbound_figure", "bare_x"].includes(candidate.code))
+    // Under `shared`, a content flag is never reviewable by tick; the re-scan above already
+    // guarantees there are none left on the working row, so this only matters for quarantine.
     .map((candidate) => candidate.id));
-  const flags = acceptanceFlags({
-    flags: item.flags,
+  const workingFlags = acceptanceFlags({
+    flags: working.flags,
     disposition: input.disposition,
     numberBindings,
     resolvedFlagIds: [
@@ -223,24 +336,41 @@ export function buildAcceptancePayload(
       ...resolvedBareIds,
     ],
   });
-  if (!allBlockingFlagsResolved(flags)) return null;
-  let responseTemplate = item.responseTemplate;
+  if (!allBlockingFlagsResolved(workingFlags)) return refuse("BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED");
+
+  // Source flags the edit made disappear are kept on the record as resolved by that edit, so the
+  // audit row still says what was wrong with the source and how it was fixed.
+  const workingIds = new Set(workingFlags.map((candidate) => candidate.id));
+  const editedAway = edit
+    ? item.flags
+      .filter((candidate) => !workingIds.has(candidate.id))
+      .map((candidate) => ({ ...candidate, resolved: true, resolution: { kind: "edited", value: null } }))
+    : [];
+  const flags = [...editedAway, ...workingFlags];
+
+  let responseTemplate = working.responseTemplate;
   for (const resolution of [...bareXResolutions].sort((left, right) => right.offset - left.offset)) {
-    if (responseTemplate.slice(resolution.offset, resolution.offset + 1) !== "X") return null;
+    if (responseTemplate.slice(resolution.offset, resolution.offset + 1) !== "X") {
+      return refuse("BRAIN_IMPORT_BARE_X_RESOLUTION_INVALID");
+    }
     responseTemplate = `${responseTemplate.slice(0, resolution.offset)}{{${resolution.token}}}${responseTemplate.slice(resolution.offset + 1)}`;
   }
   return {
-    sourceRef: item.sourceRef,
-    disposition: input.disposition,
-    numberBindings,
-    flags,
-    afterPayload: {
-      category: item.category,
-      inboundMessage: item.inboundMessage,
-      responseTemplate,
-      matchKeywords: item.matchKeywords,
+    ok: true,
+    payload: {
+      sourceRef: item.sourceRef,
+      disposition: input.disposition,
+      tenantId: input.disposition === "tenant_specific" ? tenantId : null,
+      numberBindings,
+      flags,
+      afterPayload: {
+        category: working.category,
+        inboundMessage: item.inboundMessage,
+        responseTemplate,
+        matchKeywords: item.matchKeywords,
+      },
+      embeddingText: item.inboundMessage,
+      platformDraftEligible: input.disposition === "shared",
     },
-    embeddingText: item.inboundMessage,
-    platformDraftEligible: input.disposition === "shared",
   };
 }

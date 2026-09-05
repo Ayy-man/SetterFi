@@ -97,6 +97,68 @@ const PII_PATTERNS = [
   /https?:\/\/[^\s)\]}>,]+/gi,
 ] as const;
 
+/**
+ * A social handle is an `@` that does not continue an email local part: the lookbehind refuses a
+ * word character or a dot before it, so `team@example.test` stays an email (PII) and `@coach`
+ * becomes a handle. Handles are coach identity and never belong in the shared Brain.
+ */
+const SOCIAL_HANDLE_PATTERNS = [
+  /(?<![\w.])@[a-z0-9_][a-z0-9_.]{1,29}\b/gi,
+] as const;
+
+/**
+ * Indirect proof: outcomes attributed to a coach's own clients, a headcount the coach claims to
+ * have served, or a dollar figure presented as money the coach has already funded. None of these
+ * can be checked against the offer layer, so none may ship as shared copy.
+ */
+const PROOF_CLAIM_PATTERNS = [
+  // "our clients got approved", "my students secured"
+  /\b(?:our|my)\s+(?:clients?|students?|members?|customers?|coaching\s+clients?)\s+(?:got|get|received|secured|raised|earned|made|saw|achieved|obtained|were\s+(?:approved|funded))\b/gi,
+  // "we've helped 400", "we have funded over $2,000,000", "I've coached"
+  /\b(?:we|i)(?:['’]ve|\s+have)\s+(?:helped|funded|coached|served|worked\s+with)\b/gi,
+  // "$500,000 funded", "$X funded", "$2M in funding secured"
+  /\$\s?(?:X|\d[\d,.]*)\s*(?:k|m|mm|million|thousand|billion)?\+?\s+(?:funded|in\s+funding|secured|raised|approved)\b/gi,
+  // "funded over $2,000,000", "raised $1M"
+  /\b(?:funded|secured|raised)\s+(?:over|more\s+than|up\s+to|nearly|almost)?\s*\$\s?(?:X|\d)/gi,
+  // "1,200 clients funded", "400 business owners helped"
+  /\b\d[\d,]*\+?\s+(?:clients?|students?|members?|people|businesses|business\s+owners|entrepreneurs)\s+(?:funded|helped|approved|served|coached)\b/gi,
+] as const;
+
+/**
+ * The client's own names. A batch may carry a different list (see `brandNames` on the import
+ * batch); this is the list scanned when a batch was created before the column existed.
+ */
+export const DEFAULT_BRAND_NAMES = ["Legacy Strong", "Live Legacy Strong", "CCA"] as const;
+
+export type ImportFlagOptions = {
+  /** Brand and business names that mark a row as coach-specific wherever they appear. */
+  brandNames?: readonly string[];
+};
+
+/** Flag codes that describe the copy itself. Ticking one as reviewed never makes the copy shared-safe. */
+export const CONTENT_FLAG_CODES = [
+  "first_person_pii",
+  "multi_category",
+  "social_handle",
+  "brand_name",
+  "proof_claim",
+] as const satisfies readonly ImportFlagCode[];
+
+export function isContentFlag(flag: Pick<ImportFlag, "code">) {
+  return (CONTENT_FLAG_CODES as readonly string[]).includes(flag.code);
+}
+
+function escapePattern(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function brandPatterns(brandNames: readonly string[]) {
+  return brandNames
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0)
+    .map((name) => new RegExp(`\\b${name.split(/\s+/).map(escapePattern).join("\\s+")}\\b`, "gi"));
+}
+
 export function figuresInResponse(responseTemplate: string): ImportFigure[] {
   return extractNumbers(responseTemplate).map(({ kind, value, start }) => ({
     kind,
@@ -106,7 +168,10 @@ export function figuresInResponse(responseTemplate: string): ImportFigure[] {
   }));
 }
 
-export function flagImportRow(row: FlaggableImportRow): {
+export function flagImportRow(
+  row: FlaggableImportRow,
+  options: ImportFlagOptions = {},
+): {
   flags: ImportFlag[];
   figures: ImportFigure[];
 } {
@@ -118,6 +183,15 @@ export function flagImportRow(row: FlaggableImportRow): {
 
   for (const offset of matches(row.responseTemplate, [...FIRST_PERSON_PATTERNS, ...PII_PATTERNS])) {
     flags.push(flag("first_person_pii", "responseTemplate", offset));
+  }
+  for (const offset of matches(row.responseTemplate, SOCIAL_HANDLE_PATTERNS)) {
+    flags.push(flag("social_handle", "responseTemplate", offset));
+  }
+  for (const offset of matches(row.responseTemplate, brandPatterns(options.brandNames ?? DEFAULT_BRAND_NAMES))) {
+    flags.push(flag("brand_name", "responseTemplate", offset));
+  }
+  for (const offset of matches(row.responseTemplate, PROOF_CLAIM_PATTERNS)) {
+    flags.push(flag("proof_claim", "responseTemplate", offset));
   }
 
   const figures = figuresInResponse(row.responseTemplate);

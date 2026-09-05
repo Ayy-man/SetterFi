@@ -2,6 +2,7 @@
 
 import {
   buildAcceptancePayload,
+  type AcceptanceEdit,
   type BareXResolution,
   type NormalizedImportItem,
 } from "@/lib/brain/import/normalize";
@@ -31,7 +32,42 @@ import {
   PHASE2_NO_STORE_HEADERS,
 } from "../../../../../import/handler";
 
-type LoadedImportItem = { item: NormalizedImportItem; embedding: readonly number[] };
+type LoadedImportItem = {
+  item: NormalizedImportItem;
+  embedding: readonly number[];
+  /** The brand list the batch was scanned with, so a review edit is re-scanned against the same names. */
+  brandNames: readonly string[];
+};
+
+const ACCEPT_BODY_KEYS = [
+  "bareXResolutions",
+  "disposition",
+  "numberBindings",
+  "resolvedFlagIds",
+  "sourceRef",
+] as const;
+const ACCEPT_OPTIONAL_KEYS = ["edit", "tenantId"] as const;
+
+function hasAcceptKeys(value: Record<string, unknown>) {
+  const keys = Object.keys(value);
+  const required = new Set<string>(ACCEPT_BODY_KEYS);
+  const optional = new Set<string>(ACCEPT_OPTIONAL_KEYS);
+  return ACCEPT_BODY_KEYS.every((key) => keys.includes(key))
+    && keys.every((key) => required.has(key) || optional.has(key));
+}
+
+function acceptanceEdit(value: unknown): AcceptanceEdit | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (!isRouteRecord(value)) return undefined;
+  const keys = Object.keys(value);
+  if (keys.length === 0 || !keys.every((key) => key === "responseTemplate" || key === "category")) return undefined;
+  if (value.responseTemplate !== undefined && !nonBlank(value.responseTemplate)) return undefined;
+  if (value.category !== undefined && !nonBlank(value.category)) return undefined;
+  return {
+    ...(typeof value.responseTemplate === "string" ? { responseTemplate: value.responseTemplate } : {}),
+    ...(typeof value.category === "string" ? { category: value.category } : {}),
+  };
+}
 
 type AcceptDependencies = {
   enabled(): boolean;
@@ -86,15 +122,26 @@ function storedFlag(value: unknown): value is ImportFlag {
 
 async function loadStoredItem(batchId: string, itemId: string): Promise<LoadedImportItem | null> {
   const client = createSupabaseServiceClient();
-  const { data, error } = await client
-    .from("brain_import_items")
-    .select("id,batch_id,source_ref,after_payload,flags")
-    .eq("id", itemId)
-    .eq("batch_id", batchId)
-    .eq("decision", "pending")
-    .maybeSingle();
+  const [{ data, error }, { data: batch, error: batchError }] = await Promise.all([
+    client
+      .from("brain_import_items")
+      .select("id,batch_id,source_ref,after_payload,flags")
+      .eq("id", itemId)
+      .eq("batch_id", batchId)
+      .eq("decision", "pending")
+      .maybeSingle(),
+    client
+      .from("brain_import_batches")
+      .select("id,brand_names")
+      .eq("id", batchId)
+      .maybeSingle(),
+  ]);
   if (error) throw new Error(`BRAIN_IMPORT_ITEM_READ_FAILED:${error.message}`);
-  if (!data) return null;
+  if (batchError) throw new Error(`BRAIN_IMPORT_BATCH_READ_FAILED:${batchError.message}`);
+  if (!data || !batch) return null;
+  const brandNames = Array.isArray(batch.brand_names)
+    ? batch.brand_names.filter((value): value is string => typeof value === "string")
+    : [];
   if (!isRouteRecord(data.after_payload) || !Array.isArray(data.flags) ||
     !data.flags.every(storedFlag)) throw new Error("BRAIN_IMPORT_ITEM_READBACK_INVALID");
   const payload = data.after_payload;
@@ -121,6 +168,7 @@ async function loadStoredItem(batchId: string, itemId: string): Promise<LoadedIm
       sourceShapeValid: !flags.some((flag) => flag.code === "source_shape"),
     },
     embedding: payload.embedding as number[],
+    brandNames,
   };
 }
 
@@ -138,20 +186,18 @@ export function createBrainImportAcceptHandler(dependencies: AcceptDependencies)
     }
     try {
       const raw: unknown = await request.json();
-      if (!isRouteRecord(raw) || !hasExactKeys(raw, [
-        "bareXResolutions",
-        "disposition",
-        "numberBindings",
-        "resolvedFlagIds",
-        "sourceRef",
-      ])) throw new Error("BRAIN_IMPORT_ACCEPT_BODY_INVALID");
+      if (!isRouteRecord(raw) || !hasAcceptKeys(raw)) throw new Error("BRAIN_IMPORT_ACCEPT_BODY_INVALID");
       const disposition = raw.disposition;
       const bindings = numberBindings(raw.numberBindings);
       const resolvedFlagIds = stringArray(raw.resolvedFlagIds);
       const bareResolutions = bareXResolutions(raw.bareXResolutions);
+      const edit = acceptanceEdit(raw.edit);
+      const tenantId = raw.tenantId === undefined || raw.tenantId === null
+        ? null
+        : nonBlank(raw.tenantId) ? raw.tenantId.trim() : undefined;
       if (!nonBlank(raw.sourceRef) ||
         !["shared", "tenant_specific", "needs_rewrite"].includes(String(disposition)) ||
-        !bindings || !resolvedFlagIds || !bareResolutions) {
+        !bindings || !resolvedFlagIds || !bareResolutions || edit === undefined || tenantId === undefined) {
         throw new Error("BRAIN_IMPORT_ACCEPT_BODY_INVALID");
       }
       const { batchId, itemId } = await context.params;
@@ -162,23 +208,27 @@ export function createBrainImportAcceptHandler(dependencies: AcceptDependencies)
           { status: 404, headers: PHASE2_NO_STORE_HEADERS },
         );
       }
-      const reviewed = buildAcceptancePayload(stored.item, {
+      const decision = buildAcceptancePayload(stored.item, {
         disposition: disposition as ImportDisposition,
+        tenantId,
+        edit,
         numberBindings: bindings,
         resolvedFlagIds,
         bareXResolutions: bareResolutions,
-      });
-      if (!reviewed) {
+      }, { flagOptions: { brandNames: stored.brandNames } });
+      if (!decision.ok) {
         return Response.json(
-          { state: "refused", code: "BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED" },
+          { state: "refused", code: decision.code },
           { status: 409, headers: PHASE2_NO_STORE_HEADERS },
         );
       }
+      const reviewed = decision.payload;
       const receipt = await dependencies.accept({
         batchId,
         itemId,
         sourceRef: reviewed.sourceRef,
         disposition: reviewed.disposition,
+        tenantId: reviewed.tenantId,
         afterPayload: reviewed.afterPayload,
         flags: reviewed.flags,
         numberBindings: reviewed.numberBindings,

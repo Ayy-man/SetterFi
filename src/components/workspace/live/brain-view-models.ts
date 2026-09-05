@@ -124,7 +124,72 @@ export type AdminBrainInitialState = {
   citation: BrainCitationView;
   currentSnapshotPayload: Readonly<Record<string, unknown>> | null;
   objections: BrainObjectionView[];
+  /**
+   * Knowledge counts sourced from the live snapshot rather than `status`. Optional so fixtures
+   * and older loaders that never computed it keep type-checking; a surface that needs the figure
+   * should treat its absence as "not measured", never as zero.
+   */
+  knowledgePublish?: BrainKnowledgePublishCounts;
 };
+
+export type BrainKnowledgePublishCounts = {
+  /** Rows in `brain_snapshot_entries` for the current (highest version) snapshot. */
+  inLiveSnapshot: number;
+  /**
+   * Eligible rows (`disposition = 'shared'`, `status = 'draft'`, embedding present -- the exact
+   * filter `publish_brain_draft` copies) that are absent from the live snapshot or differ from
+   * their live copy. This is the number a publish would change.
+   */
+  draftAwaitingPublish: number;
+  snapshotVersion: number | null;
+};
+
+export type KnowledgeEntryForCounts = {
+  id: string;
+  disposition: string;
+  status: string;
+  hasEmbedding: boolean;
+  category: string;
+  inboundMessage: string;
+  responseTemplate: string;
+  matchKeywords: readonly string[];
+};
+
+export type LiveSnapshotEntryForCounts = {
+  entryId: string;
+  category: string;
+  inboundMessage: string;
+  responseTemplate: string;
+  matchKeywords: readonly string[];
+};
+
+function snapshotContentKey(entry: Omit<LiveSnapshotEntryForCounts, "entryId">) {
+  return JSON.stringify([entry.category, entry.inboundMessage, entry.responseTemplate, [...entry.matchKeywords]]);
+}
+
+/**
+ * The knowledge figures the Brain page may honestly show.
+ *
+ * `brain_knowledge_entries.status = 'published'` is a legacy column that `publish_brain_draft`
+ * neither reads nor writes: the snapshot is built from `status = 'draft'` shared rows, so counting
+ * `published` reports rows no publish ever copied and misses every row that is actually live.
+ * These counts come from the snapshot table, which is what retrieval reads.
+ */
+export function knowledgePublishCounts(
+  entries: readonly KnowledgeEntryForCounts[],
+  snapshot: { version: number; entries: readonly LiveSnapshotEntryForCounts[] } | null,
+): BrainKnowledgePublishCounts {
+  const live = new Map((snapshot?.entries ?? []).map((entry) => [entry.entryId, snapshotContentKey(entry)]));
+  const eligible = entries.filter((entry) =>
+    entry.disposition === "shared" && entry.status === "draft" && entry.hasEmbedding,
+  );
+  const awaiting = eligible.filter((entry) => live.get(entry.id) !== snapshotContentKey(entry));
+  return {
+    inLiveSnapshot: live.size,
+    draftAwaitingPublish: awaiting.length,
+    snapshotVersion: snapshot?.version ?? null,
+  };
+}
 
 // One filter value, never an array, so "exactly one category at a time" is a property of the
 // type rather than a discipline the component has to keep. The counts are taken over the whole

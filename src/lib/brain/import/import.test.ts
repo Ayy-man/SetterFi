@@ -7,13 +7,24 @@ import type {
   ExistingBrainEntry,
 } from "@/lib/repositories/brain-import";
 
-import { FAQ_CATEGORIES, type NumberBinding } from "./flags";
+import {
+  DEFAULT_BRAND_NAMES,
+  FAQ_CATEGORIES,
+  flagImportRow,
+  type NumberBinding,
+} from "./flags";
 import {
   buildAcceptancePayload,
   embeddingRequests,
   normalizeImport,
+  type AcceptanceDecision,
 } from "./normalize";
 import { runBrainImport, type FaqSourceDriver } from "./pipeline";
+
+function accepted(decision: AcceptanceDecision) {
+  if (!decision.ok) throw new Error(`expected acceptance, got ${decision.code}`);
+  return decision.payload;
+}
 
 function sourceRow({
   id,
@@ -128,14 +139,16 @@ describe("Brain import normalization", () => {
     const figure = item.figures[0];
     const binding: NumberBinding = { ...figure, binding: "offer_prices" };
 
-    expect(buildAcceptancePayload(item, {})).toBeNull();
-    expect(buildAcceptancePayload(item, { disposition: "shared" })).toBeNull();
-    expect(buildAcceptancePayload(item, {
+    expect(buildAcceptancePayload(item, {})).toEqual({ ok: false, code: "BRAIN_IMPORT_DISPOSITION_REQUIRED" });
+    expect(buildAcceptancePayload(item, { disposition: "shared" }))
+      .toEqual({ ok: false, code: "BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED" });
+    expect(accepted(buildAcceptancePayload(item, {
       disposition: "shared",
       numberBindings: [binding],
-    })).toMatchObject({
+    }))).toMatchObject({
       sourceRef: "review-row",
       disposition: "shared",
+      tenantId: null,
       platformDraftEligible: true,
       embeddingText: "What is the range?",
       numberBindings: [binding],
@@ -153,19 +166,19 @@ describe("Brain import normalization", () => {
     ]).items;
     const offsets = item.flags.filter((flag) => flag.code === "bare_x").map((flag) => flag.offset);
 
-    expect(buildAcceptancePayload(item, {
+    expect(accepted(buildAcceptancePayload(item, {
       disposition: "shared",
       bareXResolutions: [
         { offset: offsets[0], token: "booking_link" },
         { offset: offsets[1], token: "asset.free-course" },
       ],
-    })?.afterPayload.responseTemplate).toBe(
+    })).afterPayload.responseTemplate).toBe(
       "Book at {{booking_link}} or read {{asset.free-course}}.",
     );
     expect(buildAcceptancePayload(item, {
       disposition: "shared",
       resolvedFlagIds: item.flags.map((flag) => flag.id),
-    })).toBeNull();
+    })).toEqual({ ok: false, code: "BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED" });
   });
 
   it("builds embedding inputs from inbound messages and never response templates", async () => {
@@ -187,6 +200,211 @@ describe("Brain import normalization", () => {
 
     expect(observed).toEqual([{ id: "embedding-row", text: "Synthetic inbound wording" }]);
     expect(JSON.stringify(observed)).not.toContain("Synthetic response wording");
+  });
+});
+
+function flaggable(response: string, overrides: { categories?: readonly string[] } = {}) {
+  const categories = overrides.categories ?? ["Credit"];
+  return {
+    sourceRef: "detector-row",
+    categories,
+    category: categories[0],
+    inboundMessage: "Synthetic inbound",
+    responseTemplate: response,
+    sourceShapeValid: true,
+    proseShape: false,
+  };
+}
+
+function codes(response: string, options?: { brandNames?: readonly string[] }) {
+  return flagImportRow(flaggable(response), options).flags.map((flag) => flag.code);
+}
+
+describe("Brain import content detectors", () => {
+  it("flags social handles but not email addresses", () => {
+    expect(codes("Follow @legacy_strong for updates.")).toContain("social_handle");
+    expect(codes("DM me at @Coach.Alec")).toContain("social_handle");
+    const emailOnly = codes("Write to team@example.test for details.");
+    expect(emailOnly).toContain("first_person_pii");
+    expect(emailOnly).not.toContain("social_handle");
+    expect(codes("Book a call at {{booking_link}} today.")).not.toContain("social_handle");
+  });
+
+  it("flags the configured brand names case-insensitively and on word boundaries only", () => {
+    expect(DEFAULT_BRAND_NAMES).toEqual(["Legacy Strong", "Live Legacy Strong", "CCA"]);
+    expect(codes("Welcome to Live Legacy Strong.")).toContain("brand_name");
+    expect(codes("The LEGACY   STRONG method works.")).toContain("brand_name");
+    expect(codes("Ask your CCA about it.")).toContain("brand_name");
+    expect(codes("Your legacy is strong when your accaccia grows.")).not.toContain("brand_name");
+    expect(codes("Welcome to Northwind Coaching.", { brandNames: ["Northwind Coaching"] })).toContain("brand_name");
+    expect(codes("Welcome to Live Legacy Strong.", { brandNames: [] })).not.toContain("brand_name");
+    expect(codes("Nothing here.", { brandNames: ["a+b", ""] })).not.toContain("brand_name");
+  });
+
+  it("flags indirect proof claims and leaves plain eligibility wording alone", () => {
+    for (const claim of [
+      "Our clients got approved within two weeks.",
+      "We've helped 400 business owners so far.",
+      "We have funded over $2,000,000 for people like you.",
+      "$500,000 funded last quarter alone.",
+      "$X funded for members.",
+      "Over 1,200 clients funded since 2019.",
+      "My students secured six figures.",
+    ]) {
+      expect(codes(claim), claim).toContain("proof_claim");
+    }
+    for (const plain of [
+      "You could get funded in as little as 30 days.",
+      "Funding ranges from $10,000 to $150,000 depending on your profile.",
+      "A 680 score is the minimum for this program.",
+      "We are here to help you understand the requirements.",
+      "Clients choose between two programs.",
+    ]) {
+      expect(codes(plain), plain).not.toContain("proof_claim");
+    }
+  });
+
+  it("points every content flag at the response field with an offset and never copies text", () => {
+    const { flags } = flagImportRow(flaggable("Our clients got funded. Ask @legacy_strong at Legacy Strong."));
+    const content = flags.filter((flag) => ["proof_claim", "social_handle", "brand_name"].includes(flag.code));
+    expect(content).toHaveLength(3);
+    for (const flag of content) {
+      expect(flag).toMatchObject({ field: "responseTemplate", severity: "blocking", resolved: false, resolution: null });
+      expect(flag.id).toBe(`${flag.code}:responseTemplate:${flag.offset}`);
+    }
+    expect(JSON.stringify(flags)).not.toContain("legacy_strong");
+  });
+});
+
+describe("Brain import acceptance of flagged content", () => {
+  const flaggedRow = () => normalizeImport([
+    sourceRow({
+      id: "flagged-row",
+      category: ["Funding Qs"],
+      inbound: "Who have you worked with?",
+      response: "Our clients got approved fast. Follow @legacy_strong.",
+    }),
+  ]).items[0];
+
+  it("refuses shared acceptance of a content-flagged row that a reviewer merely ticked as resolved", () => {
+    const item = flaggedRow();
+    expect(item.flags.map((flag) => flag.code)).toEqual(expect.arrayContaining(["proof_claim", "social_handle"]));
+    expect(buildAcceptancePayload(item, {
+      disposition: "shared",
+      resolvedFlagIds: item.flags.map((flag) => flag.id),
+    })).toEqual({ ok: false, code: "BRAIN_IMPORT_CONTENT_FLAG_UNEDITED" });
+  });
+
+  it("refuses an edit that re-scans with a content flag still present, and an edit identical to the source", () => {
+    const item = flaggedRow();
+    expect(buildAcceptancePayload(item, {
+      disposition: "shared",
+      edit: { responseTemplate: "Approval speed varies. Follow @legacy_strong." },
+    })).toEqual({ ok: false, code: "BRAIN_IMPORT_CONTENT_FLAGS_REMAIN" });
+    expect(buildAcceptancePayload(item, {
+      disposition: "shared",
+      edit: { responseTemplate: item.responseTemplate },
+    })).toEqual({ ok: false, code: "BRAIN_IMPORT_EDIT_UNCHANGED" });
+  });
+
+  it("accepts a rewritten row for the shared Brain and records the source flags as resolved by edit", () => {
+    const item = flaggedRow();
+    const payload = accepted(buildAcceptancePayload(item, {
+      disposition: "shared",
+      edit: { responseTemplate: "Approval timelines vary by lender and profile." },
+    }));
+    expect(payload.afterPayload.responseTemplate).toBe("Approval timelines vary by lender and profile.");
+    expect(payload.flags.every((flag) => flag.resolved)).toBe(true);
+    expect(payload.flags.filter((flag) => ["proof_claim", "social_handle"].includes(flag.code)))
+      .toEqual(item.flags.filter((flag) => ["proof_claim", "social_handle"].includes(flag.code)).map((flag) => ({
+        ...flag,
+        resolved: true,
+        resolution: { kind: "edited", value: null },
+      })));
+    expect(JSON.stringify(payload.flags)).not.toContain("legacy_strong");
+  });
+
+  it("re-scans the edit for figures and placeholders so a rewrite cannot smuggle an unbound number", () => {
+    const item = flaggedRow();
+    expect(buildAcceptancePayload(item, {
+      disposition: "shared",
+      edit: { responseTemplate: "Most people qualify with a 680 score." },
+    })).toEqual({ ok: false, code: "BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED" });
+    const rescan = flagImportRow({ ...item, proseShape: false, responseTemplate: "Most people qualify with a 680 score." });
+    const binding: NumberBinding = { ...rescan.figures[0], binding: "credit_min" };
+    expect(accepted(buildAcceptancePayload(item, {
+      disposition: "shared",
+      edit: { responseTemplate: "Most people qualify with a 680 score." },
+      numberBindings: [binding],
+    })).numberBindings).toEqual([binding]);
+  });
+
+  it("resolves a multi-category flag only by choosing one of the source categories", () => {
+    const [item] = normalizeImport([
+      sourceRow({
+        id: "multi-row",
+        category: ["Business", "Funding Qs"],
+        inbound: "Is this for businesses?",
+        response: "Yes, established businesses qualify.",
+      }),
+    ]).items;
+    expect(item.flags.map((flag) => flag.code)).toContain("multi_category");
+    expect(buildAcceptancePayload(item, {
+      disposition: "shared",
+      resolvedFlagIds: item.flags.map((flag) => flag.id),
+    })).toEqual({ ok: false, code: "BRAIN_IMPORT_CONTENT_FLAG_UNEDITED" });
+    expect(buildAcceptancePayload(item, {
+      disposition: "shared",
+      edit: { category: "Credit" },
+    })).toEqual({ ok: false, code: "BRAIN_IMPORT_EDIT_CATEGORY_INVALID" });
+    const payload = accepted(buildAcceptancePayload(item, {
+      disposition: "shared",
+      edit: { category: "Funding Qs" },
+    }));
+    expect(payload.afterPayload.category).toBe("Funding Qs");
+    expect(payload.flags.find((flag) => flag.code === "multi_category"))
+      .toMatchObject({ resolved: true, resolution: { kind: "edited", value: null } });
+  });
+
+  it("lets a quarantine disposition keep the source text but never marks it draft-eligible", () => {
+    const item = flaggedRow();
+    const payload = accepted(buildAcceptancePayload(item, {
+      disposition: "needs_rewrite",
+      resolvedFlagIds: item.flags.map((flag) => flag.id),
+    }));
+    expect(payload.platformDraftEligible).toBe(false);
+    expect(payload.afterPayload.responseTemplate).toBe(item.responseTemplate);
+  });
+
+  it("routes tenant_specific to a tenant or refuses", () => {
+    const item = flaggedRow();
+    const resolvedFlagIds = item.flags.map((flag) => flag.id);
+    expect(buildAcceptancePayload(item, { disposition: "tenant_specific", resolvedFlagIds }))
+      .toEqual({ ok: false, code: "BRAIN_IMPORT_TENANT_REQUIRED" });
+    expect(buildAcceptancePayload(item, { disposition: "tenant_specific", resolvedFlagIds, tenantId: "not-a-uuid" }))
+      .toEqual({ ok: false, code: "BRAIN_IMPORT_TENANT_REQUIRED" });
+    expect(buildAcceptancePayload(item, {
+      disposition: "shared",
+      edit: { responseTemplate: "Approval timelines vary." },
+      tenantId: "30000000-0000-4000-8000-000000000010",
+    })).toEqual({ ok: false, code: "BRAIN_IMPORT_TENANT_NOT_ALLOWED" });
+    expect(accepted(buildAcceptancePayload(item, {
+      disposition: "tenant_specific",
+      resolvedFlagIds,
+      tenantId: "30000000-0000-4000-8000-000000000010",
+    }))).toMatchObject({ tenantId: "30000000-0000-4000-8000-000000000010", platformDraftEligible: false });
+  });
+
+  it("scans brand names configured on the batch during normalization", () => {
+    const rows = [sourceRow({
+      id: "brand-row",
+      category: ["Credit"],
+      inbound: "Who runs this?",
+      response: "Northwind Coaching runs the program.",
+    })];
+    expect(normalizeImport(rows).items[0].flags.map((flag) => flag.code)).not.toContain("brand_name");
+    expect(normalizeImport(rows, PLACEHOLDER_REGISTRY, { brandNames: ["Northwind Coaching"] }).items[0].flags
+      .map((flag) => flag.code)).toContain("brand_name");
   });
 });
 
