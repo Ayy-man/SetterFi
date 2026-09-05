@@ -50,13 +50,15 @@ Prove a brain or model change against the safety and regression suites first.
 2. **Run the safety suite first.** Qualification, compliance, and prompt-injection cases are the gate. They matter more than tone cases because they are the ones that create a real incident.
 3. **Read the failures as receipts, not scores.** Each case opens to the grounding receipt: the rule that fired and the passage it drew from. That is where you see whether the case failed on knowledge or on the decision table.
 4. **Add the case that caused the change.** Any production conversation can be added as an eval case. A fix you add a case for stays fixed across later prompt and model swaps.
-5. **Carry the result into the publish.** The publish button reads the latest suite status. Run the suite last so the status the operator sees at publish time is the one you just produced.
+5. **Run the two live runners by hand after a prompt, checker or model change.** scripts/eval-engine.ts and scripts/eval-moderator.ts exercise the same corpora the nightly job and the Evals tab use, against the published Brain snapshot and the active generator and moderator rows, and print one line per case plus a summary without writing to the database. From the repository root, with the repository's .env.local and the stale shell exports unset: env -u SUPABASE_SERVICE_ROLE_KEY -u SUPABASE_ANON_KEY -u SUPABASE_JWT_SECRET zsh -c 'set -a; source .env.local; set +a; npx --yes tsx scripts/eval-engine.ts', and the same line with scripts/eval-moderator.ts. Both accept --only <category> and --limit <n>; the engine runner also takes --key <substring> and --json and exits 1 on any false_block, missed_by_checker or uncaught case. A full 48-case engine run costs about 0.01 OpenRouter credits, so run it freely. The moderator runner scores each of the 44 labelled cases as correct, false allow, false block, class mismatch or error, and reports strict and verdict-only accuracy with p50 and p95 latency.
+6. **Carry the result into the publish.** The publish button reads the latest suite status. Run the suite last so the status the operator sees at publish time is the one you just produced.
 
 ### Verify
 
 - The suite run shows the configuration you are about to publish, not the live one.
 - Every failing case opens to a receipt naming the rule and passage it used.
 - All eval traffic stays labeled as test data and never lands in client analytics.
+- A by-hand engine run exits 0 and its summary counts cases, passed, the six outcomes and the credits it spent; with --json it also names the snapshot and the generator and moderator rows it ran on.
 
 ### If verification fails
 
@@ -145,12 +147,15 @@ Triage system problems and lead handoffs from one queue, ranked by how long each
 1. **Read the order before you read the rows.** Both lanes rank by how long a row has waited. Nothing in the platform stores a response target or a reply promise, so no row is late and none is breaching. A long wait is the oldest thing here, not a missed commitment.
 2. **Work the system lane first, because those rows block replies.** A disconnected channel or a blocked provisioning step stops an agent from answering. Open the row, read the blast radius, and follow the account to the Health tab on Clients, which carries the provider's own error text. Read the receipt checklist there with care: the signed round-trip receipt has no write path yet, so an empty one means nothing was recorded rather than that the test failed.
 3. **Read the handoff lane as accounts, not as leads.** A handoff row names the account, the channel, what handed the thread over and how long it has waited. It never carries the lead's name or their message: those stay inside the coach's tenant, and the coach sees the thread in their own inbox. Contact the coach rather than trying to reach the lead.
-4. **Mark read when you are done looking, and say the rest out loud.** Marking read is the only per-row state the store keeps, and it means somebody looked. It does not mean the problem is fixed, and nothing records who is working a row, so hand off in writing rather than assuming the queue carries it.
+4. **Decide the follow-up copy waiting for approval.** Follow-up copy a coach submitted appears in the Inbox as its own panel, listed by workspace, channel and purpose, and the same queue is at /admin/followup-copy. An owner or admin approves or rejects each text with a required reason; the decision is logged and the row leaves the queue. Until copy is approved, that coach's follow-ups for the channel and purpose stay blocked, which is what the blocked counters on the followups receipt in System health are counting. Read the exact words: this is the text that will reach a lead.
+5. **Read a held reply the way the coach sees it.** When the engine held the agent's last draft, the coach's thread shows a Held panel with a plain-language reason, which layer held it (Checker or Moderator), the rule id, and the moderator's short note when the moderator held it. That panel is the whole of what a coach sees. The classes are NUM (a number not in the offer or the Brain), CLAIM (a promise the compliance lexicon forbids), ECHO (operator wording or instruction disclosure), LINK (an unapproved link), SCOPE (outside the agent's role), LEN (over the channel's hard length cap) and JUDGE (the moderator's final review). Checker holds are deterministic and repeat on the same input, so the fix is in the offer, the Brain or the allowlist; a Moderator hold carries the model's reason and is worth adding as an eval case. The full trace with its checks, prompt material and model configuration stays on the admin side.
+6. **Mark read when you are done looking, and say the rest out loud.** Marking read is the only per-row state the store keeps, and it means somebody looked. It does not mean the problem is fixed, and nothing records who is working a row, so hand off in writing rather than assuming the queue carries it.
 
 ### Verify
 
 - The waiting figure equals the unopened rows in the system lane plus the rows in the handoff lane.
 - A row you marked read shows Marked read and stays in the list rather than disappearing.
+- A follow-up copy decision needs a reason before the button records anything, and the row leaves the panel once it is logged.
 - With the cross-tenant handoff queue switched off, the lane says it is not counted rather than showing zero.
 
 ### If verification fails
@@ -294,12 +299,15 @@ Assess queue, jobs, and provider mode from receipts without exposing configurati
 **Outcome:** You can distinguish a current receipt, an explicit failure, and an unknown state.
 
 1. **Read queue evidence first.** Delivery queue depth, terminal attempts, and the latest attempt time are persisted facts. Unavailable means the evidence could not be read, not that the count is zero.
-2. **Check each job receipt.** A job is current only when a stored run receipt exists inside its expected window. A configured schedule with no receipt remains Unavailable.
-3. **Use provider mode as configuration state only.** System shows mock, real, or unavailable plus environment variable names. It never displays a key, webhook address, sender value, or other configuration value.
+2. **Check each job receipt.** A job is current only when a stored run receipt exists inside its expected window. A configured schedule with no receipt remains Unavailable. A receipt finishes as succeeded, failed or skipped; a job that reads Failed names its error.
+3. **Read Not configured as a job waiting on you, not a failure.** A scheduled job whose driver selector is deliberately unset finishes its receipt as skipped and reads Not configured, not Failed. Under the badge are the environment variable names the job is waiting on (names only, never values) and how long it has waited, measured from the start of the current unbroken run of skipped receipts naming the same variables, so a job skipped nightly for a month reads as waiting a month. One line above the jobs block counts the jobs waiting and lists the union of their variable names. Setting those variables in the deployment is the fix; nothing here needs a retry.
+4. **Read the counters on the followups, billing-cost-rollup and engine-evals receipts.** On the followups receipt, blocked and one blocked_<reason> counter per reason (today blocked_approved_followup_copy_required) count touches that were due but had no approved copy for their channel and purpose. They stay scheduled and are not failures; the fix is to approve the coach's copy from the Inbox. On the billing-cost-rollup receipt, estimates counts per-tenant roll-ups recomputed for a billing period that is still open; those rows are rewritten nightly and become final once computed at or after the period end. On the engine-evals receipt the counters are cases, passed, the six outcomes (caught, refused, missed_by_checker, uncaught, clean, false_block) and a judged or unjudged flag. An unjudged run means no moderator row was active, so every clean refusal the checker could not see scored as uncaught; activate a moderator row before reading that pass count as a regression.
+5. **Use provider mode as configuration state only.** System shows mock, real, or unavailable plus environment variable names. It never displays a key, webhook address, sender value, or other configuration value.
 
 ### Verify
 
 - Every Healthy or Failed label points to a persisted receipt and time.
+- Every Not configured label names at least one environment variable and a since time, and never a value.
 - Unknown queue, job, or provider evidence renders Unavailable.
 - No configuration value or mutation control appears on the page.
 
@@ -402,11 +410,13 @@ Interpret platform and agent-performance metrics only when their named evidence 
 1. **Start from the metric definition.** Overview and the Performance tab on Clients use the committed metric registry. The definition and the query must agree on population, attribution window, and exclusion of Demo and Test rows.
 2. **Treat absent evidence as absent.** Unavailable, No completed events yet, and Needs more history are evidence states. They never become zero, a dash, or a cached result presented as current.
 3. **Use the role boundary.** Success operators receive operational evidence only. Platform economics remain owner/admin-only and incomplete margin has no renderable field.
+4. **Reseed the demo with the seeders, in order, history last.** The demo tenants behind the Demo-labelled views are written by seeders only, never by hand. Run them in the order in docs/SETUP.md section 1.7, each one idempotent, and run scripts/seed-demo-history.mjs last and only after the chain above it, because it moves the demo tenants onto a twelve-month grid and exits naming the missing slugs if the earlier seeders have not landed. Against the hosted project every seeder needs --confirm-hosted. The phase 1 seeder also writes approved demo follow-up templates per connected channel and purpose so the simulated cadence sends, and it leaves the operator's active or default model rows alone when another row already holds them.
 
 ### Verify
 
 - The metric definition names the same window and population as the rendered view.
 - Demo and Test rows are excluded from real analytics and labelled in test-only views.
+- After a reseed, the Overview trend series draw twelve periods rather than one tall bar at the right edge.
 
 ### If verification fails
 
@@ -422,7 +432,7 @@ Operate fixed tiers and subscription state without exposing platform economics t
 
 1. **Read the subscription mirror.** The billing page uses persisted subscription and invoice evidence. A provider identifier on its own is not an active subscription receipt.
 2. **Separate overdue from suspended.** Overdue keeps the agent operating while dunning continues. Suspension is a reasoned human action that stops new conversations and follow-ups without silencing in-flight conversations.
-3. **Keep operating cost inside admin.** The platform cost rollup and running-cost handover are for the owner/operator. Coach replies contain allowance and account facts, never margin or cost-versus-revenue detail.
+3. **Keep operating cost inside admin.** The platform cost rollup and running-cost handover are for the owner/operator. Coach replies contain allowance and account facts, never margin or cost-versus-revenue detail. A per-tenant roll-up for a billing period that is still open is an estimate: the nightly job rewrites it in place and its receipt counts it under estimates, and it becomes final only once computed at or after the period end. Do not quote an open-period figure as a closed month.
 
 ### Verify
 

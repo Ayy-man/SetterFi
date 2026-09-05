@@ -13,7 +13,7 @@ path rather than being improvised here.
 
 ### Reversible
 
-Partly — selector changes are reversible; a provider-side rotation cannot be undone after the old credential is revoked.
+Partly: selector changes are reversible; a provider-side rotation cannot be undone after the old credential is revoked.
 
 ### Action
 
@@ -42,7 +42,7 @@ Partly — selector changes are reversible; a provider-side rotation cannot be u
 
 ### Reversible
 
-Yes — after the endpoint is healthy, the provider webhook can be re-enabled.
+Yes: after the endpoint is healthy, the provider webhook can be re-enabled.
 
 ### Action
 
@@ -70,7 +70,7 @@ Yes — after the endpoint is healthy, the provider webhook can be re-enabled.
 
 ### Reversible
 
-No — review decisions and provider asset states are external facts.
+No: review decisions and provider asset states are external facts.
 
 ### Action
 
@@ -126,7 +126,7 @@ Only with authoritative opt-in or provider confirmation; a tripwire hold require
 
 ### Reversible
 
-Yes — bounded retries remain idempotent while the queue lease and attempt records are intact.
+Yes: bounded retries remain idempotent while the queue lease and attempt records are intact.
 
 ### Action
 
@@ -210,7 +210,7 @@ Corrections use immutable offset events; suspension and reactivation require sep
 
 ### Reversible
 
-Yes — the source query is read-only and a fresh export receives a new audit pair.
+Yes: the source query is read-only and a fresh export receives a new audit pair.
 
 ### Action
 
@@ -226,3 +226,59 @@ Yes — the source query is read-only and a fresh export receives a new audit pa
 ### Undo
 
 1. Delete the incomplete local download; audit rows remain append-only and are not removed.
+
+---
+
+## Scheduled job skipped as Not configured
+
+### Detection evidence
+
+- System shows the job as Not configured rather than Failed, with the environment variable names it is waiting on and how long it has waited.
+- The job receipt outcome is skipped and its counters name the missing variables; the scheduler received a 200 so no retry is queued.
+
+### Reversible
+
+Yes: the job resumes on its next scheduled run once the named variables are set in deployment custody.
+
+### Action
+
+1. Confirm the selector was left unset on purpose; a job waiting since the deployment was created is a launch item, not an outage.
+2. Set the named variables in the deployment without copying any value into a ticket, document, log, or screenshot.
+3. Wait for the next scheduled run rather than invoking the job by hand.
+
+### Verify
+
+- The next receipt finishes succeeded or failed rather than skipped, and the Not configured badge and its since time are gone.
+- The waiting count above the jobs block falls by one and no longer lists those variable names.
+
+### Undo
+
+1. Unset the variables again if the real driver misbehaves; the job returns to skipped on its next run and the since time restarts from that receipt.
+
+---
+
+## Follow-ups blocked for want of approved copy
+
+### Detection evidence
+
+- The followups receipt counts blocked and blocked_approved_followup_copy_required while the job itself reads succeeded.
+- The Inbox follow-up copy panel, or /admin/followup-copy, lists the coach's submitted text for that channel and purpose, or nothing has been submitted yet.
+
+### Reversible
+
+Yes: a blocked touch stays scheduled and sends on the next run after copy for its channel and purpose is approved.
+
+### Action
+
+1. Read the submitted copy word for word, because it is the text a lead receives.
+2. Approve or reject it with the required reason; rejection returns it to the coach for edit and resubmission.
+3. If nothing was submitted, ask the coach to write and submit copy from their Agent page rather than approving placeholder text.
+
+### Verify
+
+- The decision has its audit receipt and the row has left the approvals queue.
+- The next followups receipt shows the blocked counters falling and sent rising for that tenant.
+
+### Undo
+
+1. There is no unapproval; if approved copy is wrong, ask the coach to submit a replacement and reject or approve that, since the send-side gate reads the current approved row.

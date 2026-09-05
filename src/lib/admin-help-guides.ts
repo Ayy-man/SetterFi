@@ -1,7 +1,7 @@
 /**
  * Operator-facing runbooks for the admin console. Separate from the coach guides on purpose:
  * these name platform operations (publishing the shared brain, reading a trace, adjusting a
- * metered count) that a coach must never see. Written steps only — no video stubs.
+ * metered count) that a coach must never see. Written steps only, no video stubs.
  */
 
 export type AdminGuideCategory =
@@ -103,6 +103,11 @@ export const ADMIN_GUIDES: AdminGuide[] = [
           "Any production conversation can be added as an eval case. A fix you add a case for stays fixed across later prompt and model swaps.",
       },
       {
+        heading: "Run the two live runners by hand after a prompt, checker or model change",
+        caption:
+          "scripts/eval-engine.ts and scripts/eval-moderator.ts exercise the same corpora the nightly job and the Evals tab use, against the published Brain snapshot and the active generator and moderator rows, and print one line per case plus a summary without writing to the database. From the repository root, with the repository's .env.local and the stale shell exports unset: env -u SUPABASE_SERVICE_ROLE_KEY -u SUPABASE_ANON_KEY -u SUPABASE_JWT_SECRET zsh -c 'set -a; source .env.local; set +a; npx --yes tsx scripts/eval-engine.ts', and the same line with scripts/eval-moderator.ts. Both accept --only <category> and --limit <n>; the engine runner also takes --key <substring> and --json and exits 1 on any false_block, missed_by_checker or uncaught case. A full 48-case engine run costs about 0.01 OpenRouter credits, so run it freely. The moderator runner scores each of the 44 labelled cases as correct, false allow, false block, class mismatch or error, and reports strict and verdict-only accuracy with p50 and p95 latency.",
+      },
+      {
         heading: "Carry the result into the publish",
         caption:
           "The publish button reads the latest suite status. Run the suite last so the status the operator sees at publish time is the one you just produced.",
@@ -112,6 +117,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       "The suite run shows the configuration you are about to publish, not the live one.",
       "Every failing case opens to a receipt naming the rule and passage it used.",
       "All eval traffic stays labeled as test data and never lands in client analytics.",
+      "A by-hand engine run exits 0 and its summary counts cases, passed, the six outcomes and the credits it spent; with --json it also names the snapshot and the generator and moderator rows it ran on.",
     ],
     troubleshoot:
       "If a suite passes here but a coach reports the old behavior, the run was against the published configuration rather than your draft. Re-run with draft selected.",
@@ -266,6 +272,16 @@ export const ADMIN_GUIDES: AdminGuide[] = [
           "A handoff row names the account, the channel, what handed the thread over and how long it has waited. It never carries the lead's name or their message: those stay inside the coach's tenant, and the coach sees the thread in their own inbox. Contact the coach rather than trying to reach the lead.",
       },
       {
+        heading: "Decide the follow-up copy waiting for approval",
+        caption:
+          "Follow-up copy a coach submitted appears in the Inbox as its own panel, listed by workspace, channel and purpose, and the same queue is at /admin/followup-copy. An owner or admin approves or rejects each text with a required reason; the decision is logged and the row leaves the queue. Until copy is approved, that coach's follow-ups for the channel and purpose stay blocked, which is what the blocked counters on the followups receipt in System health are counting. Read the exact words: this is the text that will reach a lead.",
+      },
+      {
+        heading: "Read a held reply the way the coach sees it",
+        caption:
+          "When the engine held the agent's last draft, the coach's thread shows a Held panel with a plain-language reason, which layer held it (Checker or Moderator), the rule id, and the moderator's short note when the moderator held it. That panel is the whole of what a coach sees. The classes are NUM (a number not in the offer or the Brain), CLAIM (a promise the compliance lexicon forbids), ECHO (operator wording or instruction disclosure), LINK (an unapproved link), SCOPE (outside the agent's role), LEN (over the channel's hard length cap) and JUDGE (the moderator's final review). Checker holds are deterministic and repeat on the same input, so the fix is in the offer, the Brain or the allowlist; a Moderator hold carries the model's reason and is worth adding as an eval case. The full trace with its checks, prompt material and model configuration stays on the admin side.",
+      },
+      {
         heading: "Mark read when you are done looking, and say the rest out loud",
         caption:
           "Marking read is the only per-row state the store keeps, and it means somebody looked. It does not mean the problem is fixed, and nothing records who is working a row, so hand off in writing rather than assuming the queue carries it.",
@@ -274,6 +290,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
     verify: [
       "The waiting figure equals the unopened rows in the system lane plus the rows in the handoff lane.",
       "A row you marked read shows Marked read and stays in the list rather than disappearing.",
+      "A follow-up copy decision needs a reason before the button records anything, and the row leaves the panel once it is logged.",
       "With the cross-tenant handoff queue switched off, the lane says it is not counted rather than showing zero.",
     ],
     troubleshoot:
@@ -483,7 +500,17 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Check each job receipt",
         caption:
-          "A job is current only when a stored run receipt exists inside its expected window. A configured schedule with no receipt remains Unavailable.",
+          "A job is current only when a stored run receipt exists inside its expected window. A configured schedule with no receipt remains Unavailable. A receipt finishes as succeeded, failed or skipped; a job that reads Failed names its error.",
+      },
+      {
+        heading: "Read Not configured as a job waiting on you, not a failure",
+        caption:
+          "A scheduled job whose driver selector is deliberately unset finishes its receipt as skipped and reads Not configured, not Failed. Under the badge are the environment variable names the job is waiting on (names only, never values) and how long it has waited, measured from the start of the current unbroken run of skipped receipts naming the same variables, so a job skipped nightly for a month reads as waiting a month. One line above the jobs block counts the jobs waiting and lists the union of their variable names. Setting those variables in the deployment is the fix; nothing here needs a retry.",
+      },
+      {
+        heading: "Read the counters on the followups, billing-cost-rollup and engine-evals receipts",
+        caption:
+          "On the followups receipt, blocked and one blocked_<reason> counter per reason (today blocked_approved_followup_copy_required) count touches that were due but had no approved copy for their channel and purpose. They stay scheduled and are not failures; the fix is to approve the coach's copy from the Inbox. On the billing-cost-rollup receipt, estimates counts per-tenant roll-ups recomputed for a billing period that is still open; those rows are rewritten nightly and become final once computed at or after the period end. On the engine-evals receipt the counters are cases, passed, the six outcomes (caught, refused, missed_by_checker, uncaught, clean, false_block) and a judged or unjudged flag. An unjudged run means no moderator row was active, so every clean refusal the checker could not see scored as uncaught; activate a moderator row before reading that pass count as a regression.",
       },
       {
         heading: "Use provider mode as configuration state only",
@@ -493,6 +520,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
     ],
     verify: [
       "Every Healthy or Failed label points to a persisted receipt and time.",
+      "Every Not configured label names at least one environment variable and a since time, and never a value.",
       "Unknown queue, job, or provider evidence renders Unavailable.",
       "No configuration value or mutation control appears on the page.",
     ],
@@ -646,10 +674,16 @@ export const ADMIN_GUIDES: AdminGuide[] = [
         caption:
           "Success operators receive operational evidence only. Platform economics remain owner/admin-only and incomplete margin has no renderable field.",
       },
+      {
+        heading: "Reseed the demo with the seeders, in order, history last",
+        caption:
+          "The demo tenants behind the Demo-labelled views are written by seeders only, never by hand. Run them in the order in docs/SETUP.md section 1.7, each one idempotent, and run scripts/seed-demo-history.mjs last and only after the chain above it, because it moves the demo tenants onto a twelve-month grid and exits naming the missing slugs if the earlier seeders have not landed. Against the hosted project every seeder needs --confirm-hosted. The phase 1 seeder also writes approved demo follow-up templates per connected channel and purpose so the simulated cadence sends, and it leaves the operator's active or default model rows alone when another row already holds them.",
+      },
     ],
     verify: [
       "The metric definition names the same window and population as the rendered view.",
       "Demo and Test rows are excluded from real analytics and labelled in test-only views.",
+      "After a reseed, the Overview trend series draw twelve periods rather than one tall bar at the right edge.",
     ],
     troubleshoot:
       "If a definition and number disagree, treat the metric as unavailable and escalate the projection rather than explaining the number from memory.",
@@ -675,7 +709,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       {
         heading: "Keep operating cost inside admin",
         caption:
-          "The platform cost rollup and running-cost handover are for the owner/operator. Coach replies contain allowance and account facts, never margin or cost-versus-revenue detail.",
+          "The platform cost rollup and running-cost handover are for the owner/operator. Coach replies contain allowance and account facts, never margin or cost-versus-revenue detail. A per-tenant roll-up for a billing period that is still open is an estimate: the nightly job rewrites it in place and its receipt counts it under estimates, and it becomes final only once computed at or after the period end. Do not quote an open-period figure as a closed month.",
       },
     ],
     verify: [
