@@ -35,6 +35,7 @@ import {
 } from "@/lib/env-contract";
 import { loadSafetyCorpus } from "@/lib/evals/corpus";
 import { evaluatePublishGate } from "@/lib/evals/publish-gate";
+import { loadBrainKnowledgePublishCounts } from "@/lib/repositories/brain-knowledge-counts";
 import { loadEvalRun } from "@/lib/repositories/eval-runs";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -107,6 +108,8 @@ async function loadAdminBrainStateValue(): Promise<AdminBrainInitialState> {
   const failed = [batchResult, missionResult, qualificationResult, complianceResult, knowledgeResult, objectionsResult, snapshotsResult, draftResult, traceResult]
     .find((result) => result.error);
   if (failed?.error) throw new Error(`ADMIN_BRAIN_READ_FAILED:${failed.error.message}`);
+  // Sourced from the snapshot table, not `status`: see `knowledgePublishCounts`.
+  const knowledgePublish = await loadBrainKnowledgePublishCounts();
 
   const batchRow = batchResult.data;
   const itemsResult = batchRow
@@ -237,6 +240,7 @@ async function loadAdminBrainStateValue(): Promise<AdminBrainInitialState> {
       createdAt: trace.created_at,
     } : null,
     currentSnapshotPayload: snapshotsResult.data?.[0] ? record(snapshotsResult.data[0].payload) : null,
+    knowledgePublish,
   };
 }
 

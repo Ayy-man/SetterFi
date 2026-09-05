@@ -15,6 +15,7 @@ import type {
   ExistingBrainEntry,
 } from "@/lib/repositories/brain-import";
 
+import { DEFAULT_BRAND_NAMES } from "./flags";
 import {
   embeddingRequests,
   normalizeImport,
@@ -142,7 +143,7 @@ function errorCode(stage: string, error: unknown) {
 }
 
 export async function runBrainImport(
-  input: { collectionRef: string; actorId: string },
+  input: { collectionRef: string; actorId: string; brandNames?: readonly string[] },
   dependencies: {
     source: FaqSourceDriver;
     embeddings: ImportEmbeddingsDriver;
@@ -150,10 +151,12 @@ export async function runBrainImport(
     registry?: PlaceholderRegistry;
   },
 ): Promise<BrainImportResult> {
+  const brandNames = input.brandNames ?? DEFAULT_BRAND_NAMES;
   const { batchId } = await dependencies.repository.createBatch({
     source: dependencies.source.source,
     collectionRef: input.collectionRef,
     actorId: input.actorId,
+    brandNames,
   });
   const rows: unknown[] = [];
   const editedAt: Array<string | null> = [];
@@ -179,7 +182,7 @@ export async function runBrainImport(
     } while (cursor !== undefined);
 
     stage = "IMPORT_NORMALIZATION_FAILED";
-    const normalized = normalizeImport(rows, dependencies.registry ?? PLACEHOLDER_REGISTRY);
+    const normalized = normalizeImport(rows, dependencies.registry ?? PLACEHOLDER_REGISTRY, { brandNames });
     const refs = normalized.items.map((item) => item.sourceRef);
     if (new Set(refs).size !== refs.length) throw new Error("IMPORT_DUPLICATE_SOURCE_REF");
 

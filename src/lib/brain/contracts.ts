@@ -40,8 +40,19 @@ export type ImportFlagCode =
   | "unknown_placeholder"
   | "bare_x"
   | "multi_category"
-  | "prose_shape";
+  | "prose_shape"
+  | "social_handle"
+  | "brand_name"
+  | "proof_claim";
 export type ImportDisposition = "shared" | "tenant_specific" | "needs_rewrite";
+/**
+ * A disposition and where it routes. `tenant_specific` is a route, not a quarantine label, so it
+ * carries the tenant the knowledge entry is scoped to; the other two never carry one.
+ */
+export type ImportDispositionPayload = {
+  disposition: ImportDisposition;
+  tenantId: string | null;
+};
 
 export type PublishedOfferPrice = {
   id: string;

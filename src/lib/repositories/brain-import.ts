@@ -14,7 +14,7 @@ import type {
   ImportFlag,
   NumberBinding,
 } from "@/lib/brain/import/flags";
-import { allBlockingFlagsResolved } from "@/lib/brain/import/flags";
+import { allBlockingFlagsResolved, isContentFlag } from "@/lib/brain/import/flags";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export type BrainImportSource = "notion" | "offline" | "mock";
@@ -47,9 +47,19 @@ export type BrainImportAcceptanceReceipt = {
   itemId: string;
   sourceRef: string;
   disposition: ImportDisposition;
+  tenantId: string | null;
   draftEntryId: string;
   auditId: number;
   auditAction: "brain.import.accepted";
+};
+
+export type BrainImportRejectionReceipt = {
+  batchId: string;
+  itemId: string;
+  sourceRef: string;
+  decision: "rejected";
+  auditId: number;
+  auditAction: "brain.import.rejected";
 };
 
 export type BrainImportRepository = {
@@ -57,6 +67,8 @@ export type BrainImportRepository = {
     source: BrainImportSource;
     collectionRef: string;
     actorId: string;
+    /** Brand names the batch was scanned against; stored so review re-scans use the same list. */
+    brandNames: readonly string[];
   }): Promise<{ batchId: string }>;
   loadExisting(source: BrainImportSource): Promise<readonly ExistingBrainEntry[]>;
   completeBatch(input: {
@@ -78,10 +90,20 @@ type AcceptanceReadback = {
   entryId: string;
   sourceRef: string;
   disposition: ImportDisposition;
+  tenantId: string | null;
   status: string;
   auditId: number;
   action: string;
   entityId: string;
+};
+type RejectionRpcRow = { audit_id: number };
+type RejectionReadback = {
+  itemId: string;
+  decision: string;
+  auditId: number;
+  action: string;
+  entityId: string;
+  reason: string | null;
 };
 
 export type BrainImportPersistenceDependencies = {
@@ -98,6 +120,7 @@ export type BrainImportPersistenceDependencies = {
     itemId: string;
     sourceRef: string;
     disposition: ImportDisposition;
+    tenantId: string | null;
     afterPayload: NormalizedImportPayload;
     flags: readonly ImportFlag[];
     numberBindings: readonly NumberBinding[];
@@ -105,6 +128,8 @@ export type BrainImportPersistenceDependencies = {
   }): Promise<{ id: string }>;
   callAccept(args: Record<string, unknown>): Promise<AcceptanceRpcRow>;
   readAcceptance(entryId: string, auditId: number): Promise<AcceptanceReadback>;
+  callReject(args: Record<string, unknown>): Promise<RejectionRpcRow>;
+  readRejection(itemId: string, auditId: number): Promise<RejectionReadback>;
 };
 
 async function liveDependencies(): Promise<BrainImportPersistenceDependencies> {
@@ -154,6 +179,7 @@ async function liveDependencies(): Promise<BrainImportPersistenceDependencies> {
         .from("brain_import_items")
         .update({
           disposition: input.disposition,
+          tenant_id: input.tenantId,
           after_payload: { ...input.afterPayload, embedding: input.embedding },
           flags: input.flags,
           number_bindings: input.numberBindings,
@@ -177,12 +203,14 @@ async function liveDependencies(): Promise<BrainImportPersistenceDependencies> {
       const [{ data: entry, error: entryError }, { data: audit, error: auditError }] = await Promise.all([
         client
           .from("brain_knowledge_entries")
-          .select("id, source_ref, disposition, status")
+          .select("id, source_ref, disposition, tenant_id, status")
           .eq("id", entryId)
           .single(),
+        // `audit_log` names the row it describes `target_id` (phase 1 renamed `target` to
+        // `target_type` and added `target_id`); there is no `entity_id` column.
         client
           .from("audit_log")
-          .select("id, action, entity_id")
+          .select("id, action, target_id")
           .eq("id", auditId)
           .single(),
       ]);
@@ -193,10 +221,41 @@ async function liveDependencies(): Promise<BrainImportPersistenceDependencies> {
         entryId: entry.id,
         sourceRef: entry.source_ref as string,
         disposition: entry.disposition as ImportDisposition,
+        tenantId: typeof entry.tenant_id === "string" ? entry.tenant_id : null,
         status: entry.status,
         auditId: Number(audit.id),
         action: audit.action,
-        entityId: audit.entity_id,
+        entityId: String(audit.target_id ?? ""),
+      };
+    },
+    callReject: async (args) => {
+      const { data, error } = await client.rpc("reject_brain_import_item", args);
+      if (error || typeof data !== "number") throw new Error("BRAIN_IMPORT_REJECT_FAILED");
+      return { audit_id: data };
+    },
+    readRejection: async (itemId, auditId) => {
+      const [{ data: item, error: itemError }, { data: audit, error: auditError }] = await Promise.all([
+        client
+          .from("brain_import_items")
+          .select("id, decision")
+          .eq("id", itemId)
+          .single(),
+        client
+          .from("audit_log")
+          .select("id, action, target_id, reason")
+          .eq("id", auditId)
+          .single(),
+      ]);
+      if (itemError || auditError || !item || !audit) {
+        throw new Error("BRAIN_IMPORT_REJECT_READBACK_FAILED");
+      }
+      return {
+        itemId: item.id,
+        decision: item.decision,
+        auditId: Number(audit.id),
+        action: audit.action,
+        entityId: String(audit.target_id ?? ""),
+        reason: typeof audit.reason === "string" ? audit.reason : null,
       };
     },
   };
@@ -241,6 +300,7 @@ export function createBrainImportRepository(
         flagged_count: 0,
         unchanged_count: 0,
         status: "open",
+        brand_names: input.brandNames.map((name) => name.trim()).filter((name) => name.length > 0),
         created_by: required(input.actorId, "BRAIN_IMPORT_ACTOR_REQUIRED"),
       });
       return { batchId: created.id };
@@ -292,6 +352,8 @@ export async function acceptBrainImportItem(
     itemId: string;
     sourceRef: string;
     disposition: ImportDisposition;
+    /** Required exactly when `disposition` is `tenant_specific`. */
+    tenantId?: string | null;
     afterPayload: NormalizedImportPayload;
     flags: readonly ImportFlag[];
     numberBindings: readonly NumberBinding[];
@@ -307,6 +369,21 @@ export async function acceptBrainImportItem(
   if (!allBlockingFlagsResolved(input.flags)) {
     throw new Error("BRAIN_IMPORT_BLOCKING_FLAGS_UNRESOLVED");
   }
+  // A content flag on a shared row may only be resolved by an edit that re-scanned clean. The
+  // review payload builder enforces this too; repeating it here keeps a caller that bypasses the
+  // builder from releasing ticked-but-unedited copy.
+  if (input.disposition === "shared" && input.flags.some((flag) =>
+    isContentFlag(flag) && flag.resolution?.kind !== "edited",
+  )) {
+    throw new Error("BRAIN_IMPORT_CONTENT_FLAG_NOT_EDITED");
+  }
+  const tenantId = typeof input.tenantId === "string" && input.tenantId.trim() ? input.tenantId.trim() : null;
+  if (input.disposition === "tenant_specific" && tenantId === null) {
+    throw new Error("BRAIN_IMPORT_TENANT_REQUIRED");
+  }
+  if (input.disposition !== "tenant_specific" && tenantId !== null) {
+    throw new Error("BRAIN_IMPORT_TENANT_NOT_ALLOWED");
+  }
   const batchId = required(input.batchId, "BRAIN_IMPORT_BATCH_REQUIRED");
   const itemId = required(input.itemId, "BRAIN_IMPORT_ITEM_REQUIRED");
   const sourceRef = required(input.sourceRef, "BRAIN_IMPORT_SOURCE_REF_REQUIRED");
@@ -315,6 +392,7 @@ export async function acceptBrainImportItem(
     itemId,
     sourceRef,
     disposition: input.disposition,
+    tenantId,
     afterPayload: input.afterPayload,
     flags: input.flags,
     numberBindings: input.numberBindings,
@@ -326,6 +404,7 @@ export async function acceptBrainImportItem(
     p_expected_source_ref: sourceRef,
     p_item_id: itemId,
     p_disposition: input.disposition,
+    p_tenant_id: tenantId,
     p_number_bindings: input.numberBindings,
     p_embedding: input.embedding,
     p_actor_id: required(input.actorId, "BRAIN_IMPORT_ACTOR_REQUIRED"),
@@ -335,6 +414,7 @@ export async function acceptBrainImportItem(
     readback.entryId !== rpc.knowledge_entry_id
     || readback.sourceRef !== sourceRef
     || readback.disposition !== input.disposition
+    || readback.tenantId !== tenantId
     || readback.status !== "draft"
     || readback.auditId !== rpc.audit_id
     || readback.action !== "brain.import.accepted"
@@ -347,8 +427,57 @@ export async function acceptBrainImportItem(
     itemId,
     sourceRef,
     disposition: input.disposition,
+    tenantId,
     draftEntryId: readback.entryId,
     auditId: readback.auditId,
     auditAction: "brain.import.accepted",
+  };
+}
+
+/**
+ * Reject a pending import row. The SQL RPC flips the decision and writes the audit row in one
+ * transaction; the reason is required because a rejected row leaves no entry behind to explain
+ * itself.
+ */
+export async function rejectBrainImportItem(
+  input: {
+    batchId: string;
+    itemId: string;
+    sourceRef: string;
+    reason: string;
+    actorId: string;
+  },
+  provided?: BrainImportPersistenceDependencies,
+): Promise<BrainImportRejectionReceipt> {
+  const deps = provided ?? (await liveDependencies());
+  const reason = required(input.reason, "BRAIN_IMPORT_REJECT_REASON_REQUIRED");
+  const batchId = required(input.batchId, "BRAIN_IMPORT_BATCH_REQUIRED");
+  const itemId = required(input.itemId, "BRAIN_IMPORT_ITEM_REQUIRED");
+  const sourceRef = required(input.sourceRef, "BRAIN_IMPORT_SOURCE_REF_REQUIRED");
+  const rpc = await deps.callReject({
+    p_expected_batch_id: batchId,
+    p_expected_source_ref: sourceRef,
+    p_item_id: itemId,
+    p_reason: reason,
+    p_actor_id: required(input.actorId, "BRAIN_IMPORT_ACTOR_REQUIRED"),
+  });
+  const readback = await deps.readRejection(itemId, rpc.audit_id);
+  if (
+    readback.itemId !== itemId
+    || readback.decision !== "rejected"
+    || readback.auditId !== rpc.audit_id
+    || readback.action !== "brain.import.rejected"
+    || readback.entityId !== itemId
+    || readback.reason !== reason
+  ) {
+    throw new Error("BRAIN_IMPORT_REJECT_READBACK_MISMATCH");
+  }
+  return {
+    batchId,
+    itemId,
+    sourceRef,
+    decision: "rejected",
+    auditId: readback.auditId,
+    auditAction: "brain.import.rejected",
   };
 }
