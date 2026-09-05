@@ -45,7 +45,7 @@ export function createReleaseHandler(dependencies: ReleaseDependencies) {
         actorId: actor.userId,
         expectedHolderId: body.expectedHolderId,
       });
-      const conversation = await dependencies.loadConversation(actor.tenantId, id);
+      const conversation = await dependencies.loadConversation(actor.tenantId, id, actor.userId);
       if (!conversation.disclosurePending) throw new Error("DISCLOSURE_READBACK_REQUIRED");
       return Response.json({ conversation: conversationResponse(conversation), audit: result.audit }, { headers: noStoreHeaders });
     } catch (error) {

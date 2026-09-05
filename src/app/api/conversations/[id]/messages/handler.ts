@@ -1,6 +1,7 @@
 import type { AuditReceipt } from "@/lib/audit";
 import { createHash } from "node:crypto";
 import { AUDIT_ACTIONS, type AuditActionKey } from "@/lib/audit/actions";
+import { isSimulatedProviderMessageId } from "@/lib/integrations/simulated";
 import { loadRouteActor, type RouteActor } from "@/lib/auth/actors";
 import { hasImpersonationMarker } from "@/lib/auth/claims";
 import { canWriteConversation, conversationMutationRefusal } from "@/lib/conversation-state";
@@ -107,6 +108,7 @@ export async function writeHumanMessage(input: {
       body: message.body,
       createdAt: message.created_at,
       delivered: message.direction === "out" && message.provider_message_id !== null,
+      simulated: isSimulatedProviderMessageId(message.provider_message_id),
     },
     audit: {
       auditId: String(audit.id),
@@ -124,7 +126,7 @@ export async function sendHumanReply(input: {
   body: string;
   quietHoursOverride: boolean;
 }): Promise<HumanReplyResult> {
-  const conversation = await loadConversationForRoute(input.tenantId, input.conversationId);
+  const conversation = await loadConversationForRoute(input.tenantId, input.conversationId, input.actorId);
   if (conversation.status !== "human" || conversation.takenOverBy !== input.actorId) {
     throw new Error("CONVERSATION_REPLY_STALE");
   }
@@ -177,6 +179,7 @@ export async function sendHumanReply(input: {
       body: message.body,
       createdAt: message.created_at,
       delivered: true,
+      simulated: isSimulatedProviderMessageId(result.receipt.providerMessageId),
     },
     audit: {
       auditId: String(audit.id),
@@ -254,7 +257,7 @@ export function createHumanMessageHandler(dependencies: HumanMessageDependencies
       if (body.kind === "internal_note" && sent.message.direction !== "system") {
         throw new Error("INTERNAL_NOTE_DELIVERY_INVALID");
       }
-      const conversation = await dependencies.loadConversation(actor.tenantId, id);
+      const conversation = await dependencies.loadConversation(actor.tenantId, id, actor.userId);
       return Response.json({
         message: { ...sent.message },
         conversation: conversationResponse(conversation),

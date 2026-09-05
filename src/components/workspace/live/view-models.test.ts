@@ -44,8 +44,8 @@ describe("deriveConversationView", () => {
     const disclosure = "For transparency, I’m the automated assistant helping the team.";
     const released = conversation({
       messages: [
-        { id: "system-1", direction: "system", author: "system", body: "Conversation handed back", createdAt: "2026-08-17T00:00:01.000Z", delivered: true },
-        { id: "out-1", direction: "out", author: "agent", body: `${disclosure} How can I help?`, createdAt: "2026-08-17T00:00:02.000Z", delivered: true },
+        { id: "system-1", direction: "system", author: "system", body: "Conversation handed back", createdAt: "2026-08-17T00:00:01.000Z", delivered: true, simulated: false, },
+        { id: "out-1", direction: "out", author: "agent", body: `${disclosure} How can I help?`, createdAt: "2026-08-17T00:00:02.000Z", delivered: true, simulated: false, },
       ],
     });
 

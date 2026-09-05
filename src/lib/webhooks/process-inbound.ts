@@ -2717,7 +2717,7 @@ async function processClaimedLiveWebhookReceipt(
   // Lifecycle receipts carry an install envelope, not a normalized message batch. UNINSTALL is
   // named here explicitly so it can never fall through to the inbound engine.
   if (!receipt.tenantId || receipt.eventType === "INSTALL" || receipt.eventType === "UNINSTALL") {
-    return;
+    return null;
   }
   let batch: NormalizedInboundBatch;
   try {
@@ -2726,7 +2726,7 @@ async function processClaimedLiveWebhookReceipt(
     await finish("failed", "INBOUND_RECEIPT_INVALID");
     throw error;
   }
-  await processInboundReceipt({
+  return processInboundReceipt({
     id: receipt.id,
     leaseToken: receipt.leaseToken,
     attemptNumber: receipt.attemptNumber,
@@ -2736,14 +2736,21 @@ async function processClaimedLiveWebhookReceipt(
   }, liveInboundDependencies(finish));
 }
 
-/** Live composition first acquires database custody, so request callbacks and recovery workers race safely. */
+/** What one processed receipt did per event, as the processor itself reports it. */
+export type ProcessedInboundBatch = Awaited<ReturnType<typeof processInboundReceipt>>;
+
+/**
+ * Live composition first acquires database custody, so request callbacks and recovery workers race
+ * safely. Resolves to the processor's own per-event outcome, or null when the receipt was not ours
+ * to claim or carried a lifecycle envelope rather than a message batch.
+ */
 export async function processLiveWebhookReceipt(
   receipt: WebhookReceiptRead,
   dependencies: InboundReceiptRecoveryDependencies = liveInboundReceiptRecoveryDependencies(),
-): Promise<void> {
+): Promise<ProcessedInboundBatch | null> {
   const [claimed] = await dependencies.claim({ receiptId: receipt.id, limit: 1 });
-  if (!claimed) return;
-  await processClaimedLiveWebhookReceipt(claimed, dependencies);
+  if (!claimed) return null;
+  return (await processClaimedLiveWebhookReceipt(claimed, dependencies)) ?? null;
 }
 
 /** Independently retries ordinary GHL and Meta receipts after request-scoped work exits. */

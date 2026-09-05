@@ -50,6 +50,12 @@ export type CoachInboxProps = {
   /** The tenant's conversation set, read once on the server. */
   initialConversations: ConversationRead[];
   /**
+   * Rehearsal is on for this workspace: a test thread offers "send as the lead", which plays the
+   * lead's next message through the real inbound path and the simulated send arm. Resolved on
+   * the server from the flag, so the control is absent rather than disabled when it is off.
+   */
+  rehearsal?: boolean;
+  /**
    * The ids surviving the active view, resolved on the server from the repository's own
    * `conversationViewStatuses` so the view boundary and the status enum cannot drift apart.
    * Absent, every row shows.
@@ -480,6 +486,7 @@ export function CoachInbox({
   enabled = true,
   fixtureMode = false,
   impersonation = null,
+  rehearsal = false,
   viewerId = null,
   nowIso = null,
 }: CoachInboxProps) {
@@ -495,6 +502,15 @@ export function CoachInbox({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  // Both carry the thread they belong to, so a notice or a half-written line never follows the
+  // reader to the next thread; reading them through `selected.id` is the reset.
+  const [rehearsalDraftState, setRehearsalDraftState] = useState<{ threadId: string; text: string } | null>(null);
+  const [rehearsalBusy, setRehearsalBusy] = useState(false);
+  const [rehearsalOutcomeState, setRehearsalOutcomeState] = useState<{
+    threadId: string;
+    tone: "good" | "warning" | "critical";
+    text: string;
+  } | null>(null);
   const [quietHours, setQuietHours] = useState(false);
   const [audit, setAudit] = useState<AuditReceipt | null>(null);
   const [railOpen, setRailOpen] = useState(true);
@@ -547,6 +563,14 @@ export function CoachInbox({
   const lastTakeoverId = selected
     ? [...selected.messages].reverse().find(isTakeover)?.id ?? null
     : null;
+  const rehearsalDraft = selected && rehearsalDraftState?.threadId === selected.id ? rehearsalDraftState.text : "";
+  const rehearsalOutcome = selected && rehearsalOutcomeState?.threadId === selected.id ? rehearsalOutcomeState : null;
+  const setRehearsalDraft = (text: string) => {
+    if (selected) setRehearsalDraftState({ threadId: selected.id, text });
+  };
+  const setRehearsalOutcome = (outcome: { tone: "good" | "warning" | "critical"; text: string } | null) => {
+    if (selected) setRehearsalOutcomeState(outcome ? { threadId: selected.id, ...outcome } : null);
+  };
 
   /*
    * A thread opens on its newest message, the way every messaging app a coach already uses does.
@@ -605,6 +629,7 @@ export function CoachInbox({
                 body: options.body?.trim() ?? "",
                 createdAt: now,
                 delivered: false,
+                simulated: false,
               }],
             };
       setPersisted((rows) => rows.map((row) => row.id === original.id ? next : row));
@@ -668,6 +693,83 @@ export function CoachInbox({
       setFeedback("The request did not complete. Nothing changed here; retry when ready.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  /*
+   * The lead's next message, played for real. The route writes the same receipt a provider
+   * webhook writes and runs the same processor, so what comes back is the reloaded thread plus a
+   * receipt that says what happened: a reply (simulated, never sent), a hold, or the processor's
+   * own error code. Each of those is printed as itself; nothing here reads as "sent" unless the
+   * evidence row exists.
+   */
+  async function rehearse() {
+    if (!selected || rehearsalBusy || readOnly || fixtureMode) return;
+    const body = rehearsalDraft.trim();
+    if (!body) return;
+    setRehearsalBusy(true);
+    setRehearsalOutcome(null);
+    try {
+      const response = await fetch(
+        `/api/conversations/${encodeURIComponent(selected.id)}/rehearse`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) },
+      );
+      const payload: unknown = await response.json();
+      const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+      const readBack = readMutationResponse(payload);
+      if (!response.ok || !readBack) {
+        const code = typeof record.code === "string" ? record.code : `HTTP_${response.status}`;
+        const message = typeof record.message === "string" ? record.message : "The rehearsal did not run.";
+        setRehearsalOutcome({ tone: "critical", text: `${message} (${code})` });
+        return;
+      }
+      setPersisted((rows) => rows.map((row) => row.id === selected.id ? readBack.conversation : row));
+      setRehearsalDraft("");
+      const outcome = record.rehearsal && typeof record.rehearsal === "object"
+        ? record.rehearsal as {
+            receiptStatus?: string;
+            turn?: { kind: string; reason: string | null } | null;
+            error?: string | null;
+            conversationStatus?: string | null;
+            reply?: { simulated?: boolean } | null;
+          }
+        : null;
+      if (!outcome || outcome.receiptStatus !== "processed") {
+        setRehearsalOutcome({
+          tone: "critical",
+          text: `The inbound receipt finished ${outcome?.receiptStatus ?? "unknown"}: ${outcome?.error ?? "no error recorded"}.`,
+        });
+      } else if (outcome.reply) {
+        setRehearsalOutcome({
+          tone: "good",
+          text: outcome.reply.simulated
+            ? "Your agent replied. The send was simulated and recorded as evidence; no message left the platform."
+            : "Your agent replied and the send was recorded.",
+        });
+      } else {
+        const turn = outcome.turn;
+        const because = turn?.kind === "refused"
+          ? `the send was refused: ${turn.reason ?? "no reason given"}`
+          : turn?.kind === "deferred"
+            ? "it is quiet hours where the lead is, so the reply is scheduled for when they end"
+          : turn?.kind === "held"
+            ? "the reply was held for you"
+            : turn?.kind === "no_send"
+              ? "the engine chose not to reply"
+              : turn?.kind === "control"
+                ? "the message was a control keyword"
+                : turn?.kind
+                  ? `the processor reported ${turn.kind}`
+                  : "the processor reported nothing";
+        setRehearsalOutcome({
+          tone: turn?.kind === "refused" ? "critical" : "warning",
+          text: `Received, and your agent did not reply: ${because}. The thread is ${outcome.conversationStatus ?? "unchanged"}${outcome.error ? ` (${outcome.error})` : ""}.`,
+        });
+      }
+    } catch {
+      setRehearsalOutcome({ tone: "critical", text: "The rehearsal request did not complete." });
+    } finally {
+      setRehearsalBusy(false);
     }
   }
 
@@ -1194,6 +1296,14 @@ export function CoachInbox({
                           data-slot="inbox-stamp"
                         >
                           {stamp ? `${sender}, ${stamp}` : sender}
+                          {message.simulated ? (
+                            <span
+                              className="ml-[8px] rounded-[6px] border border-current px-[6px] text-[14px] uppercase tracking-[0.04em]"
+                              data-provenance="simulated"
+                            >
+                              Simulated
+                            </span>
+                          ) : null}
                         </p>
                       </div>
                     )];
@@ -1307,6 +1417,58 @@ export function CoachInbox({
                     </p>
                   ) : null}
                 </form>
+                {rehearsal && selected.isTest && !fixtureMode ? (
+                  <form
+                    aria-label="Rehearse as the lead"
+                    className="shrink-0 border-t border-dashed border-[var(--line)] bg-[var(--pane)] px-[16px] pt-[14px] pb-[20px] sm:px-[28px]"
+                    data-slot="inbox-rehearsal"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void rehearse();
+                    }}
+                  >
+                    <p className="m-0 mb-[8px] text-[14px] leading-[1.4] text-[color:var(--muted)]">
+                      Test thread. Write what {leadFirstName} would say next and your agent answers
+                      for real: the same inbound path, the same checks, and a simulated send that is
+                      recorded but never leaves the platform.
+                    </p>
+                    <div className="flex flex-col items-stretch gap-[10px] rounded-[11px] border border-[var(--line-input)] bg-[var(--well)] py-[12px] pr-[12px] pl-[16px] sm:flex-row sm:items-end sm:gap-[14px]">
+                      <textarea
+                        aria-label={`Send as ${leadFirstName}`}
+                        className="min-h-[48px] min-w-0 flex-1 resize-none bg-transparent py-[12px] text-[16px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--faint)] disabled:opacity-55"
+                        data-coach-target="exempt"
+                        disabled={rehearsalBusy || readOnly}
+                        maxLength={1_000}
+                        onChange={(event) => setRehearsalDraft(event.target.value)}
+                        placeholder={`What ${leadFirstName} says next`}
+                        rows={1}
+                        value={rehearsalDraft}
+                      />
+                      <button
+                        className={`${BUTTON_QUIET_CLASS} max-sm:w-full`}
+                        disabled={rehearsalBusy || readOnly || !rehearsalDraft.trim()}
+                        type="submit"
+                      >
+                        {rehearsalBusy ? "Your agent is answering" : `Send as ${leadFirstName}`}
+                      </button>
+                    </div>
+                    {rehearsalOutcome ? (
+                      <p
+                        className={[
+                          "m-0 mt-[10px] text-[16px]",
+                          rehearsalOutcome.tone === "good"
+                            ? "font-medium text-[color:var(--good-text)]"
+                            : rehearsalOutcome.tone === "warning"
+                              ? "text-[color:var(--warning-text)]"
+                              : "font-medium text-[color:var(--critical-text)]",
+                        ].join(" ")}
+                        role="status"
+                      >
+                        {rehearsalOutcome.text}
+                      </p>
+                    ) : null}
+                  </form>
+                ) : null}
               </>
             ) : (
               <div className="flex flex-1 items-center justify-center p-[28px] text-center text-[16px] text-[color:var(--muted)]">

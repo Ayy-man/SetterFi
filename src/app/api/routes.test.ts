@@ -165,7 +165,7 @@ describe("signed webhook receipts", () => {
     } = {},
   ) {
     const order: string[] = [];
-    const scheduled: Array<() => Promise<void>> = [];
+    const scheduled: Array<() => Promise<unknown>> = [];
     const persistReceipt = vi.fn(async (input) => {
       order.push("receipt");
       if (behavior.persistFailure) throw new Error("DB_UNAVAILABLE");
@@ -712,7 +712,7 @@ describe("handoff and human-message contracts", () => {
       write: async (input) => ({
         message: {
           id: "message-1", direction: "system", author: `human:${input.actorId}`,
-          body: input.body, createdAt: "2026-08-17T00:00:00.000Z", delivered: false,
+          body: input.body, createdAt: "2026-08-17T00:00:00.000Z", delivered: false, simulated: false,
         },
         audit: {
           ...audit,
@@ -725,7 +725,7 @@ describe("handoff and human-message contracts", () => {
     });
     const response = await handler(post({ kind: "internal_note", body: "Test note", expectedState: "human" }), context());
     expect(await response.json()).toMatchObject({
-      message: { direction: "system", delivered: false },
+      message: { direction: "system", delivered: false, simulated: false, },
       audit: { actionKey: "conversation.internal_note.added" },
     });
     expect(adapter).not.toHaveBeenCalled();
@@ -735,7 +735,7 @@ describe("handoff and human-message contracts", () => {
     const sendReply = vi.fn(async (input) => ({
       message: {
         id: "message-2", direction: "out" as const, author: `human:${input.actorId}`,
-        body: input.body, createdAt: "2026-08-17T00:00:00.000Z", delivered: false,
+        body: input.body, createdAt: "2026-08-17T00:00:00.000Z", delivered: false, simulated: false,
       },
       audit: {
         ...audit,
@@ -766,7 +766,7 @@ describe("handoff and human-message contracts", () => {
             kind: "sent" as const,
             message: {
               id: "message-quiet", direction: "out" as const, author: `human:${input.actorId}`,
-              body: input.body, createdAt: "2026-08-17T00:00:00.000Z", delivered: true,
+              body: input.body, createdAt: "2026-08-17T00:00:00.000Z", delivered: true, simulated: false,
             },
             audit,
           }

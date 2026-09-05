@@ -213,7 +213,12 @@ export async function sendToLead(
 
   const hash = (dependencies.hashIdentifier ?? hashSuppressionIdentifier)(target.normalizedIdentifier);
   if (request.isTest) {
-    const verified = await dependencies.persistence.isTestRecipientVerified({
+    // The allowlist keeps a test send away from a real person. A simulated route reaches nobody,
+    // so it is exempt from that one check and nothing else: suppression, consent, the window,
+    // quiet hours and the dispatch claim all still run, and the dispatch itself is what keeps
+    // the send on-platform.
+    const simulated = (await dependencies.dispatch.simulates?.({ tenantId: request.tenantId })) === true;
+    const verified = simulated || await dependencies.persistence.isTestRecipientVerified({
       tenantId: request.tenantId,
       channel: target.channel,
       identifierHash: hash,

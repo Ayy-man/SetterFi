@@ -22,9 +22,9 @@ type GhlWebhookDependencies = {
   driver: GhlMessagingAdapter;
   resolveTenant(locationId: string): Promise<string | null>;
   persistReceipt(input: WebhookReceiptWrite): Promise<WebhookReceiptRead>;
-  processReceipt(receipt: WebhookReceiptRead): Promise<void>;
+  processReceipt(receipt: WebhookReceiptRead): Promise<unknown>;
   processUninstall(receipt: WebhookReceiptRead): Promise<void>;
-  schedule(callback: () => Promise<void>): void;
+  schedule(callback: () => Promise<unknown>): void;
 };
 
 function json(body: Record<string, unknown>, status: number) {

@@ -162,6 +162,12 @@ export type MessagingDispatchReceipt = {
 
 export type MessagingDispatchPort = {
   send(input: MessagingDispatchInput): Promise<MessagingDispatchReceipt>;
+  /**
+   * Whether a send for this tenant lands on the simulated driver rather than a provider. The
+   * gateway asks before the test-recipient allowlist: a simulated send reaches nobody, so that
+   * allowlist has nothing to protect there. Absent means never simulated.
+   */
+  simulates?(input: { tenantId: string }): Promise<boolean>;
 };
 
 export type SuppressionProviderInput = {

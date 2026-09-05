@@ -34,8 +34,8 @@ type MetaWebhookDependencies = {
   driver: Pick<MetaDriver, "verifyWebhook" | "normalizeInbound">;
   resolveTenant(externalAccountId: string, channel: MetaChannel | null): Promise<string | null>;
   persistReceipt(input: WebhookReceiptWrite): Promise<WebhookReceiptRead>;
-  processReceipt(receipt: WebhookReceiptRead): Promise<void>;
-  schedule(callback: () => Promise<void>): void;
+  processReceipt(receipt: WebhookReceiptRead): Promise<unknown>;
+  schedule(callback: () => Promise<unknown>): void;
 };
 
 type MetaVerificationDependencies = {

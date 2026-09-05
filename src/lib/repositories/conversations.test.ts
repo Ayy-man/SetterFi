@@ -284,9 +284,11 @@ describe("getConversation", () => {
     const conversation = await getConversation(
       "tenant-a",
       "conversation-a",
+      "user-a",
       async () => row("conversation-a"),
-      async (tenantId) => {
+      async (tenantId, actorId) => {
         expect(tenantId).toBe("tenant-a");
+        expect(actorId).toBe("user-a");
         return 6;
       },
     );
@@ -298,6 +300,7 @@ describe("getConversation", () => {
     const conversation = await getConversation(
       "tenant-a",
       "conversation-a",
+      "user-a",
       async () => null,
       async () => { questionSetSizeCalls += 1; return 6; },
     );

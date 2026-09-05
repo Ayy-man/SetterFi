@@ -198,8 +198,13 @@ its parent first.
 | Account and tenancy | `SETTERFI_ACCOUNT_SECURITY_LIVE`, `SETTERFI_ACCOUNT_MFA_LIVE`, `SETTERFI_ACCOUNT_EMAIL_CHANGE_LIVE`, `SETTERFI_ACCOUNT_TERMS_LIVE`, `SETTERFI_TENANT_MEMBERSHIP_LIVE`, `SETTERFI_TENANT_OWNERSHIP_LIVE` |
 | Brain and offer layer | `SETTERFI_BRAIN_OBJECTIONS_LIVE`, `SETTERFI_OFFER_LAYER_ENGINE_INPUT_LIVE`, `SETTERFI_TIER_OFFER_TERMS_LIVE` |
 | Surfaces and channels | `SETTERFI_PUBLIC_LANDING_LIVE`, `SETTERFI_CAPI_LIVE`, `SETTERFI_GOOGLE_CALENDAR_OAUTH_LIVE` |
+| Testing without a provider | `SETTERFI_SIMULATED_SENDS_LIVE` |
 
-Three of those deserve a sentence each. `SETTERFI_ACCOUNT_MFA_LIVE` needs
+Four of those deserve a sentence each. `SETTERFI_SIMULATED_SENDS_LIVE` puts a "Rehearse as the
+lead" form on a demo tenant's test threads in the coach Inbox and routes that tenant's sends to a
+simulated driver: the receipt, the engine turn, the send gateway and its evidence rows are all real,
+and only the provider hop is replaced by a stable `simulated:` message id. It is keyed on
+`tenants.is_demo`, never on the caller, so a real tenant is unaffected while it is on. `SETTERFI_ACCOUNT_MFA_LIVE` needs
 `SETTERFI_ACCOUNT_SECURITY_LIVE` as well. `SETTERFI_ACCOUNT_EMAIL_CHANGE_LIVE` moves only the
 application row today and not the Supabase Auth identity, so it stays off until the two stores agree.
 `SETTERFI_OFFER_LAYER_ENGINE_INPUT_LIVE` changes agent output for every tenant at once, so switch it

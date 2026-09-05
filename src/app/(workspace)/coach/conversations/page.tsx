@@ -6,7 +6,7 @@ import {
   type CoachInboxView,
 } from "@/components/workspace/rehaul/coach-inbox";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole } from "@/lib/auth/claims";
-import { brainObjectionsLive, phase1Live } from "@/lib/env-contract";
+import { brainObjectionsLive, phase1Live, simulatedSendsLive } from "@/lib/env-contract";
 import { impersonatedReadContext, type ImpersonationSession } from "@/lib/impersonation";
 import {
   conversationViewStatuses,
@@ -129,6 +129,7 @@ export default async function CoachConversationsPage({ searchParams }: PageProps
       // One instant for every wait on the page, resolved here so the server pass and the hydrated
       // client cannot disagree about how long a lead has been waiting.
       nowIso={new Date().toISOString()}
+      rehearsal={simulatedSendsLive()}
       view={view}
       viewCounts={{ needsYou: needsYou.length, agentHandling: agentHandling.length }}
       viewerId={context.actorId ?? null}

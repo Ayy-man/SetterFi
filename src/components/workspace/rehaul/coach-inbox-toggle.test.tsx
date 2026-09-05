@@ -52,7 +52,7 @@ function conversation(overrides: Partial<ConversationRead> = {}): ConversationRe
       author: "lead",
       body: "Is the credit rebuild included if I sign up?",
       createdAt: "2026-09-03T11:48:00.000Z",
-      delivered: true,
+      delivered: true, simulated: false,
     }],
     ...overrides,
   };

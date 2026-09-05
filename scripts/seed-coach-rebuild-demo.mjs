@@ -209,6 +209,32 @@ async function seedExpiredInstagramConnection(database) {
   );
 }
 
+/**
+ * Ready connections on the channels the demo threads actually use. Instagram stays expired on
+ * purpose (the reconnect story above); Messenger, WhatsApp and SMS are `ready` so the route
+ * resolver, the capability window and the send gateway all run for real on a rehearsal, with the
+ * demo tenant's send landing on the simulated driver rather than a provider. `ready`, not `live`:
+ * a live meta_direct row demands the six verification receipts, and these hold no credentials.
+ */
+async function seedReadyDemoConnections(database) {
+  await database.query(
+    `insert into public.channel_connections
+       (tenant_id, channel, provider, state, external_account_id, external_account_label, external_ref)
+     values
+       ($1::uuid, 'messenger', 'meta_direct', 'ready', 'coach-demo-messenger-page', 'Reid Capital (demo page)',
+         jsonb_build_object('pageId', 'SETTERFI_DEMO_PLACEHOLDER_REBUILD_FB_PAGE')),
+       ($1::uuid, 'whatsapp', 'meta_direct', 'ready', 'coach-demo-whatsapp-phone', 'Reid Capital (demo number)',
+         jsonb_build_object('phoneNumberId', 'SETTERFI_DEMO_PLACEHOLDER_REBUILD_WA_PHONE')),
+       ($1::uuid, 'sms', 'ghl', 'ready', 'coach-demo-ghl-location', 'Reid Capital (demo location)',
+         jsonb_build_object('locationId', 'SETTERFI_DEMO_PLACEHOLDER_REBUILD_GHL_LOCATION'))
+     on conflict (tenant_id, channel, provider) do update set state = 'ready',
+       external_account_id = excluded.external_account_id,
+       external_account_label = excluded.external_account_label,
+       external_ref = excluded.external_ref`,
+    [PHASE7_DEMO_IDS.tenant],
+  );
+}
+
 async function findGoalId(database, keyword) {
   const result = await database.query(
     `select id from public.keyword_goals
@@ -444,6 +470,8 @@ async function readBack(database, threadId) {
           and first_touch_keyword is not null and id = any($2::uuid[])) keyword_conversations,
        (select count(*)::int from public.business_profiles where id = $3) business_profiles,
        (select count(*)::int from public.channel_connections where id = $4 and state = 'expired') expired_connections,
+       (select count(*)::int from public.channel_connections where tenant_id = $1 and state = 'ready'
+          and channel in ('messenger', 'whatsapp', 'sms')) ready_connections,
        (select count(*)::int from public.support_threads where id = $5 and assigned_to is not null) support_threads,
        (select count(*)::int from public.brain_knowledge_entries
           where id = any($6::uuid[]) and status = 'published' and disposition = 'shared') qualification_questions,
@@ -473,6 +501,7 @@ export async function seedCoachRebuildDemo({ argumentsList = process.argv.slice(
     await seedBusinessProfile(database);
     await seedA2pMidReview(database);
     await seedExpiredInstagramConnection(database);
+    await seedReadyDemoConnections(database);
     await seedKeywordGoalsAndConversations(database);
     const threadId = await seedSupportThread(database);
     await seedPublishedOffer(database);

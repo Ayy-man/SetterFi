@@ -9,7 +9,8 @@ import { createHash } from "node:crypto";
 
 import type { ProposedSlotSet } from "@/lib/booking/types";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
-import { inboxVerbsLive, phase1Live, phase3Live } from "@/lib/env-contract";
+import { inboxVerbsLive, phase1Live, phase3Live, simulatedSendsLive } from "@/lib/env-contract";
+import { isSimulatedProviderMessageId } from "@/lib/integrations/simulated";
 import { createMockGhlDriver, createRealGhlDriver } from "@/lib/integrations/ghl";
 import { createMockMetaDriver, createRealMetaDriver } from "@/lib/integrations/meta";
 import { resolveMetaConnection } from "@/lib/integrations/connection-resolver";
@@ -49,6 +50,8 @@ export type ConversationMessageRead = {
   body: string;
   createdAt: string;
   delivered: boolean;
+  /** The row went to the simulated arm (a demo tenant's rehearsal), never to a provider. */
+  simulated: boolean;
 };
 
 export type ConversationRead = {
@@ -392,6 +395,7 @@ function mapConversation(row: ConversationRow): ConversationRead {
       delivered:
         message.direction === "in" ||
         (message.direction === "out" && message.provider_message_id !== null),
+      simulated: isSimulatedProviderMessageId(message.provider_message_id),
     }));
   const appointment = [...row.appointments]
     .filter((candidate) => candidate.status !== "canceled")
@@ -891,9 +895,18 @@ export function createLiveSendToLeadGateway(options: LiveGatewayOptions = {}) {
     };
   });
 
+  // The demo decision is read from the tenant row on every send rather than trusted from the
+  // caller, so it is the same fact the analytics exclusion and the demo login already use.
+  const tenantSendsSimulated = async (tenantId: string) => {
+    if (!simulatedSendsLive()) return false;
+    const { data, error } = await client.from("tenants").select("is_demo").eq("id", tenantId).single();
+    if (error || !data) throw new Error("PROVIDER_ROUTE_SCOPE_FAILED");
+    return data.is_demo === true;
+  };
   const dispatch = createProviderDispatchPort({
+    simulatedTenant: tenantSendsSimulated,
     resolveRoute: async (input) => {
-      const [identityResult, contactResult, installResult] = await Promise.all([
+      const [identityResult, contactResult, installResult, simulated] = await Promise.all([
         client.from("contact_identities").select("provider")
           .eq("tenant_id", input.tenantId).eq("id", input.identityId).single(),
         client.from("contacts").select("is_test").eq("tenant_id", input.tenantId)
@@ -901,6 +914,7 @@ export function createLiveSendToLeadGateway(options: LiveGatewayOptions = {}) {
             .eq("tenant_id", input.tenantId).eq("id", input.conversationId).single()).data?.contact_id ?? "")
           .single(),
         client.from("ghl_installs").select("location_id").eq("tenant_id", input.tenantId).limit(1).maybeSingle(),
+        tenantSendsSimulated(input.tenantId),
       ]);
       if (identityResult.error || !identityResult.data || contactResult.error || !contactResult.data) {
         throw new Error("PROVIDER_ROUTE_SCOPE_FAILED");
@@ -947,6 +961,7 @@ export function createLiveSendToLeadGateway(options: LiveGatewayOptions = {}) {
       return {
         provider,
         tenantId: input.tenantId,
+        simulated,
         approvedTemplate: null,
         authorizedCommand: policy.command,
         externalAccountId: installResult.data?.location_id ?? undefined,
@@ -1030,11 +1045,18 @@ export async function listConversations(
  * inbox page. The identifier stays addressable when a filter hides the thread or its activity
  * moves it beyond a pagination cursor.
  */
-export type QuestionSetSizeSource = (tenantId: string) => Promise<number>;
+export type QuestionSetSizeSource = (tenantId: string, actorId: string) => Promise<number>;
 
-async function loadEnabledQuestionSetSize(tenantId: string): Promise<number> {
+/**
+ * The service client carries no JWT, so the question read names its reader through the
+ * `_for_actor` wrapper; the bare RPC refuses with PHASE7_SESSION_ACTOR_REQUIRED otherwise.
+ */
+async function loadEnabledQuestionSetSize(tenantId: string, actorId: string): Promise<number> {
   const client = createSupabaseServiceClient();
-  const { data, error } = await client.rpc("read_coach_questions", { p_expected_tenant: tenantId });
+  const { data, error } = await client.rpc("read_coach_questions_for_actor", {
+    p_actor_id: actorId,
+    p_expected_tenant: tenantId,
+  });
   if (error) throw new Error(`COACH_QUESTION_READ_FAILED:${error.message}`);
   const snapshot = data as { tenantId?: string; questions?: unknown } | null;
   if (!snapshot || snapshot.tenantId !== tenantId || !Array.isArray(snapshot.questions)) {
@@ -1049,18 +1071,20 @@ async function loadEnabledQuestionSetSize(tenantId: string): Promise<number> {
 export async function getConversation(
   tenantId: string,
   conversationId: string,
+  actorId: string,
   source: ConversationByIdSource = loadLiveConversation,
   questionSetSizeSource: QuestionSetSizeSource = loadEnabledQuestionSetSize,
 ): Promise<ConversationRead | null> {
   const expectedTenant = requiredTenant(tenantId);
   const expectedConversationId = conversationId.trim();
   if (!expectedConversationId) throw new Error("CONVERSATION_ID_REQUIRED");
+  if (!actorId.trim()) throw new Error("CONVERSATION_READER_REQUIRED");
   const row = await source({ tenantId: expectedTenant, conversationId: expectedConversationId });
   if (!row) return null;
   if (row.id !== expectedConversationId || row.tenant_id !== expectedTenant) {
     throw new Error("CONVERSATION_TENANT_MISMATCH");
   }
-  const questionSetSize = await questionSetSizeSource(expectedTenant);
+  const questionSetSize = await questionSetSizeSource(expectedTenant, actorId);
   return { ...mapConversation(row), questionSetSize };
 }
 

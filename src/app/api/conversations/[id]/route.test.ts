@@ -64,7 +64,7 @@ describe("conversation thread detail and read acknowledgement", () => {
     })(getRequest(), context());
 
     expect(response.status).toBe(200);
-    expect(getConversation).toHaveBeenCalledWith("tenant-a", unreadConversation.id);
+    expect(getConversation).toHaveBeenCalledWith("tenant-a", unreadConversation.id, "coach-a");
     await expect(response.json()).resolves.toMatchObject({
       conversation: { id: unreadConversation.id, unreadByCoach: true },
     });

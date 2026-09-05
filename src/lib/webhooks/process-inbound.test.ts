@@ -332,7 +332,7 @@ describe("ordinary inbound receipt recovery", () => {
       claim: vi.fn(async () => []),
       finish,
       defer: vi.fn(async () => true),
-    })).resolves.toBeUndefined();
+    })).resolves.toBeNull();
     expect(finish).not.toHaveBeenCalled();
   });
 });

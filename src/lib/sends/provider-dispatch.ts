@@ -14,6 +14,7 @@ import {
   GHL_CONFIGURATION_NAMES,
   META_CONFIGURATION_NAMES,
 } from "@/lib/integrations/selector";
+import { createSimulatedMessagingDriver } from "@/lib/integrations/simulated";
 import type {
   ApprovedTemplateCommand,
   AuthorizedOutboundCommand,
@@ -32,6 +33,12 @@ export type ProviderDispatchConfiguration =
 export type ProviderDispatchRoute = {
   provider: IdentityProvider;
   tenantId?: string;
+  /**
+   * True only for a route the resolver has already authorised as a demo tenant's. The send then
+   * goes to the simulated arm regardless of the environment's driver selection, so a demo tenant
+   * never reaches a real provider and the production process never fakes a real tenant's send.
+   */
+  simulated?: boolean;
   approvedTemplate: Omit<ApprovedTemplateCommand, "kind" | "channel" | "recipientExternalId" | "variables"> | null;
   authorizedCommand?: AuthorizedOutboundCommand;
   externalAccountId?: string;
@@ -41,6 +48,12 @@ export type ProviderDispatchDependencies = {
   resolveRoute(input: MessagingDispatchInput): Promise<ProviderDispatchRoute>;
   createMock(provider: IdentityProvider): MessagingDriver;
   createReal(configuration: ProviderDispatchConfiguration, route: ProviderDispatchRoute): MessagingDriver;
+  createSimulated?(provider: IdentityProvider): MessagingDriver;
+  /**
+   * The same fact `resolveRoute` puts on `route.simulated`, answerable from the tenant alone so
+   * the gateway can ask it before a target or content exists. Absent means never simulated.
+   */
+  simulatedTenant?(tenantId: string): Promise<boolean>;
   environment?: EnvironmentSource;
   now?: () => string;
 };
@@ -51,6 +64,9 @@ function selectedDriver(
   dependencies: ProviderDispatchDependencies,
 ) {
   const environment = dependencies.environment ?? process.env;
+  if (route.simulated) {
+    return (dependencies.createSimulated ?? createSimulatedMessagingDriver)(provider);
+  }
   if (provider === "ghl") {
     if (driverSelection("ghl", "SETTERFI_GHL_DRIVER", environment) === "mock") {
       return dependencies.createMock(provider);
@@ -111,6 +127,9 @@ export function createProviderDispatchPort(
   dependencies: ProviderDispatchDependencies,
 ): MessagingDispatchPort {
   return {
+    async simulates({ tenantId }) {
+      return (await dependencies.simulatedTenant?.(tenantId)) === true;
+    },
     async send(input) {
       const route = await dependencies.resolveRoute(input);
       const driver = selectedDriver(route.provider, route, dependencies);

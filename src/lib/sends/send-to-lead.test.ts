@@ -171,6 +171,20 @@ describe("sendToLead", () => {
     }));
   });
 
+  it("lets an unverified test recipient through only when the dispatch route is simulated", async () => {
+    const { dependencies, persistence } = harness();
+    vi.mocked(persistence.isTestRecipientVerified).mockResolvedValue(false);
+    dependencies.dispatch.simulates = vi.fn(async () => true);
+    const result = await sendToLead({ ...baseRequest, isTest: true }, dependencies);
+    expect(result.kind).toBe("sent");
+    expect(persistence.isTestRecipientVerified).not.toHaveBeenCalled();
+    expect(persistence.hasDeletionTombstone).toHaveBeenCalled();
+
+    dependencies.dispatch.simulates = vi.fn(async () => false);
+    const refused = await sendToLead({ ...baseRequest, isTest: true }, dependencies);
+    expect(refused.kind === "refused" && refused.reason).toBe("test_recipient_not_verified");
+  });
+
   it("refuses an unverified test recipient before suppression, eligibility, or dispatch", async () => {
     const { dependencies, persistence, order } = harness();
     vi.mocked(persistence.isTestRecipientVerified).mockResolvedValue(false);

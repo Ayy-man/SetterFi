@@ -13,7 +13,7 @@ const noStoreHeaders = { "Cache-Control": "no-store" };
 type ConversationReadDependencies = {
   session(): Promise<RouteActor | null>;
   acknowledge: typeof acknowledgeConversationRead;
-  getConversation(tenantId: string, conversationId: string): Promise<ConversationRead | null>;
+  getConversation(tenantId: string, conversationId: string, actorId: string): Promise<ConversationRead | null>;
 };
 
 /** POST keeps acknowledgement explicit, so a prefetch cannot silently mark a thread as read. */
@@ -33,7 +33,7 @@ export function createConversationReadHandler(dependencies: ConversationReadDepe
         conversationId: id,
         actorId: actor.userId,
       });
-      const conversation = await dependencies.getConversation(actor.tenantId, id);
+      const conversation = await dependencies.getConversation(actor.tenantId, id, actor.userId);
       if (!conversation || conversation.unreadByCoach) throw new Error("CONVERSATION_READBACK_INVALID");
       return Response.json({
         conversation: conversationResponse(conversation, { allowWebchat: true }),

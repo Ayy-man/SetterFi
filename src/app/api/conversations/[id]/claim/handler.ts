@@ -13,7 +13,7 @@ type ClaimDependencies = {
   enabled?(): boolean;
   session(): Promise<RouteActor | null>;
   claim: typeof claim;
-  loadConversation(tenantId: string, conversationId: string): Promise<ConversationRead>;
+  loadConversation(tenantId: string, conversationId: string, actorId: string): Promise<ConversationRead>;
 };
 
 export function conversationResponse(
@@ -44,8 +44,8 @@ export function conversationResponse(
   };
 }
 
-export async function loadConversationForRoute(tenantId: string, conversationId: string) {
-  const conversation = await getConversation(tenantId, conversationId);
+export async function loadConversationForRoute(tenantId: string, conversationId: string, actorId: string) {
+  const conversation = await getConversation(tenantId, conversationId, actorId);
   if (conversation) return conversation;
   throw new Error("CONVERSATION_NOT_FOUND");
 }
@@ -90,7 +90,7 @@ export function createClaimHandler(dependencies: ClaimDependencies) {
         expectedHolderId,
         confirmDisplace,
       });
-      const conversation = await dependencies.loadConversation(actor.tenantId, id);
+      const conversation = await dependencies.loadConversation(actor.tenantId, id, actor.userId);
       return Response.json({ conversation: conversationResponse(conversation), audit: result.audit }, { headers: noStoreHeaders });
     } catch (error) {
       return Response.json(conversationMutationRefusal(error), { status: 409, headers: noStoreHeaders });

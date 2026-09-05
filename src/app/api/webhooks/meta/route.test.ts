@@ -43,7 +43,7 @@ function request(payload: unknown, signature = true) {
 }
 
 function dependencies(batch: NormalizedInboundBatch) {
-  const scheduled: Array<() => Promise<void>> = [];
+  const scheduled: Array<() => Promise<unknown>> = [];
   const persistReceipt = vi.fn(async (input) => ({
     id: `receipt-${input.providerEventId}`,
     ...input,

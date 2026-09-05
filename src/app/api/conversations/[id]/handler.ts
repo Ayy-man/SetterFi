@@ -8,7 +8,7 @@ const noStoreHeaders = { "Cache-Control": "no-store" };
 
 type ConversationDetailDependencies = {
   session(): Promise<RouteActor | null>;
-  getConversation(tenantId: string, conversationId: string): Promise<ConversationRead | null>;
+  getConversation(tenantId: string, conversationId: string, actorId: string): Promise<ConversationRead | null>;
 };
 
 /** Stable thread read for deep links; acknowledgement is intentionally a separate POST. */
@@ -23,7 +23,7 @@ export function createConversationDetailHandler(dependencies: ConversationDetail
     }
     try {
       const { id } = await context.params;
-      const conversation = await dependencies.getConversation(actor.tenantId, id);
+      const conversation = await dependencies.getConversation(actor.tenantId, id, actor.userId);
       if (!conversation) {
         return Response.json({ error: "Conversation not found." }, { status: 404, headers: noStoreHeaders });
       }

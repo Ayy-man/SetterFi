@@ -157,6 +157,10 @@ export const ENV_CONTRACT_NAMES = [
   // production deploy fail; the debt stays visible in each build's log until the credential list
   // is filled, and deleting this variable re-arms the gate.
   "SETTERFI_FIRST_CUSTOMER_ENFORCE",
+  // Rehearsal sends. On, a demo tenant's outbound traffic goes to the simulated arm and the coach
+  // Inbox offers "send as the lead" on test threads, so flows that need a live channel can be
+  // exercised on the one deployment without a carrier or a Meta app. Real tenants are untouched.
+  "SETTERFI_SIMULATED_SENDS_LIVE",
 ] as const;
 
 export type EnvironmentName = (typeof ENV_CONTRACT_NAMES)[number];
@@ -330,6 +334,10 @@ export function contactDeleteLive(environment: EnvironmentSource = process.env) 
 }
 
 // Phase 5
+export function simulatedSendsLive(environment: EnvironmentSource = process.env) {
+  return environmentValue("SETTERFI_SIMULATED_SENDS_LIVE", environment) === "true";
+}
+
 export function phase5Live(environment: EnvironmentSource = process.env) {
   return environmentValue("SETTERFI_PHASE5_LIVE", environment) === "true";
 }

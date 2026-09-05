@@ -50,7 +50,7 @@ function conversation(overrides: Partial<ConversationRead> = {}): ConversationRe
       author: "lead",
       body: "Is the credit rebuild included if I sign up?",
       createdAt: "2026-09-03T11:48:00.000Z",
-      delivered: true,
+      delivered: true, simulated: false,
     }],
     ...overrides,
   };
@@ -71,7 +71,7 @@ const AGENT_HELD = conversation({
     author: "lead",
     body: "can you call me instead",
     createdAt: "2026-09-03T09:00:00.000Z",
-    delivered: true,
+    delivered: true, simulated: false,
   }],
 });
 
@@ -259,7 +259,7 @@ describe("CoachInbox", () => {
             author: "lead",
             body: "Is the credit rebuild included if I sign up?",
             createdAt: "2026-09-03T11:48:00.000Z",
-            delivered: true,
+            delivered: true, simulated: false,
           },
           {
             id: "message-two",
@@ -267,7 +267,7 @@ describe("CoachInbox", () => {
             author: "agent",
             body: "Two quick questions and I will know if this is a fit.",
             createdAt: "2026-09-03T11:50:00.000Z",
-            delivered: true,
+            delivered: true, simulated: false,
           },
         ],
       })],
@@ -291,7 +291,7 @@ describe("CoachInbox", () => {
             author: "lead",
             body: "Is the credit rebuild included if I sign up?",
             createdAt: "2026-09-03T11:48:00.000Z",
-            delivered: true,
+            delivered: true, simulated: false,
           },
           {
             id: "message-two",
@@ -299,7 +299,7 @@ describe("CoachInbox", () => {
             author: "system",
             body: "Automation paused, Reid Fletcher took over",
             createdAt: "2026-09-03T11:52:00.000Z",
-            delivered: false,
+            delivered: false, simulated: false,
           },
         ],
       })],
@@ -331,7 +331,7 @@ describe("CoachInbox", () => {
             author: "lead",
             body: "Is the credit rebuild included if I sign up?",
             createdAt: "2026-09-03T11:48:00.000Z",
-            delivered: true,
+            delivered: true, simulated: false,
           },
           {
             id: "message-two",
@@ -339,7 +339,7 @@ describe("CoachInbox", () => {
             author: "agent",
             body: "It is, and I can show you the plan.",
             createdAt: "2026-09-03T11:50:00.000Z",
-            delivered: true,
+            delivered: true, simulated: false,
           },
           {
             id: "message-three",
@@ -347,7 +347,7 @@ describe("CoachInbox", () => {
             author: "human:coach-1",
             body: "Reid here, happy to walk you through it.",
             createdAt: "2026-09-03T11:55:00.000Z",
-            delivered: true,
+            delivered: true, simulated: false,
           },
         ],
       })],
@@ -393,9 +393,9 @@ describe("CoachInbox", () => {
     renderInbox({
       rows: [conversation({
         messages: [
-          { author: "contact", body: "First", createdAt: "2026-09-01T14:00:00.000Z", delivered: true, direction: "in", id: "m1" },
-          { author: "agent", body: "Second", createdAt: "2026-09-01T14:05:00.000Z", delivered: true, direction: "out", id: "m2" },
-          { author: "contact", body: "Third", createdAt: "2026-09-03T11:48:00.000Z", delivered: true, direction: "in", id: "m3" },
+          { author: "contact", body: "First", createdAt: "2026-09-01T14:00:00.000Z", delivered: true, simulated: false, direction: "in", id: "m1" },
+          { author: "agent", body: "Second", createdAt: "2026-09-01T14:05:00.000Z", delivered: true, simulated: false, direction: "out", id: "m2" },
+          { author: "contact", body: "Third", createdAt: "2026-09-03T11:48:00.000Z", delivered: true, simulated: false, direction: "in", id: "m3" },
         ],
       })],
     });
@@ -421,7 +421,7 @@ describe("CoachInbox", () => {
             author: "lead",
             body: "Is the credit rebuild included if I sign up?",
             createdAt: "2026-09-03T11:48:00.000Z",
-            delivered: true,
+            delivered: true, simulated: false,
           },
           {
             id: "message-two",
@@ -429,7 +429,7 @@ describe("CoachInbox", () => {
             author: "system",
             body: "A person joined this conversation.",
             createdAt: "2026-09-03T11:52:00.000Z",
-            delivered: false,
+            delivered: false, simulated: false,
           },
         ],
       })],
