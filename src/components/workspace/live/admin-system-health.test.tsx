@@ -381,6 +381,27 @@ describe("AdminSystemHealth", () => {
     expect(within(failedRow!).getByText(detail)).toBeInTheDocument();
   });
 
+  it("shows a deliberately unavailable driver as not configured in amber", async () => {
+    const user = userEvent.setup();
+    render(<AdminSystemHealth health={{
+      ...health,
+      jobs: jobs.map((job) => job.id === "a2p-probe" ? {
+        ...job,
+        state: "not-configured",
+        errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
+        reason: "The job driver is not configured in this environment.",
+      } : job),
+      reporting: { state: "not-configured", reason: "At least one scheduled job driver is not configured." },
+    }} />);
+
+    await user.click(screen.getByRole("tab", { name: "Jobs" }));
+    const row = screen.getAllByTestId("system-job-row")
+      .find((candidate) => within(candidate).queryByText("Carrier registration probe"));
+    const status = within(row!).getByText("Not configured");
+    expect(status.closest("[data-slot='status']")?.getAttribute("data-tone")).toBe("warning");
+    expect(within(row!).getByText("Setterfi ghl provisioning driver")).toBeInTheDocument();
+  });
+
   /**
    * Never-Colour-Alone, on the row that most tempts a designer to drop to a dot.
    *
@@ -398,7 +419,7 @@ describe("AdminSystemHealth", () => {
     const rows = screen.getAllByTestId("system-job-row");
     expect(rows).toHaveLength(8);
     for (const row of rows) {
-      const status = within(row).getByText(/Healthy|Failed|No recent report/);
+      const status = within(row).getByText(/Healthy|Failed|Not configured|No recent report/);
       const badge = status.closest("[data-slot='status']");
       expect(badge, "the state must be a Status, not loose coloured text").not.toBeNull();
       // The label is the accessible state. A dot alone would leave this empty.
