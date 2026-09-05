@@ -524,11 +524,11 @@ function MissingConfiguration({
 }) {
   return (
     <div
-      className="flex flex-col items-start gap-[2px] @min-[520px]:items-end"
+      className="flex flex-col items-start gap-[2px]"
       data-testid="system-job-missing-configuration"
     >
       {configuration.variables.length > 0 ? (
-        <ul className="m-0 flex list-none flex-wrap gap-x-[var(--s-2)] gap-y-[2px] p-0 @min-[520px]:justify-end">
+        <ul className="m-0 flex list-none flex-wrap gap-x-[var(--s-2)] gap-y-[2px] p-0">
           {configuration.variables.map((name) => (
             <li key={name}><MonoMeta>{name}</MonoMeta></li>
           ))}
@@ -632,7 +632,7 @@ function JobsTab({ health, nowMs }: { health: SystemHealth; nowMs: number }) {
                   the state is the bare dot plus its words, which is what the roster and the client
                   book already do. A not-configured row carries the names it waits on under it.
                 */}
-                <div className="flex shrink-0 flex-col items-start gap-[var(--s-1)] @min-[520px]:items-end">
+                <div className="flex shrink-0 flex-col items-start gap-[var(--s-1)]">
                   <Status
                     label={state.label}
                     tone={STATE_TONE_TO_TONE[state.tone]}

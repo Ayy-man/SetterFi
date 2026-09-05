@@ -162,7 +162,7 @@ describe("/api/onboarding/run", () => {
     expect(finished).toEqual([expect.objectContaining({
       outcome: "skipped",
       errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
-      counters: { skipped: "driver_not_configured" },
+      counters: { skipped: "driver_not_configured", missing_variables: ["SETTERFI_GHL_PROVISIONING_DRIVER"] },
     })]);
   });
 
