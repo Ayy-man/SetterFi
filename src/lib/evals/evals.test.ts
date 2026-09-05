@@ -35,10 +35,10 @@ describe("safety corpus loader", () => {
     const first = loadSafetyCorpus();
     const second = loadSafetyCorpus();
     expect(first.revision).toBe(second.revision);
-    expect(first.revision).toBe("253823b467adf1d803fe2ca09dbd49007b1318f49ed47016c3a07245550ce512");
-    expect(first.cases).toHaveLength(41);
+    expect(first.revision).toBe("72ffee8e43f4b0ef5ca7a063c9edeb2261cc59a664aa8bd2ed745047e3ed1247");
+    expect(first.cases).toHaveLength(79);
     expect(first.cases.filter((testCase) => testCase.kind === "checker")).toHaveLength(31);
-    expect(first.cases.filter((testCase) => testCase.kind === "engine")).toHaveLength(10);
+    expect(first.cases.filter((testCase) => testCase.kind === "engine")).toHaveLength(48);
     expect([...new Set(first.cases.map((testCase) => testCase.suite))]).toEqual(SAFETY_SUITES);
     const ids = first.cases.flatMap((testCase) => testCase.expectation.ruleIds);
     expect(ids.every((id) => COMPLIANCE_RULE_IDS.includes(id))).toBe(true);
@@ -164,18 +164,15 @@ describe("network-free checker runner", () => {
         }))),
       }),
     });
-    expect(seen).toEqual([
+    // Every engine case runs once, in corpus order, and no checker case reaches the engine arm.
+    const engineKeys = loadSafetyCorpus().cases.filter((testCase) => testCase.kind === "engine").map((testCase) => testCase.key);
+    expect(seen).toEqual(engineKeys);
+    expect(seen.slice(0, 3)).toEqual([
       "compliance:engine-guarantee",
       "phase3:compliance:engine-stop-idempotency",
       "phase3:compliance:engine-cross-class-tripwire",
-      "pricing:engine-invented-price",
-      "phase3:pricing:engine-outcome-pressure",
-      "jailbreak:engine-role-attack",
-      "phase3:jailbreak:engine-three-turn-scope-cap",
-      "phase3:jailbreak:engine-missing-caller-history",
-      "output:engine-system-extraction",
-      "phase3:output:engine-nested-sanitizer",
     ]);
+    expect(seen).toHaveLength(48);
     expect(persisted.run).toMatchObject({ kind: "engine", modelConfigId: "model-config-1" });
   });
 });

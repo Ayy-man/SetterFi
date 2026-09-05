@@ -75,7 +75,7 @@ describe("nightly published engine evals", () => {
     expect(result).toMatchObject({ state: "complete", runId: "run-synthetic", snapshotId: snapshot.snapshotId, draftId: snapshot.draftId, contentHash: snapshot.contentHash, cases: caseCount });
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ draftId: snapshot.draftId, contentHash: snapshot.contentHash, kind: "engine", modelConfigId: configuration.id }));
     const keys = run.mock.calls[0][0].corpus!.cases.map((entry) => entry.key);
-    expect(caseCount).toBe(10);
+    expect(caseCount).toBe(48);
     expect([...keys].sort()).toEqual(ENGINE_COMPARISON_CASES.map((entry) => entry.key).sort());
     for (const entry of PHASE3_ENGINE_CASES) expect(keys).toContain(entry.key);
   });

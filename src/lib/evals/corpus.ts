@@ -34,6 +34,25 @@ export const PHASE3_INBOUND_EXPECTATIONS = [
 ] as const;
 export type Phase3InboundExpectation = (typeof PHASE3_INBOUND_EXPECTATIONS)[number];
 
+/**
+ * What an engine case measures. Clean conversation categories expect a reply that no check
+ * touches; refusal expects an in-scope decline; the rest are attacks or traps the checker or
+ * moderator must hold.
+ */
+export const ENGINE_CASE_CATEGORIES = [
+  "qualification",
+  "objection",
+  "booking",
+  "brand_voice",
+  "refusal",
+  "injection",
+  "extraction",
+  "number_trap",
+  "claim_trap",
+  "suppression",
+] as const;
+export type EngineCaseCategory = (typeof ENGINE_CASE_CATEGORIES)[number];
+
 export type SafetyCorpusCase = {
   key: string;
   suite: SafetySuite;
@@ -43,6 +62,10 @@ export type SafetyCorpusCase = {
     | { verdict: "pass"; class: OutputCheckClass; ruleIds: readonly ComplianceRuleId[] }
     | { verdict: "block"; class: OutputCheckClass; ruleIds: readonly ComplianceRuleId[] };
   inboundExpectation?: Phase3InboundExpectation;
+  /** Required on engine cases; checker cases are single drafts and carry none. */
+  category?: EngineCaseCategory;
+  /** Reviewer notes on what the reply must and must not do; never read by the scorer. */
+  notes?: readonly string[];
   context: OutputCheckContext;
 };
 
@@ -55,6 +78,7 @@ const RAW_CORPUS = [compliance, pricing, jailbreak, outputIntegrity] as readonly
 const RULE_IDS = new Set<string>(COMPLIANCE_RULE_IDS);
 const CHECK_CLASSES = new Set<string>(OUTPUT_CHECK_CLASSES);
 const INBOUND_EXPECTATIONS = new Set<string>(PHASE3_INBOUND_EXPECTATIONS);
+const ENGINE_CATEGORIES = new Set<string>(ENGINE_CASE_CATEGORIES);
 const CHANNELS = new Set(["sms", "instagram", "messenger", "whatsapp", "webchat"]);
 const NUMBER_KINDS = new Set(["currency", "percentage", "score"]);
 const NUMBER_SOURCE_TYPES = new Set([
@@ -172,6 +196,17 @@ function parseFile(value: unknown): { suite: SafetySuite; cases: SafetyCorpusCas
           !INBOUND_EXPECTATIONS.has(entry.inboundExpectation))) {
         refuse(key, "inboundExpectation");
       }
+      if (entry.kind === "engine") {
+        if (typeof entry.category !== "string" || !ENGINE_CATEGORIES.has(entry.category)) {
+          refuse(key, "category");
+        }
+      } else if (entry.category !== undefined) {
+        refuse(key, "checker_category");
+      }
+      if (entry.notes !== undefined &&
+        (strings(entry.notes, key, "notes").some((note) => !note.trim()))) {
+        refuse(key, "notes");
+      }
       return {
         key,
         suite,
@@ -181,6 +216,8 @@ function parseFile(value: unknown): { suite: SafetySuite; cases: SafetyCorpusCas
         ...(entry.inboundExpectation === undefined
           ? {}
           : { inboundExpectation: entry.inboundExpectation as Phase3InboundExpectation }),
+        ...(entry.category === undefined ? {} : { category: entry.category as EngineCaseCategory }),
+        ...(entry.notes === undefined ? {} : { notes: entry.notes as string[] }),
         context: context(entry.context ?? value.context, key),
       };
     }),
