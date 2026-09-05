@@ -23,6 +23,7 @@ import {
   sealGhlInstallCredentials,
   stepEvidenceKeys,
   suppressionIdForIdentity,
+  verifiedCitationEntryId,
   tenantReceiptEventId,
   traceForPersistence,
   withBookingSlotOffer,
@@ -1327,6 +1328,7 @@ describe("ordinary inbound measurement persistence", () => {
         order.push("trace");
         return { messageId: "agent-message-1", tenantId: "tenant-1" };
       }),
+      recordKnowledgeUsage: vi.fn(async () => ({ state: "recorded" as const, eventId: "usage-1" })),
       recordStepEvents: vi.fn(async (input) => {
         order.push("step-events");
         for (const [kind, messageId, stepKey] of [
@@ -1393,6 +1395,7 @@ describe("ordinary inbound measurement persistence", () => {
         order.push("trace");
         return { messageId: "agent-message-1", tenantId: "tenant-1" };
       },
+      recordKnowledgeUsage: async () => ({ state: "recorded" as const, eventId: "usage-1" }),
       recordStepEvents: async () => {
         order.push("step-events");
         throw new Error("CONVERSATION_STEP_EVIDENCE_WRITE_FAILED");
@@ -1410,6 +1413,106 @@ describe("ordinary inbound measurement persistence", () => {
         { kind: "transition", state: "needs_human", reason: "output_check_failed" },
       ],
     }, "credit")).toEqual({ answeredStepKey: null, askedStepKey: null });
+  });
+});
+
+// A sent reply counts as a Brain use only when the engine declared a citation and verified it. The
+// event is written by the application after the trace, so the ordering and the gate are pinned here.
+describe("verified-citation knowledge usage", () => {
+  async function engineResult() {
+    return runEngineTurn(engineInput(), turnDependencies());
+  }
+
+  function withCitation(result: EngineTurnResult, declaredEntryId: string | null, verified: boolean): EngineTurnResult {
+    return { ...result, trace: { ...result.trace, declaredEntryId, declaredEntryVerified: verified } };
+  }
+
+  it("names the entry only when the declared citation was verified", async () => {
+    const result = await engineResult();
+    expect(verifiedCitationEntryId(traceForPersistence(withCitation(result, "entry-7", true)))).toBe("entry-7");
+    expect(verifiedCitationEntryId(traceForPersistence(withCitation(result, "entry-7", false)))).toBeNull();
+    expect(verifiedCitationEntryId(traceForPersistence(withCitation(result, null, true)))).toBeNull();
+  });
+
+  it("appends one usage event for the traced agent message after the trace and before step evidence", async () => {
+    const result = await engineResult();
+    const order: string[] = [];
+    const recordKnowledgeUsage = vi.fn(async () => {
+      order.push("knowledge-usage");
+      return { state: "recorded" as const, eventId: "usage-1" };
+    });
+    await persistOrdinaryInboundResult({
+      tenantId: "tenant-1",
+      conversationId: "conversation-1",
+      leadMessageId: "lead-message-1",
+      providerMessageId: "provider-message-1",
+      preTurnCurrentStep: null,
+      result: withCitation(result, "entry-7", true),
+    }, {
+      readOutboundMessage: async () => ({ messageId: "agent-message-1" }),
+      consumeDisclosure: async () => {},
+      writeTrace: async () => {
+        order.push("trace");
+        return { messageId: "agent-message-1", tenantId: "tenant-1" };
+      },
+      recordKnowledgeUsage,
+      recordStepEvents: async (input) => {
+        order.push("step-events");
+        return { ...input, answeredEventId: null, askedEventId: null };
+      },
+    });
+    expect(order).toEqual(["trace", "knowledge-usage", "step-events"]);
+    expect(recordKnowledgeUsage).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      conversationId: "conversation-1",
+      agentMessageId: "agent-message-1",
+      knowledgeEntryId: "entry-7",
+    });
+  });
+
+  it.each([
+    ["unverified citation", "entry-7", false],
+    ["no declared citation", null, false],
+  ])("writes no usage event for a reply with %s", async (_label, declaredEntryId, verified) => {
+    const result = await engineResult();
+    const recordKnowledgeUsage = vi.fn(async () => ({ state: "recorded" as const, eventId: "usage-1" }));
+    await persistOrdinaryInboundResult({
+      tenantId: "tenant-1",
+      conversationId: "conversation-1",
+      leadMessageId: "lead-message-1",
+      providerMessageId: "provider-message-1",
+      preTurnCurrentStep: null,
+      result: withCitation(result, declaredEntryId, verified),
+    }, {
+      readOutboundMessage: async () => ({ messageId: "agent-message-1" }),
+      consumeDisclosure: async () => {},
+      writeTrace: async () => ({ messageId: "agent-message-1", tenantId: "tenant-1" }),
+      recordKnowledgeUsage,
+      recordStepEvents: async (input) => ({ ...input, answeredEventId: null, askedEventId: null }),
+    });
+    expect(recordKnowledgeUsage).not.toHaveBeenCalled();
+  });
+
+  it("fails the receipt after the trace when the usage event cannot be written, so the retry replays it", async () => {
+    const result = await engineResult();
+    const recordStepEvents = vi.fn();
+    await expect(persistOrdinaryInboundResult({
+      tenantId: "tenant-1",
+      conversationId: "conversation-1",
+      leadMessageId: "lead-message-1",
+      providerMessageId: "provider-message-1",
+      preTurnCurrentStep: null,
+      result: withCitation(result, "entry-7", true),
+    }, {
+      readOutboundMessage: async () => ({ messageId: "agent-message-1" }),
+      consumeDisclosure: async () => {},
+      writeTrace: async () => ({ messageId: "agent-message-1", tenantId: "tenant-1" }),
+      recordKnowledgeUsage: async () => {
+        throw new Error("KNOWLEDGE_USAGE_WRITE_FAILED:synthetic");
+      },
+      recordStepEvents,
+    })).rejects.toThrow("KNOWLEDGE_USAGE_WRITE_FAILED");
+    expect(recordStepEvents).not.toHaveBeenCalled();
   });
 });
 
@@ -1517,6 +1620,7 @@ describe("traceForPersistence objection mapping", () => {
         readOutboundMessage: async () => ({ messageId: "agent-message-1" }),
         consumeDisclosure: async () => {},
         writeTrace,
+        recordKnowledgeUsage: async () => ({ state: "recorded" as const, eventId: "usage-1" }),
         recordStepEvents: async (input) => ({
           ...input, answeredEventId: null, askedEventId: null,
         }),

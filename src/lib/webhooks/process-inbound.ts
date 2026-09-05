@@ -52,6 +52,11 @@ import {
 import { sharedRateLimit } from "@/lib/shared-rate-limit";
 import { writeMessageTrace, type MessageTrace } from "@/lib/repositories/traces";
 import {
+  recordVerifiedCitationUsage,
+  type KnowledgeUsageReceipt,
+  type VerifiedCitationUsageInput,
+} from "@/lib/repositories/knowledge-usage";
+import {
   recordConversationStepEvents,
   type ConversationStepEvidenceInput,
   type ConversationStepEvidenceReceipt,
@@ -530,8 +535,23 @@ type OrdinaryInboundPersistenceDependencies = {
     target: { kind: "existing_message"; conversationId: string; messageId: string },
     trace: MessageTrace,
   ): Promise<{ messageId: string; tenantId: string }>;
+  /**
+   * Appends the Brain usage event for a reply whose declared citation the engine verified. Called
+   * only when the trace above carries `citationVerified` with a declared entry, and idempotent
+   * per agent message, so a retried receipt never counts the same reply twice.
+   */
+  recordKnowledgeUsage(input: VerifiedCitationUsageInput): Promise<KnowledgeUsageReceipt>;
   recordStepEvents(input: ConversationStepEvidenceInput): Promise<ConversationStepEvidenceReceipt>;
 };
+
+/**
+ * The one condition under which a sent reply counts as a use of a Brain entry: the engine declared
+ * a citation and verified it against the retrieved set. A retrieved-but-uncited entry, or a cited
+ * entry that failed verification, is telemetry on the trace and nothing more.
+ */
+export function verifiedCitationEntryId(trace: MessageTrace): string | null {
+  return trace.citationVerified && trace.declaredEntryId ? trace.declaredEntryId : null;
+}
 
 type HeldInboundPersistenceDependencies = {
   readOutboundMessage(input: {
@@ -617,11 +637,21 @@ export async function persistOrdinaryInboundResult(
       conversationId: input.conversationId,
     });
   }
+  const trace = traceForPersistence(input.result);
   await dependencies.writeTrace(input.tenantId, {
     kind: "existing_message",
     conversationId: input.conversationId,
     messageId: message.messageId,
-  }, traceForPersistence(input.result));
+  }, trace);
+  const citedEntryId = verifiedCitationEntryId(trace);
+  if (citedEntryId) {
+    await dependencies.recordKnowledgeUsage({
+      tenantId: input.tenantId,
+      conversationId: input.conversationId,
+      agentMessageId: message.messageId,
+      knowledgeEntryId: citedEntryId,
+    });
+  }
   const keys = stepEvidenceKeys(input.result, input.preTurnCurrentStep);
   return dependencies.recordStepEvents({
     expectedTenant: input.tenantId,
@@ -2612,6 +2642,7 @@ function liveInboundDependencies(
           }
         },
         writeTrace: writeMessageTrace,
+        recordKnowledgeUsage: recordVerifiedCitationUsage,
         recordStepEvents: recordConversationStepEvents,
       });
       const slotOffer = result.commands.find((command) => command.kind === "record_booking_slot_offer");

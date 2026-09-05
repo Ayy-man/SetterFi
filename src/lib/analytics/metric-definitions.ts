@@ -596,11 +596,11 @@ export const METRIC_DEFINITIONS = {
     audience: "platform", economics: "none", requiresPositiveDenominator: false,
   }),
   "platform.knowledge_usage_count": defineMetric({
-    key: "platform.knowledge_usage_count", name: "knowledgeUsageCount", label: "Knowledge uses", unit: "count",
-    denominator: "Persisted Brain knowledge usage events.", window: "Trailing 30 days ending at asOf.", clock: "UTC.",
-    cohortRule: "Count append-only usage events; never read a counter stored on the knowledge entry.",
-    sources: [{ table: "public.analytics_brain_knowledge_usage_events", columns: ["event_id", "tenant_id", "knowledge_entry_id", "used_at"] }],
-    population: "Real-tenant, non-test knowledge usage events in the trailing-30-day window.", history: "Available from the first persisted event.",
+    key: "platform.knowledge_usage_count", name: "knowledgeUsageCount", label: "Verified citations", unit: "count",
+    denominator: "Sent agent replies whose declared Brain citation the engine verified against the retrieved set; one event per such reply, appended by the inbound pipeline after the message trace.", window: "Trailing 30 days ending at asOf, by the agent message's own timestamp.", clock: "UTC.",
+    cohortRule: "Count append-only verified-citation events; never read a counter stored on the knowledge entry, and never count retrieved-but-uncited or unverified citations, which live only on message_traces.",
+    sources: [{ table: "public.analytics_brain_knowledge_usage_events", columns: ["event_id", "tenant_id", "knowledge_entry_id", "conversation_id", "used_at"] }],
+    population: "Real-tenant, non-test verified-citation events in the trailing-30-day window; held replies never produce one.", history: "Available from the first verified citation persisted by the pipeline; earlier traces carry citations but no events, so history before that point reads as zero, not as absence.",
     audience: "platform", economics: "none", requiresPositiveDenominator: false,
   }),
   "platform.margin": defineMetric({

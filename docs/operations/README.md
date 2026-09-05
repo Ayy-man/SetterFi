@@ -82,6 +82,43 @@ checker or model-pair change. The moderator runner scores each of the 44 labelle
 correct, false allow, false block, class mismatch or error, and reports strict and verdict-only
 accuracy with p50 and p95 latency.
 
+**Running the retrieval suite.** The same runner has a second suite that measures whether the
+Brain's retrieval ranks the right entry for a lead's phrasing. It runs `evals/corpus/retrieval.json`
+through the real retrieval path against the published snapshot's own match function and the live
+embeddings driver; no generator or moderator runs, so it costs only embedding calls and needs
+`SETTERFI_EMBEDDINGS_DRIVER=real` rather than the OpenRouter driver flag:
+
+```bash
+env -u SUPABASE_SERVICE_ROLE_KEY -u SUPABASE_ANON_KEY -u SUPABASE_JWT_SECRET \
+  zsh -c 'set -a; source .env.local; set +a; npx --yes tsx scripts/eval-engine.ts --suite retrieval'
+```
+
+Its summary is separate from the safety pass rate and the two are never added together. Read the
+four figures as ratios with their numerator and denominator printed beside them; a denominator of
+zero prints `null`, never 100%:
+
+- **precision@1** — of the cases that expect a specific entry, the share whose expected entry
+  ranked first. This is the number a lead experiences, since the top candidate is what the prompt
+  leans on.
+- **recall@5** — of the same cases, the share whose expected entry appears anywhere in the five
+  prompt candidates. A gap between this and precision@1 means the right knowledge reaches the
+  prompt but does not lead it.
+- **no-match precision** — of every case the pipeline answered "no match", the share that expected
+  no match. Off-topic, other-industry and gibberish messages are the only source of this figure,
+  so a low value means real questions are being refused, and a run where nothing was refused
+  prints `null` here rather than a score.
+- **citation validity** — of every candidate retrieval offered the prompt, the share whose entry id
+  exists in the snapshot. Anything under 1 means the engine could declare a citation the trace
+  cannot verify.
+
+Every case also prints its outcome: `hit_at_1`, `hit_at_5`, `miss`, `false_no_match`,
+`no_match_correct`, `no_match_missed`, `unresolvable` (the corpus names an entry the published
+snapshot does not contain, which counts against precision and recall rather than being dropped) or
+`error`. The runner exits 1 unless every case is `hit_at_1` or `no_match_correct`. The
+`platform.knowledge_usage_count` figure on the platform Overview is the production counterpart:
+one event per sent reply whose declared citation the engine verified, so it rises only when
+retrieval put a real entry in front of the model and the model used it.
+
 **Reseeding the demo.** The demo is written by seeders only, in the order in `docs/SETUP.md`
 section 1.7, with the history seeder last; against the hosted project every seeder needs
 `--confirm-hosted`. Since 2026-09-05 the phase 1 seeder writes approved demo follow-up templates

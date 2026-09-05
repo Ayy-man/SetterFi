@@ -181,6 +181,20 @@ describe("measurement vocabulary", () => {
     }]);
   });
 
+  it("defines knowledge usage as verified citations on sent replies, read from the usage-events view", () => {
+    const definition = metricDefinition("platform.knowledge_usage_count");
+    expect(definition.label).toBe("Verified citations");
+    expect(definition.sources).toEqual([{
+      table: "public.analytics_brain_knowledge_usage_events",
+      columns: ["event_id", "tenant_id", "knowledge_entry_id", "conversation_id", "used_at"],
+    }]);
+    expect(definition.denominator).toMatch(/verified/i);
+    expect(definition.denominator).toMatch(/one event per such reply/);
+    expect(definition.cohortRule).toMatch(/never count retrieved-but-uncited or unverified citations/);
+    expect(definition.population).toMatch(/held replies never produce one/i);
+    expect(definition.window).toMatch(/agent message's own timestamp/);
+  });
+
   it("records the objection booked rate as proposed and unapproved rather than as a shipped rule", () => {
     const conversations = metricDefinition("coach.objection.conversations");
     expect(conversations.unit).toBe("count");
