@@ -490,6 +490,17 @@ out of its verdict is the same failure with an extra hop:
 A blocked draft regenerates once with the violation named, then falls back to a safe holding reply
 and raises an alert. It writes an `audit_log` row either way: the evidence trail is half the point.
 
+**As built (2026-09-06), the mechanical floor is six classes, not two, and a model verdict sits
+behind it.** NUM and CLAIM above shipped alongside ECHO (system text and instruction disclosure),
+LINK (allowlisted https hosts only), SCOPE (off-role content, role adoption, verse shape) and LEN
+(soft cap truncated at a sentence boundary, hard cap held), all still code constants with no tenant
+input. The "not another model call" argument held for the floor and was then answered differently
+for the layer behind it: a verdict-only moderator model runs after the floor passes, sees a
+six-field payload with no Brain or coach block in it, returns a closed schema that cannot carry
+replacement copy, and fails closed when it refuses or times out, so it can be talked out of nothing
+that reaches the lead. The full contract, including what the moderator does not judge, is
+`BACKEND-SPEC.md` §3.
+
 ### 11.4 Closed schemas and DDL bounds
 
 `offer_layers` today has five open `jsonb` columns (`voice_answers`, `faq`, `proof`, `assets`,

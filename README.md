@@ -8,7 +8,7 @@ and operational recovery paths.
 ## What is in this repository
 
 - Next.js 16 App Router application with React 19, TypeScript, and Tailwind v4, under `src/`.
-- Supabase SQL migrations (105 files under `supabase/migrations/`) and database-contract tests
+- Supabase SQL migrations (137 files under `supabase/migrations/`) and database-contract tests
   under `supabase/tests/`.
 - Server-enforced authorization, tenant isolation, consent and suppression handling, booking
   workflows, notification preferences, provider integrations, and scheduled job routes.

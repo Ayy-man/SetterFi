@@ -727,9 +727,11 @@ and the audit row did not, the install succeeded.
 3. `ghl_agency_installs` has a row for that app with `install_state = 'token_ok'` and `updated_at`
    later than the call's start time.
 4. **App 1 only:** `install_to_future_locations = true`. If it is `false` or `null`, the fallback
-   check is an installed-locations read, which must return **74** locations for app 1. That is the
-   full sub-account count confirmed by a paged read on 2026-08-22. Anything less than 74 is not a
-   pass.
+   check is an installed-locations read, which must return every sub-account the agency owns for
+   app 1. That count was **74** on the paged read of 2026-08-22 and was **77** by the install of
+   2026-09-02 (section 2.12), roughly half of them paused or deleted, so read the current total
+   from the agency before the call rather than trusting either figure. Anything less than the
+   agency's own count is not a pass.
 
 If app 1's flag is false or null and the installed-locations count is short, the call did not pass.
 Go to section 2.11. App 2 does not need the flag; it only ever uses the company grant.
@@ -822,11 +824,18 @@ no amount of documentation has settled them and one real install settles all thr
    nobody on the call was asked to watch for it.
 
 **Then capture the values the code needs.** `companyId` from the agency grant into
-`GHL_AGENCY_COMPANY_ID`. The coach snapshot's ID, read from its URL in the agency interface, into
-`GHL_SNAPSHOT_ID`. The number pool ID, read from
-`GET https://services.leadconnectorhq.com/phone-system/number-pools?locationId=...` with
-`Version: 2021-07-28`, into `GHL_NUMBER_POOL_ID`. And the seeded test sub-account's location,
-calendar, and contact IDs plus a Location access token into the four `SETTERFI_GHL_TEST_*` names.
+`GHL_AGENCY_COMPANY_ID`. The coach snapshot's ID into `GHL_SNAPSHOT_ID`: since 2026-09-06 it can be
+read without the portal by `scripts/list-ghl-snapshots.ts`, a read-only script that resolves app 2's
+stored provisioning grant through the lease-guarded resolver, lists the agency's snapshots by id and
+name, samples three locations, and never prints a token (run it the way the header of the script
+shows, with the repository's `.env.local` and the stale shell exports unset). The number pool ID,
+read from `GET https://services.leadconnectorhq.com/phone-system/number-pools?locationId=...` with
+`Version: 2021-07-28`, into `GHL_NUMBER_POOL_ID`; that call needs the `numberpools.read` scope,
+which neither installed app carries as of 2026-09-06, so the script's number-pool read answers 401
+until the scope is added to app 2 in a new draft version and the app is re-authorized. And the
+seeded test sub-account's location, calendar, and contact IDs plus a Location access token into the
+four `SETTERFI_GHL_TEST_*` names. The three names still owed to production after that are
+`GHL_SNAPSHOT_ID`, `GHL_NUMBER_POOL_ID` and `SETTERFI_GHL_PROVISIONING_DRIVER=real`.
 
 **Use a real sub-account in the client's agency as the test account, flagged as test data.** Sandbox
 accounts are capped at 2 sub-accounts, have email and SMS disabled by default, and their data may be

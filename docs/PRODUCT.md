@@ -80,7 +80,17 @@ self-serve onboarding, and the shared "Meet Your Agent" surface.
    "Agent live" readout and the "Agent is handling this thread" composer line are gone.
    Turning the agent off inserts an in-thread system line ("Automation paused · [name] took
    over"), flips status to paused/human, and swaps the composer to human mode (Reply vs internal
-   Note); turning it back on restores AI with context. It stays audit-logged. The Lead Details rail: the
+   Note); turning it back on restores AI with context. It stays audit-logged. **A held reply says
+   why (2026-09-06):** when the engine held the agent's last draft, the thread shows a panel
+   titled "Held:" plus a plain-language reason (used a number that is not in your offer, made a
+   promise your compliance rules forbid, repeated wording it should not, included a link that is
+   not approved, went outside what your agent is allowed to discuss, went over the SMS length, or
+   failed a final compliance review), which layer held it (Checker or Moderator), the rule id, and
+   the moderator's short note when the moderator held it. Nothing else from the trace crosses to
+   the coach: no prompt material, allowlists or model configuration. On a demo tenant's test
+   threads the "Rehearse as the lead" form shows "Rehearsal logged" under the control once the
+   audit row reads back, and a submit that lands while the first attempt is still in flight keeps
+   its draft and asks again rather than reporting a result. The Lead Details rail: the
    qualification the agent captured (credit range, funding goal, timeline, business), a live 3–5
    sentence AI summary, and booking status (proposed slots / confirmed).
 3. **Contacts.** Six click-to-filter KPI bubbles pinned top, all counts (round 3): Total, Convo
@@ -117,7 +127,11 @@ self-serve onboarding, and the shared "Meet Your Agent" surface.
    the conversation drop-off panel moved here in round 3, and its Detailed mode reads the
    question list being edited directly above it — booking horizon/mode, top objections, follow-up cadence where every touch carries a purpose
    select: send free lead magnet / send free training / value nudge / proof point / new angle /
-   last touch), **Marketing assets** (lead magnets and videos the cadence links to, plus proof and case studies), and
+   last touch, plus a **Follow-up copy** panel added 2026-09-05 where the coach writes the exact
+   words for each connected channel and purpose, SMS capped at 160 characters, saves a draft and
+   submits it for approval; each row reads Not written, Draft, Pending approval, Approved or
+   Rejected with the rejection reason, a submitted row is locked until decided, and a follow-up
+   stays blocked until its copy is approved), **Marketing assets** (lead magnets and videos the cadence links to, plus proof and case studies), and
    **Setup** (round 3 — agent status / connected services, the finish-setup readiness checklist,
    and per-channel readiness; the provisioning surface, kept out of the offer editor).
    Editing shows a "republish" state. White-labeled integration cards keep infrastructure
@@ -200,11 +214,21 @@ self-serve onboarding, and the shared "Meet Your Agent" surface.
 7. **System.** A linked roll-up of client channel health, LLM error rate, delivery failures; one platform health
    number. Activity log (severity-bucketed, searchable by client/lead/code). **Conversation debug
    trace**: from any conversation, "view trace" → what the brain retrieved, which decision-table
-   row fired, prompt/response, latency, token cost. Webhook retry queue with manual replay.
+   row fired, prompt/response, latency, token cost. Webhook retry queue with manual replay. The
+   scheduled-jobs block (2026-09-05) distinguishes a job that failed from one that is waiting on
+   deployment configuration: a job whose driver is deliberately unset reads **Not configured**
+   rather than Failed, carries the variable names it is waiting on under the badge (names only,
+   never values) and how long it has waited ("since 3 days ago", measured from the start of the
+   current run of skipped receipts), and one line above the rows counts the jobs waiting and lists
+   the union of their names so an operator does not read eighteen rows to collect them.
 8. **Inbox.** One tabbed surface for coach support, the preserved global cross-tenant lead
    conversation view, and operational Needs attention. Admin takeover still works in lead threads;
    support threads use their own coach/platform model; the attention tab keeps compliance
-   triggers, repeated agent failures, and STOP events.
+   triggers, repeated agent failures, and STOP events. **Follow-up copy approvals** (2026-09-05)
+   sit in the same Inbox: every coach-submitted follow-up text waiting on a decision is listed with
+   its workspace, channel and purpose, and an owner or admin approves or rejects it with a required
+   reason; the decision is logged and the row leaves the queue. The panel is absent when nothing
+   is waiting, and the same queue is reachable at `/admin/followup-copy`.
 9. **Settings and billing.** Four tabs (round 2): **Notifications** (platform notification
    preferences), **Alerts** (rules → destinations: in-app bell / email; prebuilt:
    booking made, payment failed, completed payment, channel disconnected, A2P cleared, agent
@@ -365,7 +389,9 @@ real leads). Footer: "Runs use test data only." Tabs:
   guarantees → refuse/auto-pause), Jailbreak + injection (stay in role, exit after cap), Voice &
   tone, Pricing discipline. "Add case from playground" and "add from a production conversation."
 - **Past runs** — history over time (config/version/model, pass rate, cost, who ran it); compare two
-  runs.
+  runs. Since 2026-09-05 an engine case carries an outcome, not just a pass flag: caught, refused,
+  missed by checker, uncaught, clean or false block, with the active moderator as the judge of the
+  replies the checker did not catch, and the nightly run reports the same counters on its receipt.
 Cross-links: brain publish shows last eval status; any production conversation can be added as an
 eval case; model config shows "last benchmarked."
 

@@ -27,3 +27,63 @@ Two things this package does not prove: that any provider is configured in produ
 `docs/LAUNCH-CHECKLIST.md` section E and `docs/platform-diagram/EVIDENCE.md`), and that the two
 walkthrough recordings exist. Placeholders marked "Input required" or "Recording required" are
 open items, not omissions.
+
+## What landed after the package was generated (2026-09-05 and 2026-09-06)
+
+The generated files above are pinned to the source commit in `MANIFEST.md`, so the surfaces and
+procedures below are recorded here until the guide registry is updated and the package is
+regenerated. Each one is a fact about the deployed code, with its contract in the document named.
+
+**Reading System health.** A scheduled job whose driver selector is deliberately unset now finishes
+its receipt as `skipped` and reads **Not configured** on the System page, not Failed. Under the
+badge are the environment variable names the job is waiting on (names only, never values) and how
+long it has waited, measured from the start of the current unbroken run of skipped receipts, and
+one line above the jobs block counts the jobs waiting and lists the union of their names. A job
+that reads Failed still names its error. On the `followups` receipt, `blocked` and one
+`blocked_<reason>` counter per reason (today `blocked_approved_followup_copy_required`) count
+touches that were due but had no approved copy for their channel and purpose; they stay scheduled
+and are not failures, and the fix is to approve the coach's copy from the Inbox. On the
+`billing-cost-rollup` receipt, `estimates` counts roll-ups recomputed for a billing period that is
+still open; those rows are rewritten nightly and become final once computed at or after the period
+end. On the `engine-evals` receipt the counters are `cases`, `passed`, the six outcomes (`caught`,
+`refused`, `missed_by_checker`, `uncaught`, `clean`, `false_block`) and a `judged` or `unjudged`
+flag; an unjudged run means no moderator row was active, so every clean refusal the checker could
+not see scored as uncaught. Contracts: `docs/BACKEND-SPEC.md` §3, §8 and §9.
+
+**Working the platform Inbox.** Follow-up copy a coach submitted for approval appears in the Inbox
+as its own panel, listed by workspace, channel and purpose, and an owner or admin approves or
+rejects each text with a required reason; the decision is logged and the row leaves the queue. The
+same queue is at `/admin/followup-copy`. Until copy is approved the coach's follow-ups for that
+channel and purpose stay blocked, which is what the `blocked_*` counters above are counting.
+
+**Reading a held reply in a coach Inbox.** When the engine held the agent's last draft, the thread
+shows a "Held:" panel with a plain-language reason, which layer held it (Checker or Moderator), the
+rule id, and the moderator's short note when the moderator held it. That panel is the whole of what
+a coach sees; the full trace with its checks, violations, prompt material and model configuration
+stays on the admin side. The evidence behind it is the `moderator_class`, `moderator_rule_id`,
+`moderator_reason` and `moderator_model_config_id` columns on `message_traces`.
+
+**Running the evals by hand.** Two read-only runners exercise the same corpora the nightly job and
+the admin comparison use, against the published Brain snapshot and the active generator and
+moderator rows, and print one line per case plus a summary without writing to the database. Run
+them from the repository root with the repository's `.env.local` and the stale shell exports unset:
+
+```bash
+env -u SUPABASE_SERVICE_ROLE_KEY -u SUPABASE_ANON_KEY -u SUPABASE_JWT_SECRET \
+  zsh -c 'set -a; source .env.local; set +a; npx --yes tsx scripts/eval-engine.ts'
+env -u SUPABASE_SERVICE_ROLE_KEY -u SUPABASE_ANON_KEY -u SUPABASE_JWT_SECRET \
+  zsh -c 'set -a; source .env.local; set +a; npx --yes tsx scripts/eval-moderator.ts'
+```
+
+Both accept `--only <category>` and `--limit <n>`; the engine runner also takes `--key <substring>`
+and `--json`, and exits 1 on any `false_block`, `missed_by_checker` or `uncaught` case. A full
+48-case engine run costs about 0.01 OpenRouter credits, so it is cheap to run after any prompt,
+checker or model-pair change. The moderator runner scores each of the 44 labelled cases as
+correct, false allow, false block, class mismatch or error, and reports strict and verdict-only
+accuracy with p50 and p95 latency.
+
+**Reseeding the demo.** The demo is written by seeders only, in the order in `docs/SETUP.md`
+section 1.7, with the history seeder last; against the hosted project every seeder needs
+`--confirm-hosted`. Since 2026-09-05 the phase 1 seeder writes approved demo follow-up templates
+per connected channel and purpose, so the simulated cadence sends, and it no longer replaces the
+operator's active or default model rows when another row already holds them.

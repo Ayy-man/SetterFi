@@ -198,6 +198,14 @@ adapters behind one internal interface.
   interface must expose post-window capability per provider (`template` / `human_agent_only` /
   `none`) rather than assuming one rule.
 
+  **Follow-up copy is written by the coach and approved by the platform before it can send
+  (2026-09-05).** A coach writes the exact words per connected channel and purpose on the Agent
+  page and submits them; an owner or admin approves or rejects each one from the admin Inbox with
+  a reason, and every step is audited. A due touch with no approved copy is a blocked touch that
+  stays scheduled until copy exists, never a failed run and never a cancelled lead. The only
+  exception is a demo tenant, which may send a demo-flagged draft labelled as such.
+
+
 - **Two Meta obligations with visible product consequences.** The agent must disclose that it is
   an automated experience — a fixed, non-editable element of its opening message and of any
   human→AI handback, which the brand-voice and offer-layer editors must not let a coach remove.
@@ -360,6 +368,19 @@ an unapproved notice fails closed as `BILLING_COPY_UNAPPROVED`.
 
 - **Grounding / anti-hallucination:** retrieval-grounded answers; hard-gated pricing/guarantees;
   compliance language enforced in the system layer, not left to the model.
+- **Two layers on every outbound draft, and the evidence stays on the trace (2026-09-05).** The
+  first layer is deterministic: six code-owned check classes (numbers, claims, echo, links, scope,
+  length) that tenant text can neither add to nor weaken, with a soft length breach truncated at
+  a sentence boundary and a hard breach held. The second is a verdict-only moderator model that
+  sees the draft, the lead message and the allowlists but never the Brain, answers a closed
+  schema it cannot smuggle replacement copy through, does not judge links or length because the
+  first layer already did, and fails closed: a refused, timed-out or malformed verdict holds the
+  turn, and a provider-level refusal is a scope block. Every generation prompt opens with
+  code-owned platform invariants, so a thin snapshot still runs behind the untrusted-input and
+  disclosure rules. The moderator's class, rule id, model configuration and reason are persisted
+  on `message_traces` beside its state, which is what lets the coach Inbox say why a reply was
+  held without exposing prompts, allowlists or model configuration. The contracts are in
+  `docs/BACKEND-SPEC.md` §3.
 - **Jailbreak / injection resistance:** input screening, bounded per-stage prompt structure (the
   agent can't be argued off its current step), off-topic deflection with an exit cap, banned-topic
   tripwires that auto-pause the agent and file a human handoff. The coach's free-text offer inputs
@@ -399,3 +420,16 @@ an unapproved notice fails closed as `BILLING_COPY_UNAPPROVED`.
 Premium model via OpenRouter, model-configurable so models can be swapped and compared. The evals
 playground compares models/prompts/configs against test scenarios with cost and latency visible.
 Budget alerting on LLM spend (admin). Replies stream to the UI.
+
+**Evals, as built (2026-09-05 and 2026-09-06).** Two reviewed corpora under `evals/corpus/`: 48
+engine cases (real conversations, refusals, injections, extraction attempts, number and claim
+traps, suppression) and 44 labelled moderator cases. An engine case is scored by outcome rather
+than by whether the checker tripped, because a clean on-role refusal and an undetected failure
+used to score identically: the checker catches it, or the model refused on role, or the checker
+missed what the moderator then blocked, or nobody could judge it, or a clean reply passed, or a
+clean reply was falsely blocked. The judge is the active moderator row through the same payload
+production sends, so the bench measures the shipped pair on the published prompt with the platform
+invariants in front of it. The nightly `engine-evals` job runs every comparison case with that
+judge and reports the outcome counters on its receipt, saying whether it ran judged or unjudged.
+Two live runners, `scripts/eval-engine.ts` and `scripts/eval-moderator.ts`, run the same cases by
+hand without writing to the database; the commands are in `docs/operations/README.md`.
