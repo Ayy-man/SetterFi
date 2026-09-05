@@ -212,7 +212,7 @@ component. Expect more of this: check every consumer before rewriting anything s
 
 ## Part 5. What is still open
 
-- The Brain view needs its own redesign round and has not been started.
+- The Brain view had its redesign round on 2026-09-06 (design source in `design/brain/`, screen in `src/components/workspace/rehaul/owner-brain.tsx`).
 - The five coach navigation pills are proposed and awaiting confirmation, along with the
   qualification question ordering control, which reverses the simplification spec's default because
   the client asked for it again.

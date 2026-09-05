@@ -179,21 +179,27 @@ self-serve onboarding, and the shared "Meet Your Agent" surface.
    both parties — identical to the coach, completely different in the log), resend signup link,
    nudge stalled
    onboarding, suspend for non-payment, archive with reason, internal note.
-3. **The Brain** (the moat). One knowledge system, one name. Section tabs (round 2):
-   Qualification · Objections · Mission · Compliance · Knowledge. Structured editors, not
-   walls of text: qualification is an **editable decision table** (credit range × business stage
-   × funding goal → BOOK / SOFT DQ / HARD DQ; click an outcome to cycle) — no explainer cards
-   above it. Objections are pattern→response pairs with tags, plus a **"new objections needed"
-   queue** of unmatched lead phrases from production conversations that the admin drafts answers
-   for. Mission is the scaffold editor (Identity / Goal / Tone / Criteria / Guardrails / DQ),
-   merged in from the removed Agent-defaults page. Compliance renders as locked-style cards
-   (platform law, not settings) and owns the hard-blocked language list plus TCPA-supporting
-   behavior (opt-in gating, STOP handling, quiet hours by lead timezone). Per-coach voice
-   settings live on the coach's Your-business tab; there is no admin voice tab or separate Evals route;
-   hands-on testing, suites, and run history live in The Brain's Testing tab. Top: DRAFT/PUBLISHED
-   lifecycle with version history + diff, and one action "Publish to all agents" ("publishing
-   updates every agent instantly"). The publish button surfaces the latest eval status and
-   soft-warns (not hard-blocks) if a safety suite is failing.
+3. **The Brain** (the moat). One knowledge system, one name. Since the 2026-09-06 redesign it is
+   one workspace: a rail of five settings on the left (Behavior · Qualification · Knowledge ·
+   Safety · Models), one editor in the middle, and an always-on **test conversation** on the right
+   that runs a real turn against any coach on the draft or the live version and prints the
+   evidence under every reply (rule fired, safety checks, knowledge cited, channel length,
+   moderator verdict). Every field carries a scope tag: **ALL** (every agent, always), **DEFAULT**
+   (a coach can override it from their offer), **COACH** (comes from the coach's offer, shown for
+   context), **SYSTEM** (enforced in code, read-only). Behavior holds identity, goal, tone, the
+   first-message disclosure and the role boundary; Qualification holds the criteria text and the
+   ordered rules (first match wins, BOOK / SOFT DQ / HARD DQ); Knowledge lists approved answers and
+   objections and opens **Review imports**, a full-width master-detail queue where a flagged row
+   must be edited and re-scanned before it can become shared, can be routed to one coach, or
+   dropped with a reason; Safety shows what the system enforces, the never-say guardrails, the
+   compliance phrases and the holding message a lead sees per blocked-reply class; Models shows
+   the writer and the moderator and the parked challengers. **Test suite** and **Inspect prompt**
+   (the assembled [A0][A][B][C][D] blocks for one coach and revision) take the full width.
+   History is a drawer with restore; **Review & publish** is a sheet that lists the changes since
+   the live version, the checks (saved draft, suite passed on this exact draft, how many agents it
+   reaches), a note for history, and one action. The suite hard-blocks publish while a safety case
+   fails. Per-coach voice settings live on the coach's Your-business tab; there is no separate
+   Evals route, and the old `/admin/brain/testing` link lands on the Test suite view.
 4. **Tiers & billing.** Editable tier cards (see ARCHITECTURE for the tier model), call allowances,
    fair-use cap on the top tier, per-client overrides. Stripe status, per-client usage table
    (booked calls + messages, cost vs revenue). As built in Phase 6 the dispute path is a **correction
