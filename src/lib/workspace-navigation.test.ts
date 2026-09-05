@@ -181,10 +181,15 @@ describe("workspace navigation information architecture", () => {
     // Get started: the blocked-steps row on the setup rail, "See setup".
     expect(measurement).toContain('href="/coach/get-started"');
     expect(measurement).toContain("See setup");
-    // Connections: the setup rail's first step, which takes the rail's one accent fill and names
-    // the channels it connects.
-    expect(measurement).toContain('href="/coach/integrations"');
-    expect(measurement).toContain("Connect Instagram and Messenger");
+    // Connections: the setup rail's channels row. Since the rehaul the rows are derived in
+    // coach-setup.tsx and the row's control opens the connect sheet for Instagram and Messenger
+    // rather than linking the page, so the sheet button is the labelled control on Home.
+    const setupRows = readFileSync(
+      resolve(process.cwd(), "src/components/workspace/rehaul/coach-setup.tsx"),
+      "utf8",
+    );
+    expect(setupRows).toContain("ConnectChannelButton");
+    expect(setupRows).toMatch(/label: "Connect" \| "Reconnect"/);
     // ...and, because that row only exists while something is broken, the unconditional one on
     // Setup's channel strip. Setup is itself reachable from every coach page via the support
     // bubble, so this is the route that survives every channel being healthy.

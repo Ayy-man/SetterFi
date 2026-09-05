@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { TITLE_PANEL_TITLE_CLASS } from "@/components/kit/deck-panel";
 import { Check } from "@/components/kit/icons";
 
 /*
@@ -119,7 +120,7 @@ export function DemoMetaLogin({ finished, state }: DemoMetaLoginProps) {
           <p className="m-0 text-[14px] leading-[1.4] text-[var(--muted)]">Signed in to Facebook</p>
         </div>
       </div>
-      <h1 className="m-0 mt-6 text-[22px] leading-[1.25] font-semibold tracking-[-0.015em] text-[var(--ink)]">
+      <h1 className={`${TITLE_PANEL_TITLE_CLASS} mt-6 text-[var(--ink)]`}>
         SetterFi is asking to connect to your {channelName === "Instagram" ? "Instagram account" : "Facebook Page"}
       </h1>
       <p className="m-0 mt-2 text-[15px] leading-[1.5] text-[var(--muted)]">

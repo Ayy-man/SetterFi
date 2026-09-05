@@ -196,7 +196,7 @@ function FirstRun({ now, setup }: { now?: Date; setup: CoachSetupRead }) {
           The same list, with the technical record beside it.
         </p>
         <Link className={SETUP_LINK_CLASS} href="/coach/get-started">
-          Open your setup
+          See setup
         </Link>
       </div>
     </>

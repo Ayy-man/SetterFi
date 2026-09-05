@@ -67,6 +67,7 @@ type Fetcher = typeof fetch;
 const TITLE_CLASS = "m-0 text-[26px] leading-[1.15] font-semibold tracking-[-0.02em] text-[var(--ink)]";
 const BODY_CLASS = "m-0 text-[16px] leading-[1.55] text-[var(--body)]";
 const MUTED_CLASS = "m-0 text-[15px] leading-[1.55] text-[var(--muted)]";
+const NEVER_LINE_CLASS = "m-0 text-[15px] leading-[1.55] text-[var(--body)]";
 const PRIMARY_CLASS =
   "inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-transparent [background:var(--accent-fill)] px-5 text-[16px] font-medium text-[var(--on-accent)] disabled:opacity-60";
 const SECONDARY_CLASS =
@@ -435,7 +436,7 @@ function Intro({
         </ul>
         <p className="m-0 flex items-start gap-3 rounded-[12px] border border-[var(--line)] bg-[var(--well)] px-4 py-3">
           <ShieldCheck className="mt-[3px] flex-none text-[var(--good-text)]" size={18} strokeWidth={1.75} />
-          <span className={`${BODY_CLASS} text-[15px]`}>{NEVER_LINE}</span>
+          <span className={NEVER_LINE_CLASS}>{NEVER_LINE}</span>
         </p>
       </div>
       <Actions>

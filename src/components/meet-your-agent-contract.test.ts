@@ -64,12 +64,20 @@ describe("Meet Your Agent mount contract", () => {
      * enumerates every file holding a mount, so a playback put back under onboarding is caught
      * there rather than being silently allowed by this one.
      */
+    // The setup root is a resume redirect since the coach rehaul: it carries no flag of its own,
+    // resolves the coach's identity before it reads a row, and never mounts a playback. The
+    // flag moved down to the step page that actually draws a gated surface, so the same
+    // flag-before-identity order is asserted there instead of on a line the root no longer has.
     expect(onboardingPage).toContain('export const dynamic = "force-dynamic"');
-    expect(onboardingPage.indexOf("if (!phase5Live())"))
-      .toBeLessThan(onboardingPage.indexOf("await coachContext()"));
-    expect(onboardingPage.indexOf("if (!phase5Live())"))
-      .toBeLessThan(onboardingPage.indexOf("loadStoredEvidence(tenantId)"));
+    expect(onboardingPage).not.toContain("phase5Live");
+    expect(onboardingPage.indexOf("await coachSetupContext("))
+      .toBeLessThan(onboardingPage.indexOf("await loadCoachSetup("));
+    expect(onboardingPage.indexOf("await coachSetupContext(")).toBeGreaterThan(-1);
     expect(onboardingPage).not.toContain("meetAgentEnabled");
+    const connectPage = source("src/app/onboarding/connect/page.tsx");
+    expect(connectPage.indexOf("if (!phase5Live())")).toBeGreaterThan(-1);
+    expect(connectPage.indexOf("if (!phase5Live())"))
+      .toBeLessThan(connectPage.indexOf("await coachContext()"));
     expect(component.indexOf("if (!enabled)")).toBeLessThan(component.indexOf("return ("));
     expect(component).toContain("Meet Your Agent is not enabled");
     expect(component).toContain("if (!enabled) return;");

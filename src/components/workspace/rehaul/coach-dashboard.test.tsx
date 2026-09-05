@@ -580,7 +580,7 @@ describe("CoachDashboard first run, which is Setup's list", () => {
 
   it("keeps a link to the full page outside the list, and never two actions under one label", () => {
     firstRun();
-    const link = screen.getByRole("link", { name: "Open your setup" });
+    const link = screen.getByRole("link", { name: "See setup" });
     expect(link).toHaveAttribute("href", "/coach/get-started");
     expect(document.querySelector("[data-slot='coach-setup-list']")?.contains(link)).toBe(false);
     expect(screen.queryByRole("link", { name: "See the rest of your setup" })).toBeNull();
@@ -629,7 +629,7 @@ describe("CoachDashboard first run, which is Setup's list", () => {
     expect(accentFills()).toHaveLength(0);
     expect(document.querySelector("[data-slot='coach-setup-count']")?.textContent).toBe("4 of 4 done");
     expect(document.body.textContent).not.toContain("yours to do");
-    expect(screen.getByRole("link", { name: "Open your setup" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "See setup" })).toBeTruthy();
   });
 });
 

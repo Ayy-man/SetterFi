@@ -18,6 +18,7 @@
  */
 
 import type { MetaConnectChannel } from "@/components/workspace/live/coach-meta-connect";
+import { WORKSPACE_DISPLAY_TIMEZONE } from "@/lib/format/datetime";
 
 export type ConnectChannel = MetaConnectChannel;
 
@@ -128,7 +129,9 @@ export function connectedCopy(channel: ConnectChannel, label: string, date: Date
 }
 
 export function longDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric", month: "long", year: "numeric", timeZone: WORKSPACE_DISPLAY_TIMEZONE,
+  }).format(date);
 }
 
 /** Parse `GET /api/channels/meta/assets`. Unknown shapes are an empty list, never a guess. */

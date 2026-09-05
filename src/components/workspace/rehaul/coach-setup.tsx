@@ -1,5 +1,3 @@
-"use client";
-
 /*
  * Setup: one list of what stands between a coach and a live agent, drawn from one read.
  *
