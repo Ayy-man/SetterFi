@@ -1,7 +1,7 @@
 # SetterFi handover manifest
 
-Generated at: `2026-09-05T21:59:10.000Z`
-Source commit: `c144358091dd8bb92f58d89190cae3276eee94ed`
+Generated at: `2026-09-05T23:43:53.000Z`
+Source commit: `7281e4624dc58da1490fbcdb796e9262e9ed1107`
 Operator guides: 23
 Audit actions: 195
 Alert rules: 37
@@ -11,7 +11,7 @@ recording, browser, or live-UAT evidence. Input-required placeholders remain una
 
 | File | SHA-256 |
 | --- | --- |
-| operator-guide.md | `ebbaa29f39d01a6bd6fa76469ddf66e416f08b4385f493fd56308f4b8390fcab` |
+| operator-guide.md | `335bfe15751262ecb435ee1841eb600f7f20860b3ed065e5f5fad6d726f39051` |
 | audit-action-registry.md | `7af9a201ec5504d1f42db47001292d6c83e6c2c66a4c9a73e73319bcb234982b` |
 | alert-rule-registry.md | `1ff796d48556ebc391844f35bf4572052988d987a0a1d93f55264a2cc46f1c72` |
 | failure-procedures.md | `c7df2a9204640e2173abf3341be236fe96a6171f2f35a102e3c5fa84d87344cd` |

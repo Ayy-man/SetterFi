@@ -108,6 +108,11 @@ export const ADMIN_GUIDES: AdminGuide[] = [
           "scripts/eval-engine.ts and scripts/eval-moderator.ts exercise the same corpora the nightly job and the Evals tab use, against the published Brain snapshot and the active generator and moderator rows, and print one line per case plus a summary without writing to the database. From the repository root, with the repository's .env.local and the stale shell exports unset: env -u SUPABASE_SERVICE_ROLE_KEY -u SUPABASE_ANON_KEY -u SUPABASE_JWT_SECRET zsh -c 'set -a; source .env.local; set +a; npx --yes tsx scripts/eval-engine.ts', and the same line with scripts/eval-moderator.ts. Both accept --only <category> and --limit <n>; the engine runner also takes --key <substring> and --json and exits 1 on any false_block, missed_by_checker or uncaught case. A full 48-case engine run costs about 0.01 OpenRouter credits, so run it freely. The moderator runner scores each of the 44 labelled cases as correct, false allow, false block, class mismatch or error, and reports strict and verdict-only accuracy with p50 and p95 latency.",
       },
       {
+        heading: "Run the retrieval suite after a Brain import or re-publish",
+        caption:
+          "The same runner with --suite retrieval (and SETTERFI_EMBEDDINGS_DRIVER=real in place of the OpenRouter driver flag) runs evals/corpus/retrieval.json through the real retrieval path against the published snapshot, with no generator or moderator, and prints four ratios that are never blended with the safety pass rate: precision@1 (the expected entry ranked first), recall@5 (it reached the five prompt candidates), no-match precision (of the messages retrieval refused, the share that deserved refusal) and citation validity (every candidate offered to the prompt exists in the snapshot). A case marked unresolvable means the corpus names a question the published snapshot does not carry; fix the corpus or the import rather than reading around it. docs/operations/README.md explains how to read each figure.",
+      },
+      {
         heading: "Carry the result into the publish",
         caption:
           "The publish button reads the latest suite status. Run the suite last so the status the operator sees at publish time is the one you just produced.",
@@ -118,6 +123,7 @@ export const ADMIN_GUIDES: AdminGuide[] = [
       "Every failing case opens to a receipt naming the rule and passage it used.",
       "All eval traffic stays labeled as test data and never lands in client analytics.",
       "A by-hand engine run exits 0 and its summary counts cases, passed, the six outcomes and the credits it spent; with --json it also names the snapshot and the generator and moderator rows it ran on.",
+      "A by-hand retrieval run names the snapshot and the embeddings model it ranked against, prints each of the four ratios with its numerator and denominator (a zero denominator prints null, never 100%), and exits 0 only when every case is hit_at_1 or no_match_correct.",
     ],
     troubleshoot:
       "If a suite passes here but a coach reports the old behavior, the run was against the published configuration rather than your draft. Re-run with draft selected.",
