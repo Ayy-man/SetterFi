@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildNumberSources,
+  channelLengthLimits,
   decideCheckAttempt,
+  extractBareIntegers,
   extractNumbers,
   leadResponse,
+  lengthBreach,
   runOutputChecks,
+  truncateAtSentenceBoundary,
 } from "@/lib/engine/output-checks";
 import type { CoachOffer, OutputCheckClass, PublishedBrainEntry } from "@/lib/engine/types";
 
@@ -126,6 +130,174 @@ describe("the one-regeneration ladder", () => {
       action: "pass_truncated",
       draft: `${"A".repeat(120)}.`,
     });
+  });
+});
+
+describe("LEN soft cap versus hard cap", () => {
+  // SMS: soft 160, hard 320. Every draft below has sentence boundaries well inside the soft cap,
+  // so the only thing separating the outcomes is which cap the whole draft breaks.
+  const sentence = "We look at your file first. ";
+  function draftOfLength(length: number) {
+    return sentence.repeat(Math.ceil(length / sentence.length)).slice(0, length - 1) + ".";
+  }
+
+  it("records a soft breach as LEN-001 and truncates it on the first attempt without a retry", () => {
+    const draft = draftOfLength(200);
+    const result = runOutputChecks(draft, context);
+    expect(result.violations).toEqual([{
+      class: "LEN", ruleId: "LEN-001", evidence: "sms reply length 200 exceeds soft cap 160",
+    }]);
+    for (const attempt of [1, 2] as const) {
+      const decision = decideCheckAttempt({ draft, attempt, result, channel: "sms" });
+      expect(decision.action).toBe("pass_truncated");
+      expect(decision.action === "pass_truncated" && decision.draft.length <= 160).toBe(true);
+    }
+  });
+
+  it("still regenerates a soft breach that has no sentence boundary inside the cap", () => {
+    const draft = `${"A".repeat(199)}.`;
+    const result = runOutputChecks(draft, context);
+    expect(decideCheckAttempt({ draft, attempt: 1, result, channel: "sms" }))
+      .toEqual({ action: "regenerate", ruleIds: ["LEN-001"], classes: ["LEN"] });
+    expect(decideCheckAttempt({ draft, attempt: 2, result, channel: "sms" })).toEqual({ action: "hold" });
+  });
+
+  it("does not truncate away a second class that failed alongside a soft breach", () => {
+    const draft = `You are pre-approved. ${draftOfLength(180)}`;
+    const result = runOutputChecks(draft, context);
+    expect(decideCheckAttempt({ draft, attempt: 1, result, channel: "sms" }).action).toBe("regenerate");
+    expect(decideCheckAttempt({ draft, attempt: 2, result, channel: "sms" })).toEqual({ action: "hold" });
+  });
+
+  it("records a hard breach as LEN-002 and holds instead of truncating the essay", () => {
+    const draft = draftOfLength(900);
+    const result = runOutputChecks(draft, context);
+    expect(result.violations).toEqual([{
+      class: "LEN", ruleId: "LEN-002", evidence: "sms reply length 900 exceeds hard cap 320",
+    }]);
+    expect(result.checks.find((check) => check.class === "LEN")).toEqual({
+      class: "LEN", passed: false, ruleIds: ["LEN-002"],
+      evidence: ["sms reply length 900 exceeds hard cap 320"],
+    });
+    expect(decideCheckAttempt({ draft, attempt: 1, result, channel: "sms" }))
+      .toEqual({ action: "regenerate", ruleIds: ["LEN-002"], classes: ["LEN"] });
+    expect(decideCheckAttempt({ draft, attempt: 2, result, channel: "sms" })).toEqual({ action: "hold" });
+    expect(truncateAtSentenceBoundary(draft, "sms")).toBeNull();
+  });
+
+  it("treats the hard cap itself as a soft breach and one character past it as hard", () => {
+    const atCap = draftOfLength(320);
+    const pastCap = draftOfLength(321);
+    expect(lengthBreach(atCap, "sms")).toBe("soft");
+    expect(lengthBreach(pastCap, "sms")).toBe("hard");
+    expect(decideCheckAttempt({
+      draft: atCap, attempt: 2, result: runOutputChecks(atCap, context), channel: "sms",
+    }).action).toBe("pass_truncated");
+    expect(decideCheckAttempt({
+      draft: pastCap, attempt: 2, result: runOutputChecks(pastCap, context), channel: "sms",
+    })).toEqual({ action: "hold" });
+  });
+
+  it("scales both caps per channel", () => {
+    expect(channelLengthLimits("sms")).toEqual({ soft: 160, hard: 320 });
+    expect(channelLengthLimits("instagram")).toEqual({ soft: 320, hard: 800 });
+    const draft = draftOfLength(500);
+    expect(lengthBreach(draft, "sms")).toBe("hard");
+    expect(lengthBreach(draft, "instagram")).toBe("soft");
+    expect(decideCheckAttempt({
+      draft, attempt: 2, result: runOutputChecks(draft, { ...context, channel: "instagram" }), channel: "instagram",
+    }).action).toBe("pass_truncated");
+  });
+});
+
+describe("LINK without a scheme", () => {
+  it.each([
+    "Apply at sketchy-lender.example/apply and we go from there.",
+    "Details are on sketchy-lender.example.",
+    "Try funding.sketchy-lender.example/start today",
+  ])("checks a bare host against the whitelist: %s", (draft) => {
+    const result = runOutputChecks(draft, context);
+    expect(result.violations.map((violation) => violation.class)).toEqual(["LINK"]);
+  });
+
+  it("lets a bare mention of a whitelisted host through, including a subdomain", () => {
+    expect(runOutputChecks("Book at summit.example/call when you are ready.", context).passed).toBe(true);
+    expect(runOutputChecks("It's all on book.summit.example.", context).passed).toBe(true);
+  });
+
+  it.each([
+    "Some lenders, e.g. credit unions, ask for more.",
+    "Rates near 1.5 points are common. Let's talk at 10.30am. U.S. lenders vary.",
+    "Email me at help@summit.example and we go from there.",
+    "Sept. 5 works. Call ends 3.15pm.",
+  ])("ignores abbreviations, decimals, times and email domains: %s", (draft) => {
+    expect(runOutputChecks(draft, context).violations.map((violation) => violation.class)).not.toContain("LINK");
+  });
+
+  it("counts a scheme-bearing link once rather than once more as a bare host", () => {
+    const result = runOutputChecks("Go to https://phish.example/x now.", context);
+    expect(result.violations.filter((violation) => violation.class === "LINK")).toHaveLength(1);
+    expect(runOutputChecks("Go to https://book.summit.example/x now.", context).passed).toBe(true);
+  });
+});
+
+describe("NUM and bare integers", () => {
+  it("reads a figure as a score only with score context", () => {
+    expect(extractNumbers("Your credit is around 700.")).toEqual([
+      { kind: "score", value: 700, raw: "700", start: 22, end: 25 },
+    ]);
+    expect(extractNumbers("A score of 700 helps.")[0]).toMatchObject({ kind: "score", value: 700 });
+    expect(extractNumbers("700 FICO is the usual bar.")[0]).toMatchObject({ kind: "score", value: 700 });
+    expect(extractNumbers("That takes about 700 forms.")).toEqual([]);
+    expect(extractBareIntegers("That takes about 700 forms.")).toEqual([
+      { value: 700, raw: "700", start: 17, end: 20 },
+    ]);
+  });
+
+  it("does not let a bare integer ground itself on the credit threshold by coincidence", () => {
+    const result = runOutputChecks("We usually see about 640 applicants a month.", context);
+    // 640 is the tenant's credit_min, so the value matches a source and the bare integer passes.
+    expect(result.passed).toBe(true);
+    const unmatched = runOutputChecks("We usually see about 650 applicants a month.", context);
+    expect(unmatched.violations).toEqual([{
+      class: "NUM", ruleId: "NUM-001", evidence: "unattributed number at character 21",
+    }]);
+    // With score context the same figure is a score and must match a score source exactly.
+    expect(runOutputChecks("Your score of 650 is close.", context).violations[0].class).toBe("NUM");
+    expect(runOutputChecks("Your score of 640 clears the bar.", context).passed).toBe(true);
+  });
+
+  it("takes only contextual scores from Brain text and lead words as sources", () => {
+    const sources = buildNumberSources({
+      offer: { ...OFFER, offerPrices: [], creditMin: null, fundingGoalMinCents: null },
+      brainEntries: [{
+        ...BRAIN[0],
+        answer: "About 700 people apply every single month here, and the typical credit score is 680.",
+      }],
+      leadMessages: [{
+        id: "lead-1", body: "I keep 720 in savings for emergencies right now. My score is 690.",
+      }],
+    });
+    expect(sources.map((source) => source.value).sort()).toEqual([680, 690]);
+  });
+});
+
+describe("SCOPE for verse set as a list", () => {
+  it.each([
+    ["dashes", "- every dawn insists it's new\n- though yesterday's ash still clings\n- we say start over like a spell\n- as if words could unweave what's spun"],
+    ["numbers", "1. every dawn insists it's new\n2. though yesterday's ash still clings\n3. we say start over like a spell\n4. as if words could unweave what's spun"],
+    ["bullets", "• every dawn insists it's new\n• though yesterday's ash still clings\n• we say start over\n• as if words could unweave"],
+  ])("blocks a poem written as %s", (_label, draft) => {
+    expect(runOutputChecks(draft, context).violations.map((violation) => violation.class)).toContain("SCOPE");
+  });
+
+  it("lets a bulleted list of full sentences through", () => {
+    const draft = "Here is what happens next:\n"
+      + "- We review your file on the first call.\n"
+      + "- You get a written plan you can act on.\n"
+      + "- Nothing is promised before we look.\n"
+      + "- You choose whether to continue.";
+    expect(runOutputChecks(draft, context).violations.map((violation) => violation.class)).not.toContain("SCOPE");
   });
 });
 

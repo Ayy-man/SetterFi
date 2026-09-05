@@ -26,6 +26,8 @@ const RULE_IDS: Record<OutputCheckClass, string> = {
   SCOPE: "SCOPE-001",
   LEN: "LEN-001",
 };
+/** A hard-cap breach carries its own rule id so a trace names which LEN cap the draft broke. */
+const LEN_HARD_RULE_ID = "LEN-002";
 
 const CHANNEL_LIMITS = {
   sms: { soft: 160, hard: 320 },
@@ -58,8 +60,26 @@ function numberKey(kind: NumberKind, value: number) {
   return `${kind}:${value}`;
 }
 
-export function extractNumbers(value: string) {
-  const facts: Array<{ kind: NumberKind; value: number; raw: string; start: number; end: number }> = [];
+/**
+ * A three-digit figure in the credit-score range only reads as a score when the text says so:
+ * "score", "credit" or "FICO" within a few words on either side, or "score of N". Without that
+ * context the figure is a bare integer, and a bare integer never grounds itself against the
+ * tenant's score threshold just because the two happen to share a value.
+ */
+const SCORE_CONTEXT = /\b(?:scores?|credit|fico)\b/i;
+const SCORE_CONTEXT_WINDOW = 40;
+
+function hasScoreContext(text: string, start: number, end: number) {
+  const before = text.slice(Math.max(0, start - SCORE_CONTEXT_WINDOW), start);
+  const after = text.slice(end, end + SCORE_CONTEXT_WINDOW);
+  return /\bscore of\s*$/i.test(before) || SCORE_CONTEXT.test(before) || SCORE_CONTEXT.test(after);
+}
+
+type NumericFact = { kind: NumberKind; value: number; raw: string; start: number; end: number };
+
+function scanNumbers(value: string) {
+  const facts: NumericFact[] = [];
+  const bare: Array<Omit<NumericFact, "kind">> = [];
   const occupied: Array<[number, number]> = [];
   const text = value.replace(/https?:\/\/\S+/g, (url) => " ".repeat(url.length));
   const currency = /\$(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmM])?/g;
@@ -89,9 +109,20 @@ export function extractNumbers(value: string) {
     const start = match.index;
     const end = start + match[0].length;
     if (occupied.some(([from, to]) => start >= from && start < to)) continue;
-    facts.push({ kind: "score", value: Number(match[1]), raw: match[0], start, end });
+    const fact = { value: Number(match[1]), raw: match[0], start, end };
+    if (hasScoreContext(text, start, end)) facts.push({ kind: "score", ...fact });
+    else bare.push(fact);
   }
-  return facts;
+  return { facts, bare };
+}
+
+export function extractNumbers(value: string) {
+  return scanNumbers(value).facts;
+}
+
+/** Score-range integers with no score context: not a fact of any kind, but not free either. */
+export function extractBareIntegers(value: string) {
+  return scanNumbers(value).bare;
 }
 
 function sourcesFromText(value: string, sourceType: NumberSource["sourceType"], sourceId: string) {
@@ -150,9 +181,17 @@ export function buildNumberSources({
 
 function numberViolations(draft: string, context: OutputCheckContext) {
   const allowlist = new Set(context.numberSources.map((source) => numberKey(source.kind, source.value)));
-  return extractNumbers(draft)
-    .filter((fact) => !allowlist.has(numberKey(fact.kind, fact.value)))
-    .map((fact) => `ungrounded ${fact.kind} at character ${fact.start}`);
+  const allowedValues = new Set(context.numberSources.map((source) => source.value));
+  // A bare integer is unattributed: it passes only when some grounded source carries that exact
+  // value, whatever that source's kind, because the draft gave no kind to match against.
+  return [
+    ...extractNumbers(draft)
+      .filter((fact) => !allowlist.has(numberKey(fact.kind, fact.value)))
+      .map((fact) => `ungrounded ${fact.kind} at character ${fact.start}`),
+    ...extractBareIntegers(draft)
+      .filter((fact) => !allowedValues.has(fact.value))
+      .map((fact) => `unattributed number at character ${fact.start}`),
+  ];
 }
 
 function isDeclining(text: string, phraseStart: number) {
@@ -208,12 +247,20 @@ function echoViolations(draft: string, context: OutputCheckContext) {
   return evidence;
 }
 
+/**
+ * One pass, scheme-bearing links first so a host inside `https://…` is consumed once. The bare
+ * form wants labels, a dot, and a TLD of two or more letters, so "e.g.", "1.5", "10.30pm" and
+ * "U.S." never qualify, and the lookbehind keeps an email's domain and a URL's tail out of it.
+ */
+const LINK_PATTERN =
+  /(?:https?:\/\/|www\.)[^\s)\]}>,]+|(?<![\w@.\/-])(?:[a-z0-9-]+\.)+[a-z]{2,}(?![a-z@])(?:\/[^\s)\]}>,]*)?/gi;
+
 function linkViolations(draft: string, whitelist: readonly string[]) {
   const allowed = whitelist.map((host) => host.toLowerCase().replace(/^www\./, ""));
-  const links = draft.match(/(?:https?:\/\/|www\.)[^\s)\]}>,]+/gi) ?? [];
+  const links = draft.match(LINK_PATTERN) ?? [];
   return links.flatMap((raw, index) => {
     try {
-      const url = new URL(raw.startsWith("www.") ? `https://${raw}` : raw);
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
       const host = url.hostname.toLowerCase().replace(/^www\./, "");
       const hostAllowed = allowed.some((candidate) => host === candidate || host.endsWith(`.${candidate}`));
       return url.protocol === "https:" && hostAllowed ? [] : [`unapproved link at index ${index}`];
@@ -234,15 +281,17 @@ const SCOPE_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
 
 /**
  * Four or more consecutive short lines, most without terminal punctuation, is verse or a list of
- * lyrics, never a setter's reply. Markdown bullets and numbered steps are excluded so a rare
- * itemised answer is judged by LEN, not SCOPE.
+ * lyrics, never a setter's reply. Bullet and number markers are stripped before the test rather
+ * than exempting the line, so a poem set as a list is still a poem, while a rare itemised answer
+ * of full punctuated sentences is judged by LEN, not SCOPE.
  */
 function looksLikeVerse(draft: string) {
-  const lines = draft.split(/\r?\n/).map((line) => line.trim());
+  const lines = draft.split(/\r?\n/)
+    .map((line) => line.trim().replace(/^(?:[-*•]|\d+[.)])\s+/, ""));
   let run = 0;
   let unpunctuated = 0;
   for (const line of lines) {
-    const short = line.length > 0 && line.length <= 60 && !/^(?:[-*•]|\d+[.)])\s/.test(line);
+    const short = line.length > 0 && line.length <= 60;
     if (!short) { run = 0; unpunctuated = 0; continue; }
     run += 1;
     if (!/[.!?:]["')\]]?$/.test(line)) unpunctuated += 1;
@@ -257,11 +306,33 @@ function scopeViolations(draft: string, roleBoundary: string) {
   return evidence.map((label) => `reply crossed role boundary (${label}): ${roleBoundary}`);
 }
 
+export function channelLengthLimits(channel: OutputCheckContext["channel"]) {
+  return CHANNEL_LIMITS[channel];
+}
+
+/**
+ * Two caps per channel. Over the soft cap the draft is a long reply: regenerate once, then drop
+ * trailing sentences. Over the hard cap it is an essay, and the first sentence of an essay is not
+ * a reply to the lead, so truncation is never offered and the turn is held. The hard cap itself
+ * is still a soft breach; only a draft strictly beyond it is a hard breach.
+ */
+export function lengthBreach(draft: string, channel: OutputCheckContext["channel"]) {
+  const limits = CHANNEL_LIMITS[channel];
+  if (draft.length > limits.hard) return "hard" as const;
+  if (draft.length > limits.soft) return "soft" as const;
+  return "none" as const;
+}
+
 function lengthViolations(draft: string, channel: OutputCheckContext["channel"]) {
   const limits = CHANNEL_LIMITS[channel];
-  return draft.length > limits.soft
-    ? [`${channel} reply length ${draft.length} exceeds soft cap ${limits.soft}`]
-    : [];
+  switch (lengthBreach(draft, channel)) {
+    case "hard":
+      return [`${channel} reply length ${draft.length} exceeds hard cap ${limits.hard}`];
+    case "soft":
+      return [`${channel} reply length ${draft.length} exceeds soft cap ${limits.soft}`];
+    default:
+      return [];
+  }
 }
 
 export function runOutputChecks(draft: string, context: OutputCheckContext) {
@@ -274,12 +345,15 @@ export function runOutputChecks(draft: string, context: OutputCheckContext) {
     SCOPE: scopeViolations(draft, context.roleBoundary),
     LEN: lengthViolations(draft, context.channel),
   };
+  const lengthRuleId = lengthBreach(draft, context.channel) === "hard" ? LEN_HARD_RULE_ID : RULE_IDS.LEN;
   const checks: CheckResult[] = CHECK_ORDER.map((checkClass) => ({
     class: checkClass,
     passed: evidenceByClass[checkClass].length === 0,
     ruleIds: checkClass === "CLAIM"
       ? claimEvidence.map((evidence) => evidence.split(" ", 1)[0])
-      : evidenceByClass[checkClass].length ? [RULE_IDS[checkClass]] : [],
+      : evidenceByClass[checkClass].length
+        ? [checkClass === "LEN" ? lengthRuleId : RULE_IDS[checkClass]]
+        : [],
     evidence: evidenceByClass[checkClass],
   }));
   const violations: CheckViolation[] = checks.flatMap((check) =>
@@ -292,9 +366,15 @@ export function runOutputChecks(draft: string, context: OutputCheckContext) {
   return { passed: violations.length === 0, checks, violations };
 }
 
+/**
+ * Drops trailing sentences until the draft fits the soft cap. Null when no sentence ends inside
+ * the cap, and null for a hard-cap breach: an essay's opening sentence is not the reply the lead
+ * was owed, so the caller has nothing to send and holds.
+ */
 export function truncateAtSentenceBoundary(draft: string, channel: OutputCheckContext["channel"]) {
   const limit = CHANNEL_LIMITS[channel].soft;
   if (draft.length <= limit) return draft;
+  if (lengthBreach(draft, channel) === "hard") return null;
   const prefix = draft.slice(0, limit + 1);
   const matches = [...prefix.matchAll(/[.!?](?=\s|$)/g)];
   const boundary = matches.at(-1)?.index;
@@ -317,16 +397,20 @@ export function decideCheckAttempt({
   | { action: "hold" }
   | { action: "pass_truncated"; draft: string } {
   if (result.passed) return { action: "pass", draft };
+  // A soft LEN breach on its own has a deterministic remedy, so it is applied on the first
+  // attempt without a model call. `truncateAtSentenceBoundary` answers null for a hard breach,
+  // so an essay regenerates once and then falls through to the held path with class LEN, and a
+  // soft breach with no sentence boundary inside the cap takes the same ladder.
+  if (result.violations.every((violation) => violation.class === "LEN")) {
+    const truncated = truncateAtSentenceBoundary(draft, channel);
+    if (truncated) return { action: "pass_truncated", draft: truncated };
+  }
   if (attempt === 1) {
     return {
       action: "regenerate",
       ruleIds: [...new Set(result.violations.map((violation) => violation.ruleId))],
       classes: [...new Set(result.violations.map((violation) => violation.class))],
     };
-  }
-  if (result.violations.every((violation) => violation.class === "LEN")) {
-    const truncated = truncateAtSentenceBoundary(draft, channel);
-    if (truncated) return { action: "pass_truncated", draft: truncated };
   }
   return { action: "hold" };
 }
