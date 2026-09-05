@@ -19,8 +19,8 @@ export function resolveEmbeddingsDriver(
   }
   const apiKey = requireEnvironment(
     "embeddings",
-    ["OPENAI_API_KEY"],
+    ["OPENROUTER_API_KEY"],
     environment,
-  ).OPENAI_API_KEY;
+  ).OPENROUTER_API_KEY;
   return createRealEmbeddingsDriver(apiKey, realDependencies);
 }

@@ -4,7 +4,7 @@ Audience: a developer with zero project context. Read docs/ENGINEERING-BRIEF.md 
 top to bottom. Every subsystem below specifies schema, routes, contracts, and jobs. Stack:
 Next.js route handlers + Vercel (one project, `setter-fi` — no staging environment, see §10.5),
 Supabase Postgres + pgvector (new project under
-the client's org), OpenRouter (LLM chat completions), OpenAI (embeddings only), Stripe,
+the client's org), OpenRouter (LLM chat completions and embeddings), Stripe,
 GoHighLevel API v2, Meta Graph API. TypeScript, zod on every boundary. Base rule: **ack every webhook <1s, process via `waitUntil()`/queue.**
 
 ## 0. Conventions
@@ -553,7 +553,7 @@ create table offer_layers (      -- per-tenant, bounded self-editing
   prose sources. Cadence (nightly cron vs manual "Sync now" vs one-time import with the Brain as
   authority) is open and owned by Alec.
   As specced: Notion API delta fetch → markdown → chunk (~500 tokens, heading-aware) → embed
-  (OpenAI `text-embedding-3-small`, called directly — OpenRouter has no embeddings endpoint) →
+  (`openai/text-embedding-3-small` through OpenRouter’s embeddings endpoint, docs read 2026-09-05) →
   upsert as DRAFT. Admin reviews diff → **publish** flips `published` atomically per document
   (transaction), bumps version, writes audit row. Retrieval
   reads `published=true` only. Draft context available exclusively in evals/test panel.

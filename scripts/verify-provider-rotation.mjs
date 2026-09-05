@@ -22,7 +22,7 @@ const PROVIDERS = {
   },
   openai_embeddings: {
     selector: "SETTERFI_EMBEDDINGS_DRIVER",
-    names: ["OPENAI_API_KEY"],
+    names: ["OPENROUTER_API_KEY"],
     receiptClass: "openai.models.read",
   },
   notion: {

@@ -14,8 +14,12 @@ import {
   type EmbeddingsDriver,
 } from "./types";
 
-const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
-const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
+// OpenRouter serves OpenAI-compatible embeddings (https://openrouter.ai/docs/api-reference/embeddings,
+// read 2026-09-05). The wire model id carries the provider prefix; the driver reports the bare
+// model name so rows embedded before the switch stay comparable.
+const EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings";
+const WIRE_EMBEDDING_MODEL = "openai/text-embedding-3-small";
+const EMBEDDING_MODEL = "text-embedding-3-small";
 const MAX_BATCH_ITEMS = 128;
 const MAX_INPUT_TOKENS_ESTIMATE = 8_000;
 const MAX_BATCH_TOKENS_ESTIMATE = 250_000;
@@ -134,19 +138,19 @@ export function createRealEmbeddingsDriver(
   { fetch: fetcher = fetch }: RealEmbeddingsDependencies = {},
 ): EmbeddingsDriver {
   return {
-    model: OPENAI_EMBEDDING_MODEL,
+    model: EMBEDDING_MODEL,
     dimensions: EMBEDDING_DIMENSIONS,
     embed: async (input) => {
       const results: EmbeddingResult[] = [];
       for (const batch of embeddingBatches(input)) {
-        const response = await fetcher(OPENAI_EMBEDDINGS_URL, {
+        const response = await fetcher(EMBEDDINGS_URL, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: OPENAI_EMBEDDING_MODEL,
+            model: WIRE_EMBEDDING_MODEL,
             dimensions: EMBEDDING_DIMENSIONS,
             input: batch.map((row) => row.text),
           }),

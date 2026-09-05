@@ -43,7 +43,7 @@ map onto those three workspaces; the mapping lives in `src/lib/auth/claims.ts`.
 - **Supabase** (Postgres + pgvector): the brain/knowledge store and app data. Seeded from the
   client's Notion knowledge base.
 - **OpenRouter**: LLM access, model-configurable (so models can be swapped and A/B-evaluated).
-  **OpenAI** for embeddings only.
+  Embeddings also go through OpenRouter (`openai/text-embedding-3-small`) since 2026-09-05.
 - **Stripe**: subscription billing and affiliate commission calculation.
 - **GoHighLevel**: the CRM, sub-account, phone number and SMS backbone. Invisible to coaches and
   leads.

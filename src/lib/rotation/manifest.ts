@@ -61,7 +61,7 @@ export const ROTATION_MANIFEST = {
     provider: "openai_embeddings",
     driverName: "embeddings",
     selectorName: "SETTERFI_EMBEDDINGS_DRIVER",
-    credentialNames: ["OPENAI_API_KEY"],
+    credentialNames: ["OPENROUTER_API_KEY"],
     verificationNames: [],
     receiptClass: "openai.models.read",
   },

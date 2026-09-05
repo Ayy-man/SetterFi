@@ -37,7 +37,7 @@ describe("embedding driver selection", () => {
       DriverConfigurationError,
     );
     expect(() => resolveEmbeddingsDriver({ SETTERFI_EMBEDDINGS_DRIVER: "real" })).toThrow(
-      /OPENAI_API_KEY/,
+      /OPENROUTER_API_KEY/,
     );
   });
 });
@@ -100,9 +100,10 @@ describe("real OpenAI embeddings adapter", () => {
     const results = await driver.embed(input);
 
     expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.every(([url]) => url === "https://openrouter.ai/api/v1/embeddings")).toBe(true);
     expect(requestBodies.map((body) => body.input.length)).toEqual([128, 2]);
     expect(requestBodies.every((body) =>
-      body.model === "text-embedding-3-small" && body.dimensions === EMBEDDING_DIMENSIONS,
+      body.model === "openai/text-embedding-3-small" && body.dimensions === EMBEDDING_DIMENSIONS,
     )).toBe(true);
     expect(results.map((row) => row.id)).toEqual(input.map((row) => row.id));
     expect(results[0].vector[0]).toBe(1);
@@ -177,13 +178,13 @@ describe("real OpenAI embeddings adapter", () => {
 });
 
 const embeddingsRealSkipReason = environmentValue("SETTERFI_EMBEDDINGS_DRIVER") !== "real"
-  ? "SETTERFI_EMBEDDINGS_DRIVER=real is required; OPENAI_API_KEY is required"
-  : !environmentValue("OPENAI_API_KEY")
-    ? "OPENAI_API_KEY is missing"
+  ? "SETTERFI_EMBEDDINGS_DRIVER=real is required; OPENROUTER_API_KEY is required"
+  : !environmentValue("OPENROUTER_API_KEY")
+    ? "OPENROUTER_API_KEY is missing"
     : null;
 
 describe.skipIf(Boolean(embeddingsRealSkipReason))(
-  `OpenAI embeddings real arm — SKIPPED: ${embeddingsRealSkipReason ?? "configured"}`,
+  `OpenRouter embeddings real arm — SKIPPED: ${embeddingsRealSkipReason ?? "configured"}`,
   () => {
     it("embeds one synthetic sentence without promoting the mock arm to provider evidence", async () => {
       const driver = resolveEmbeddingsDriver(process.env);

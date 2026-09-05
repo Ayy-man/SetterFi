@@ -140,7 +140,7 @@ const PROVIDERS: readonly ProviderDescriptor[] = [
     label: "Model routing",
     checks: [
       { selectorName: "SETTERFI_OPENROUTER_DRIVER", requiredNames: ["OPENROUTER_API_KEY"] },
-      { selectorName: "SETTERFI_EMBEDDINGS_DRIVER", requiredNames: ["OPENAI_API_KEY"] },
+      { selectorName: "SETTERFI_EMBEDDINGS_DRIVER", requiredNames: ["OPENROUTER_API_KEY"] },
     ],
   },
   {

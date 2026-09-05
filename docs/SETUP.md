@@ -160,8 +160,7 @@ the demo identities, revoke their sessions, and confirm the shortcuts are gone f
 | `GHL_INSTALL_URL` / `GHL_AGENCY_INSTALL_URL` | Portal-issued install links for app 1 and app 2 |
 | `GHL_SNAPSHOT_ID` | Snapshot pushed onto each new coach sub-account |
 | `GHL_NUMBER_POOL_ID` | Number pool a coach's phone number is bought from |
-| `OPENROUTER_API_KEY` | Chat completions only, no embeddings endpoint |
-| `OPENAI_API_KEY` | Embeddings only, used by brain sync |
+| `OPENROUTER_API_KEY` | Chat completions and embeddings (`openai/text-embedding-3-small` via OpenRouter, docs read 2026-09-05) |
 | `NOTION_API_KEY` / `NOTION_KB_ROOT_ID` / `NOTION_EXPORT_PATH` | Knowledge base sync |
 | `META_APP_ID` / `META_APP_SECRET` | Meta app credentials for OAuth and webhooks |
 | `META_LOGIN_CONFIG_ID` | Facebook Login configuration used by the coach connect flow |
