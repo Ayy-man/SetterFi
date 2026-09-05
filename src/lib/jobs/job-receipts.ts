@@ -16,6 +16,7 @@ export const JOB_RECEIPT_KEYS = [
   "inbound-recovery",
   "notification-deliveries",
   "outbound-reconciliation",
+  "platform-smoke",
   "provisioning-run",
   "stripe-webhooks",
   "tenant-health-rollup",
@@ -145,6 +146,8 @@ const JOB_FRESHNESS_WINDOWS_MS: Record<JobReceiptKey, number> = {
   "inbound-recovery": 10 * 60_000,
   "notification-deliveries": 26 * 60 * 60_000,
   "outbound-reconciliation": 10 * 60_000,
+  // Hourly at :20; two cycles plus slack so one slow run does not read as stale.
+  "platform-smoke": 130 * 60_000,
   "provisioning-run": 20 * 60_000,
   "stripe-webhooks": 45 * 60_000,
   "tenant-health-rollup": 26 * 60 * 60_000,

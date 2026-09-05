@@ -16,7 +16,7 @@ import {
 const NOW = new Date("2026-08-18T06:00:00.000Z");
 const SCHEDULED_JOB_KEYS: SystemJobReceipt["job"][] = [
   "appointment-reconcile", "compliance-reconcile", "a2p-probe", "stripe-webhooks",
-  "billing-allowances", "billing-cost-rollup", "notification-deliveries", "engine-evals",
+  "billing-allowances", "billing-cost-rollup", "notification-deliveries", "engine-evals", "platform-smoke",
   "followups", "ghl-install-reconcile", "inbound-recovery", "outbound-reconciliation",
   "contact-deletion-recovery", "tenant-health-rollup", "provisioning-run",
   "agent-inactivity-sweep",
@@ -48,11 +48,11 @@ function source(overrides: Partial<SystemHealthSource> = {}): SystemHealthSource
 }
 
 describe("read-only system health", () => {
-  it("shows all 18 configured jobs as never-ran when no receipts exist", async () => {
+  it("shows all 19 configured jobs as never-ran when no receipts exist", async () => {
     const result = await loadSystemHealth({ source: source(), environment: {}, now: NOW });
 
     expect(result.queue).toMatchObject({ state: "available", depth: 2, failedAttempts: 3, terminalAttempts: 1 });
-    expect(result.jobs).toHaveLength(18);
+    expect(result.jobs).toHaveLength(19);
     expect(result.jobs.find((job) => job.id === "capi-events")).toMatchObject({
       label: "CAPI Events", schedule: "*/2 * * * *", state: "never-ran",
     });
@@ -191,7 +191,7 @@ describe("read-only system health", () => {
       environment: {}, now: NOW,
     });
 
-    expect(result.jobs).toHaveLength(18);
+    expect(result.jobs).toHaveLength(19);
     expect(result.jobs.every((job) => job.state === "healthy")).toBe(true);
     expect(result.reporting).toEqual({ state: "healthy", reason: null });
   });

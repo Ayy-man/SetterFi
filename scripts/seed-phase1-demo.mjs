@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js";
 import { COACH_NAMES, DEMO_ONBOARDING_COPY, LEAD_NAMES, assertUniqueDisplayNames } from "./fixtures/names.mjs";
 import { isShowcaseLeadId } from "./fixtures/showcase-leads-namespace.mjs";
 import { DEMO_CONNECTED_CHANNELS, DEMO_CONNECTED_CHANNEL_NAMES } from "./fixtures/demo-channels.mjs";
+import { runHostedSmokeAfterSeed } from "./run-hosted-smoke.mjs";
 
 export const LOCAL_API_URL = "http://127.0.0.1:54321";
 export const DEMO_IDS = Object.freeze({
@@ -1721,8 +1722,12 @@ export async function seedPhase1Demo({ argumentsList = process.argv.slice(2), an
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  seedPhase1Demo().catch((error) => {
-    console.error(error instanceof Error ? error.message : "DEMO_SEED_FAILED");
-    process.exitCode = 1;
-  });
+  seedPhase1Demo()
+    // A hosted seed ends with the platform smoke, so a seed that breaks an admin page fails here
+    // as SMOKE_FAILED:<check> rather than waiting for someone to open the page.
+    .then(() => runHostedSmokeAfterSeed())
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : "DEMO_SEED_FAILED");
+      process.exitCode = 1;
+    });
 }

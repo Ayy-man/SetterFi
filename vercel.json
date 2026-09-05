@@ -45,6 +45,10 @@
       "schedule": "40 5 * * *"
     },
     {
+      "path": "/api/jobs/platform-smoke",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/jobs/followups",
       "schedule": "*/5 * * * *"
     },

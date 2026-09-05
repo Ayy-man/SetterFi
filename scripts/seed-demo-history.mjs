@@ -31,6 +31,7 @@ import { pathToFileURL } from "node:url";
 
 import pg from "pg";
 
+import { runHostedSmokeAfterSeed } from "./run-hosted-smoke.mjs";
 import { resolveDemoTarget } from "./seed-phase1-demo.mjs";
 import {
   DEMO_HISTORY_COHORT,
@@ -245,8 +246,12 @@ function demoPriceIdFor(rung) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  seedDemoHistory().catch((error) => {
-    console.error(error instanceof Error ? error.message : "DEMO_HISTORY_SEED_FAILED");
-    process.exitCode = 1;
-  });
+  seedDemoHistory()
+    // Backdating tenants is exactly the kind of write the Overview's fail-closed loader can refuse,
+    // so a hosted run ends with the platform smoke and fails as SMOKE_FAILED:<check> if it does.
+    .then(() => runHostedSmokeAfterSeed())
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : "DEMO_HISTORY_SEED_FAILED");
+      process.exitCode = 1;
+    });
 }
