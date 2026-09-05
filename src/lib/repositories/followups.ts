@@ -1,5 +1,5 @@
 import type { MessagingChannel } from "@/lib/booking/types";
-import type { FollowupSchedulerRepository } from "@/lib/followups/scheduler";
+import type { FollowupContentResult, FollowupSchedulerRepository } from "@/lib/followups/scheduler";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export type FollowupRead = {
@@ -76,6 +76,23 @@ export async function listFollowups(
   }));
 }
 
+/**
+ * The demo fallback for follow-up copy, mirroring `approvedPlatformAgentContent`: production
+ * tenants get nothing but an approved template, demo tenants may send a draft demo placeholder
+ * whose text is labelled `[DRAFT]` on the way out. The template row must itself be demo-flagged,
+ * which the database ties to the `SETTERFI_DEMO_PLACEHOLDER_` sentinel body.
+ */
+export function demoDraftFollowupContent(
+  tenant: { isDemo: boolean },
+  draft: { body: string; isDemo: boolean },
+): FollowupContentResult {
+  const body = draft.body.trim();
+  if (!tenant.isDemo || !draft.isDemo || !body.startsWith("SETTERFI_DEMO_PLACEHOLDER_")) {
+    return { kind: "unavailable", reason: "approved_followup_copy_required" };
+  }
+  return { kind: "freeform", body: `[DRAFT] ${body}` };
+}
+
 function rpcRow(value: unknown) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -147,10 +164,24 @@ export function createLiveFollowupSchedulerRepository(): FollowupSchedulerReposi
     },
     loadApprovedFollowupContent: async ({ tenantId, purpose, destination }) => {
       const { data, error } = await client.from("message_templates")
-        .select("id,status").eq("tenant_id", tenantId).eq("channel", destination.channel)
-        .eq("name", `followup:${purpose}`).eq("status", "approved").limit(1).maybeSingle();
-      if (error || !data) throw new Error("APPROVED_FOLLOWUP_COPY_REQUIRED");
-      return { kind: "approved_template", templateKey: data.id, variables: {} };
+        .select("id,status,body,is_demo").eq("tenant_id", tenantId).eq("channel", destination.channel)
+        .eq("name", `followup:${purpose}`).in("status", ["approved", "draft"])
+        .order("status", { ascending: true }).limit(2);
+      if (error) throw new Error("FOLLOWUP_COPY_READ_FAILED");
+      const approved = (data ?? []).find((row) => row.status === "approved");
+      if (approved) return { kind: "approved_template", templateKey: approved.id, variables: {} };
+      const draft = (data ?? []).find((row) => row.status === "draft");
+      if (!draft) return { kind: "unavailable", reason: "approved_followup_copy_required" };
+      // Same rule as the platform prompt: a production tenant needs approved copy, a demo tenant
+      // may run on draft copy that is explicitly labelled as such. A draft template cannot pass the
+      // send gateway's approved-template check, so the draft goes out as labelled freeform text.
+      const { data: tenant, error: tenantError } = await client.from("tenants").select("is_demo")
+        .eq("id", tenantId).single();
+      if (tenantError || !tenant) throw new Error("FOLLOWUP_COPY_READ_FAILED");
+      return demoDraftFollowupContent(
+        { isDemo: tenant.is_demo === true },
+        { body: typeof draft.body === "string" ? draft.body : "", isDemo: draft.is_demo === true },
+      );
     },
     recordResolvedIdentity: async (input) => {
       const { data, error } = await client.from("followups").update({ resolved_identity_id: input.identityId })

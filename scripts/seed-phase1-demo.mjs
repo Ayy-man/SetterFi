@@ -13,7 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { COACH_NAMES, DEMO_ONBOARDING_COPY, LEAD_NAMES, assertUniqueDisplayNames } from "./fixtures/names.mjs";
 import { isShowcaseLeadId } from "./fixtures/showcase-leads-namespace.mjs";
-import { DEMO_CONNECTED_CHANNEL_NAMES } from "./fixtures/demo-channels.mjs";
+import { DEMO_CONNECTED_CHANNELS, DEMO_CONNECTED_CHANNEL_NAMES } from "./fixtures/demo-channels.mjs";
 
 export const LOCAL_API_URL = "http://127.0.0.1:54321";
 export const DEMO_IDS = Object.freeze({
@@ -333,6 +333,81 @@ function demoTemplate({ id, suffix, status, lifecycle = {} }) {
     is_demo: true,
     ...lifecycle,
   };
+}
+
+// The cadence purposes that send something. "none" is a switched-off touch and never reaches copy.
+const DEMO_FOLLOWUP_PURPOSES = Object.freeze([
+  "lead_magnet", "training", "value_nudge", "proof_point", "new_angle", "last_touch",
+]);
+
+/** A stable id for one demo follow-up template, so every re-run upserts the same row. */
+function demoFollowupTemplateId(tenantId, channel, purpose) {
+  const hex = createHash("sha256").update(`demo-followup-template:${tenantId}:${channel}:${purpose}`)
+    .digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * The follow-up copy the scheduler's gate reads (`message_templates.name = followup:<purpose>`,
+ * matched on channel). Without these rows every due demo touch blocks on missing copy and the
+ * simulated cadence never sends. They are approved demo placeholders: the body is a sentinel the
+ * database ties to `is_demo`, and the send path persists `[approved template:<id>]` rather than
+ * the sentinel, so no reader ever sees this text as lead-facing copy.
+ */
+export function demoFollowupTemplateRows(tenantId) {
+  return DEMO_CONNECTED_CHANNELS.flatMap(({ channel, provider }) =>
+    DEMO_FOLLOWUP_PURPOSES.map((purpose) => {
+      const suffix = `FOLLOWUP_${purpose.toUpperCase()}`;
+      const body = `SETTERFI_DEMO_PLACEHOLDER_${suffix}_BODY`;
+      return {
+        id: demoFollowupTemplateId(tenantId, channel, purpose),
+        tenant_id: tenantId,
+        channel,
+        provider,
+        provider_template_id: `demo-followup-${purpose}-${channel}`,
+        provider_template_name: `SETTERFI_DEMO_PLACEHOLDER_${suffix}`,
+        name: `followup:${purpose}`,
+        category: "utility",
+        locale: "en_US",
+        body,
+        body_hash: createHash("sha256").update(body).digest("hex"),
+        variables: [],
+        status: "approved",
+        submitted_at: "2026-09-05T00:00:00.000Z",
+        approved_at: "2026-09-05T00:00:00.000Z",
+        status_updated_at: "2026-09-05T00:00:00.000Z",
+        is_demo: true,
+      };
+    }));
+}
+
+/** Every demo tenant runs the cadence, so every demo tenant gets the same approved follow-up copy. */
+async function seedDemoFollowupTemplates(client) {
+  const tenants = await requireSuccess(
+    "DEMO_FOLLOWUP_TEMPLATE_TENANTS_READ_FAILED",
+    client.from("tenants").select("id").eq("is_demo", true).order("id"),
+  );
+  if (!tenants.some((row) => row.id === DEMO_IDS.tenant)) {
+    throw new Error("DEMO_FOLLOWUP_TEMPLATE_TENANT_MISSING");
+  }
+  const rows = tenants.flatMap((row) => demoFollowupTemplateRows(row.id));
+  await requireSuccess(
+    "DEMO_FOLLOWUP_TEMPLATES_UPSERT_FAILED",
+    client.from("message_templates").upsert(rows, { onConflict: "id" }),
+  );
+  const readback = await requireSuccess(
+    "DEMO_FOLLOWUP_TEMPLATE_READBACK_FAILED",
+    client.from("message_templates").select("id,status,is_demo,name")
+      .in("id", rows.map((row) => row.id)),
+  );
+  if (
+    readback.length !== rows.length
+    || readback.some((row) => row.status !== "approved" || row.is_demo !== true
+      || !row.name.startsWith("followup:"))
+  ) {
+    throw new Error("DEMO_FOLLOWUP_TEMPLATE_READBACK_INVALID");
+  }
+  return rows.length;
 }
 
 function publishedDemoOffer() {
@@ -1419,6 +1494,7 @@ export async function seedPhase1Demo({ argumentsList = process.argv.slice(2), an
     "PHASE4_DEMO_TEMPLATES_UPSERT_FAILED",
     client.from("message_templates").upsert(PHASE4_TEMPLATE_ROWS, { onConflict: "id" }),
   );
+  await seedDemoFollowupTemplates(client);
 
   const mergeContacts = await requireSuccess(
     "PHASE4_DEMO_MERGE_CONTACTS_READ_FAILED",

@@ -5,7 +5,20 @@ import { runJobWithReceipt, type JobReceiptExecution } from "@/lib/jobs/job-rece
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 const headers = { "Cache-Control": "no-store" };
-export type CostRollupReceipt = { rollupId: string; tenantId: string; complete: boolean; missingSources: string[]; marginCents?: number };
+export type CostRollupReceipt = {
+  rollupId: string;
+  tenantId: string;
+  complete: boolean;
+  missingSources: string[];
+  /** Computed while the billing period was still open; the next nightly run rewrites it. */
+  estimate: boolean;
+  marginCents?: number;
+};
+
+/** A roll-up computed before its window closed is a running estimate rather than a settled figure. */
+export function rollupIsEstimate(row: { computed_at: string; window_end: string }) {
+  return Date.parse(row.computed_at) < Date.parse(row.window_end);
+}
 type Dependencies = { enabled(): boolean; secret: string | null; execute?: JobReceiptExecution; run(): Promise<readonly CostRollupReceipt[]> };
 
 async function authorized(request: Request, secret: string | null) {
@@ -23,7 +36,11 @@ export function createBillingCostRollupJobHandler(dependencies: Dependencies) {
     try {
       const work = () => dependencies.run();
       const rollups = await (dependencies.execute ? dependencies.execute("billing-cost-rollup", work, {
-        counters: (result) => ({ selected: result.length, complete: result.filter((row) => row.complete).length }),
+        counters: (result) => ({
+          selected: result.length,
+          complete: result.filter((row) => row.complete).length,
+          estimates: result.filter((row) => row.estimate).length,
+        }),
       }) : work());
       return Response.json({ selected: rollups.length, rollups }, { headers });
     } catch (cause) {
@@ -73,12 +90,13 @@ export async function runLiveCostRollup(): Promise<CostRollupReceipt[]> {
     const row = Array.isArray(data) ? data[0] : data;
     if (rpcError || !row?.rollup_id || typeof row.complete !== "boolean") throw new Error("COST_ROLLUP_WRITE_FAILED");
     const persisted = await client.from("tenant_cost_rollups")
-      .select("id,complete,missing_sources,total_cost_cents,recognized_subscription_cents")
+      .select("id,complete,missing_sources,total_cost_cents,recognized_subscription_cents,computed_at,window_end")
       .eq("id", row.rollup_id).single();
     if (persisted.error || !persisted.data || persisted.data.complete !== row.complete) throw new Error("COST_ROLLUP_READBACK_MISMATCH");
     const receipt: CostRollupReceipt = {
       rollupId: row.rollup_id, tenantId: subscription.tenant_id,
       complete: row.complete, missingSources: persisted.data.missing_sources,
+      estimate: rollupIsEstimate(persisted.data),
     };
     if (persisted.data.complete) {
       receipt.marginCents = persisted.data.recognized_subscription_cents - persisted.data.total_cost_cents;

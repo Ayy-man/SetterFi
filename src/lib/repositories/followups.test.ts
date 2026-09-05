@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { listFollowups } from "@/lib/repositories/followups";
+import { demoDraftFollowupContent, listFollowups } from "@/lib/repositories/followups";
 
 const row = (tenantId = "tenant-a") => ({
   id: "followup-1",
@@ -42,5 +42,29 @@ describe("listFollowups", () => {
   it("fails closed when a service-role source crosses tenants", async () => {
     await expect(listFollowups("tenant-a", {}, async () => [row("tenant-b")]))
       .rejects.toThrow("FOLLOWUP_TENANT_MISMATCH");
+  });
+});
+
+describe("demoDraftFollowupContent", () => {
+  const draft = { body: "SETTERFI_DEMO_PLACEHOLDER_FOLLOWUP_VALUE_NUDGE_BODY", isDemo: true };
+
+  it("lets a demo tenant send a demo-flagged draft as explicitly labelled freeform copy", () => {
+    expect(demoDraftFollowupContent({ isDemo: true }, draft)).toEqual({
+      kind: "freeform",
+      body: "[DRAFT] SETTERFI_DEMO_PLACEHOLDER_FOLLOWUP_VALUE_NUDGE_BODY",
+    });
+  });
+
+  it("blocks a production tenant on draft copy rather than sending it", () => {
+    expect(demoDraftFollowupContent({ isDemo: false }, draft)).toEqual({
+      kind: "unavailable",
+      reason: "approved_followup_copy_required",
+    });
+  });
+
+  it("blocks a draft that is not demo-labelled even on a demo tenant", () => {
+    expect(demoDraftFollowupContent({ isDemo: true }, { ...draft, isDemo: false }).kind).toBe("unavailable");
+    expect(demoDraftFollowupContent({ isDemo: true }, { body: "Hi there", isDemo: true }).kind).toBe("unavailable");
+    expect(demoDraftFollowupContent({ isDemo: true }, { body: "  ", isDemo: true }).kind).toBe("unavailable");
   });
 });

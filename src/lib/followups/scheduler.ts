@@ -102,6 +102,18 @@ export type LinkedConversationIntent = {
   idempotencyKey: string;
 };
 
+/**
+ * What the copy gate hands back for one due touch. "unavailable" is a per-touch block rather than
+ * a thrown error: the touch keeps its lease until it expires, the next batch re-claims it, and the
+ * operator reads the reason off the job receipt instead of a failed run that stranded every other
+ * touch the batch had already claimed.
+ */
+export type FollowupContentResult =
+  | SendContent
+  | { kind: "unavailable"; reason: FollowupBlockedReason };
+
+export type FollowupBlockedReason = "approved_followup_copy_required";
+
 export type FollowupSchedulerRepository = {
   claimDueFollowups(input: {
     tenantId: string;
@@ -125,7 +137,7 @@ export type FollowupSchedulerRepository = {
     followupId: string;
     purpose: OfferCadencePurpose;
     destination: FollowupDestination;
-  }): Promise<SendContent>;
+  }): Promise<FollowupContentResult>;
   recordResolvedIdentity(input: {
     tenantId: string;
     followupId: string;
@@ -178,7 +190,7 @@ export type SendToLead = (request: SendToLeadRequest) => Promise<SendToLeadResul
 
 export type FollowupRunResult = {
   followupId: string;
-  outcome: "sent" | "deferred" | "canceled" | "retryable" | "claim_missing";
+  outcome: "sent" | "deferred" | "canceled" | "retryable" | "blocked" | "claim_missing";
   reason: string | null;
 };
 
@@ -360,6 +372,12 @@ async function runClaim(
     purpose: followup.purpose,
     destination,
   });
+  if (content.kind === "unavailable") {
+    // The row stays scheduled and claimed; the lease lapses and the next batch tries again. The
+    // status enum has no "blocked" member and cancelling would misreport missing copy as a lead
+    // outcome, so the attempt counter on the row and the receipt counters carry the evidence.
+    return { followupId: followup.id, outcome: "blocked", reason: content.reason };
+  }
   const result = await sendToLead({
     tenantId: followup.tenantId,
     contactId: followup.contactId,

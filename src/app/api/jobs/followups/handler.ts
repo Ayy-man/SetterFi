@@ -15,7 +15,9 @@ type Dependencies = {
   secret: string | null;
   execute?: JobReceiptExecution;
   listTenants(limit: number): Promise<readonly string[]>;
-  run(input: { tenantId: string; workerKey: string; now: string; limit: number }): Promise<readonly { outcome: string }[]>;
+  run(input: { tenantId: string; workerKey: string; now: string; limit: number }): Promise<
+    readonly { outcome: string; reason?: string | null }[]
+  >;
 };
 
 async function authorized(request: Request, secret: string | null) {
@@ -42,14 +44,24 @@ export function createFollowupJobHandler(dependencies: Dependencies) {
       let sent = 0;
       let deferred = 0;
       let canceled = 0;
+      let blocked = 0;
+      // One counter per block reason, keyed so the receipt reads as `blocked_<reason>`. A touch
+      // with no approved copy is a blocked touch, never a failed run.
+      const blockedByReason: Record<string, number> = {};
       for (const tenantId of tenants) {
         const results = await dependencies.run({ tenantId, workerKey, now, limit: FOLLOWUP_LIMIT });
         claimed += results.length;
         sent += results.filter((result) => result.outcome === "sent").length;
         deferred += results.filter((result) => result.outcome === "deferred").length;
         canceled += results.filter((result) => result.outcome === "canceled").length;
+        for (const result of results) {
+          if (result.outcome !== "blocked") continue;
+          blocked += 1;
+          const key = `blocked_${result.reason ?? "unknown"}`;
+          blockedByReason[key] = (blockedByReason[key] ?? 0) + 1;
+        }
       }
-      return { tenants: tenants.length, claimed, sent, deferred, canceled };
+      return { tenants: tenants.length, claimed, sent, deferred, canceled, blocked, ...blockedByReason };
     };
     return Response.json(
       await (dependencies.execute ? dependencies.execute("followups", work) : work()),

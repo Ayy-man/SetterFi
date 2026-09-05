@@ -343,6 +343,40 @@ describe("runFollowupBatch", () => {
     });
   });
 
+  it("blocks a touch with no approved copy without completing it or failing the batch", async () => {
+    const completions: string[] = [];
+    let sends = 0;
+    const repo = repository({
+      claimDueFollowups: async () => [
+        { followupId: FOLLOWUP_ID, leaseToken: "lease-1", dueAt: NOW, auditId: "audit-1" },
+        { followupId: "followup-b", leaseToken: "lease-2", dueAt: NOW, auditId: "audit-2" },
+      ],
+      loadClaimedFollowup: async ({ followupId }) => ({ ...baseFollowup, id: followupId }),
+      loadIdentityCandidates: async () => [identity()],
+      loadApprovedFollowupContent: async ({ followupId }) => followupId === FOLLOWUP_ID
+        ? { kind: "unavailable", reason: "approved_followup_copy_required" }
+        : { kind: "freeform", body: "Synthetic follow-up fixture." },
+      completeFollowupAttempt: async (input) => {
+        completions.push(`${input.followupId}:${input.outcome}`);
+        return { auditId: "audit-complete" };
+      },
+    });
+    const sendToLead: Parameters<typeof runFollowupBatch>[1]["sendToLead"] = async (request) => {
+      sends += 1;
+      return sentResult(request.idempotencyKey);
+    };
+    const results = await runFollowupBatch(
+      { tenantId: TENANT_ID, workerKey: "worker-a", now: NOW },
+      { repository: repo, sendToLead },
+    );
+    expect(results).toEqual([
+      { followupId: FOLLOWUP_ID, outcome: "blocked", reason: "approved_followup_copy_required" },
+      { followupId: "followup-b", outcome: "sent", reason: null },
+    ]);
+    expect(sends).toBe(1);
+    expect(completions).toEqual(["followup-b:sent"]);
+  });
+
   it("cancels a window-bound deferral that would land after provider close", async () => {
     let completion: unknown;
     const repo = repository({
