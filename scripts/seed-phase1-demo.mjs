@@ -570,6 +570,10 @@ function provisioningBaselineRow(row) {
     next_attempt_at: DEMO_PROVISIONING_TRANSITION_AT,
     last_transition_at: DEMO_PROVISIONING_TRANSITION_AT,
     idempotency_key: `${DEMO_IDS.tenant}:${row.step_key}`,
+    // A done step must never complete before it started: an earlier live provisioning run can have
+    // stamped started_at after the baseline's fixed completion, which reads as a negative clearing
+    // time and fails the Overview's evidence check for the whole platform.
+    started_at: row.state === "done" ? DEMO_PROVISIONING_TRANSITION_AT : null,
     completed_at: row.state === "done" ? DEMO_PROVISIONING_TRANSITION_AT : null,
   };
 }
