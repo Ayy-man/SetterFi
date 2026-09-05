@@ -53,6 +53,20 @@ export type ConversationMessageRead = {
   delivered: boolean;
   /** The row went to the simulated arm (a demo tenant's rehearsal), never to a provider. */
   simulated: boolean;
+  /**
+   * The narrow, coach-safe receipt for a draft the engine held. The raw trace, checks,
+   * violations, prompt material and model configuration never leave this repository.
+   */
+  heldEvidence?: HeldTurnEvidence | null;
+};
+
+export type HeldEvidenceClass = "NUM" | "CLAIM" | "ECHO" | "LINK" | "SCOPE" | "LEN" | "JUDGE";
+
+export type HeldTurnEvidence = {
+  layer: "checker" | "moderator";
+  class: HeldEvidenceClass | null;
+  ruleId: string | null;
+  moderatorReason: string | null;
 };
 
 export type ConversationRead = {
@@ -158,6 +172,15 @@ type ConversationRow = {
     body: string;
     created_at: string;
     provider_message_id: string | null;
+    held_trace?: {
+      tenant_id: string;
+      outcome: string | null;
+      moderator_state: string | null;
+      moderator_reason: string | null;
+      moderator_class: string | null;
+      moderator_rule_id: string | null;
+      rule_fired: string | null;
+    } | null;
   }>;
   appointments: Array<{
     id: string;
@@ -268,7 +291,11 @@ const CONVERSATION_SELECT = `
   contact:contacts!inner(name, credit_range, funding_goal, timeline, business_stage, outcome),
   tenant:tenants!inner(is_demo),
   messages!messages_conversation_id_fkey(
-    id, direction, author, body, created_at, provider_message_id
+    id, direction, author, body, created_at, provider_message_id,
+    held_trace:message_traces!message_traces_message_id_fkey(
+      tenant_id, outcome:trace->>outcome, moderator_state, moderator_reason,
+      moderator_class, moderator_rule_id, rule_fired
+    )
   ),
   appointments(id, start_at, end_at, timezone, attributed_to_agent, status, provider, external_id, updated_at)
 `;
@@ -384,6 +411,31 @@ function parseProposedSlots(value: unknown): ProposedSlotSet | null {
   return slots.length === row.slots.length ? { ...row, slots } as ProposedSlotSet : null;
 }
 
+const HELD_EVIDENCE_CLASSES = new Set<HeldEvidenceClass>([
+  "NUM", "CLAIM", "ECHO", "LINK", "SCOPE", "LEN", "JUDGE",
+]);
+
+function heldEvidenceFor(
+  trace: ConversationRow["messages"][number]["held_trace"],
+  expectedTenant: string,
+): HeldTurnEvidence | null {
+  if (!trace) return null;
+  if (trace.tenant_id !== expectedTenant) throw new Error("CONVERSATION_TRACE_TENANT_MISMATCH");
+  if (trace.outcome !== "held") return null;
+  const evidenceClass = trace.moderator_class && HELD_EVIDENCE_CLASSES.has(
+    trace.moderator_class as HeldEvidenceClass,
+  )
+    ? trace.moderator_class as HeldEvidenceClass
+    : null;
+  const moderatorHeld = trace.moderator_state === "blocked";
+  return {
+    layer: moderatorHeld ? "moderator" : "checker",
+    class: evidenceClass,
+    ruleId: moderatorHeld ? trace.moderator_rule_id : trace.rule_fired,
+    moderatorReason: moderatorHeld ? trace.moderator_reason : null,
+  };
+}
+
 function mapConversation(row: ConversationRow): ConversationRead {
   const messages = [...row.messages]
     .sort((left, right) => left.created_at.localeCompare(right.created_at))
@@ -397,6 +449,7 @@ function mapConversation(row: ConversationRow): ConversationRead {
         message.direction === "in" ||
         (message.direction === "out" && message.provider_message_id !== null),
       simulated: isSimulatedProviderMessageId(message.provider_message_id),
+      heldEvidence: heldEvidenceFor(message.held_trace, row.tenant_id),
     }));
   const appointment = [...row.appointments]
     .filter((candidate) => candidate.status !== "canceled")

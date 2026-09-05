@@ -449,6 +449,42 @@ describe("CoachInbox", () => {
     expect(stop).toHaveTextContent("The agent stops and the thread comes to you.");
   });
 
+  it("shows the coach-safe held evidence panel for a held draft", () => {
+    renderInbox({
+      rows: [conversation({
+        messages: [{
+          id: "held-draft",
+          direction: "out",
+          author: "agent",
+          body: "You are approved for $10,000.",
+          createdAt: "2026-09-03T11:48:00.000Z",
+          delivered: false,
+          simulated: false,
+          heldEvidence: {
+            layer: "moderator",
+            class: "CLAIM",
+            ruleId: "CLAIM-001",
+            moderatorReason: "The draft promised an approval outcome.",
+          },
+        }],
+      })],
+      viewIds: ["one"],
+    });
+
+    const panel = screen.getByRole("region", { name: "Why this reply was held" });
+    expect(panel).toHaveTextContent("Held: made a promise your compliance rules forbid");
+    expect(panel).toHaveTextContent("Held byModerator");
+    expect(panel).toHaveTextContent("RuleCLAIM-001");
+    expect(panel).toHaveTextContent("Moderator noteThe draft promised an approval outcome.");
+    expect(panel).not.toHaveTextContent(/model config|allowlist|prompt/u);
+  });
+
+  it("does not show held evidence for a thread that is not held", () => {
+    renderInbox({ rows: [AGENT_HELD], view: "agent-handling", viewIds: ["two"] });
+
+    expect(screen.queryByRole("region", { name: "Why this reply was held" })).not.toBeInTheDocument();
+  });
+
   it("offers Reply and Note as two tabs over one field, and gates the write behind the band", () => {
     renderInbox();
 

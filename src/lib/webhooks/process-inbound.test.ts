@@ -1433,12 +1433,14 @@ describe("traceForPersistence objection mapping", () => {
   it("passes the moderator verdict receipt through to the trace writer", async () => {
     const persisted = await mapped({
       moderator: "blocked",
+      moderatorReason: "The draft promised an approval outcome.",
       moderatorClass: "CLAIM",
       moderatorRuleId: "CLAIM-001",
       moderatorModelConfigId: "10000000-0000-4000-8000-000000000002",
     });
     expect(persisted).toMatchObject({
       moderatorState: "blocked",
+      moderatorReason: "The draft promised an approval outcome.",
       moderatorClass: "CLAIM",
       moderatorRuleId: "CLAIM-001",
       moderatorModelConfigId: "10000000-0000-4000-8000-000000000002",

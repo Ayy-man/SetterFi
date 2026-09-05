@@ -18,6 +18,7 @@ import type {
 import { workspaceNavigationFor } from "@/lib/workspace-navigation";
 import { StatusDot } from "./_primitives";
 import { ContextEye } from "./context-eye";
+import { heldEvidenceViewModel } from "./coach-inbox-held-evidence";
 
 /**
  * The coach Inbox as `design/coach/Inbox.dc.html` draws it.
@@ -570,6 +571,10 @@ export function CoachInbox({
   const handoff = selected ? handoffFor(selected.statusReason) : null;
   const stopped = selected !== null
     && (selected.status === "needs_human" || selected.status === "scope_blocked");
+  const heldEvidence = stopped
+    ? [...selected.messages].reverse().find((message) => message.heldEvidence)?.heldEvidence ?? null
+    : null;
+  const heldEvidencePanel = heldEvidence ? heldEvidenceViewModel(heldEvidence) : null;
   const lastTakeoverId = selected
     ? [...selected.messages].reverse().find(isTakeover)?.id ?? null
     : null;
@@ -1364,7 +1369,27 @@ export function CoachInbox({
                     the run recorded rather than a stock sentence, so a thread held for a tripwire
                     does not claim it was held over a price.
                   */}
-                  {stopped ? (
+                  {heldEvidencePanel ? (
+                    <section
+                      aria-label="Why this reply was held"
+                      className="max-w-[min(100%,60ch)] self-center rounded-[12px] border border-[var(--warning-line)] bg-[var(--warning-wash)] px-[16px] py-[14px] text-[15px] leading-[1.5] text-[color:var(--warning-text)]"
+                      data-slot="held-evidence"
+                    >
+                      <p className="m-0 font-semibold">{heldEvidencePanel.title}</p>
+                      <dl className="m-0 mt-[8px] grid grid-cols-[auto_1fr] gap-x-[10px] gap-y-[4px]">
+                        <dt className="font-medium">Held by</dt>
+                        <dd className="m-0">{heldEvidencePanel.layer}</dd>
+                        <dt className="font-medium">Rule</dt>
+                        <dd className="m-0">{heldEvidencePanel.rule}</dd>
+                        {heldEvidencePanel.moderatorReason ? (
+                          <>
+                            <dt className="font-medium">Moderator note</dt>
+                            <dd className="m-0">{heldEvidencePanel.moderatorReason}</dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    </section>
+                  ) : stopped ? (
                     <div className="flex items-center gap-[14px] py-[4px]" data-slot="inbox-stop">
                       <span className="h-px flex-1 bg-[var(--line)]" />
                       <span className="max-w-[74%] text-center text-[15px] leading-[1.5] text-balance text-[color:var(--thread-system)]">

@@ -120,6 +120,63 @@ describe("listConversations", () => {
     expect(result.items[0].qualification).toMatchObject({ business: "established" });
   });
 
+  it("projects only tenant-scoped held evidence from the trace joined to its draft", async () => {
+    const result = await listConversations(
+      "tenant-a",
+      { limit: 1 },
+      async () => [{
+        ...row("conversation-a"),
+        status: "needs_human" as const,
+        status_reason: "output_check_failed",
+        messages: [{
+          ...row("conversation-a").messages[0],
+          id: "held-draft",
+          direction: "out" as const,
+          author: "agent",
+          held_trace: {
+            tenant_id: "tenant-a",
+            outcome: "held",
+            moderator_state: "blocked",
+            moderator_reason: "The draft promised approval.",
+            moderator_class: "CLAIM",
+            moderator_rule_id: "CLAIM-001",
+            rule_fired: "CLAIM-001",
+          },
+        }],
+      }],
+    );
+
+    expect(result.items[0].messages[0]?.heldEvidence).toEqual({
+      layer: "moderator",
+      class: "CLAIM",
+      ruleId: "CLAIM-001",
+      moderatorReason: "The draft promised approval.",
+    });
+    expect(result.items[0].messages[0]?.heldEvidence).not.toHaveProperty("modelConfigId");
+  });
+
+  it("refuses a held trace that does not belong to the conversation tenant", async () => {
+    await expect(listConversations(
+      "tenant-a",
+      { limit: 1 },
+      async () => [{
+        ...row("conversation-a"),
+        messages: [{
+          ...row("conversation-a").messages[0],
+          held_trace: {
+            tenant_id: "tenant-b",
+            outcome: "held",
+            moderator_state: null,
+            moderator_reason: null,
+            moderator_class: "NUM",
+            moderator_rule_id: null,
+            rule_fired: "NUM-001",
+          },
+        }],
+      }],
+    )).rejects.toThrow("CONVERSATION_TRACE_TENANT_MISMATCH");
+  });
+
   it("reads a well-formed proposed-slots proposal into the rail's booking-status field", async () => {
     const proposal = {
       calendarConnectionId: "calendar-1",

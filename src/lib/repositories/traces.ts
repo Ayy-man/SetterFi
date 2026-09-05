@@ -47,6 +47,7 @@ export type MessageTrace = {
   usage: Record<string, unknown> | null;
   cost: number | null;
   moderatorState: "allowed" | "blocked" | "unavailable" | null;
+  moderatorReason: string | null;
   moderatorClass: ModeratorEvidenceClass | null;
   moderatorRuleId: string | null;
   moderatorModelConfigId: string | null;
@@ -103,6 +104,7 @@ type TraceReadback = {
   usage: unknown;
   cost: number | null;
   moderatorState: string | null;
+  moderatorReason: string | null;
   moderatorClass: string | null;
   moderatorRuleId: string | null;
   moderatorModelConfigId: string | null;
@@ -142,7 +144,7 @@ async function liveDependencies(): Promise<TraceDependencies> {
       };
     },
     insertTrace: async (row) => {
-      const columns = "message_id, tenant_id, brain_version, offer_version, prompt_hash, rule_fired, retrieved_entry_ids, number_sources, checks, violations, rejected_drafts, model, params, latency_ms, usage, cost, moderator_state, moderator_class, moderator_rule_id, moderator_model_config_id, offer_content_hash, retrieval_candidates, declared_entry_id, citation_verified, dropped_entry_ids, objection_snapshot_id, objection_id, objection_handling_outcome, objection_hard_gate, trace";
+      const columns = "message_id, tenant_id, brain_version, offer_version, prompt_hash, rule_fired, retrieved_entry_ids, number_sources, checks, violations, rejected_drafts, model, params, latency_ms, usage, cost, moderator_state, moderator_reason, moderator_class, moderator_rule_id, moderator_model_config_id, offer_content_hash, retrieval_candidates, declared_entry_id, citation_verified, dropped_entry_ids, objection_snapshot_id, objection_id, objection_handling_outcome, objection_hard_gate, trace";
       const inserted = await client
         .from("message_traces")
         .insert(row)
@@ -180,6 +182,7 @@ async function liveDependencies(): Promise<TraceDependencies> {
         usage: data.usage,
         cost: data.cost === null ? null : Number(data.cost),
         moderatorState: data.moderator_state,
+        moderatorReason: data.moderator_reason,
         moderatorClass: data.moderator_class,
         moderatorRuleId: data.moderator_rule_id,
         moderatorModelConfigId: data.moderator_model_config_id,
@@ -259,6 +262,7 @@ export async function writeMessageTrace(
     usage: trace.usage,
     cost: trace.cost,
     moderator_state: trace.moderatorState,
+    moderator_reason: trace.moderatorReason,
     moderator_class: trace.moderatorClass,
     moderator_rule_id: trace.moderatorRuleId,
     moderator_model_config_id: trace.moderatorModelConfigId,
@@ -291,6 +295,7 @@ export async function writeMessageTrace(
     !sameJson(persisted.params, trace.params) || persisted.latencyMs !== trace.latencyMs ||
     !sameJson(persisted.usage, trace.usage) || persisted.cost !== trace.cost ||
     persisted.moderatorState !== trace.moderatorState ||
+    persisted.moderatorReason !== trace.moderatorReason ||
     persisted.moderatorClass !== trace.moderatorClass ||
     persisted.moderatorRuleId !== trace.moderatorRuleId ||
     persisted.moderatorModelConfigId !== trace.moderatorModelConfigId ||
