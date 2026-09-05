@@ -6,6 +6,7 @@ import {
   createMockCalendarDriver,
   createRealCalendarDriver,
 } from "./calendar";
+import { createSimulatedCalendarDriver, isSimulatedCalendarExternalId } from "./calendar";
 
 const appointment = {
   locationId: "location-1",
@@ -187,5 +188,16 @@ describe("calendar real driver", () => {
       startAt: appointment.startAt,
       endAt: appointment.endAt,
     })).rejects.toThrow("CALENDAR_APPOINTMENT_ENVELOPE_INVALID");
+  });
+});
+
+describe("simulated calendar driver", () => {
+  it("issues provider-shaped slot ids and prefixed appointment ids", async () => {
+    const driver = createSimulatedCalendarDriver();
+    const [slot] = await driver.fetchSlots({ locationId: "loc", calendarId: "cal", startAt: "2026-09-06T17:00:00.000Z", endAt: "2026-09-06T18:00:00.000Z", timezone: "America/Los_Angeles" });
+    expect(slot.id).toMatch(/^[A-Za-z0-9._~-]{1,200}$/u);
+    const appointment = await driver.createAppointment({ locationId: "loc", calendarId: "cal", contactId: "c", startAt: slot.startAt, endAt: slot.endAt, timezone: slot.timezone });
+    expect(isSimulatedCalendarExternalId(appointment.externalId)).toBe(true);
+    expect(await driver.listAppointments({ locationId: "loc", calendarId: "cal", startAt: slot.startAt, endAt: slot.endAt })).toEqual([]);
   });
 });

@@ -171,9 +171,11 @@ export function createSimulatedCalendarDriver(): CalendarDriver {
   const simulatedId = (prefix: string, values: readonly string[]) =>
     `${SIMULATED_CALENDAR_ID_PREFIX}${stableId(prefix, values)}`;
   return {
+    // A slot id travels through the lead's reply and is validated as a provider id (letters,
+    // digits and ._~- only), so it carries no colon; only the appointment id needs the prefix.
     fetchSlots: async (input) => (await mock.fetchSlots(input)).map((slot) => ({
       ...slot,
-      id: simulatedId("slot", [input.calendarId, input.startAt, input.timezone]),
+      id: `simulated-${stableId("slot", [input.calendarId, input.startAt, input.timezone])}`,
     })),
     createAppointment: async (input) => ({
       externalId: simulatedId("appointment", [

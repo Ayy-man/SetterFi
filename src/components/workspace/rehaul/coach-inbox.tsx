@@ -748,7 +748,6 @@ export function CoachInbox({
         return;
       }
       setPersisted((rows) => rows.map((row) => row.id === selected.id ? readBack.conversation : row));
-      setRehearsalDraftState(null);
       const outcome = record.rehearsal && typeof record.rehearsal === "object"
         ? record.rehearsal as {
             receiptStatus?: string;
@@ -758,7 +757,17 @@ export function CoachInbox({
             reply?: { simulated?: boolean } | null;
           }
         : null;
-      if (!outcome || outcome.receiptStatus !== "processed") {
+      // The draft and its key survive until the receipt is terminal, so a submit that raced an
+      // earlier one still in flight can be sent again and replay instead of playing a new line.
+      if (outcome && (outcome.receiptStatus === "processed" || outcome.receiptStatus === "failed" || outcome.receiptStatus === "skipped")) {
+        setRehearsalDraftState(null);
+      }
+      if (outcome?.receiptStatus === "received") {
+        setRehearsalOutcome({
+          tone: "warning",
+          text: "Your agent is still answering an earlier send of this line. Send it again in a moment to see the result.",
+        });
+      } else if (!outcome || outcome.receiptStatus !== "processed") {
         setRehearsalOutcome({
           tone: "critical",
           text: `The inbound receipt finished ${outcome?.receiptStatus ?? "unknown"}: ${outcome?.error ?? "no error recorded"}.`,
