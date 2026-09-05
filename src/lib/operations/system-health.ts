@@ -13,7 +13,7 @@ import {
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import cronTopology from "../../../vercel.json";
 
-export type SystemHealthState = "healthy" | "failed" | "stale" | "never-ran" | "in-progress" | "unavailable";
+export type SystemHealthState = "healthy" | "failed" | "not-configured" | "stale" | "never-ran" | "in-progress" | "unavailable";
 
 export type DeliveryQueueRow = {
   id: string;
@@ -278,15 +278,18 @@ function jobInventory(
         errorDetail: null,
       };
     }
-    const failed = receipt.outcome !== "succeeded";
+    const skipped = receipt.outcome === "skipped";
+    const failed = receipt.outcome === "failed";
     return {
       ...job,
-      state: failed ? "failed" as const : "healthy" as const,
+      state: skipped ? "not-configured" as const : failed ? "failed" as const : "healthy" as const,
       lastRunAt,
       reportedSinceYesterday,
       receiptId: receipt.receiptId,
-      reason: failed ? "The latest run report says this job failed." : null,
-      errorDetail: failed ? receipt.errorDetail?.trim() || null : null,
+      reason: skipped
+        ? "The job driver is not configured in this environment."
+        : failed ? "The latest run report says this job failed." : null,
+      errorDetail: (failed || skipped) ? receipt.errorDetail?.trim() || null : null,
     };
   });
 }
@@ -303,6 +306,9 @@ export function deriveSystemReportingState(input: {
   }
   if (input.jobs.some((job) => job.state === "failed")) {
     return { state: "failed", reason: "At least one scheduled job reports a failure." };
+  }
+  if (input.jobs.some((job) => job.state === "not-configured")) {
+    return { state: "not-configured", reason: "At least one scheduled job driver is not configured." };
   }
   if (input.jobs.some((job) => job.state === "stale")) {
     return { state: "stale", reason: "At least one scheduled job report is stale." };

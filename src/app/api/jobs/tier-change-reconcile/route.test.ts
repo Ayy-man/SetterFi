@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { DriverConfigurationError } from "@/lib/env-contract";
+import { createJobReceiptExecution } from "@/lib/jobs/job-receipts";
 import { createTierChangeReconcileJobHandler } from "./handler";
 
 const request = (secret = "secret") => new Request("https://app.test/api/jobs/tier-change-reconcile", {
@@ -31,5 +33,29 @@ describe("tier-change reconciliation job", () => {
     });
     await createTierChangeReconcileJobHandler({ enabled: () => true, secret: "secret", execute: execute as never, run: async () => result })(request());
     expect(calls).toEqual([{ key: "tier-change-reconcile", counters: result }]);
+  });
+
+  it("returns 200 and records skipped when the Stripe driver is deliberately unavailable", async () => {
+    const finished: unknown[] = [];
+    const execute = createJobReceiptExecution({
+      start: async () => ({ id: "receipt-1", started_at: "2026-09-05T00:00:00.000Z" }),
+      finish: async (input) => { finished.push(input); },
+    });
+    const response = await createTierChangeReconcileJobHandler({
+      enabled: () => true,
+      secret: "secret",
+      execute,
+      run: async () => {
+        throw new DriverConfigurationError("stripe", ["SETTERFI_STRIPE_DRIVER"]);
+      },
+    })(request());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ skipped: "driver_not_configured" });
+    expect(finished).toEqual([expect.objectContaining({
+      outcome: "skipped",
+      errorDetail: "SETTERFI_STRIPE_DRIVER",
+      counters: { skipped: "driver_not_configured" },
+    })]);
   });
 });

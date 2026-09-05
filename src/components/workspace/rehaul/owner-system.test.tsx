@@ -190,6 +190,26 @@ describe("OwnerSystem", () => {
     expect(row.querySelector('[data-slot="pill"]')?.getAttribute("data-tone")).toBe("neutral");
   });
 
+  it("shows a skipped driver as not configured in amber", () => {
+    const notConfigured: SystemHealth = {
+      ...health,
+      jobs: [{
+        ...health.jobs[0]!,
+        state: "not-configured",
+        reason: "The job driver is not configured in this environment.",
+        errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
+      }],
+      reporting: { state: "not-configured", reason: "At least one scheduled job driver is not configured." },
+    };
+    navigation.searchParams = new URLSearchParams("?tab=jobs");
+    render(<OwnerSystem health={notConfigured} nowIso={NOW_ISO} />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Job driver not configured");
+    const row = screen.getByTestId("owner-system-job-row");
+    expect(within(row).getByText("Not configured")).toBeInTheDocument();
+    expect(row.querySelector('[data-slot="pill"]')?.getAttribute("data-tone")).toBe("amber");
+  });
+
   it("draws the seven-day delivery bars from the snapshot", () => {
     renderAt("");
 

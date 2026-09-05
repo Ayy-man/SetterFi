@@ -44,6 +44,7 @@ const CRUMBS = [
 const SYSTEM_REPORTING_BADGE = {
   healthy: { label: "Reporting live", tone: "good" },
   failed: { label: "Scheduled job failing", tone: "critical" },
+  "not-configured": { label: "Job driver not configured", tone: "warning" },
   stale: { label: "Job reports stale", tone: "warning" },
   "never-ran": { label: "Scheduled job has never run", tone: "warning" },
   "in-progress": { label: "Job run unfinished", tone: "info" },
@@ -191,6 +192,7 @@ function queueMetric(value: number | null): MetricAvailability {
 function jobState(state: SystemHealthState): { label: string; tone: StateTone } {
   if (state === "healthy") return { label: "Healthy", tone: "good" };
   if (state === "failed") return { label: "Failed", tone: "critical" };
+  if (state === "not-configured") return { label: "Not configured", tone: "warning" };
   return { label: "No recent report", tone: "warning" };
 }
 
@@ -556,10 +558,10 @@ function JobsTab({ health }: { health: SystemHealth }) {
                     </Prose>
                   ) : null}
                   {/*
-                    The reason line says the run failed; this says why, from the receipt the run
-                    wrote. Only a failed row has one, so the label appears exactly where there is
-                    something to act on, and the row stays on the muted ink -- the state beside
-                    it is already the only colour this row spends.
+                    The reason line says why the job is not healthy; this carries the receipt's
+                    specific detail. It appears only on a failed or intentionally skipped row,
+                    and the row stays on the muted ink because the state beside it spends the
+                    colour.
                   */}
                   {job.errorDetail ? (
                     <Prose className="mt-[var(--s-1)] text-[12.5px] leading-[1.5] text-[color:var(--muted)]">

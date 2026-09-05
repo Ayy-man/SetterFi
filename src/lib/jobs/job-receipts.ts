@@ -1,3 +1,4 @@
+import { DriverConfigurationError } from "@/lib/env-contract";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const JOB_RECEIPT_KEYS = [
@@ -22,8 +23,19 @@ export const JOB_RECEIPT_KEYS = [
 ] as const;
 
 export type JobReceiptKey = typeof JOB_RECEIPT_KEYS[number];
-export type JobReceiptOutcome = "succeeded" | "failed";
-export type JobReceiptCounters = Record<string, number>;
+export type JobReceiptOutcome = "succeeded" | "failed" | "skipped";
+export type JobReceiptCounters = Record<string, number | string>;
+
+/**
+ * Returned to the scheduler after a deliberate no-driver skip. It is deliberately a normal 200
+ * response so a cron service does not retry configuration that an operator has intentionally left
+ * unset.
+ */
+export const DRIVER_NOT_CONFIGURED_COUNTERS = { skipped: "driver_not_configured" } as const;
+
+export function isDriverNotConfiguredResult(value: unknown): value is typeof DRIVER_NOT_CONFIGURED_COUNTERS {
+  return value === DRIVER_NOT_CONFIGURED_COUNTERS;
+}
 
 type StartedReceipt = { id: string; started_at: string };
 
@@ -105,6 +117,10 @@ function numericCounters(value: unknown): JobReceiptCounters {
   )) as JobReceiptCounters;
 }
 
+function isDriverNotConfigured(cause: unknown): cause is DriverConfigurationError {
+  return cause instanceof DriverConfigurationError;
+}
+
 function parseCounters(value: unknown): JobReceiptCounters {
   return numericCounters(value);
 }
@@ -154,6 +170,16 @@ export function createJobReceiptExecution(
       return result;
     } catch (cause) {
       try {
+        if (isDriverNotConfigured(cause)) {
+          await store.finish({
+            id: receipt.id,
+            finishedAt: now().toISOString(),
+            outcome: "skipped",
+            errorDetail: cause.variableNames.join(", "),
+            counters: DRIVER_NOT_CONFIGURED_COUNTERS,
+          });
+          return DRIVER_NOT_CONFIGURED_COUNTERS as never;
+        }
         await store.finish({
           id: receipt.id,
           finishedAt: now().toISOString(),

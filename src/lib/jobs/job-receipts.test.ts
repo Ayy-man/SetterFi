@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createJobReceiptExecution, type JobReceiptStore } from "./job-receipts";
+import { DriverConfigurationError } from "@/lib/env-contract";
+
+import {
+  DRIVER_NOT_CONFIGURED_COUNTERS,
+  createJobReceiptExecution,
+  type JobReceiptStore,
+} from "./job-receipts";
 
 function store(): JobReceiptStore {
   return {
@@ -31,6 +37,22 @@ describe("job receipt execution", () => {
     })).rejects.toThrow("DATABASE_UNAVAILABLE");
     expect(receipts.finish).toHaveBeenCalledWith(expect.objectContaining({
       outcome: "failed", errorDetail: "DATABASE_UNAVAILABLE", counters: {},
+    }));
+  });
+
+  it("records an intentionally unavailable driver as skipped and does not rethrow it to the scheduler", async () => {
+    const receipts = store();
+    const execute = createJobReceiptExecution(receipts, () => new Date("2026-09-05T00:00:00.000Z"));
+    const resolveFakeDriver = vi.fn(() => {
+      throw new DriverConfigurationError("ghl_provisioning", ["SETTERFI_GHL_PROVISIONING_DRIVER"]);
+    });
+
+    await expect(execute("a2p-probe", async () => resolveFakeDriver()))
+      .resolves.toEqual(DRIVER_NOT_CONFIGURED_COUNTERS);
+    expect(receipts.finish).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "skipped",
+      errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
+      counters: DRIVER_NOT_CONFIGURED_COUNTERS,
     }));
   });
 

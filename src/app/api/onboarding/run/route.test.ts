@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { accessToken } from "@/lib/access";
+import { DriverConfigurationError } from "@/lib/env-contract";
 import { createJobReceiptExecution } from "@/lib/jobs/job-receipts";
 
 import { approvedCampaignInput, createProvisioningRunHandler } from "./handler";
@@ -138,6 +139,30 @@ describe("/api/onboarding/run", () => {
     await expect(response.json()).resolves.toEqual({ error: "Provisioning run could not be completed." });
     expect(finished).toEqual([expect.objectContaining({
       id: "receipt-1", outcome: "failed", errorDetail: "PROVISIONING_TENANT_READ_FAILED",
+    })]);
+  });
+
+  it("reports a deliberately unavailable provisioning driver as skipped without retrying the cron", async () => {
+    const finished: unknown[] = [];
+    const execute = createJobReceiptExecution({
+      start: async () => ({ id: "receipt-1", started_at: "2026-09-05T00:00:00.000Z" }),
+      finish: async (input) => { finished.push(input); },
+    });
+    const response = await createProvisioningRunHandler({
+      enabled: () => true,
+      secret: "synthetic-cron-secret",
+      execute,
+      run: async () => {
+        throw new DriverConfigurationError("ghl_provisioning", ["SETTERFI_GHL_PROVISIONING_DRIVER"]);
+      },
+    })(request("GET"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ skipped: "driver_not_configured" });
+    expect(finished).toEqual([expect.objectContaining({
+      outcome: "skipped",
+      errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
+      counters: { skipped: "driver_not_configured" },
     })]);
   });
 

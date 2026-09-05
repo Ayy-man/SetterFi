@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { DriverConfigurationError } from "@/lib/env-contract";
+import { createJobReceiptExecution, type JobReceiptExecution } from "@/lib/jobs/job-receipts";
 import type { StepOutcome } from "@/lib/onboarding/contracts";
 
 import { createA2pProbeHandler, type ProbeWorkItem } from "./handler";
@@ -61,6 +63,29 @@ describe("GET /api/jobs/a2p-probe", () => {
   it("returns a zeroed safe summary for an empty batch", async () => {
     const response = await createA2pProbeHandler(dependencies())(request());
     await expect(response.json()).resolves.toEqual({ selected: 0, attempted: 0, delivered: 0, registering: 0, blocked: 0, failed: 0, stallsFlagged: 0, replayed: 0 });
+  });
+
+  it("returns 200 and records skipped when the provisioning driver is deliberately unavailable", async () => {
+    const deps = dependencies();
+    const finished: unknown[] = [];
+    deps.list.mockRejectedValue(new DriverConfigurationError(
+      "ghl_provisioning",
+      ["SETTERFI_GHL_PROVISIONING_DRIVER"],
+    ));
+    const scheduledDeps = deps as typeof deps & { execute?: JobReceiptExecution };
+    scheduledDeps.execute = createJobReceiptExecution({
+      start: async () => ({ id: "receipt-1", started_at: NOW.toISOString() }),
+      finish: async (input) => { finished.push(input); },
+    });
+
+    const response = await createA2pProbeHandler(scheduledDeps)(request());
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ skipped: "driver_not_configured" });
+    expect(finished).toEqual([expect.objectContaining({
+      outcome: "skipped",
+      errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
+      counters: { skipped: "driver_not_configured" },
+    })]);
   });
 
   it("handles mixed outcomes and continues after one tenant failure", async () => {

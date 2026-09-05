@@ -620,6 +620,7 @@ describe("secreted reconcile jobs", () => {
     const secret = crypto.randomUUID();
     const run = vi.fn(async () => [
       { outcome: "sent" }, { outcome: "deferred" }, { outcome: "canceled" },
+      { outcome: "blocked", reason: "approved_followup_copy_required" },
     ]);
     const handler = createFollowupJobHandler({
       secret,
@@ -634,7 +635,10 @@ describe("secreted reconcile jobs", () => {
     }));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ tenants: 1, claimed: 3, sent: 1, deferred: 1, canceled: 1 });
+    expect(await response.json()).toEqual({
+      tenants: 1, claimed: 4, sent: 1, deferred: 1, canceled: 1,
+      blocked: 1, blocked_approved_followup_copy_required: 1,
+    });
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "tenant-1", limit: 50 }));
   });
 

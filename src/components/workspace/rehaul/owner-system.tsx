@@ -78,6 +78,7 @@ export type OwnerSystemProps = {
 const HEADLINE: Record<SystemHealthState, { label: string; tone: StatusTone }> = {
   failed: { label: "Scheduled job failing", tone: "bad" },
   healthy: { label: "Reporting live", tone: "good" },
+  "not-configured": { label: "Job driver not configured", tone: "amber" },
   "in-progress": { label: "Job run unfinished", tone: "wait" },
   "never-ran": { label: "Scheduled job has never run", tone: "amber" },
   stale: { label: "Job reports stale", tone: "amber" },
@@ -378,6 +379,7 @@ function formatDateTime(value: string | null, absent: string) {
 function jobPill(state: SystemHealthState): { label: string; tone: PillTone } {
   if (state === "healthy") return { label: "Healthy", tone: "good" };
   if (state === "failed") return { label: "Failed", tone: "neutral" };
+  if (state === "not-configured") return { label: "Not configured", tone: "amber" };
   return { label: "No recent report", tone: "amber" };
 }
 

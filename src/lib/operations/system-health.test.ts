@@ -98,6 +98,29 @@ describe("read-only system health", () => {
     expect(result.jobs.filter((job) => job.state === "never-ran").every((job) => job.errorDetail === null)).toBe(true);
   });
 
+  it("shows a skipped driver as not configured, without treating it as a failure or healthy run", async () => {
+    const result = await loadSystemHealth({
+      source: source({ readJobReceipts: async () => [
+        receipt({
+          job: "a2p-probe",
+          outcome: "skipped",
+          errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
+        }),
+      ] }),
+      environment: {}, now: NOW,
+    });
+
+    expect(result.jobs.find((job) => job.id === "a2p-probe")).toMatchObject({
+      state: "not-configured",
+      reason: "The job driver is not configured in this environment.",
+      errorDetail: "SETTERFI_GHL_PROVISIONING_DRIVER",
+    });
+    expect(result.reporting).toEqual({
+      state: "not-configured",
+      reason: "At least one scheduled job driver is not configured.",
+    });
+  });
+
   it("uses the receipt reader's explicit per-job freshness rather than inventing one", async () => {
     const result = await loadSystemHealth({
       source: source({ readJobReceipts: async () => [
