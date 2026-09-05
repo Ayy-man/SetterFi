@@ -10,7 +10,7 @@ import { loadRouteActor, type RouteActor } from "@/lib/auth/actors";
 import { hasImpersonationMarker } from "@/lib/auth/claims";
 import { canWriteConversation } from "@/lib/conversation-state";
 import { simulatedSendsLive } from "@/lib/env-contract";
-import { rehearsalBody, rehearseLeadTurn, type RehearsalOutcome } from "@/lib/webhooks/rehearsal";
+import { REHEARSAL_KEY_PATTERN, rehearsalBody, rehearseLeadTurn, type RehearsalOutcome } from "@/lib/webhooks/rehearsal";
 
 import { conversationResponse, loadConversationForRoute } from "../claim/handler";
 
@@ -19,7 +19,13 @@ const noStoreHeaders = { "Cache-Control": "no-store" };
 export type RehearseDependencies = {
   enabled(): boolean;
   session(): Promise<RouteActor | null>;
-  rehearse(input: { tenantId: string; conversationId: string; actorId: string; body: string }): Promise<RehearsalOutcome>;
+  rehearse(input: {
+    tenantId: string;
+    conversationId: string;
+    actorId: string;
+    body: string;
+    idempotencyKey?: string;
+  }): Promise<RehearsalOutcome>;
   loadConversation: typeof loadConversationForRoute;
 };
 
@@ -58,11 +64,21 @@ export function createRehearseHandler(dependencies: RehearseDependencies) {
     } catch {
       payload = null;
     }
-    const body = isRecord(payload) && Object.keys(payload).join(",") === "body" ? rehearsalBody(payload.body) : null;
+    const keys = isRecord(payload) ? Object.keys(payload).sort().join(",") : "";
+    const body = isRecord(payload) && (keys === "body" || keys === "body,idempotencyKey")
+      ? rehearsalBody(payload.body)
+      : null;
     if (!body) {
       return Response.json({
         code: "REHEARSAL_BODY_INVALID",
         message: "Write what the lead would say, up to 1,000 characters.",
+      }, { status: 400, headers: noStoreHeaders });
+    }
+    const idempotencyKey = isRecord(payload) && "idempotencyKey" in payload ? payload.idempotencyKey : undefined;
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || !REHEARSAL_KEY_PATTERN.test(idempotencyKey))) {
+      return Response.json({
+        code: "REHEARSAL_KEY_INVALID",
+        message: "The idempotency key must be a UUID.",
       }, { status: 400, headers: noStoreHeaders });
     }
     const { id } = await context.params;
@@ -73,6 +89,7 @@ export function createRehearseHandler(dependencies: RehearseDependencies) {
         conversationId: id,
         actorId: actor.userId,
         body,
+        ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
       });
     } catch (error) {
       const code = error instanceof Error ? error.message.split(":", 1)[0] : "REHEARSAL_FAILED";

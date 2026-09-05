@@ -504,7 +504,9 @@ export function CoachInbox({
   const [feedback, setFeedback] = useState<string | null>(null);
   // Both carry the thread they belong to, so a notice or a half-written line never follows the
   // reader to the next thread; reading them through `selected.id` is the reset.
-  const [rehearsalDraftState, setRehearsalDraftState] = useState<{ threadId: string; text: string } | null>(null);
+  // The key is minted when a draft starts and sent with it, so a retried submit of the same
+  // draft lands on the receipt already written instead of playing the lead's line twice.
+  const [rehearsalDraftState, setRehearsalDraftState] = useState<{ threadId: string; text: string; key: string } | null>(null);
   const [rehearsalBusy, setRehearsalBusy] = useState(false);
   const [rehearsalOutcomeState, setRehearsalOutcomeState] = useState<{
     threadId: string;
@@ -565,8 +567,11 @@ export function CoachInbox({
     : null;
   const rehearsalDraft = selected && rehearsalDraftState?.threadId === selected.id ? rehearsalDraftState.text : "";
   const rehearsalOutcome = selected && rehearsalOutcomeState?.threadId === selected.id ? rehearsalOutcomeState : null;
+  const rehearsalKey = selected && rehearsalDraftState?.threadId === selected.id ? rehearsalDraftState.key : null;
   const setRehearsalDraft = (text: string) => {
-    if (selected) setRehearsalDraftState({ threadId: selected.id, text });
+    if (!selected) return;
+    const key = rehearsalDraftState?.threadId === selected.id ? rehearsalDraftState.key : crypto.randomUUID();
+    setRehearsalDraftState({ threadId: selected.id, text, key });
   };
   const setRehearsalOutcome = (outcome: { tone: "good" | "warning" | "critical"; text: string } | null) => {
     if (selected) setRehearsalOutcomeState(outcome ? { threadId: selected.id, ...outcome } : null);
@@ -712,7 +717,11 @@ export function CoachInbox({
     try {
       const response = await fetch(
         `/api/conversations/${encodeURIComponent(selected.id)}/rehearse`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body }) },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body, ...(rehearsalKey ? { idempotencyKey: rehearsalKey } : {}) }),
+        },
       );
       const payload: unknown = await response.json();
       const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
@@ -724,7 +733,7 @@ export function CoachInbox({
         return;
       }
       setPersisted((rows) => rows.map((row) => row.id === selected.id ? readBack.conversation : row));
-      setRehearsalDraft("");
+      setRehearsalDraftState(null);
       const outcome = record.rehearsal && typeof record.rehearsal === "object"
         ? record.rehearsal as {
             receiptStatus?: string;

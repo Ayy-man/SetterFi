@@ -9,7 +9,8 @@ import { createHash } from "node:crypto";
 
 import type { ProposedSlotSet } from "@/lib/booking/types";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
-import { inboxVerbsLive, phase1Live, phase3Live, simulatedSendsLive } from "@/lib/env-contract";
+import { inboxVerbsLive, phase1Live, phase3Live } from "@/lib/env-contract";
+import { tenantSimulates } from "@/lib/sends/simulated-tenant";
 import { isSimulatedProviderMessageId } from "@/lib/integrations/simulated";
 import { createMockGhlDriver, createRealGhlDriver } from "@/lib/integrations/ghl";
 import { createMockMetaDriver, createRealMetaDriver } from "@/lib/integrations/meta";
@@ -897,12 +898,7 @@ export function createLiveSendToLeadGateway(options: LiveGatewayOptions = {}) {
 
   // The demo decision is read from the tenant row on every send rather than trusted from the
   // caller, so it is the same fact the analytics exclusion and the demo login already use.
-  const tenantSendsSimulated = async (tenantId: string) => {
-    if (!simulatedSendsLive()) return false;
-    const { data, error } = await client.from("tenants").select("is_demo").eq("id", tenantId).single();
-    if (error || !data) throw new Error("PROVIDER_ROUTE_SCOPE_FAILED");
-    return data.is_demo === true;
-  };
+  const tenantSendsSimulated = (tenantId: string) => tenantSimulates(client, tenantId);
   const dispatch = createProviderDispatchPort({
     simulatedTenant: tenantSendsSimulated,
     resolveRoute: async (input) => {

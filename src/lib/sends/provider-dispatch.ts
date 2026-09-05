@@ -126,12 +126,19 @@ export async function dispatchAuthorizedMessagingDriver(
 export function createProviderDispatchPort(
   dependencies: ProviderDispatchDependencies,
 ): MessagingDispatchPort {
+  // Once this port has told the gateway a tenant simulates, every send it makes for that tenant
+  // stays simulated. The gateway skips the test-recipient allowlist on that answer, so a tenant
+  // row that flips to non-demo between the two reads must not hand the send to a real driver.
+  const simulatedTenants = new Set<string>();
   return {
     async simulates({ tenantId }) {
-      return (await dependencies.simulatedTenant?.(tenantId)) === true;
+      const simulated = (await dependencies.simulatedTenant?.(tenantId)) === true;
+      if (simulated) simulatedTenants.add(tenantId);
+      return simulated;
     },
     async send(input) {
-      const route = await dependencies.resolveRoute(input);
+      const resolved = await dependencies.resolveRoute(input);
+      const route = simulatedTenants.has(input.tenantId) ? { ...resolved, simulated: true } : resolved;
       const driver = selectedDriver(route.provider, route, dependencies);
       const receipt = await dispatchAuthorizedMessagingDriver(driver, commandFor(input, route));
       if (!receipt.providerMessageId.trim()) throw new Error("PROVIDER_SEND_RECEIPT_INVALID");

@@ -324,6 +324,27 @@ describe("appointment lifecycle", () => {
 });
 
 describe("daily appointment reconciliation", () => {
+  it("never sends a simulated appointment to the provider, and never cancels it as provider-missing", async () => {
+    const simulated: AppointmentRecord = { ...baseAppointment, isTest: true, externalId: "simulated:appointment-1" };
+    const rescheduled = makeHarness({ appointment: simulated, providerAppointments: [] });
+    const result = await rescheduled.service.reschedule({
+      tenantId: "tenant-1",
+      appointmentId: "appointment-1",
+      startAt: "2026-08-16T15:00:00.000Z",
+      endAt: "2026-08-16T15:30:00.000Z",
+      initiatedBy: "lead",
+      actorId: null,
+    });
+    expect(result.kind).toBe("updated");
+    expect(rescheduled.calls.order).toEqual(["repository:reschedule"]);
+
+    const swept = makeHarness({ appointment: simulated, providerAppointments: [] });
+    const sweep = await swept.service.reconcileCalendar({ tenantId: "tenant-1", connection });
+    expect(sweep).toMatchObject({ checked: 1, canceledAppointmentIds: [], rescheduledAppointmentIds: [] });
+    expect(swept.calls.localCancels).toEqual([]);
+    expect(swept.calls.providerCancels).toEqual([]);
+  });
+
   it("cancels a provider-missing row through the shared path without a second provider call", async () => {
     const { service, calls } = makeHarness({ providerAppointments: [] });
 

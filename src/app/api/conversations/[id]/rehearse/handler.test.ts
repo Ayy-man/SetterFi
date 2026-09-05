@@ -70,6 +70,18 @@ describe("rehearse handler", () => {
     expect((await handler()(post({ body: "x".repeat(1_001) }), context)).status).toBe(400);
   });
 
+  it("accepts a UUID idempotency key beside the body and nothing else", async () => {
+    const rehearse = vi.fn(async () => ({
+      receiptId: "r1", receiptStatus: "processed" as const, error: null, turn: null, conversationStatus: "agent", reply: null,
+    }));
+    const key = "0f2c9d3e-1b6a-4c8d-9e0f-123456789abc";
+    const accepted = await handler({ rehearse })(post({ body: "hi", idempotencyKey: key }), context);
+    expect(accepted.status).toBe(200);
+    expect(rehearse).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: key }));
+    expect((await handler()(post({ body: "hi", idempotencyKey: "not-a-uuid" }), context)).status).toBe(400);
+    expect((await handler()(post({ body: "hi", idempotencyKey: 7 }), context)).status).toBe(400);
+  });
+
   it("passes tenant and actor from the session, never from the body, and returns the reloaded thread", async () => {
     const rehearse = vi.fn(async () => ({
       receiptId: "r1",

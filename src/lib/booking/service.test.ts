@@ -75,7 +75,9 @@ function makeHarness({
   leaseHeartbeatMs = 60_000,
   providerRequestTimeoutMs = 240_000,
   times = ["2026-08-20T14:00:00.000Z"],
+  simulatedCalendar,
 }: {
+  simulatedCalendar?: CalendarDriver;
   initialProposal?: ProposedSlotSet | null;
   bookingContext?: BookingContext;
   primaryCalendar?: CalendarConnection | null;
@@ -212,6 +214,7 @@ function makeHarness({
   };
 
   const service = createBookingService({
+    simulatedCalendar,
     calendar,
     repository,
     emitDomainEvent: async (event) => void calls.events.push(event),
@@ -251,6 +254,30 @@ describe("provider-first booking", () => {
     })).resolves.toEqual({ kind: "in_progress", intentId: "intent-busy" });
     expect(calls.create).toEqual([]);
     expect(calls.appointmentInputs).toEqual([]);
+  });
+
+  it("keeps a simulated thread's calendar traffic away from the real provider", async () => {
+    const simulatedFetches: Parameters<CalendarDriver["fetchSlots"]>[0][] = [];
+    const simulatedCalendar: CalendarDriver = {
+      async fetchSlots(input) { simulatedFetches.push(input); return [slot]; },
+      async createAppointment() { return { externalId: "simulated:appointment" }; },
+      async updateAppointment(input) { return { externalId: input.externalId }; },
+      async cancelAppointment() {},
+      async listAppointments() { return []; },
+    };
+    const { service, calls } = makeHarness({
+      bookingContext: { ...context, isTest: true, simulated: true },
+      simulatedCalendar,
+    });
+    const result = await service.proposeSlots({
+      tenantId: context.tenantId,
+      conversationId: context.conversationId,
+      rangeStartAt: "2026-08-20T00:00:00.000Z",
+      rangeEndAt: "2026-08-27T00:00:00.000Z",
+    });
+    expect(result.kind).toBe("offered");
+    expect(simulatedFetches).toHaveLength(1);
+    expect(calls.fetch).toHaveLength(0);
   });
 
   it("fetches slots on each proposing turn and records a healthy provider read", async () => {

@@ -154,6 +154,38 @@ export function createMockCalendarDriver(): CalendarDriver {
   };
 }
 
+export const SIMULATED_CALENDAR_ID_PREFIX = "simulated:";
+
+export function isSimulatedCalendarExternalId(value: string | null | undefined) {
+  return typeof value === "string" && value.startsWith(SIMULATED_CALENDAR_ID_PREFIX);
+}
+
+/**
+ * The calendar arm of a simulated send. A demo tenant's test thread books against this instead
+ * of the tenant's real calendar, so a rehearsal can walk the whole booking flow without a slot
+ * ever being taken on a coach's provider. Its ids carry the same prefix as a simulated message,
+ * and the lifecycle service treats them as never having existed at the provider.
+ */
+export function createSimulatedCalendarDriver(): CalendarDriver {
+  const mock = createMockCalendarDriver();
+  const simulatedId = (prefix: string, values: readonly string[]) =>
+    `${SIMULATED_CALENDAR_ID_PREFIX}${stableId(prefix, values)}`;
+  return {
+    fetchSlots: async (input) => (await mock.fetchSlots(input)).map((slot) => ({
+      ...slot,
+      id: simulatedId("slot", [input.calendarId, input.startAt, input.timezone]),
+    })),
+    createAppointment: async (input) => ({
+      externalId: simulatedId("appointment", [
+        (await mock.createAppointment(input)).externalId,
+      ]),
+    }),
+    updateAppointment: async (input) => ({ externalId: input.externalId }),
+    cancelAppointment: async () => {},
+    listAppointments: async () => [],
+  };
+}
+
 function missingAccessToken(locationId: string): never {
   throw new CalendarProviderError(`GHL_LOCATION_ACCESS_TOKEN_UNAVAILABLE:${locationId}`);
 }

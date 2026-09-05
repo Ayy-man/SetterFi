@@ -68,7 +68,8 @@ export type RehearsalDependencies = {
     tenantId: string;
     conversationId: string;
     receiptId: string;
-    since: string;
+    /** The inbound event this turn wrote; the reply is the one the engine linked to it. */
+    eventId: string;
   }): Promise<Omit<RehearsalOutcome, "receiptId" | "turn">>;
   now?: () => Date;
 };
@@ -80,8 +81,20 @@ export function rehearsalBody(value: unknown) {
   return body;
 }
 
+export const REHEARSAL_KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function rehearseLeadTurn(
-  input: { tenantId: string; conversationId: string; actorId: string; body: string },
+  input: {
+    tenantId: string;
+    conversationId: string;
+    actorId: string;
+    body: string;
+    /**
+     * Supplied by the caller per draft. A retry of the same request then lands on the receipt
+     * already written, so a timed-out submit cannot play the lead's line twice.
+     */
+    idempotencyKey?: string;
+  },
   dependencies: RehearsalDependencies = liveRehearsalDependencies(),
 ): Promise<RehearsalOutcome> {
   const body = rehearsalBody(input.body);
@@ -93,9 +106,12 @@ export async function rehearseLeadTurn(
   if (!thread.isDemo || !thread.isTest) throw new Error("REHEARSAL_THREAD_NOT_REHEARSABLE");
   if (!thread.identity) throw new Error("REHEARSAL_IDENTITY_REQUIRED");
 
+  if (input.idempotencyKey !== undefined && !REHEARSAL_KEY_PATTERN.test(input.idempotencyKey)) {
+    throw new Error("REHEARSAL_KEY_INVALID");
+  }
   const now = (dependencies.now ?? (() => new Date()))();
-  const since = now.toISOString();
-  const eventId = `rehearsal:${input.conversationId}:${randomUUID()}`;
+  const observedAt = now.toISOString();
+  const eventId = `rehearsal:${input.conversationId}:${input.idempotencyKey ?? randomUUID()}`;
   const event: NormalizedInboundMessage = {
     kind: "message",
     eventId,
@@ -110,7 +126,7 @@ export async function rehearseLeadTurn(
       normalizedEmail: thread.identity.normalizedEmail,
     },
     providerWindow: {
-      observedAt: since,
+      observedAt,
       expiresAt: new Date(now.getTime() + 24 * 60 * 60_000).toISOString(),
       source: "derived_24h",
     },
@@ -128,6 +144,7 @@ export async function rehearseLeadTurn(
       raw: { rehearsal: true, actorId: input.actorId },
       normalized: { events: [event] },
     },
+    signatureVerified: false,
   });
   let processingError: string | null = null;
   let turn: RehearsalOutcome["turn"] = null;
@@ -151,7 +168,7 @@ export async function rehearseLeadTurn(
     tenantId: input.tenantId,
     conversationId: input.conversationId,
     receiptId: receipt.id,
-    since,
+    eventId,
   });
   return {
     receiptId: receipt.id,
@@ -200,19 +217,38 @@ export function liveRehearsalDependencies(): RehearsalDependencies {
     },
     persistReceipt: (input) => persistWebhookReceipt(input),
     processReceipt: (receipt) => processLiveWebhookReceipt(receipt),
-    readOutcome: async ({ tenantId, conversationId, receiptId, since }) => {
-      const [{ data: receipt }, { data: conversation }, { data: reply }] = await Promise.all([
-        client.from("webhook_events").select("status,error").eq("id", receiptId).single(),
+    readOutcome: async ({ tenantId, conversationId, receiptId, eventId }) => {
+      // The reply is the one the engine linked to this turn's inbound message, so a concurrent
+      // rehearsal or a genuine inbound on the same thread can never be reported as this one's.
+      const [receiptResult, conversationResult, inboundResult] = await Promise.all([
+        client.from("webhook_events").select("status,error").eq("tenant_id", tenantId).eq("id", receiptId).single(),
         client.from("conversations").select("status").eq("tenant_id", tenantId).eq("id", conversationId).single(),
-        client.from("messages").select("id,body,provider_message_id")
-          .eq("tenant_id", tenantId).eq("conversation_id", conversationId).eq("direction", "out")
-          .gte("created_at", since).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        client.from("messages").select("id")
+          .eq("tenant_id", tenantId).eq("conversation_id", conversationId)
+          .eq("direction", "in").eq("provider_message_id", eventId).maybeSingle(),
       ]);
-      const status = receipt?.status;
+      if (receiptResult.error || !receiptResult.data) throw new Error("REHEARSAL_READBACK_FAILED:receipt");
+      if (conversationResult.error || !conversationResult.data) throw new Error("REHEARSAL_READBACK_FAILED:conversation");
+      if (inboundResult.error) throw new Error("REHEARSAL_READBACK_FAILED:inbound");
+      let reply: { id: string; body: string; provider_message_id: string | null } | null = null;
+      if (inboundResult.data) {
+        const turnResult = await client.from("inbound_engine_turns").select("outbound_message_id")
+          .eq("tenant_id", tenantId).eq("inbound_message_id", inboundResult.data.id).maybeSingle();
+        if (turnResult.error) throw new Error("REHEARSAL_READBACK_FAILED:turn");
+        if (typeof turnResult.data?.outbound_message_id === "string") {
+          const replyResult = await client.from("messages").select("id,body,provider_message_id")
+            .eq("tenant_id", tenantId).eq("id", turnResult.data.outbound_message_id).single();
+          if (replyResult.error || !replyResult.data) throw new Error("REHEARSAL_READBACK_FAILED:reply");
+          reply = replyResult.data;
+        }
+      }
+      const receipt = receiptResult.data;
+      const conversation = conversationResult.data;
+      const status = receipt.status;
       return {
         receiptStatus: status === "processed" || status === "failed" || status === "skipped" ? status : "received",
-        error: typeof receipt?.error === "string" && receipt.error ? receipt.error : null,
-        conversationStatus: typeof conversation?.status === "string" ? conversation.status : null,
+        error: typeof receipt.error === "string" && receipt.error ? receipt.error : null,
+        conversationStatus: typeof conversation.status === "string" ? conversation.status : null,
         reply: reply
           ? {
               messageId: reply.id,

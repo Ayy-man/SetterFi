@@ -74,6 +74,11 @@ export type BookingContext = {
   leadTimezone: string | null;
   qualification: QualificationSummary;
   isTest: boolean;
+  /**
+   * True only for a demo tenant's test thread while simulated sends are live: the same fact
+   * that routes its messages to the simulated driver routes its calendar calls there too.
+   */
+  simulated?: boolean;
 };
 
 export type CalendarConnection = {

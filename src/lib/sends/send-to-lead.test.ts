@@ -480,6 +480,27 @@ describe("createProviderDispatchPort", () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: "send:test:2" }));
   });
 
+  it("keeps a send simulated once it has told the gateway that tenant simulates", async () => {
+    const simulatedSend = vi.fn(async () => ({ providerMessageId: "simulated:abc" }));
+    const send = vi.fn(async () => ({ providerMessageId: "provider-message-2" }));
+    const driver = (provider: "ghl" | "meta_direct") => ({ provider, verifyWebhook: async () => true,
+      normalizeInbound: async () => ({ events: [] }), capabilities: () => ({ windowed: false, postWindow: "none" as const, templates: false }), send });
+    const port = createProviderDispatchPort({
+      environment: { SETTERFI_GHL_DRIVER: "mock" },
+      simulatedTenant: async () => true,
+      // The tenant row flipped between the gateway's allowlist question and the route read.
+      resolveRoute: async () => ({ provider: "ghl", approvedTemplate: null, simulated: false }),
+      createMock: driver,
+      createReal: () => driver("ghl"),
+      createSimulated: (provider) => ({ ...driver(provider), send: simulatedSend }),
+      now: () => NOW,
+    });
+    expect(await port.simulates?.({ tenantId: TENANT })).toBe(true);
+    await expect(port.send(dispatchInput)).resolves.toMatchObject({ providerMessageId: "simulated:abc" });
+    expect(simulatedSend).toHaveBeenCalledOnce();
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("fails closed with named configuration when real dispatch is explicitly selected", async () => {
     const { port } = providerHarness({ SETTERFI_GHL_DRIVER: "real" });
     await expect(port.send(dispatchInput)).rejects.toEqual(expect.objectContaining({

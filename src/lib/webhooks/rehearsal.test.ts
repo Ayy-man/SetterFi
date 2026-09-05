@@ -77,6 +77,36 @@ describe("rehearseLeadTurn", () => {
     expect(dependencies.processReceipt).toHaveBeenCalledWith(expect.objectContaining({ id: "r1" }));
   });
 
+  it("records the receipt as unsigned, since no provider vouched for it", async () => {
+    const dependencies = harness();
+    await rehearseLeadTurn(input, dependencies);
+    expect(vi.mocked(dependencies.persistReceipt).mock.calls[0][0].signatureVerified).toBe(false);
+  });
+
+  it("derives the event id from the caller's idempotency key so a retry lands on the same receipt", async () => {
+    const dependencies = harness();
+    await rehearseLeadTurn({ ...input, idempotencyKey: "0f2c9d3e-1b6a-4c8d-9e0f-123456789abc" }, dependencies);
+    const write = vi.mocked(dependencies.persistReceipt).mock.calls[0][0];
+    const eventId = "rehearsal:c1:0f2c9d3e-1b6a-4c8d-9e0f-123456789abc";
+    expect(write.providerEventId).toBe(`t1:${eventId}:${eventId}`);
+    const events = (write.payload.normalized as { events: Array<Record<string, unknown>> }).events;
+    expect(events[0].eventId).toBe("rehearsal:c1:0f2c9d3e-1b6a-4c8d-9e0f-123456789abc");
+    expect(events[0].providerMessageId).toBe(events[0].eventId);
+  });
+
+  it("reads the outcome back by the event it wrote, not by whatever was newest", async () => {
+    const dependencies = harness();
+    await rehearseLeadTurn(input, dependencies);
+    const write = vi.mocked(dependencies.persistReceipt).mock.calls[0][0];
+    const events = (write.payload.normalized as { events: Array<Record<string, unknown>> }).events;
+    expect(dependencies.readOutcome).toHaveBeenCalledWith({
+      tenantId: "t1",
+      conversationId: "c1",
+      receiptId: "r1",
+      eventId: events[0].eventId,
+    });
+  });
+
   it("names what the processor did, and calls a quiet-hours refusal a deferral", async () => {
     const refused = await rehearseLeadTurn(input, harness({
       processReceipt: async () => ({

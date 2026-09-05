@@ -6,6 +6,7 @@
  * the authoritative list has already shown missing. Time passing never supplies attendance evidence.
  */
 
+import { isSimulatedCalendarExternalId } from "@/lib/integrations/calendar";
 import type { CalendarDriver } from "@/lib/integrations/types";
 
 import type {
@@ -96,7 +97,10 @@ export function createAppointmentLifecycleService({
 
     let providerResult: { externalId: string };
     try {
-      providerResult = await calendar.updateAppointment({
+      // A simulated appointment was never created at the provider, so there is nothing to move.
+      providerResult = isSimulatedCalendarExternalId(appointment.externalId)
+        ? { externalId: appointment.externalId }
+        : await calendar.updateAppointment({
         locationId: appointment.externalLocationId,
         externalId: appointment.externalId,
         startAt: input.startAt,
@@ -146,7 +150,7 @@ export function createAppointmentLifecycleService({
     if (appointment.status === "canceled") {
       return { kind: "ignored", reason: "already_canceled" };
     }
-    if (input.source !== "provider_missing") {
+    if (input.source !== "provider_missing" && !isSimulatedCalendarExternalId(appointment.externalId)) {
       try {
         await calendar.cancelAppointment({
           locationId: appointment.externalLocationId,
@@ -195,10 +199,12 @@ export function createAppointmentLifecycleService({
         });
         return { kind: "ignored", reason: "already_canceled" };
       }
-      await calendar.cancelAppointment({
-        locationId: appointment.externalLocationId,
-        externalId: appointment.externalId,
-      });
+      if (!isSimulatedCalendarExternalId(appointment.externalId)) {
+        await calendar.cancelAppointment({
+          locationId: appointment.externalLocationId,
+          externalId: appointment.externalId,
+        });
+      }
       const confirmation = await confirmCoachCommand({
         commandId: input.commandId,
         tenantId: input.tenantId,
@@ -271,6 +277,8 @@ export function createAppointmentLifecycleService({
       ) {
         throw new Error("RECONCILIATION_APPOINTMENT_SCOPE_MISMATCH");
       }
+      // The provider has never heard of a simulated appointment; its absence there means nothing.
+      if (isSimulatedCalendarExternalId(appointment.externalId)) continue;
       const providerAppointment = providerAppointmentsById.get(appointment.externalId);
       if (providerAppointment?.contactId === appointment.providerContactId && providerAppointment.status !== "canceled") {
         if (providerAppointment.startAt !== appointment.startAt || providerAppointment.endAt !== appointment.endAt) {

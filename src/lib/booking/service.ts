@@ -43,6 +43,8 @@ export function bookingIntentIdempotencyKey(input: {
 
 type BookingServiceDependencies = {
   calendar: CalendarDriver;
+  /** Used instead of `calendar` for a context marked `simulated`; absent means always real. */
+  simulatedCalendar?: CalendarDriver;
   repository: BookingRepository;
   emitDomainEvent: (event: BookingDomainEvent) => Promise<void>;
   now?: () => Date;
@@ -110,7 +112,8 @@ export function isProposedSlotFresh(proposal: ProposedSlotSet, now: Date) {
 }
 
 export function createBookingService({
-  calendar,
+  calendar: realCalendar,
+  simulatedCalendar,
   repository,
   emitDomainEvent,
   now = () => new Date(),
@@ -118,6 +121,9 @@ export function createBookingService({
   leaseHeartbeatMs = 60_000,
   providerRequestTimeoutMs = 240_000,
 }: BookingServiceDependencies) {
+  function calendarFor(context: { simulated?: boolean }) {
+    return context.simulated && simulatedCalendar ? simulatedCalendar : realCalendar;
+  }
   async function withProviderDeadline<T>(operation: (signal: AbortSignal) => Promise<T>) {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -169,6 +175,7 @@ export function createBookingService({
     persistProposal = true,
   ): Promise<SlotProposalResult> {
     const presentationTimezone = context.leadTimezone ?? connection.timezone;
+    const calendar = calendarFor(context);
     let slots: CalendarSlot[];
 
     try {
@@ -330,6 +337,7 @@ export function createBookingService({
       ? claim.providerExternalId
       : null;
     let recovered = false;
+    const calendar = calendarFor(context);
     try {
       if (claim.kind === "claimed") {
         const resolved = await withBookingLease(claim, context.tenantId, async () => {

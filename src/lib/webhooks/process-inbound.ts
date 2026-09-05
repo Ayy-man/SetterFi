@@ -63,6 +63,7 @@ import {
   type PinnedKeywordGoal,
 } from "@/lib/keyword-goals/runtime";
 import { createLiveSendToLeadGateway } from "@/lib/repositories/conversations";
+import { tenantSimulates } from "@/lib/sends/simulated-tenant";
 import {
   createBookingService,
   isProposedSlotFresh,
@@ -75,7 +76,7 @@ import type {
   MessagingChannel as CadenceMessagingChannel,
   ProposedSlotSet,
 } from "@/lib/booking/types";
-import { createMockCalendarDriver, createRealCalendarDriver } from "@/lib/integrations/calendar";
+import { createMockCalendarDriver, createRealCalendarDriver, createSimulatedCalendarDriver } from "@/lib/integrations/calendar";
 import { resolveGhlLocationAccessToken } from "@/lib/integrations/ghl-oauth-store";
 import {
   createComplianceEventEmitter,
@@ -1604,6 +1605,7 @@ function liveBookingRepository(
       }
       const channel = cadenceMessagingChannel(conversation.channel);
       if (!channel) throw new Error("BOOKING_CONTEXT_CHANNEL_UNSUPPORTED");
+      const isTest = contact.is_test || conversation.is_test;
       return {
         tenantId,
         conversationId,
@@ -1617,7 +1619,8 @@ function liveBookingRepository(
           fundingGoal: contact.funding_goal,
           timeline: contact.timeline,
         },
-        isTest: contact.is_test || conversation.is_test,
+        isTest,
+        simulated: isTest && await tenantSimulates(client, tenantId),
       };
     },
     getPrimaryCalendar: async (tenantId) => {
@@ -1796,6 +1799,7 @@ function liveBookingRepository(
 
 function liveBookingService(client: ReturnType<typeof createSupabaseServiceClient>) {
   return createBookingService({
+    simulatedCalendar: createSimulatedCalendarDriver(),
     calendar: selectCalendarDriver({
       factories: {
         mock: createMockCalendarDriver,
@@ -2792,6 +2796,8 @@ export type WebhookReceiptWrite = {
   tenantId: string | null;
   eventType: string;
   payload: Record<string, unknown>;
+  /** Provider webhooks are persisted after signature verification; a synthetic receipt says so. */
+  signatureVerified?: boolean;
 };
 
 export type WebhookReceiptRead = WebhookReceiptWrite & {
@@ -2861,7 +2867,7 @@ export async function persistWebhookReceipt(
     provider_event_id: providerEventId,
     tenant_id: input.tenantId,
     event_type: eventType,
-    signature_verified: true,
+    signature_verified: input.signatureVerified ?? true,
     payload: input.payload,
     status: "received",
   };

@@ -67,16 +67,34 @@ export function assertDifferentModelVendors(generatorModel: string, moderatorMod
 /**
  * OpenRouter keeps a long non-streaming request alive by writing SSE-style comment lines
  * (`: OPENROUTER PROCESSING`) ahead of the JSON body, so the body is read as text and those
- * leading comment lines are dropped before parsing. Anything else that is not JSON still refuses.
+ * leading keepalive lines are dropped before parsing. Only OpenRouter's own keepalive line is
+ * tolerated: any other non-JSON prefix is a broken body and still refuses.
  */
+const GENERATE_TIMEOUT_MS = 90_000;
+const MODERATE_TIMEOUT_MS = 30_000;
+
 function stripKeepaliveComments(body: string) {
-  return body.replace(/^(?:[ \t]*:[^\n]*\r?\n|\s)+/, "");
+  return body.replace(/^(?:[ \t]*: OPENROUTER PROCESSING[ \t]*\r?\n|\s)+/, "");
+}
+
+function isAbort(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 async function responseJson(response: Response, code: string) {
+  // The status line arrives as soon as OpenRouter accepts the request; the body only lands when
+  // the model finishes, so the request budget can expire while the body is still streaming. That
+  // is a timeout, and it must not be reported as the provider sending broken JSON.
+  let body: string;
+  try {
+    body = await response.text();
+  } catch (error) {
+    if (isAbort(error)) throw new OpenRouterProviderError(`${code}_TIMEOUT`, response.status);
+    throw new OpenRouterProviderError(`${code}_BODY_UNREADABLE`, response.status);
+  }
   let payload: unknown;
   try {
-    payload = JSON.parse(stripKeepaliveComments(await response.text()));
+    payload = JSON.parse(stripKeepaliveComments(body));
   } catch {
     throw new OpenRouterProviderError(`${code}_MALFORMED_JSON`, response.status, "non-json");
   }
@@ -89,6 +107,11 @@ function completionContent(payload: unknown) {
   const choice = Array.isArray(row?.choices) ? object(row.choices[0]) : null;
   const message = object(choice?.message);
   const content = text(message?.content);
+  if (row && !content && choice?.finish_reason === "length") {
+    // A reasoning model can spend the whole output window thinking and return no text at all.
+    // Retrying the same request only repeats the spend, so it fails once with the cause named.
+    throw new OpenRouterProviderError("OPENROUTER_OUTPUT_TRUNCATED", null, shape(payload));
+  }
   if (!row || !content) {
     throw new OpenRouterProviderError("OPENROUTER_SUCCESS_ENVELOPE_INVALID", null, shape(payload));
   }
@@ -148,19 +171,26 @@ function transport(apiKey: string, options: TransportOptions = {}) {
   const createAbortController = options.createAbortController ?? (() => new AbortController());
 
   return async (body: JsonObject, timeoutMs: number) => {
+    // Generation and moderation share this transport; callers pass their own budget.
     const controller = createAbortController();
     const startedAt = now();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetcher(OPENROUTER_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      let response: Response;
+      try {
+        response = await fetcher(OPENROUTER_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (isAbort(error)) throw new OpenRouterProviderError("OPENROUTER_REQUEST_FAILED_TIMEOUT");
+        throw error;
+      }
       return { payload: await responseJson(response, "OPENROUTER_REQUEST_FAILED"), latencyMs: now() - startedAt };
     } finally {
       clearTimeout(timeout);
@@ -223,9 +253,18 @@ export function createRealModelDriver(
         ({ payload, latencyMs } = await request(
           // A bounded completion by default: OpenRouter precharges the full requested output
           // window, so an unbounded request can 402 on a funded key, and no DM-sized reply
-          // needs more than this. A config row's params still override.
-          { model: config.model, messages, max_tokens: 1024, ...config.params },
-          30_000,
+          // needs more than this. Reasoning tokens are billed inside the same window, so a
+          // config row that asks for reasoning gets a wider one (gpt-5.6 at medium effort
+          // measured 1,024 tokens of thinking and no text). A config row's params still override.
+          {
+            model: config.model,
+            messages,
+            max_tokens: config.params.reasoning === undefined ? 1024 : 4096,
+            ...config.params,
+          },
+          // gpt-5.6 at medium effort measured 47 s on a DM-sized prompt; 30 s cut those off as
+          // aborted body reads. The moderator keeps its own tighter budget.
+          GENERATE_TIMEOUT_MS,
         ));
         try {
           parsed = completionContent(payload);
@@ -287,7 +326,7 @@ export function createRealModeratorDriver(
             { role: "user", content: JSON.stringify(inputs) },
           ],
         },
-        30_000,
+        MODERATE_TIMEOUT_MS,
       );
       return parseModeratorEnvelope(completionContent(payload).content);
     },
