@@ -29,6 +29,8 @@ export const REHEARSAL_MAX_BODY = 1_000;
 
 export type RehearsalOutcome = {
   receiptId: string;
+  /** True when the caller's idempotency key matched a receipt already written. */
+  replayed: boolean;
   receiptStatus: WebhookReceiptRead["status"];
   /** The processor's own error code when the receipt did not finish `processed`. */
   error: string | null;
@@ -63,14 +65,16 @@ export type RehearsalDependencies = {
     } | null;
   } | null>;
   persistReceipt(input: WebhookReceiptWrite): Promise<WebhookReceiptRead>;
+  /** The receipt an earlier submit with the same key wrote, if any. Absent means never replayed. */
+  findReceipt?(input: { provider: "ghl" | "meta"; providerEventId: string; tenantId: string }): Promise<WebhookReceiptRead | null>;
   processReceipt(receipt: WebhookReceiptRead): Promise<ProcessedInboundBatch | null>;
   readOutcome(input: {
     tenantId: string;
     conversationId: string;
     receiptId: string;
-    /** The inbound event this turn wrote; the reply is the one the engine linked to it. */
+    /** The inbound event this turn wrote, for callers that correlate by message rather than attempt. */
     eventId: string;
-  }): Promise<Omit<RehearsalOutcome, "receiptId" | "turn">>;
+  }): Promise<Omit<RehearsalOutcome, "receiptId" | "turn" | "replayed">>;
   now?: () => Date;
 };
 
@@ -131,20 +135,25 @@ export async function rehearseLeadTurn(
       source: "derived_24h",
     },
   };
-  const receipt = await dependencies.persistReceipt({
-    provider: thread.identity.provider === "ghl" ? "ghl" : "meta",
-    providerEventId: tenantReceiptEventId({
-      tenantId: input.tenantId,
-      eventId,
-      providerMessageId: eventId,
-    }),
+  const provider = thread.identity.provider === "ghl" ? "ghl" : "meta";
+  const providerEventId = tenantReceiptEventId({ tenantId: input.tenantId, eventId, providerMessageId: eventId });
+  // The payload carries the observation time, so a retry cannot be re-persisted as the same
+  // receipt; it is looked up by the key instead and the rest of the turn reads from what the
+  // first submit wrote.
+  const existing = input.idempotencyKey !== undefined
+    ? await dependencies.findReceipt?.({ provider, providerEventId, tenantId: input.tenantId }) ?? null
+    : null;
+  const receipt = existing ?? await dependencies.persistReceipt({
+    provider,
+    providerEventId,
     tenantId: input.tenantId,
     eventType: "InboundMessage",
     payload: {
+      // Provenance lives here: the claim RPC only hands out receipts whose signature flag is
+      // set, so that flag is the processing gate rather than a statement about a provider.
       raw: { rehearsal: true, actorId: input.actorId },
       normalized: { events: [event] },
     },
-    signatureVerified: false,
   });
   let processingError: string | null = null;
   let turn: RehearsalOutcome["turn"] = null;
@@ -172,6 +181,7 @@ export async function rehearseLeadTurn(
   });
   return {
     receiptId: receipt.id,
+    replayed: existing !== null,
     ...outcome,
     turn,
     error: outcome.error ?? processingError,
@@ -216,31 +226,46 @@ export function liveRehearsalDependencies(): RehearsalDependencies {
       };
     },
     persistReceipt: (input) => persistWebhookReceipt(input),
+    findReceipt: async ({ provider, providerEventId, tenantId }) => {
+      const { data, error } = await client.from("webhook_events")
+        .select("id, provider, provider_event_id, tenant_id, event_type, payload, status")
+        .eq("tenant_id", tenantId).eq("provider", provider).eq("provider_event_id", providerEventId).maybeSingle();
+      if (error) throw new Error("REHEARSAL_RECEIPT_LOOKUP_FAILED");
+      if (!data) return null;
+      return {
+        id: String(data.id),
+        inserted: false,
+        provider: data.provider as "ghl" | "meta",
+        providerEventId: String(data.provider_event_id),
+        tenantId: typeof data.tenant_id === "string" ? data.tenant_id : null,
+        eventType: String(data.event_type),
+        payload: (data.payload ?? {}) as Record<string, unknown>,
+        status: data.status as WebhookReceiptRead["status"],
+      };
+    },
     processReceipt: (receipt) => processLiveWebhookReceipt(receipt),
-    readOutcome: async ({ tenantId, conversationId, receiptId, eventId }) => {
-      // The reply is the one the engine linked to this turn's inbound message, so a concurrent
-      // rehearsal or a genuine inbound on the same thread can never be reported as this one's.
-      const [receiptResult, conversationResult, inboundResult] = await Promise.all([
+    readOutcome: async ({ tenantId, conversationId, receiptId }) => {
+      // The reply is the message the send gateway persisted for this receipt: every outbound
+      // attempt records the webhook event it answers, so a concurrent rehearsal or a genuine
+      // inbound on the same thread can never be reported as this turn's. (The engine-turn table
+      // itself is written through RPCs and is not readable by the service role.)
+      const [receiptResult, conversationResult, attemptResult] = await Promise.all([
         client.from("webhook_events").select("status,error").eq("tenant_id", tenantId).eq("id", receiptId).single(),
         client.from("conversations").select("status").eq("tenant_id", tenantId).eq("id", conversationId).single(),
-        client.from("messages").select("id")
+        client.from("outbound_send_attempts").select("message_id")
           .eq("tenant_id", tenantId).eq("conversation_id", conversationId)
-          .eq("direction", "in").eq("provider_message_id", eventId).maybeSingle(),
+          .eq("origin_webhook_event_id", receiptId).not("message_id", "is", null)
+          .order("created_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       if (receiptResult.error || !receiptResult.data) throw new Error("REHEARSAL_READBACK_FAILED:receipt");
       if (conversationResult.error || !conversationResult.data) throw new Error("REHEARSAL_READBACK_FAILED:conversation");
-      if (inboundResult.error) throw new Error("REHEARSAL_READBACK_FAILED:inbound");
+      if (attemptResult.error) throw new Error("REHEARSAL_READBACK_FAILED:attempt");
       let reply: { id: string; body: string; provider_message_id: string | null } | null = null;
-      if (inboundResult.data) {
-        const turnResult = await client.from("inbound_engine_turns").select("outbound_message_id")
-          .eq("tenant_id", tenantId).eq("inbound_message_id", inboundResult.data.id).maybeSingle();
-        if (turnResult.error) throw new Error("REHEARSAL_READBACK_FAILED:turn");
-        if (typeof turnResult.data?.outbound_message_id === "string") {
-          const replyResult = await client.from("messages").select("id,body,provider_message_id")
-            .eq("tenant_id", tenantId).eq("id", turnResult.data.outbound_message_id).single();
-          if (replyResult.error || !replyResult.data) throw new Error("REHEARSAL_READBACK_FAILED:reply");
-          reply = replyResult.data;
-        }
+      if (typeof attemptResult.data?.message_id === "string") {
+        const replyResult = await client.from("messages").select("id,body,provider_message_id")
+          .eq("tenant_id", tenantId).eq("id", attemptResult.data.message_id).single();
+        if (replyResult.error || !replyResult.data) throw new Error("REHEARSAL_READBACK_FAILED:reply");
+        reply = replyResult.data;
       }
       const receipt = receiptResult.data;
       const conversation = conversationResult.data;

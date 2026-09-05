@@ -2796,8 +2796,6 @@ export type WebhookReceiptWrite = {
   tenantId: string | null;
   eventType: string;
   payload: Record<string, unknown>;
-  /** Provider webhooks are persisted after signature verification; a synthetic receipt says so. */
-  signatureVerified?: boolean;
 };
 
 export type WebhookReceiptRead = WebhookReceiptWrite & {
@@ -2867,7 +2865,7 @@ export async function persistWebhookReceipt(
     provider_event_id: providerEventId,
     tenant_id: input.tenantId,
     event_type: eventType,
-    signature_verified: input.signatureVerified ?? true,
+    signature_verified: true,
     payload: input.payload,
     status: "received",
   };

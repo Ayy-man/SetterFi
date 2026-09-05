@@ -506,7 +506,13 @@ export function CoachInbox({
   // reader to the next thread; reading them through `selected.id` is the reset.
   // The key is minted when a draft starts and sent with it, so a retried submit of the same
   // draft lands on the receipt already written instead of playing the lead's line twice.
-  const [rehearsalDraftState, setRehearsalDraftState] = useState<{ threadId: string; text: string; key: string } | null>(null);
+  const [rehearsalDraftState, setRehearsalDraftState] = useState<{
+    threadId: string;
+    text: string;
+    key: string;
+    /** The text last submitted under `key`; editing it after a submit mints a new key. */
+    attempted: string | null;
+  } | null>(null);
   const [rehearsalBusy, setRehearsalBusy] = useState(false);
   const [rehearsalOutcomeState, setRehearsalOutcomeState] = useState<{
     threadId: string;
@@ -570,8 +576,16 @@ export function CoachInbox({
   const rehearsalKey = selected && rehearsalDraftState?.threadId === selected.id ? rehearsalDraftState.key : null;
   const setRehearsalDraft = (text: string) => {
     if (!selected) return;
-    const key = rehearsalDraftState?.threadId === selected.id ? rehearsalDraftState.key : crypto.randomUUID();
-    setRehearsalDraftState({ threadId: selected.id, text, key });
+    const current = rehearsalDraftState?.threadId === selected.id ? rehearsalDraftState : null;
+    // A key names one exact line. Once that line has been submitted, a changed line is a new
+    // turn and gets a new key, so a retry after a lost response replays only an unchanged draft.
+    const reuse = current !== null && (current.attempted === null || current.attempted === text);
+    setRehearsalDraftState({
+      threadId: selected.id,
+      text,
+      key: reuse ? current.key : crypto.randomUUID(),
+      attempted: reuse ? current.attempted : null,
+    });
   };
   const setRehearsalOutcome = (outcome: { tone: "good" | "warning" | "critical"; text: string } | null) => {
     if (selected) setRehearsalOutcomeState(outcome ? { threadId: selected.id, ...outcome } : null);
@@ -714,6 +728,7 @@ export function CoachInbox({
     if (!body) return;
     setRehearsalBusy(true);
     setRehearsalOutcome(null);
+    setRehearsalDraftState((state) => state && state.threadId === selected.id ? { ...state, attempted: body } : state);
     try {
       const response = await fetch(
         `/api/conversations/${encodeURIComponent(selected.id)}/rehearse`,
@@ -1426,7 +1441,7 @@ export function CoachInbox({
                     </p>
                   ) : null}
                 </form>
-                {rehearsal && selected.isTest && !fixtureMode ? (
+                {rehearsal && selected.isDemo && selected.isTest && !fixtureMode ? (
                   <form
                     aria-label="Rehearse as the lead"
                     className="shrink-0 border-t border-dashed border-[var(--line)] bg-[var(--pane)] px-[16px] pt-[14px] pb-[20px] sm:px-[28px]"
