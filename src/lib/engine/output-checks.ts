@@ -45,8 +45,13 @@ export type OutputCheckContext = {
   channel: keyof typeof CHANNEL_LIMITS;
 };
 
+/**
+ * NFKC leaves typographic quotes alone, and a model that writes "can’t" with U+2019 must read
+ * the same as one that writes "can't": the negation and declining exemptions key on that word.
+ */
 function normalizedText(value: string) {
-  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+  return value.normalize("NFKC").replace(/[\u2018\u2019\u02BC]/g, "'").replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function numberKey(kind: NumberKind, value: number) {

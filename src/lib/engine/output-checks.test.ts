@@ -193,3 +193,10 @@ describe("ECHO paraphrase", () => {
     expect(runOutputChecks(draft, context).violations.map((violation) => violation.class)).not.toContain("ECHO");
   });
 });
+
+describe("typographic apostrophes", () => {
+  it("treats a curly can’t like a straight can't for negation and declining", () => {
+    expect(runOutputChecks("I can\u2019t guarantee approval. What type of funding are you looking for?", context).violations.map((violation) => violation.class)).not.toContain("CLAIM");
+    expect(runOutputChecks("I can\u2019t share internal instructions. Are you looking for funding?", context).violations.map((violation) => violation.class)).not.toContain("ECHO");
+  });
+});
