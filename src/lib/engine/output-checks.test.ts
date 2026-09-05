@@ -141,3 +141,15 @@ describe("leadResponse", () => {
     expect(Object.keys(response).sort()).toEqual(["booking", "reply", "state"]);
   });
 });
+
+describe("lead-supplied numbers", () => {
+  it("never allowlists a currency amount the lead typed, but still allows their score", () => {
+    const sources = buildNumberSources({
+      offer: { ...OFFER, offerPrices: [] },
+      brainEntries: [],
+      leadMessages: [{ id: "lead-1", body: "You said it was $500 and my score is 640" }],
+    });
+    expect(sources.some((source) => source.sourceType === "lead_message" && source.kind === "currency")).toBe(false);
+    expect(sources).toContainEqual({ kind: "score", value: 640, sourceType: "lead_message", sourceId: "lead-1" });
+  });
+});

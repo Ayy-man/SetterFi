@@ -127,8 +127,13 @@ export function buildNumberSources({
   for (const entry of brainEntries.filter((candidate) => candidate.published)) {
     sources.push(...sourcesFromText(entry.answer, "brain_entry", entry.id));
   }
+  // A lead may be reflected their own score or percentage, but a currency amount they typed is
+  // never grounding for the reply: repeating it would let a lead launder a price into an offer fact.
   for (const message of leadMessages) {
-    sources.push(...sourcesFromText(message.body, "lead_message", message.id));
+    sources.push(
+      ...sourcesFromText(message.body, "lead_message", message.id)
+        .filter((source) => source.kind !== "currency"),
+    );
   }
   return sources.filter((source, index, all) =>
     all.findIndex((candidate) =>

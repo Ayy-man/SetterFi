@@ -1373,6 +1373,25 @@ function normalizedBatch(value: unknown): NormalizedInboundBatch {
   return { events: events as NormalizedInboundEvent[] };
 }
 
+/**
+ * Lead text that tries to move the agent off its role. A tripwire for the obvious shapes only: the
+ * generator's platform invariants, the SCOPE check and the moderator carry the paraphrased rest.
+ */
+export const SCOPE_ATTACK_PATTERN = new RegExp([
+  "\\b(?:poem|general assistant|essay|roleplay|jailbreak|developer mode|dan mode)\\b",
+  "(?:ignore|disregard|forget|override|bypass)\\b.{0,40}\\b(?:instruction|rule|prompt|guideline|restriction)",
+  "\\b(?:system|initial|hidden|secret|original)\\s+(?:prompt|instruction|message)",
+  "\\b(?:reveal|show|print|repeat|display|leak)\\b.{0,30}\\b(?:prompt|instruction|configuration|rules)",
+  "\\bwrite me\\b",
+  "\\byou(?:’|')?re now\\b",
+  "\\bfrom now on\\b",
+  "\\b(?:act|behave|respond|answer)\\s+as\\b",
+  "\\bpretend\\s+(?:to be|you|that)\\b",
+  "\\bnew instructions?\\b",
+  "\\bi am (?:the|your|an?) (?:admin|administrator|developer|owner|coach|operator)\\b",
+  "\\btest mode\\b",
+].join("|"), "iu");
+
 function classifyInboundSafety(event: NormalizedInboundMessage, reply: string, approved: boolean) {
   const body = event.body.toLowerCase();
   const signalKey = `${event.identity.provider}:${event.eventId}`;
@@ -1382,7 +1401,7 @@ function classifyInboundSafety(event: NormalizedInboundMessage, reply: string, a
   if (/\b(guarantee|guaranteed|promise)\b.{0,30}\b(approval|funding|result|outcome)\b/u.test(body)) {
     return { kind: "tripwire" as const, signalKey, class: "guarantee", severity: "refuse" as const, reply, replyApproved: approved };
   }
-  if (/\b(poem|general assistant|essay|roleplay)\b|ignore .*instruction|write me|you(?:’|')?re now|act as/u.test(body)) {
+  if (SCOPE_ATTACK_PATTERN.test(body)) {
     return { kind: "scope" as const, signalKey };
   }
   return { kind: "none" as const };

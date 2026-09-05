@@ -1,5 +1,6 @@
 /** OpenRouter-backed executor for evidence-bound published-snapshot engine cases. */
 
+import { withPlatformGuardrails } from "@/lib/engine/guardrails";
 import { runOutputChecks } from "@/lib/engine/output-checks";
 import type { EnvironmentSource } from "@/lib/env-contract";
 import type { SafetyCorpusCase } from "@/lib/evals/corpus";
@@ -57,7 +58,7 @@ export function createOpenRouterEngineCaseExecutor(input: {
     const generated = await model.generate([
       {
         role: "system",
-        content: `${input.snapshot.compiledPlatform}\n\n${testCase.context.roleBoundary}`,
+        content: `${withPlatformGuardrails(input.snapshot.compiledPlatform)}\n\n${testCase.context.roleBoundary}`,
       },
       ...testCase.turns.map((turn) => ({
         role: turn.role === "lead" ? "user" as const : "assistant" as const,

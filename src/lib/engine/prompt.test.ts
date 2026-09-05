@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { PLATFORM_GUARDRAILS } from "@/lib/engine/guardrails";
 import { assemblePrompt, hashPrompt, regenerationInstruction } from "@/lib/engine/prompt";
 import type {
   BrainSnapshot,
@@ -67,7 +68,12 @@ describe("assemblePrompt", () => {
       tagSecret: "test-secret",
       automatedExperienceDisclosure: TEST_DISCLOSURE,
     });
-    expect(result.messages).toMatchInlineSnapshot(`
+    // The code-owned invariants open every system message; the snapshot pins the rest byte for byte.
+    expect(result.messages[0].content.startsWith(`${PLATFORM_GUARDRAILS}\n[A] PLATFORM FRAME`)).toBe(true);
+    const messages = result.messages.map((message, index) => index === 0
+      ? { ...message, content: message.content.slice(PLATFORM_GUARDRAILS.length + 1) }
+      : message);
+    expect(messages).toMatchInlineSnapshot(`
       [
         {
           "content": "[A] PLATFORM FRAME
@@ -163,7 +169,8 @@ describe("assemblePrompt", () => {
         categoryAgreement: true,
       }],
     });
-    expect(result.cacheablePrefix).toBe("[A] IMMUTABLE PLATFORM\n[B] IMMUTABLE BRAIN");
+    expect(result.cacheablePrefix).toBe(`${PLATFORM_GUARDRAILS}\n[A] IMMUTABLE PLATFORM\n[B] IMMUTABLE BRAIN`);
+    expect(result.messages[0].content.startsWith("[A0] PLATFORM INVARIANTS")).toBe(true);
     expect(result.cacheablePrefix).not.toContain("rendered-1");
     expect(result.messages[0].content).toContain("[entry_id:rendered-1]");
     expect(result.messages[0].content).toContain("A tenant-rendered synthetic answer.");
