@@ -159,6 +159,20 @@ describe("OpenRouter real transport", () => {
     }
   });
 
+  it("reads a success body that OpenRouter prefixed with keepalive comment lines", async () => {
+    const body = ": OPENROUTER PROCESSING\n: OPENROUTER PROCESSING\n\n" + JSON.stringify({
+      id: "gen-1",
+      model: generator.model,
+      choices: [{ message: { content: "A grounded reply." } }],
+      usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14, cost: 0.001 },
+    });
+    const driver = createRealModelDriver("injected-api-key", {
+      fetch: async () => new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    });
+    const generated = await driver.generate([], { model: generator.model, params: {} });
+    expect(generated.draft).toBe("A grounded reply.");
+  });
+
   it("rejects malformed success and error envelopes without repeating provider details", async () => {
     const malformed = createRealModelDriver("injected-api-key", {
       fetch: async () => new Response(JSON.stringify({ choices: [] }), { status: 200 }),

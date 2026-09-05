@@ -64,10 +64,19 @@ export function assertDifferentModelVendors(generatorModel: string, moderatorMod
   }
 }
 
+/**
+ * OpenRouter keeps a long non-streaming request alive by writing SSE-style comment lines
+ * (`: OPENROUTER PROCESSING`) ahead of the JSON body, so the body is read as text and those
+ * leading comment lines are dropped before parsing. Anything else that is not JSON still refuses.
+ */
+function stripKeepaliveComments(body: string) {
+  return body.replace(/^(?:[ \t]*:[^\n]*\r?\n|\s)+/, "");
+}
+
 async function responseJson(response: Response, code: string) {
   let payload: unknown;
   try {
-    payload = await response.json();
+    payload = JSON.parse(stripKeepaliveComments(await response.text()));
   } catch {
     throw new OpenRouterProviderError(`${code}_MALFORMED_JSON`, response.status, "non-json");
   }
