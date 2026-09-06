@@ -50,7 +50,8 @@ describe("retrieval integration executor", () => {
     const arm = createFakeRetrievalArm(corpus);
     const run = await runRetrievalCorpus(arm, corpus, { filter: (testCase) => testCase.key === "retrieval:booking:how-to-book" });
     expect(run.reports).toHaveLength(1);
-    expect(run.reports[0].includedEntryIds[0]).toBe(arm.entryIdFor("How do I book a call?"));
+    // The real "can I call you" row answers with the bare booking link the importer registers.
+    expect(run.reports[0].includedEntryIds[0]).toBe(arm.entryIdFor("\"Can I call you?\" / \"Can we talk now?”"));
     expect(run.reports[0].invalidCitations).toEqual([]);
   });
 
@@ -69,10 +70,11 @@ describe("retrieval integration executor", () => {
   it("counts a candidate the snapshot does not contain against citation validity", async () => {
     const corpus = loadRetrievalCorpus();
     const fake = createFakeRetrievalArm(corpus);
-    const arm: RetrievalArm = { ...fake, knownEntry: (entryId) => entryId !== "retrieval-entry-13" };
+    const costEntryId = fake.entryIdFor("Cost of funding program?") as string;
+    const arm: RetrievalArm = { ...fake, knownEntry: (entryId) => entryId !== costEntryId };
     const run = await runRetrievalCorpus(arm, corpus, { filter: (testCase) => testCase.key === "retrieval:program:cost" });
     expect(run.reports[0].outcome).toBe("hit_at_1");
-    expect(run.reports[0].invalidCitations).toEqual(["retrieval-entry-13"]);
+    expect(run.reports[0].invalidCitations).toEqual([costEntryId]);
     expect(run.summary.citationValidity.value).toBeLessThan(1);
   });
 

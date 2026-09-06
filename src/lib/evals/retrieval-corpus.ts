@@ -54,6 +54,9 @@ export type RetrievalOfferFixture = {
   renderSources: PublishedRuntimeBundle["renderSources"];
 };
 
+/** The slug shape an `asset.<slug>` placeholder carries (see `src/lib/brain/placeholders.ts`). */
+const ASSET_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 export type LoadedRetrievalCorpus = {
   suite: typeof RETRIEVAL_SUITE;
   revision: string;
@@ -105,6 +108,17 @@ function fixture(value: unknown): RetrievalOfferFixture {
     value.qualificationInputs.some((entry) => typeof entry !== "string" || !entry.trim())) {
     refuse("offer", "qualificationInputs");
   }
+  // Optional: the links a real FAQ answer's bare `X` resolves to when it is not the booking link
+  // (a free course, a clinic page). Without a URL an `asset.*` entry is dropped at render time and
+  // can never be cited, so a case that expects it would read as a miss of the retrieval itself.
+  const assetUrlsBySlug: Record<string, string> = {};
+  if (value.assetUrlsBySlug !== undefined) {
+    if (!isRecord(value.assetUrlsBySlug)) refuse("offer", "assetUrlsBySlug");
+    for (const [slug, url] of Object.entries(value.assetUrlsBySlug)) {
+      if (!ASSET_SLUG.test(slug) || typeof url !== "string" || !/^https:\/\//.test(url)) refuse("offer", "assetUrlsBySlug");
+      assetUrlsBySlug[slug] = url;
+    }
+  }
   const contentHash = createHash("sha256").update(serializeCanonicalJson(value as CanonicalJson)).digest("hex");
   return {
     offer: {
@@ -141,7 +155,7 @@ function fixture(value: unknown): RetrievalOfferFixture {
       bookingUrl: value.bookingUrl as string | null,
       qualificationSummary,
       qualificationInputs: value.qualificationInputs as string[],
-      assetUrlsBySlug: {},
+      assetUrlsBySlug,
     },
   };
 }
