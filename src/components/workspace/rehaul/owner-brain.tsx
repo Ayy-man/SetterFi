@@ -100,6 +100,10 @@ import {
 } from "@/components/workspace/live/brain-view-models";
 import type { ImportDisposition } from "@/lib/brain/contracts";
 import { FIGURE_BINDING_FIELDS } from "@/lib/brain/import/flags";
+import {
+  BRAIN_KNOWLEDGE_ENTITY_TYPE,
+  brainKnowledgeDraftEntity,
+} from "@/lib/brain/snapshot/knowledge-entity";
 import { OWNER_BRAIN_SECTIONS, type OwnerBrainTab } from "@/lib/console-tabs";
 import { QUALIFICATION_OUTCOME_COPY } from "@/lib/copy/states";
 import { channelLengthLimits } from "@/lib/engine/output-checks";
@@ -175,7 +179,7 @@ const SECTION_LABEL: Record<OwnerBrainTab, string> = {
 const SECTION_ENTITY: Partial<Record<OwnerBrainTab, string>> = {
   behavior: "mission",
   qualification: "qualification_rule",
-  knowledge: "knowledge_entry",
+  knowledge: BRAIN_KNOWLEDGE_ENTITY_TYPE,
   safety: "compliance_rule",
 };
 
@@ -364,7 +368,7 @@ function draftPayload(state: AdminBrainInitialState) {
     ...state.mission.map((item) => ({ id: item.id, type: "mission", value: { label: item.label, text: item.text } })),
     ...state.qualification.map((item) => ({ id: item.id, type: "qualification_rule", value: { label: item.label, outcome: item.outcome, position: item.position } })),
     ...state.compliance.map((item) => ({ id: item.id, type: "compliance_rule", value: { slug: item.slug, phrase: item.phrase, severity: item.severity } })),
-    ...state.knowledge.map((item) => ({ id: item.id, type: "knowledge_entry", value: { category: item.category, inboundMessage: item.inboundMessage, responseTemplate: item.responseTemplate, status: item.status } })),
+    ...state.knowledge.map((item) => brainKnowledgeDraftEntity(item)),
   ];
   const compiledPlatform = JSON.stringify({
     mission: state.mission,

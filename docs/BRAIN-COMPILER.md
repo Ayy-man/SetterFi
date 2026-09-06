@@ -373,6 +373,19 @@ computed or omitted — never hand-written and never guessed, because someone pu
 strength of them. The no-op case (step 4's `source_hash` already detects it) says **"nothing
 changed"** rather than rendering an empty diff that reads like a bug.
 
+**What the hash covers** (as built). `canonicalizeBrainDraft` in `src/lib/brain/snapshot/`
+serializes the draft payload the way PostgreSQL prints jsonb, so the RPC can hash `payload::text`
+independently, and drops database timestamps so a read-back time cannot make unchanged content
+look publishable. Every entity's whole value is hashed, and for a `knowledge_entry` that value is
+built by `brainKnowledgeDraftEntity` and carries the question, answer, status, the reviewed
+`numberBindings`, the `rewriteHash` those bindings were reviewed against, and the entry's question
+`variants` (immutable id + text). Bindings and variants are sorted before hashing, so reordering
+them mints no version while rebinding a figure, re-reviewing an edited answer or adding a variant
+changes the hash and shows up as a changed entity in the tier-one diff — they all change what a
+publish retrieves or is allowed to say, even when no answer text differs. `publish_brain_draft`
+copies bindings and variants from the authoring tables at publish, the same way it copies the
+response text; the payload is the hash record of what those rows held when the draft was saved.
+
 **Rollback** appends. `POST /api/admin/brain/rollback/:version` writes a *new* snapshot copying
 the old payload and restores the working tables from it. History is never rewritten. **It sits
 next to every version in the list rather than buried behind a menu.**

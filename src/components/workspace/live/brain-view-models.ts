@@ -1,4 +1,6 @@
 import type { ImportDisposition } from "@/lib/brain/contracts";
+import type { KnowledgeNumberBinding } from "@/lib/brain/contracts";
+import type { BrainKnowledgeVariant } from "@/lib/brain/snapshot/knowledge-entity";
 import type { BrainImpactKey } from "@/lib/brain/snapshot/diff";
 import type { PublishGateIssue, PublishGateWarning } from "@/lib/evals/publish-gate";
 
@@ -114,6 +116,14 @@ export type AdminBrainInitialState = {
     inboundMessage: string;
     responseTemplate: string;
     status: string;
+    /**
+     * Provenance and question variants as the authoring rows hold them. Required rather than
+     * optional: they are part of the draft hash (`brainKnowledgeDraftEntity`), and a loader that
+     * silently omitted them would let a rebinding or a new variant publish as "nothing changed".
+     */
+    numberBindings: readonly KnowledgeNumberBinding[];
+    rewriteHash: string | null;
+    variants: readonly BrainKnowledgeVariant[];
     /** As on `BrainObjectionView`: read off the row, never synthesised, no actor recorded. */
     updatedAt?: string | null;
     publishedAt?: string | null;

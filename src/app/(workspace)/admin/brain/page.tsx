@@ -30,6 +30,7 @@ import type { PageSearchParams } from "@/lib/admin-route-fold";
 import { ownerBrainTab } from "@/lib/console-tabs";
 import { canAccessWorkspace, parseAppClaims, workspaceForRole, type AppClaims } from "@/lib/auth/claims";
 import { figuresInResponse } from "@/lib/brain/import/flags";
+import { knowledgeNumberBindings } from "@/lib/brain/provenance";
 import {
   driverSelection,
   environmentValue,
@@ -94,6 +95,7 @@ async function loadAdminBrainStateValue(): Promise<AdminBrainInitialState> {
     qualificationResult,
     complianceResult,
     knowledgeResult,
+    variantsResult,
     objectionsResult,
     snapshotsResult,
     draftResult,
@@ -103,19 +105,26 @@ async function loadAdminBrainStateValue(): Promise<AdminBrainInitialState> {
     client.from("brain_mission").select("id,identity,goal,tone,criteria,guardrails,dq,status,version").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("qualification_rules").select("id,rule_key,label,position,outcome,status").order("position", { ascending: true }),
     client.from("compliance_rules").select("id,slug,phrase,severity,status").order("id", { ascending: true }),
-    client.from("brain_knowledge_entries").select("id,category,question,response_template,status,source,source_ref,disposition,updated_at,published_at").order("created_at", { ascending: false }),
+    client.from("brain_knowledge_entries").select("id,category,question,response_template,status,source,source_ref,disposition,number_bindings,rewrite_hash,updated_at,published_at").order("created_at", { ascending: false }),
+    client.from("brain_knowledge_entry_variants").select("id,entry_id,variant").order("created_at", { ascending: true }),
     client.from("brain_objections").select("id,label,category,hard_gate,match_keywords,response,status,updated_at,published_at").order("created_at", { ascending: false }),
     client.from("brain_snapshots").select("id,version,content_hash,source_hash,payload,knowledge_mode,platform_tokens,rollback_of_snapshot_id,published_at").order("version", { ascending: false }),
     client.from("brain_draft_versions").select("id,content_hash,payload,created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("message_traces").select("message_id,declared_entry_id,citation_verified,retrieval_candidates,created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
-  const failed = [batchResult, missionResult, qualificationResult, complianceResult, knowledgeResult, objectionsResult, snapshotsResult, draftResult, traceResult]
+  const failed = [batchResult, missionResult, qualificationResult, complianceResult, knowledgeResult, variantsResult, objectionsResult, snapshotsResult, draftResult, traceResult]
     .find((result) => result.error);
   if (failed?.error) throw new Error(`ADMIN_BRAIN_READ_FAILED:${failed.error.message}`);
   // Sourced from the snapshot table, not `status`: see `knowledgePublishCounts`.
   const knowledgePublish = await loadBrainKnowledgePublishCounts();
 
   const batchRow = batchResult.data;
+  const variantsByEntry = new Map<string, Array<{ id: string; text: string }>>();
+  for (const row of variantsResult.data ?? []) {
+    const list = variantsByEntry.get(row.entry_id) ?? [];
+    list.push({ id: row.id, text: row.variant });
+    variantsByEntry.set(row.entry_id, list);
+  }
   const itemsResult = batchRow
     ? await client.from("brain_import_items").select("id,batch_id,source_ref,operation,after_payload,flags,disposition,decision").eq("batch_id", batchRow.id).order("created_at", { ascending: true })
     : { data: [], error: null };
@@ -207,7 +216,21 @@ async function loadAdminBrainStateValue(): Promise<AdminBrainInitialState> {
     qualificationApproved,
     qualificationSource: qualificationApproved ? "platform" : "demo_seed",
     compliance: (complianceResult.data ?? []).map((row) => ({ id: row.id, slug: row.slug, phrase: row.phrase, severity: row.severity })),
-    knowledge: (knowledgeResult.data ?? []).map((row) => ({ id: row.id, category: row.category, inboundMessage: row.question, responseTemplate: row.response_template, status: row.status, updatedAt: row.updated_at, publishedAt: row.published_at })),
+    // Bindings and variants are part of the draft hash, so they are read here from the same
+    // authoring rows `publish_brain_draft` copies into the snapshot. A malformed binding row
+    // fails the page rather than hashing as "no bindings".
+    knowledge: (knowledgeResult.data ?? []).map((row) => ({
+      id: row.id,
+      category: row.category,
+      inboundMessage: row.question,
+      responseTemplate: row.response_template,
+      status: row.status,
+      numberBindings: knowledgeNumberBindings(row.number_bindings),
+      rewriteHash: typeof row.rewrite_hash === "string" ? row.rewrite_hash : null,
+      variants: variantsByEntry.get(row.id) ?? [],
+      updatedAt: row.updated_at,
+      publishedAt: row.published_at,
+    })),
     // The cast is sound because `brain_objections_category_check` refuses anything outside the
     // five, so no row can reach here carrying a category the filter cannot render.
     objections: (objectionsResult.data ?? []).map((row) => ({
