@@ -576,6 +576,7 @@ export function OwnerBrain({
   const [platformEdit, setPlatformEdit] = useState<PlatformContentFields | null>(null);
   const [platformError, setPlatformError] = useState<string | null>(null);
   const [platformSavedAt, setPlatformSavedAt] = useState<string | null>(null);
+  const [platformReason, setPlatformReason] = useState("");
 
   // The test conversation.
   const defaultCoach = coaches.find((coach) => coach.isDemo) ?? coaches[0] ?? null;
@@ -693,7 +694,7 @@ export function OwnerBrain({
       .then((view) => {
         if (cancelled) return;
         setPlatform(view);
-        setPlatformEdit(view.draft ?? view.approved ?? emptyPlatformContent());
+        setPlatformEdit(view.draft ?? view.live);
       })
       .catch((cause: unknown) => {
         if (!cancelled) setPlatformError(ownerBrainApiFailure(cause));
@@ -702,8 +703,8 @@ export function OwnerBrain({
   }, [needsPlatform, ownerApi, platform, platformError]);
 
   const platformDirty = platform !== null && platformEdit !== null
-    && JSON.stringify(platformEdit) !== JSON.stringify(platform.draft ?? platform.approved ?? emptyPlatformContent());
-  const platformDraftPending = platform?.draft !== null && platform?.draft !== undefined;
+    && JSON.stringify(platformEdit) !== JSON.stringify(platform.draft ?? platform.live);
+  const platformDraftPending = Boolean(platform?.draft && platform.draftHash);
 
   function updatePlatform(update: Partial<PlatformContentFields>) {
     setPlatformEdit((current) => ({ ...(current ?? emptyPlatformContent()), ...update }));
@@ -714,16 +715,18 @@ export function OwnerBrain({
     await runAction("platform", async () => {
       const view = await ownerApi.savePlatformContentDraft(platformEdit);
       setPlatform(view);
-      setPlatformEdit(view.draft ?? view.approved ?? platformEdit);
+      setPlatformEdit(view.draft ?? view.live);
       setPlatformSavedAt(new Date().toISOString());
     });
   }
 
   async function approvePlatform() {
+    if (!platform?.draftHash || !reasonControlView(platformReason).enabled) return;
     await runAction("platform-approve", async () => {
-      const view = await ownerApi.approvePlatformContent();
+      const view = await ownerApi.approvePlatformContent({ expectedDraftHash: platform.draftHash!, reason: platformReason.trim() });
       setPlatform(view);
-      setPlatformEdit(view.draft ?? view.approved ?? emptyPlatformContent());
+      setPlatformEdit(view.draft ?? view.live);
+      setPlatformReason("");
     });
   }
 
@@ -966,19 +969,34 @@ export function OwnerBrain({
         {busy === "platform" ? "Saving" : "Save platform text"}
       </Button>
       {platformDraftPending ? (
-        <div className="flex flex-col items-end gap-[2px]">
-          <Button
-            disabled={busy !== null}
-            onClick={() => void approvePlatform()}
-            type="button"
-            variant="outline"
-          >
-            {busy === "platform-approve" ? "Approving" : "Approve for every agent"}
-          </Button>
-          <MonoMeta aria-label="Approval recorded in the audit log">Logged</MonoMeta>
+        <div className="flex flex-wrap items-end gap-[8px]">
+          <Input
+            aria-label="Why approve the platform text"
+            className="w-[220px]"
+            onChange={(event) => setPlatformReason(event.target.value)}
+            placeholder="Why, for history"
+            value={platformReason}
+          />
+          <div className="flex flex-col items-end gap-[2px]">
+            <Button
+              disabled={busy !== null || !platform.canApprove || !reasonControlView(platformReason).enabled}
+              onClick={() => void approvePlatform()}
+              title={platform.canApprove ? undefined : `Blocked: ${platform.blockers.join(", ")}`}
+              type="button"
+              variant="outline"
+            >
+              {busy === "platform-approve" ? "Approving" : "Approve for every agent"}
+            </Button>
+            <MonoMeta aria-label="Approval recorded in the audit log">Logged</MonoMeta>
+          </div>
         </div>
       ) : null}
     </div>
+  ) : null;
+  const platformBlockerNote = platform && platformDraftPending && !platform.canApprove ? (
+    <p className="m-0 text-[12px] text-[color:var(--muted)]" data-slot="platform-blocker">
+      Approval is blocked until these slots are filled: {platform.blockers.join(", ")}. They have no editor here yet.
+    </p>
   ) : null;
 
   function platformField(key: keyof Omit<PlatformContentFields, "heldReplies">, title: string, hint: string) {
@@ -996,11 +1014,11 @@ export function OwnerBrain({
         </FieldBlock>
       );
     }
-    const approved = platform?.approved?.[key] ?? "";
-    const note = platform?.approved === null
-      ? "nothing approved yet"
-      : platformEdit[key] !== approved
-        ? "differs from the approved text"
+    const live = platform?.live[key] ?? "";
+    const note = platform && platform.approved === null
+      ? "seed text, not approved yet"
+      : platformEdit[key] !== live
+        ? "differs from the live text"
         : undefined;
     return (
       <FieldBlock hint={hint} note={note} scope="ALL" title={title}>
@@ -1056,6 +1074,7 @@ export function OwnerBrain({
         "Where the agent stops",
         "What the agent stays inside, and what it leaves to a person.",
       )}
+      {platformBlockerNote}
       <p className="m-0 text-[12px] text-[color:var(--faint)]">
         Booking rules live in <Link className="text-[color:var(--accent-text)] no-underline" href={tabHref("qualification")}>Qualification</Link>; what the agent must never say lives in <Link className="text-[color:var(--accent-text)] no-underline" href={tabHref("safety")}>Safety</Link>.
       </p>
@@ -1321,6 +1340,7 @@ export function OwnerBrain({
             ))}
           </ListCard>
         )}
+        {platformBlockerNote}
       </div>
     </>
   );

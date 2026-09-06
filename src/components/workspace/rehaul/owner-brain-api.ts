@@ -125,7 +125,8 @@ export function narrowTestTurn(payload: unknown): TestTurnResult {
         moderator: { verdict: text(moderator.verdict), ms: count(moderator.ms) },
       },
       promptHash: text(evidence.promptHash),
-      tokens: count(evidence.tokens),
+      // The route reports `{ prompt, completion, total }`; the pane shows the total.
+      tokens: count(evidence.tokens) ?? count(record(evidence.tokens).total),
       channelLength: { chars: count(length.chars), soft: count(length.soft), hard: count(length.hard) },
     },
   };
@@ -143,10 +144,17 @@ export type PlatformContentFields = {
 };
 
 export type PlatformContentView = {
-  /** The values the engine reads today. Null when nothing has been approved yet. */
+  /** The values the engine reads today. Null until the live content has been approved once. */
   approved: PlatformContentFields | null;
-  /** A saved, unapproved draft. Null when the approved values are the latest saved ones. */
+  /** The values the engine reads, approved or not (the seed before the first approval). */
+  live: PlatformContentFields;
+  /** A saved, unapproved draft. Null when the live values are the latest saved ones. */
   draft: PlatformContentFields | null;
+  /** The saved draft's content hash; approval must quote it back. */
+  draftHash: string | null;
+  /** Slots that still block approval, e.g. `controlCopy.STOP`; empty when approvable. */
+  blockers: string[];
+  canApprove: boolean;
   /** Read-only here: these two are owned by the Brain draft and only echoed for context. */
   mission: string;
   qualification: string;
@@ -174,17 +182,23 @@ function narrowFields(value: unknown): PlatformContentFields | null {
 }
 
 export function narrowPlatformContent(payload: unknown): PlatformContentView {
-  const value = record(payload);
-  // The route may answer with the fields at the top level (one approved row) or split into
-  // `approved` and `draft`. Both are read; a top-level row counts as the approved one.
-  const approved = narrowFields(value.approved) ?? (value.approved === undefined ? narrowFields(value) : null);
-  const draft = narrowFields(value.draft);
-  const brain = record(value.brain);
+  // PUT and approve wrap the view under `view`; GET returns it at the top level.
+  const outer = record(payload);
+  const value = outer.view && typeof outer.view === "object" ? record(outer.view) : outer;
+  const live = narrowFields(value.live) ?? emptyPlatformContent();
+  const draftRow = record(value.draft);
+  const draft = narrowFields(draftRow.values);
+  const approval = record(value.approval);
+  const brainOwned = record(value.brainOwned);
   return {
-    approved,
+    approved: value.approved === true ? live : null,
+    live,
     draft,
-    mission: text(value.mission ?? brain.mission),
-    qualification: text(value.qualification ?? brain.qualification),
+    draftHash: typeof draftRow.hash === "string" ? draftRow.hash : null,
+    blockers: (Array.isArray(approval.blockers) ? approval.blockers : []).filter((item): item is string => typeof item === "string"),
+    canApprove: approval.canApprove === true,
+    mission: text(brainOwned.mission),
+    qualification: text(brainOwned.qualification),
   };
 }
 
@@ -239,10 +253,10 @@ export function createOwnerBrainApi(fetcher: FetchLike = fetch) {
         body: JSON.stringify(fields),
       }));
     },
-    async approvePlatformContent(): Promise<PlatformContentView> {
+    async approvePlatformContent(input: { expectedDraftHash: string; reason: string }): Promise<PlatformContentView> {
       return narrowPlatformContent(await request(fetcher, "/api/admin/brain/platform-content/approve", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify(input),
       }));
     },
     async readAssembledPrompt(input: { coachTenantId: string; revision: TestRevision }): Promise<AssembledPromptView> {
