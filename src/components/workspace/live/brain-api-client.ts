@@ -14,13 +14,14 @@ export class BrainApiError extends Error {
 async function requestJson(
   fetcher: FetchLike,
   path: string,
-  method: "POST",
-  body: Readonly<Record<string, unknown>>,
+  method: "GET" | "POST" | "PUT",
+  body?: Readonly<Record<string, unknown>>,
 ) {
   const response = await fetcher(path, {
     method,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    ...(body === undefined
+      ? {}
+      : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
   });
   const payload: unknown = await response.json();
   if (!response.ok) {
@@ -71,6 +72,41 @@ export function createBrainApiClient(fetcher: FetchLike = fetch) {
     },
     runAgent(message: string, history: string[] = []) {
       return requestJson(fetcher, "/api/agent", "POST", { message, history });
+    },
+    /** An owner test turn against a chosen coach and Brain revision; nothing is sent or written. */
+    runTestTurn(input: {
+      coachTenantId: string;
+      revision: "draft" | "live";
+      channel: "sms" | "instagram" | "messenger" | "whatsapp" | "webchat";
+      message: string;
+      history?: Array<{ role: "user" | "assistant"; content: string }>;
+    }) {
+      return requestJson(fetcher, "/api/admin/brain/test-turn", "POST", {
+        coachTenantId: input.coachTenantId,
+        revision: input.revision,
+        channel: input.channel,
+        message: input.message,
+        history: input.history ?? [],
+      });
+    },
+    loadPlatformContent() {
+      return requestJson(fetcher, "/api/admin/brain/platform-content", "GET");
+    },
+    /** Saves an unapproved draft; the row the pipeline reads is untouched until approval. */
+    savePlatformContentDraft(input: {
+      automatedExperienceDisclosure: string;
+      platformFrame: string;
+      roleBoundary: string;
+      heldReplies: Record<string, string>;
+    }) {
+      return requestJson(fetcher, "/api/admin/brain/platform-content", "PUT", input);
+    },
+    approvePlatformContent(input: { expectedDraftHash: string; reason: string }) {
+      return requestJson(fetcher, "/api/admin/brain/platform-content/approve", "POST", input);
+    },
+    inspectPrompt(input: { coachTenantId: string; revision: "draft" | "live" }) {
+      const query = new URLSearchParams({ coachTenantId: input.coachTenantId, revision: input.revision });
+      return requestJson(fetcher, `/api/admin/brain/prompt?${query.toString()}`, "GET");
     },
   };
 }

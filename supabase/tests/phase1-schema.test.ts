@@ -193,6 +193,8 @@ const AUDIT_KEYS = [
   "platform_export.finished",
   "platform_export.started",
   "platform.conversation_queue.read",
+  "platform_content.approved",
+  "platform_content.draft.saved",
   "money.page.refused",
   // Phase 9
   "platform.provisioning_install.completed",

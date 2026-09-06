@@ -60,6 +60,33 @@ describe("Brain API client", () => {
     ]);
   });
 
+  it("keeps the owner test-turn, platform-content and prompt payloads exact", async () => {
+    const calls: Array<{ path: string; method: string | undefined; body: unknown }> = [];
+    const client = createBrainApiClient(async (input, init) => {
+      calls.push({ path: String(input), method: init?.method, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+      return response({ state: "ok" });
+    });
+    await client.runTestTurn({ coachTenantId: "tenant-1", revision: "draft", channel: "sms", message: "Is this legitimate?" });
+    await client.loadPlatformContent();
+    const heldReplies = { NUM: "n", CLAIM: "c", ECHO: "e", LINK: "l", SCOPE: "s", LEN: "len", JUDGE: "j", REVOKE: "r" };
+    await client.savePlatformContentDraft({ automatedExperienceDisclosure: "d", platformFrame: "f", roleBoundary: "b", heldReplies });
+    await client.approvePlatformContent({ expectedDraftHash: "1".repeat(64), reason: "Reviewed" });
+    await client.inspectPrompt({ coachTenantId: "tenant/1", revision: "live" });
+    expect(calls).toEqual([
+      {
+        path: "/api/admin/brain/test-turn", method: "POST",
+        body: { coachTenantId: "tenant-1", revision: "draft", channel: "sms", message: "Is this legitimate?", history: [] },
+      },
+      { path: "/api/admin/brain/platform-content", method: "GET", body: undefined },
+      {
+        path: "/api/admin/brain/platform-content", method: "PUT",
+        body: { automatedExperienceDisclosure: "d", platformFrame: "f", roleBoundary: "b", heldReplies },
+      },
+      { path: "/api/admin/brain/platform-content/approve", method: "POST", body: { expectedDraftHash: "1".repeat(64), reason: "Reviewed" } },
+      { path: "/api/admin/brain/prompt?coachTenantId=tenant%2F1&revision=live", method: "GET", body: undefined },
+    ]);
+  });
+
   it("preserves a named route refusal rather than turning it into success", async () => {
     const client = createBrainApiClient(() => response({ state: "blocked", code: "BRAIN_EVAL_STALE" }, 409));
     await expect(client.publish({ draftId: "d", evalRunId: "e", expectedCurrentVersion: 1, reason: "r" }))

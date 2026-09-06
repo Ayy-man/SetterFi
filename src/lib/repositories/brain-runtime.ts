@@ -237,6 +237,16 @@ function qualificationSources(qualification: readonly QualificationRule[]) {
   };
 }
 
+/**
+ * The service-role readers `loadPublishedRuntimeBundle` uses by default, for a caller that needs
+ * to substitute exactly one of them. The admin test turn swaps `loadCurrentSnapshot` for the
+ * current draft so a bundle can be assembled from unpublished Brain content while every other
+ * read (tenant, offer, calendar, demo qualification) stays the production one.
+ */
+export function liveBrainRuntimeDependencies(): BrainRuntimeDependencies {
+  return liveDependencies();
+}
+
 function liveDependencies(): BrainRuntimeDependencies {
   const client = createSupabaseServiceClient();
   const offers = createOfferLayerRepository();
