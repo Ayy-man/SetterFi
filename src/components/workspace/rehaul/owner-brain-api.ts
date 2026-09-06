@@ -305,11 +305,21 @@ export function createOwnerBrainApi(fetcher: FetchLike = fetch) {
 
 export type OwnerBrainApi = ReturnType<typeof createOwnerBrainApi>;
 
+const FAILURE_COPY: Readonly<Record<string, string>> = {
+  RUNTIME_OFFER_NOT_PUBLISHED: "This coach has not published an offer yet, so there is nothing to run against. Pick another coach.",
+  RUNTIME_BRAIN_NOT_PUBLISHED: "No Brain version is live yet. Publish one, or test the draft.",
+  RUNTIME_TENANT_NOT_READY: "This coach's workspace is not ready for an agent yet.",
+  BRAIN_DRAFT_NOT_FOUND: "There is no saved draft. Save one first, or switch to the live version.",
+  BRAIN_TEST_TURN_RATE_LIMITED: "Too many test turns for this coach in the last minute. Wait a moment.",
+  DRIVER_CONFIGURATION_ERROR: "The model driver is not configured on this deployment.",
+  PLATFORM_AGENT_CONTENT_UNAPPROVED_NON_DEMO: "Platform text is not approved yet, so only a test tenant can run a turn.",
+};
+
 /** What the screen prints when a route answers with a failure. */
 export function ownerBrainApiFailure(cause: unknown): string {
   if (cause instanceof OwnerBrainApiError) {
     if (cause.code === "ROUTE_NOT_DEPLOYED") return "This part of The Brain is not deployed yet.";
-    return cause.code;
+    return FAILURE_COPY[cause.code] ?? cause.code;
   }
   return cause instanceof Error ? cause.message : "The request did not complete.";
 }

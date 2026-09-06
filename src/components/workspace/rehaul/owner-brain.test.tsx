@@ -289,7 +289,9 @@ describe("OwnerBrain, full-width views", () => {
       <OwnerBrain api={fakeApi()} coaches={COACHES} evals={evals} initialState={state()} tab="suite" />,
     );
     expect(screen.getByText("Folded evals surface")).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Configure" })).not.toBeInTheDocument();
+    // The rail stays on a full-width view; the test conversation is what gives way.
+    expect(screen.getByRole("navigation", { name: "Configure" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Test conversation" })).not.toBeInTheDocument();
 
     rerender(<OwnerBrain api={fakeApi()} coaches={COACHES} evals={evals} initialState={state()} tab="behavior" />);
     expect(screen.queryByText("Folded evals surface")).not.toBeInTheDocument();

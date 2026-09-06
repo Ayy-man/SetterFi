@@ -255,13 +255,18 @@ async function loadAdminBrainStateValue(): Promise<AdminBrainInitialState> {
  */
 async function loadBrainContext(): Promise<{ coaches: OwnerBrainCoach[]; models: OwnerBrainModel[] }> {
   const client = createSupabaseServiceClient();
-  const [tenantsResult, modelsResult] = await Promise.all([
+  const [tenantsResult, modelsResult, offersResult] = await Promise.all([
     client.from("tenants").select("id,name,is_demo,status").order("is_demo", { ascending: false }).order("name", { ascending: true }),
     client.from("model_configs").select("id,label,openrouter_model,role,active,moderator_unavailable_count").order("active", { ascending: false }).order("label", { ascending: true }),
+    client.from("offer_layers").select("tenant_id").eq("status", "published"),
   ]);
+  // A test turn and the assembled prompt need a published offer, so coaches that have one sort first
+  // and the screen defaults to one of them instead of a workspace the engine would refuse.
+  const withOffer = new Set((offersResult.data ?? []).map((row) => String(row.tenant_id)));
   const coaches: OwnerBrainCoach[] = (tenantsResult.data ?? [])
     .filter((row) => row.status !== "archived")
-    .map((row) => ({ id: row.id, name: row.name, isDemo: row.is_demo === true }));
+    .map((row) => ({ id: row.id, name: row.name, isDemo: row.is_demo === true, hasOffer: withOffer.has(String(row.id)) }))
+    .sort((left, right) => Number(right.hasOffer) - Number(left.hasOffer));
   const models: OwnerBrainModel[] = (modelsResult.data ?? []).map((row) => ({
     id: row.id,
     label: row.label,

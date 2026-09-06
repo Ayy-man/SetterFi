@@ -110,7 +110,7 @@ const brainApi = createBrainApiClient();
  * Props and the small view types the page hands over
  * ------------------------------------------------------------------------------------------ */
 
-export type OwnerBrainCoach = { id: string; name: string; isDemo: boolean };
+export type OwnerBrainCoach = { id: string; name: string; isDemo: boolean; hasOffer?: boolean };
 
 export type OwnerBrainModel = {
   id: string;
@@ -262,6 +262,44 @@ const KNOWLEDGE_MODE_COPY: Record<string, string> = {
   inline: "Every published answer is in the prompt",
   retrieved: "Top matches are retrieved per message",
 };
+
+const CHANNEL_LABEL: Record<TestChannel, string> = {
+  sms: "SMS",
+  instagram: "Instagram",
+  messenger: "Messenger",
+  whatsapp: "WhatsApp",
+  webchat: "Web chat",
+};
+
+function channelLabel(channel: string) {
+  return CHANNEL_LABEL[channel as TestChannel] ?? humanize(channel);
+}
+
+/** "just now", "4 min ago", "3 h ago", then the date. What the artboard prints beside a draft. */
+function relativeTime(value: string | null) {
+  if (!value) return "time not recorded";
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return "time not recorded";
+  const minutes = Math.round((Date.now() - then) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`;
+  return workspaceDateTimeFormat.format(new Date(then));
+}
+
+/** "PLATFORM INVARIANTS" → "Platform invariants"; leaves mixed-case titles alone. */
+function sentenceCase(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed !== trimmed.toUpperCase()) return trimmed;
+  const lower = trimmed.toLowerCase();
+  return `${lower[0].toUpperCase()}${lower.slice(1)}`;
+}
+
+/** The block text without its own header line, which the row above already shows. */
+function blockBody(block: { label: string; title: string; text: string }) {
+  const header = `${block.label} ${block.title}`;
+  return block.text.startsWith(header) ? block.text.slice(header.length).replace(/^\n/, "") : block.text;
+}
 
 function humanize(value: string) {
   const words = value.trim().replace(/[_-]+/g, " ").toLowerCase();
@@ -450,12 +488,12 @@ function Over({ children, className = "" }: { children: ReactNode; className?: s
 
 function SectionHead({ right, sub, title }: { right?: ReactNode; sub: string; title: string }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-[var(--s-3)]">
-      <div className="flex min-w-0 flex-col gap-[4px]">
-        <h2 className="m-0 text-[16px] leading-[1.35] font-[600] tracking-[-0.008em] text-[color:var(--ink)]">{title}</h2>
-        <p className="m-0 text-[13px] text-[color:var(--muted)]">{sub}</p>
+    <div className="flex flex-col gap-[4px]">
+      <div className="flex flex-wrap items-center justify-between gap-x-[var(--s-4)] gap-y-[var(--s-2)]">
+        <h2 className="m-0 min-w-0 text-[16px] leading-[1.35] font-[600] tracking-[-0.008em] text-[color:var(--ink)]">{title}</h2>
+        {right ? <div className="flex min-w-0 flex-wrap items-center justify-end gap-[8px]">{right}</div> : null}
       </div>
-      {right ? <div className="flex flex-wrap items-center gap-[8px]">{right}</div> : null}
+      <p className="m-0 text-[13px] text-[color:var(--muted)]">{sub}</p>
     </div>
   );
 }
@@ -565,6 +603,7 @@ export function OwnerBrain({
   const [rollbackResponse, setRollbackResponse] = useState<unknown>(null);
   const [decidedRows, setDecidedRows] = useState<Record<string, "accepted" | "rejected">>({});
   const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
+  const [dropOpenId, setDropOpenId] = useState<string | null>(null);
   const [knowledgeQuery, setKnowledgeQuery] = useState("");
   const [knowledgeFilter, setKnowledgeFilter] = useState<"all" | "published" | "draft">("all");
   const [knowledgeSheet, setKnowledgeSheet] = useState<KnowledgeRow | null>(null);
@@ -579,7 +618,11 @@ export function OwnerBrain({
   const [platformReason, setPlatformReason] = useState("");
 
   // The test conversation.
-  const defaultCoach = coaches.find((coach) => coach.isDemo) ?? coaches[0] ?? null;
+  // A test turn and a prompt need a published offer; a demo coach with one is the safest default.
+  const defaultCoach = coaches.find((coach) => coach.isDemo && coach.hasOffer !== false)
+    ?? coaches.find((coach) => coach.hasOffer !== false)
+    ?? coaches[0]
+    ?? null;
   const [testCoachId, setTestCoachId] = useState<string>(defaultCoach?.id ?? "");
   const [testChannel, setTestChannel] = useState<TestChannel>("sms");
   const [testRevision, setTestRevision] = useState<TestRevision>("draft");
@@ -940,7 +983,7 @@ export function OwnerBrain({
    * ------------------------------------------------------------------------------------- */
 
   const draftSavedMeta = state.draft
-    ? <MonoMeta className="text-[color:var(--faint)]">Draft saved {displayTime(state.draft.createdAt)}</MonoMeta>
+    ? <MonoMeta className="text-[color:var(--faint)]" title={displayTime(state.draft.createdAt)}>Draft saved {relativeTime(state.draft.createdAt)}</MonoMeta>
     : <MonoMeta className="text-[color:var(--faint)]">No saved draft</MonoMeta>;
 
   const saveDraftControl = (
@@ -1043,7 +1086,7 @@ export function OwnerBrain({
       );
     }
     return (
-      <FieldBlock hint={hint ?? copy.help} note={note} scope={scope} title={title ?? copy.title}>
+      <FieldBlock hint={hint} note={note} scope={scope} title={title ?? copy.title}>
         <Textarea
           aria-label={title ?? copy.title}
           onChange={(event) => setMissionText(label, event.target.value)}
@@ -1057,7 +1100,7 @@ export function OwnerBrain({
   const behaviorEditor = (
     <>
       <SectionHead
-        right={<>{draftSavedMeta}{saveDraftControl}{platformControls}</>}
+        right={draftSavedMeta}
         sub="What the agent is, how it sounds, and when it books, keeps qualifying, or hands over."
         title="Behavior"
       />
@@ -1074,7 +1117,6 @@ export function OwnerBrain({
         "Where the agent stops",
         "What the agent stays inside, and what it leaves to a person.",
       )}
-      {platformBlockerNote}
       <p className="m-0 text-[12px] text-[color:var(--faint)]">
         Booking rules live in <Link className="text-[color:var(--accent-text)] no-underline" href={tabHref("qualification")}>Qualification</Link>; what the agent must never say lives in <Link className="text-[color:var(--accent-text)] no-underline" href={tabHref("safety")}>Safety</Link>.
       </p>
@@ -1084,7 +1126,7 @@ export function OwnerBrain({
   const qualificationEditor = (
     <>
       <SectionHead
-        right={<>{draftSavedMeta}{saveDraftControl}</>}
+        right={draftSavedMeta}
         sub="What the agent checks, in order, and the rules that decide book, nurture or decline."
         title="Qualification"
       />
@@ -1171,7 +1213,7 @@ export function OwnerBrain({
       <div className="flex flex-wrap items-center gap-[8px]">
         <Input
           aria-label="Search answers"
-          className="min-w-[200px] flex-1"
+          className="min-w-[160px] flex-1 basis-[200px]"
           onChange={(event) => setKnowledgeQuery(event.target.value)}
           placeholder="Search answers"
           value={knowledgeQuery}
@@ -1257,7 +1299,7 @@ export function OwnerBrain({
   const safetyEditor = (
     <>
       <SectionHead
-        right={<>{draftSavedMeta}{saveDraftControl}{platformControls}</>}
+        right={draftSavedMeta}
         sub="What the agent must never say, what happens when a reply is blocked, and what the system enforces on its own."
         title="Safety"
       />
@@ -1284,7 +1326,7 @@ export function OwnerBrain({
               <span className="text-[13px] text-[color:var(--muted)]">Reply length caps</span>
               {TEST_CHANNELS.map((channel) => {
                 const limits = channelLengthLimits(channel);
-                return <Chip key={channel}>{humanize(channel)} {limits.soft} / {limits.hard}</Chip>;
+                return <Chip key={channel}>{channelLabel(channel)} {limits.soft} / {limits.hard}</Chip>;
               })}
             </span>
             <ScopeTag scope="SYSTEM" />
@@ -1293,8 +1335,8 @@ export function OwnerBrain({
       </div>
       {missionField("guardrails", "ALL", "Never promise or state")}
       <div className="flex flex-col gap-[8px]">
-        <div className="flex flex-wrap items-center justify-between gap-[8px]">
-          <Over>COMPLIANCE PHRASES · BLOCK IF THE REPLY CONTAINS</Over>
+        <div className="flex items-center justify-between gap-[8px]">
+          <Over className="min-w-0 truncate">COMPLIANCE PHRASES · BLOCK IF THE REPLY CONTAINS</Over>
           <ExportMenu filename="setterfi-brain-compliance" label="Export phrases" mode="local" rows={state.compliance} />
         </div>
         {state.compliance.length ? (
@@ -1340,7 +1382,6 @@ export function OwnerBrain({
             ))}
           </ListCard>
         )}
-        {platformBlockerNote}
       </div>
     </>
   );
@@ -1475,13 +1516,13 @@ export function OwnerBrain({
       />
       {reviewRows.length ? (
         <div className="flex min-h-0 flex-1 flex-col gap-[16px] lg:flex-row">
-          <div className="flex w-full shrink-0 flex-col gap-[8px] lg:w-[300px]">
+          <div className="flex w-full shrink-0 flex-col gap-[8px] lg:min-h-0 lg:w-[300px]">
             <div className="flex flex-wrap gap-[6px]">
               <Chip tone="warn">Needs a look {workspaceCountFormat.format(pendingRows.length - cleanRows.length)}</Chip>
               <Chip tone="good">Clean {workspaceCountFormat.format(cleanRows.length)}</Chip>
               <Chip>Decided {workspaceCountFormat.format(reviewRows.length - pendingRows.length)}</Chip>
             </div>
-            <ListCard>
+            <ListCard className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
               {reviewRows.map((row) => {
                 const why = rowWhy(row);
                 const selected = selectedImport?.id === row.id;
@@ -1514,7 +1555,7 @@ export function OwnerBrain({
             const canApprove = !decided && item.canAccept && !needsTenant && busy === null
               && (row.flags.length === 0 || edited || row.flags.every((flag) => flag.code === "unbound_figure" || flag.code === "bare_x"));
             return (
-              <div className="flex min-w-0 flex-1 flex-col gap-[16px]">
+              <div className="flex min-w-0 flex-1 flex-col gap-[16px] lg:min-h-0 lg:overflow-y-auto">
                 {blocking.length ? (
                   <div className="flex items-start gap-[10px] rounded-[8px] bg-[var(--warning-wash)] px-[14px] py-[12px]" role="status">
                     <StatusDot className="mt-[6px]" tone="amber" />
@@ -1554,7 +1595,7 @@ export function OwnerBrain({
                   return (
                     <Surface className="flex flex-col gap-[var(--s-3)]" key={flag.id} variant="well">
                       <div className="flex flex-wrap items-baseline justify-between gap-[var(--s-2)]">
-                        <span className="text-[14px] font-[500] text-[color:var(--ink)]">{copy.title}</span>
+                        <span className="text-[14px] font-[500] text-[color:var(--ink)]" title={`${flag.code} · ${flag.field} · offset ${flag.offset}`}>{copy.title}</span>
                         {/*
                           * Amber on both arms until acceptance returns: nothing ticked here is
                           * persisted until `accept()` runs, so the only green is the one the
@@ -1604,7 +1645,6 @@ export function OwnerBrain({
                           </span>
                         </label>
                       )}
-                      <TechnicalDetail items={[{ label: "Issue code", value: flag.code }, { label: "Field", value: flag.field }, { label: "Offset", value: String(flag.offset), mono: false }]} />
                     </Surface>
                   );
                 })}
@@ -1642,6 +1682,15 @@ export function OwnerBrain({
                   ) : null}
                   <div className="flex-1" />
                   <Button
+                    aria-expanded={dropOpenId === row.id}
+                    disabled={decided !== null || busy !== null}
+                    onClick={() => setDropOpenId((current) => current === row.id ? null : row.id)}
+                    type="button"
+                    variant="outline"
+                  >
+                    Drop
+                  </Button>
+                  <Button
                     disabled={decided !== null || busy !== null}
                     onClick={() => setSelectedImportId(nextPendingAfter(row.id))}
                     type="button"
@@ -1663,14 +1712,17 @@ export function OwnerBrain({
                     Edit the answer before approving: a flagged row cannot be released with its source text unchanged.
                   </p>
                 ) : null}
-                {!decided ? (
+                {!decided && dropOpenId === row.id ? (
                   <div className="flex flex-wrap items-end gap-[8px] rounded-[8px] border border-[var(--line-soft)] bg-[var(--well)] px-[12px] py-[10px]">
+                    <div className="min-w-[240px] flex-1">
                     <Field hint="Recorded with the decision." label="Why drop it">
                       <Input
+                        autoFocus
                         onChange={(event) => updateReview(row.id, { dropReason: event.target.value })}
                         value={decision.dropReason}
                       />
                     </Field>
+                    </div>
                     <div className="flex flex-col items-end gap-[2px]">
                       <Button
                         disabled={!decision.dropReason.trim() || busy !== null}
@@ -1678,7 +1730,7 @@ export function OwnerBrain({
                         type="button"
                         variant="outline"
                       >
-                        {busy === `reject:${row.id}` ? "Dropping" : "Drop"}
+                        {busy === `reject:${row.id}` ? "Dropping" : "Drop this answer"}
                       </Button>
                       <MonoMeta aria-label="Drop recorded in the audit log">Logged</MonoMeta>
                     </div>
@@ -1732,7 +1784,7 @@ export function OwnerBrain({
           </MonoMeta>
         </div>
       </div>
-      {gate.details.length ? (
+      {state.eval.state === "blocked" && gate.details.length ? (
         <ListCard>
           {gate.details.map((detail) => {
             const [suite, caseKey] = detail.split(" · ");
@@ -1820,12 +1872,12 @@ export function OwnerBrain({
                   type="button"
                 >
                   <MonoMeta className="w-[56px] shrink-0 text-[11px] text-[color:var(--faint)]">{block.label}</MonoMeta>
-                  <span className="min-w-0 flex-1 text-[13px] font-[500] text-[color:var(--ink)]">{block.title}</span>
+                  <span className="min-w-0 flex-1 text-[13px] font-[500] text-[color:var(--ink)]">{sentenceCase(block.title)}</span>
                   <ScopeTag scope={scope} />
                   <span aria-hidden="true" className="text-[11px] text-[color:var(--faint)]">{open ? "▲" : "▼"}</span>
                 </button>
                 {open ? (
-                  <pre className="mono m-0 overflow-x-auto px-[14px] py-[12px] text-[11.5px] leading-[1.6] whitespace-pre-wrap text-[color:var(--muted)]">{block.text}</pre>
+                  <pre className="mono m-0 overflow-x-auto px-[14px] py-[12px] text-[11.5px] leading-[1.6] whitespace-pre-wrap text-[color:var(--muted)]">{blockBody(block)}</pre>
                 ) : null}
               </div>
             );
@@ -1864,7 +1916,7 @@ export function OwnerBrain({
     }
     if (evidence.channelLength.chars !== null) {
       const over = evidence.channelLength.soft !== null && evidence.channelLength.chars > evidence.channelLength.soft;
-      chips.push(<Chip key="len" tone={over ? "warn" : "neutral"}>{evidence.channelLength.chars} chars · {humanize(testChannel)} {over ? "over soft cap" : "ok"}</Chip>);
+      chips.push(<Chip key="len" tone={over ? "warn" : "neutral"}>{evidence.channelLength.chars} chars · {channelLabel(testChannel)} {over ? "over soft cap" : "ok"}</Chip>);
     }
     if (evidence.safety.moderator.verdict) {
       chips.push(<Chip key="mod">Moderator: {evidence.safety.moderator.verdict}{evidence.safety.moderator.ms !== null ? ` ${(evidence.safety.moderator.ms / 1000).toFixed(1)}s` : ""}</Chip>);
@@ -1900,7 +1952,7 @@ export function OwnerBrain({
               <SelectValue />
             </SelectTrigger>
             <SelectContent align="start">
-              {TEST_CHANNELS.map((channel) => <SelectItem key={channel} value={channel}>{humanize(channel)}</SelectItem>)}
+              {TEST_CHANNELS.map((channel) => <SelectItem key={channel} value={channel}>{channelLabel(channel)}</SelectItem>)}
             </SelectContent>
           </Select>
           {revisionSwitch(testRevision, (next) => { setTestRevision(next); setTestMessages([]); }, "Test revision")}
@@ -2002,12 +2054,9 @@ export function OwnerBrain({
                   <span className="text-[12px] text-[color:var(--muted)]">
                     {displayTime(snapshot.publishedAt)} · {humanize(snapshot.knowledgeMode)} · {workspaceCountFormat.format(snapshot.platformTokens)} tokens
                   </span>
-                  <TechnicalDetail items={[
-                    { label: "Snapshot ID", value: snapshot.id },
-                    { label: "Content hash", value: snapshot.contentHash },
-                    { label: "Source hash", value: snapshot.sourceHash },
-                    ...(snapshot.rollbackOfSnapshotId ? [{ label: "Rollback source ID", value: snapshot.rollbackOfSnapshotId }] : []),
-                  ]} />
+                  <MonoMeta className="text-[10.5px] text-[color:var(--faint)]" title={`Snapshot ${snapshot.id} · content ${snapshot.contentHash} · source ${snapshot.sourceHash}`}>
+                    content {shortHash(snapshot.contentHash)} · source {shortHash(snapshot.sourceHash)}{snapshot.rollbackOfSnapshotId ? ` · from ${shortHash(snapshot.rollbackOfSnapshotId)}` : ""}
+                  </MonoMeta>
                 </div>
                 {snapshot.version < currentVersion ? (
                   <label className="inline-flex shrink-0 items-center gap-[6px] text-[12px] text-[color:var(--accent-text)]">
@@ -2200,11 +2249,24 @@ export function OwnerBrain({
           ? safetyEditor
           : modelsEditor;
   const fullWidth = tab === "review" ? reviewView : tab === "suite" ? suiteView : tab === "prompt" ? promptView : null;
+  const hasDraftControls = tab === "behavior" || tab === "qualification" || tab === "safety";
+  const saveBar = hasDraftControls ? (
+    <div
+      className="flex shrink-0 flex-col gap-[8px] border-t border-[var(--line-soft)] bg-[var(--pane)] px-[20px] py-[12px] xl:px-[28px]"
+      data-slot="brain-save-bar"
+    >
+      <div className="flex flex-wrap items-center justify-end gap-[8px]">
+        {saveDraftControl}
+        {tab === "behavior" || tab === "safety" ? platformControls : null}
+      </div>
+      {tab === "behavior" || tab === "safety" ? platformBlockerNote : null}
+    </div>
+  ) : null;
 
   const rail = (
     <nav
       aria-label="Configure"
-      className="hidden w-[220px] shrink-0 flex-col gap-[4px] border-r border-[var(--line)] px-[12px] py-[20px] xl:flex"
+      className="hidden w-[220px] shrink-0 flex-col gap-[4px] overflow-y-auto border-r border-[var(--line)] px-[12px] py-[20px] xl:flex"
       data-slot="brain-rail"
     >
       <Over className="px-[10px] pb-[8px]">CONFIGURE</Over>
@@ -2215,13 +2277,13 @@ export function OwnerBrain({
         return (
           <Link
             aria-current={on ? "page" : undefined}
-            className={`flex h-[36px] items-center justify-between rounded-[6px] px-[10px] text-[13.5px] font-[500] no-underline hover:no-underline ${on ? "bg-[var(--card-top)] text-[color:var(--ink)]" : "text-[color:var(--body)] hover:bg-[var(--row-hover)]"}`}
+            className={`flex h-[36px] items-center justify-between gap-[8px] rounded-[6px] px-[10px] text-[13.5px] font-[500] no-underline hover:no-underline ${on ? "bg-[var(--card-top)] text-[color:var(--ink)]" : "text-[color:var(--body)] hover:bg-[var(--row-hover)]"}`}
             href={tabHref(section)}
             key={section}
           >
             {SECTION_LABEL[section]}
             {section === "knowledge" ? (
-              <MonoMeta className="text-[11px] text-[color:var(--faint)]">
+              <MonoMeta className="shrink-0 text-[11px] text-[color:var(--faint)]">
                 {workspaceCountFormat.format(state.knowledge.length)}{pendingReviewCount ? ` · ${workspaceCountFormat.format(pendingReviewCount)} to review` : ""}
               </MonoMeta>
             ) : differs ? (
@@ -2249,7 +2311,7 @@ export function OwnerBrain({
   );
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col gap-[14px]" data-slot="owner-brain">
+    <div className="relative flex min-h-0 flex-1 flex-col gap-[14px]" data-layout="fixed" data-slot="owner-brain">
       {error ? (
         <div className="shrink-0" role="alert">
           <Callout
@@ -2265,8 +2327,8 @@ export function OwnerBrain({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-[12px]">
-        <h1 className="m-0 text-[30px] leading-[1.1] font-[600] tracking-[-0.02em] text-[color:var(--ink)]">
+      <div className="flex shrink-0 flex-wrap items-center gap-[12px]">
+        <h1 className="m-0 text-[22px] leading-[1.2] font-[600] tracking-[-0.012em] text-[color:var(--ink)]">
           The Brain
         </h1>
         {currentVersion ? (
@@ -2286,7 +2348,7 @@ export function OwnerBrain({
             Draft · {workspaceCountFormat.format(diff.changes.length)} {diff.changes.length === 1 ? "change" : "changes"}
           </Pill>
         ) : state.draft ? (
-          <Pill>Draft saved {displayTime(state.draft.createdAt)}</Pill>
+          <Pill>Draft saved {relativeTime(state.draft.createdAt)}</Pill>
         ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-[8px]">
           <Button onClick={() => setHistoryOpen(true)} type="button" variant="outline">History</Button>
@@ -2305,22 +2367,17 @@ export function OwnerBrain({
         </div>
       </div>
 
-      {isSection ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--pane)] xl:flex-row">
-          {rail}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="px-[20px] pt-[16px] xl:hidden">{railTabs}</div>
-            <div className="flex min-w-0 flex-1 flex-col gap-[20px] px-[20px] py-[24px] xl:px-[28px]" data-slot="brain-editor">
-              {editor}
-            </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--pane)] xl:flex-row">
+        {rail}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="shrink-0 px-[20px] pt-[16px] xl:hidden">{railTabs}</div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-[20px] overflow-y-auto px-[20px] py-[24px] xl:px-[28px]" data-slot={isSection ? "brain-editor" : "brain-view"}>
+            {isSection ? editor : fullWidth}
           </div>
-          {testPane}
+          {saveBar}
         </div>
-      ) : (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[14px] border border-[var(--line)] bg-[var(--pane)] px-[20px] py-[24px] xl:px-[28px]">
-          {fullWidth}
-        </div>
-      )}
+        {isSection ? testPane : null}
+      </div>
 
       {historySheet}
       {publishSheet}
