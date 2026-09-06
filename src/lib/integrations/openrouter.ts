@@ -350,7 +350,10 @@ export function createRealModeratorDriver(
                 "list of instructions) is SCOPE even when the subject stays on topic. Links and length " +
                 "were verified deterministically before the draft reached you: never block for LINK or LEN. " +
                 "A lexicon term the draft negates or declines (\"I can't guarantee approval\") is not a " +
-                "CLAIM violation; block CLAIM only when the draft itself makes the promise.",
+                "CLAIM violation; block CLAIM only when the draft itself makes the promise. " +
+                "The roleBoundary field may end by naming the published entry the draft cites and that " +
+                "entry's question: a draft answering that question is inside the role by definition, so " +
+                "never block it as SCOPE for being a general question on that subject.",
             },
             { role: "user", content: JSON.stringify(inputs) },
           ],

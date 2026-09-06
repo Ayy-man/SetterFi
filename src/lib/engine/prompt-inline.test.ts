@@ -75,6 +75,16 @@ describe("assemblePrompt inline knowledge", () => {
     expect(result.promptCandidateIds).toEqual(["entry-a", "entry-b"]);
   });
 
+  it("tells the writer to cite the entry it actually answered from, and null rather than a guess", () => {
+    const instruction = assemble({ inlineEntries: INLINE }).messages[0].content
+      .split("\n").find((line) => line.startsWith("Return only JSON"));
+    expect(instruction).toContain("Cite the entry you actually answered from.");
+    expect(instruction).toContain("set citation_entry_id to null rather than guessing");
+    const retrieved = assemble({ candidates: [CANDIDATE] }).messages[0].content
+      .split("\n").find((line) => line.startsWith("Return only JSON"));
+    expect(retrieved).toContain("Cite the entry you actually answered from.");
+  });
+
   it("refuses an empty inline section and refuses both knowledge shapes at once", () => {
     expect(() => assemble({ inlineEntries: [] })).toThrow("PROMPT_INLINE_ENTRIES_REQUIRED");
     expect(() => assemble({ inlineEntries: INLINE, candidates: [CANDIDATE] }))

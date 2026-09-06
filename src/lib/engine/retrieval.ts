@@ -77,6 +77,69 @@ export function verifyCitationDeclaration(
   return new Set(promptCandidateIds).has(declaredEntryId);
 }
 
+const GROUNDING_STOPWORDS = new Set([
+  "that", "this", "with", "your", "yours", "have", "from", "they", "them", "their", "there", "will",
+  "what", "when", "where", "which", "about", "would", "could", "should", "been", "were", "into",
+  "than", "then", "also", "just", "does", "only", "some", "more", "very", "much", "well", "like",
+  "want", "need", "know", "mean", "sure", "yeah", "okay", "thanks", "please", "here", "still",
+  "really", "actually", "though", "thing", "things", "make", "made", "take", "give", "help",
+]);
+const GROUNDING_MIN_SHARED = 3;
+const GROUNDING_MIN_CONTAINMENT = 0.5;
+const GROUNDING_SPAN_LENGTH = 32;
+
+function groundingNormalized(text: string) {
+  return text.normalize("NFKC").replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function groundingTokens(normalized: string) {
+  return new Set((normalized.match(/[a-z]{4,}|\d{3,}/g) ?? []).filter((token) => !GROUNDING_STOPWORDS.has(token)));
+}
+
+function sharesSpan(reply: string, entry: string) {
+  for (let index = 0; index + GROUNDING_SPAN_LENGTH <= reply.length; index += 1) {
+    if (entry.includes(reply.slice(index, index + GROUNDING_SPAN_LENGTH))) return true;
+  }
+  return false;
+}
+
+export type GroundingMatch = { entryId: string; evidence: string };
+
+/**
+ * Which rendered entry a reply is drawn from, judged on the reply's own wording: at least half of
+ * its content words (and never fewer than three) appear in the entry, or a run of 32 characters
+ * is shared verbatim. Deterministic and conservative on purpose — it corrects a citation the model
+ * mis-declared, so it must never invent grounding a reviewer could not see. Two entries that
+ * ground the reply equally well leave it ungrounded, because a corrected citation that could name
+ * either is a guess.
+ */
+export function groundingEntryFor(
+  reply: string,
+  rendered: readonly { entryId: string; content: string }[],
+): GroundingMatch | null {
+  const normalizedReply = groundingNormalized(reply);
+  const replyTokens = groundingTokens(normalizedReply);
+  const scored = rendered.map((entry) => {
+    const normalizedEntry = groundingNormalized(entry.content);
+    const entryTokens = groundingTokens(normalizedEntry);
+    const shared = [...replyTokens].filter((token) => entryTokens.has(token)).length;
+    const containment = replyTokens.size ? shared / replyTokens.size : 0;
+    const span = sharesSpan(normalizedReply, normalizedEntry);
+    const grounded = span || (shared >= GROUNDING_MIN_SHARED && containment >= GROUNDING_MIN_CONTAINMENT);
+    return { entryId: entry.entryId, shared, containment, span, grounded };
+  }).filter((candidate) => candidate.grounded);
+  if (scored.length === 0) return null;
+  scored.sort((a, b) => b.shared - a.shared || Number(b.span) - Number(a.span) || b.containment - a.containment);
+  const [best, runnerUp] = scored;
+  if (runnerUp && runnerUp.shared === best.shared && runnerUp.span === best.span) return null;
+  return {
+    entryId: best.entryId,
+    evidence: `${best.shared} of ${replyTokens.size} content words shared` +
+      `${best.span ? `, a ${GROUNDING_SPAN_LENGTH}-character run shared verbatim` : ""}`,
+  };
+}
+
 export function answerFromCitation(citations: readonly RetrievalCitation[]) {
   const citation = sortRetrievalCitations(citations)[0];
   return citation ? { answer: citation.content, entryId: citation.entryId } : null;
