@@ -5,12 +5,22 @@ const DB_URL = process.env.RLS_TEST_DB_URL ?? "postgresql://postgres:postgres@12
 const OWNER = "00000000-0000-4000-8000-00000000c001";
 const SUCCESS = "00000000-0000-4000-8000-00000000c002";
 
+// Every slot the pipeline can send a lead verbatim (20261013000016): the three prompt texts, the
+// scope ladder, the held reply per moderator class and the STOP/HELP/START control copy.
 const DRAFT = {
   automatedExperienceDisclosure: " You are chatting with an automated assistant. ",
   platformFrame: "Frame text",
   roleBoundary: "Boundary text",
+  scopeDeflection1: "Deflection one",
+  scopeDeflection2: "Deflection two",
+  scopeClosing: "Scope closing",
   heldReplies: { NUM: "n", CLAIM: "c", ECHO: "e", LINK: "l", SCOPE: "s", LEN: "len", JUDGE: "j", REVOKE: "r" },
+  controlCopy: { STOP: " Stopped. ", HELP: "Help.", START: "Started." },
 };
+const DRAFT_KEYS = [
+  "automatedExperienceDisclosure", "controlCopy", "heldReplies", "platformFrame", "roleBoundary",
+  "scopeClosing", "scopeDeflection1", "scopeDeflection2",
+];
 
 let db: Client;
 
@@ -46,7 +56,7 @@ async function refuses(sql: string, params: unknown[]) {
 }
 
 describe("platform agent content drafts", () => {
-  it("only an owner or admin can save, and only the four editable keys are accepted", async () => {
+  it("only an owner or admin can save, and only the eight editable keys are accepted", async () => {
     expect(await refuses("select * from public.save_platform_agent_content_draft($1, $2)", [SUCCESS, JSON.stringify(DRAFT)]))
       .toBe("PLATFORM_CONTENT_ADMIN_REQUIRED");
     expect(await refuses("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify({ ...DRAFT, mission: "m" })]))
@@ -55,6 +65,15 @@ describe("platform agent content drafts", () => {
       .toBe("PLATFORM_CONTENT_DRAFT_INVALID:heldReplies.NUM");
     expect(await refuses("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify({ ...DRAFT, heldReplies: { NUM: "n" } })]))
       .toBe("PLATFORM_CONTENT_DRAFT_INVALID:heldReplies.keys");
+    const withoutControlCopy = Object.fromEntries(Object.entries(DRAFT).filter(([key]) => key !== "controlCopy"));
+    expect(await refuses("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify(withoutControlCopy)]))
+      .toBe("PLATFORM_CONTENT_DRAFT_INVALID:keys");
+    expect(await refuses("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify({ ...DRAFT, scopeClosing: " " })]))
+      .toBe("PLATFORM_CONTENT_DRAFT_INVALID:scopeClosing");
+    expect(await refuses("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify({ ...DRAFT, controlCopy: { STOP: "s", HELP: "h" } })]))
+      .toBe("PLATFORM_CONTENT_DRAFT_INVALID:controlCopy.keys");
+    expect(await refuses("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify({ ...DRAFT, controlCopy: { ...DRAFT.controlCopy, START: "" } })]))
+      .toBe("PLATFORM_CONTENT_DRAFT_INVALID:controlCopy.START");
   });
 
   it("saving writes the draft lane, trims it, logs it, and leaves the approved row untouched", async () => {
@@ -67,6 +86,8 @@ describe("platform agent content drafts", () => {
       "select agent_content_draft draft, agent_content_draft_hash hash, agent_content_draft_saved_by saved_by, agent_content, approved from public.platform_settings",
     );
     expect(row.rows[0].draft.automatedExperienceDisclosure).toBe("You are chatting with an automated assistant.");
+    expect(Object.keys(row.rows[0].draft).sort()).toEqual(DRAFT_KEYS);
+    expect(row.rows[0].draft.controlCopy).toEqual({ STOP: "Stopped.", HELP: "Help.", START: "Started." });
     expect(row.rows[0].hash).toBe(saved.rows[0].draft_hash);
     expect(row.rows[0].saved_by).toBe(OWNER);
     expect(row.rows[0].agent_content).toEqual(before.rows[0].agent_content);
@@ -81,7 +102,15 @@ describe("platform agent content drafts", () => {
   });
 
   it("approval needs a matching hash, a reason, and no placeholder in any lead-facing slot", async () => {
-    const saved = await db.query<{ draft_hash: string }>("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify(DRAFT)]);
+    // A draft may still carry placeholder text in the slots the seed left unapproved; saving it is
+    // allowed, approving it is not, and the refusal names every slot that blocks it.
+    const placeholderDraft = {
+      ...DRAFT,
+      scopeDeflection1: "[DRAFT] deflection one", scopeDeflection2: "SETTERFI_DEMO_PLACEHOLDER_SCOPE_2",
+      scopeClosing: "[DRAFT] closing",
+      controlCopy: { STOP: "SETTERFI_DEMO_PLACEHOLDER_STOP", HELP: "[DRAFT] help", START: "[DRAFT] start" },
+    };
+    const saved = await db.query<{ draft_hash: string }>("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify(placeholderDraft)]);
     const hash = saved.rows[0].draft_hash;
     expect(await refuses("select * from public.approve_platform_agent_content($1, $2, $3)", [OWNER, "stale", "reason"]))
       .toBe("PLATFORM_CONTENT_DRAFT_STALE");
@@ -105,11 +134,10 @@ describe("platform agent content drafts", () => {
 
   it("approval merges the draft over the approved row, keeps mission and qualification, clears the draft, and logs the reason", async () => {
     const saved = await db.query<{ draft_hash: string }>("select * from public.save_platform_agent_content_draft($1, $2)", [OWNER, JSON.stringify(DRAFT)]);
-    await db.query(`
-      update public.platform_settings set agent_content = agent_content || jsonb_build_object(
-        'controlCopy', jsonb_build_object('STOP', 'Stopped.', 'HELP', 'Help.', 'START', 'Started.'),
-        'scopeDeflection1', 'd1', 'scopeDeflection2', 'd2', 'scopeClosing', 'close')
-    `);
+    const seed = await db.query<{ placeholders: string[] }>(
+      "select public.platform_agent_content_blockers(agent_content) placeholders from public.platform_settings",
+    );
+    expect(seed.rows[0].placeholders).toEqual(expect.arrayContaining(["scopeDeflection1", "controlCopy.STOP"]));
     const approved = await db.query<{ audit_id: string; content_hash: string }>(
       "select * from public.approve_platform_agent_content($1, $2, $3)", [OWNER, saved.rows[0].draft_hash, "Reviewed with the client"],
     );
@@ -122,6 +150,11 @@ describe("platform agent content drafts", () => {
     expect(row.rows[0].content.platformFrame).toBe("Frame text");
     expect(row.rows[0].content.mission).toBe("[DRAFT] Mission prompt pending approval.");
     expect(row.rows[0].content.controlCopy).toEqual({ STOP: "Stopped.", HELP: "Help.", START: "Started." });
+    expect(row.rows[0].content.scopeClosing).toBe("Scope closing");
+    const cleared = await db.query<{ blockers: string[] }>(
+      "select public.platform_agent_content_blockers(agent_content) blockers from public.platform_settings",
+    );
+    expect(cleared.rows[0].blockers).toEqual([]);
     const audit = await db.query<{ action: string; reason: string; payload: Record<string, unknown> }>(
       "select action, reason, payload from public.audit_log where id = $1", [approved.rows[0].audit_id],
     );
@@ -131,7 +164,7 @@ describe("platform agent content drafts", () => {
       draftHash: saved.rows[0].draft_hash,
       contentHash: approved.rows[0].content_hash,
       previouslyApproved: false,
-      fields: ["automatedExperienceDisclosure", "heldReplies", "platformFrame", "roleBoundary"],
+      fields: DRAFT_KEYS,
     });
     expect(await refuses("select * from public.approve_platform_agent_content($1, $2, $3)", [OWNER, "x", "reason"]))
       .toBe("PLATFORM_CONTENT_DRAFT_REQUIRED");

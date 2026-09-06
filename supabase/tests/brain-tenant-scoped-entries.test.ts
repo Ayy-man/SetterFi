@@ -154,8 +154,9 @@ describe("tenant_read on brain_knowledge_entries and brain_knowledge_entry_varia
 
     await resetRole();
     await db.query(
-      `update public.tenant_memberships set revoked_at = now() where user_id = $1 and tenant_id = $2`,
-      [MEMBER_A, TENANT_A],
+      // tenant_memberships_revocation_shape: a revocation records who revoked it.
+      `update public.tenant_memberships set revoked_at = now(), revoked_by = $3 where user_id = $1 and tenant_id = $2`,
+      [MEMBER_A, TENANT_A, ADMIN],
     );
     await actAs("authenticated", MEMBER_A, { role: "coach_member", tenant_id: TENANT_A });
     expect(await visibleEntries()).toEqual([]);

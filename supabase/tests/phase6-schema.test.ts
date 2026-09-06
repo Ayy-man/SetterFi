@@ -173,9 +173,10 @@ describe("Phase 6 catalog contract", () => {
       "billing_correction_decisions.reason:text:NO", "billing_correction_decisions.offset_event_id:uuid:YES",
       "billing_correction_decisions.audit_id:int8:NO", "billing_correction_decisions.created_at:timestamptz:NO",
       "billing_correction_requests.id:uuid:NO", "billing_correction_requests.tenant_id:uuid:NO",
-      "billing_correction_requests.billable_event_id:uuid:NO", "billing_correction_requests.quantity_delta:int4:NO",
+      "billing_correction_requests.billable_event_id:uuid:YES", "billing_correction_requests.quantity_delta:int4:YES",
       "billing_correction_requests.requested_by:uuid:NO", "billing_correction_requests.reason:text:NO",
       "billing_correction_requests.audit_id:int8:NO", "billing_correction_requests.created_at:timestamptz:NO",
+      "billing_correction_requests.period_start:timestamptz:YES", "billing_correction_requests.period_end:timestamptz:YES",
       "billing_subscriptions.id:uuid:NO", "billing_subscriptions.tenant_id:uuid:NO",
       "billing_subscriptions.stripe_customer_id:text:NO", "billing_subscriptions.stripe_subscription_id:text:NO",
       "billing_subscriptions.stripe_price_id:text:NO", "billing_subscriptions.status:text:NO",
@@ -236,7 +237,7 @@ describe("Phase 6 catalog contract", () => {
       "allowance_actions_schedule_shape_chk", "allowance_actions_state_chk",
       "billing_correction_decisions_reason_chk", "billing_correction_decisions_request_fk",
       "billing_correction_decisions_request_key", "billing_correction_decisions_shape_chk",
-      "billing_correction_decisions_value_chk", "billing_correction_requests_delta_chk",
+      "billing_correction_decisions_value_chk", "billing_correction_requests_shape_chk",
       "billing_correction_requests_reason_chk", "billing_subscriptions_customer_key",
       "billing_subscriptions_period_chk", "billing_subscriptions_status_chk",
       "billing_subscriptions_subscription_key", "billing_subscriptions_tenant_key",
@@ -336,7 +337,7 @@ describe("Phase 6 catalog contract", () => {
       "approve_commission_payout(uuid,uuid,uuid[],text)":
         "TABLE(payout_id uuid, event_id uuid, audit_id bigint)",
       "coach_billing_projection(uuid)":
-        "TABLE(tier_name text, price_cents integer, period_start timestamp with time zone, period_end timestamp with time zone, timezone text, booked_count bigint, call_allowance integer, subscription_state text, invoice_state text, account_state text, pending_tier_name text, pending_price_cents integer, pending_effective_at timestamp with time zone, notices jsonb, correction_candidates jsonb, outcome_prompts jsonb, is_demo boolean)",
+        "TABLE(tier_name text, price_cents integer, period_start timestamp with time zone, period_end timestamp with time zone, timezone text, booked_count bigint, call_allowance integer, subscription_state text, invoice_state text, account_state text, pending_tier_name text, pending_price_cents integer, pending_effective_at timestamp with time zone, notices jsonb, correction_candidates jsonb, outcome_prompts jsonb, settled_attendance jsonb, is_demo boolean)",
       "decide_billable_correction(uuid,uuid,uuid,text,text)":
         "TABLE(decision_id uuid, offset_event_id uuid, audit_id bigint)",
       "record_allowance_action(uuid,timestamp with time zone,timestamp with time zone,text,integer,integer,uuid,timestamp with time zone,uuid,text,text)":
