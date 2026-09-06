@@ -250,6 +250,52 @@ export function narrowAssembledPrompt(payload: unknown): AssembledPromptView {
 }
 
 /* --------------------------------------------------------------------------------------------
+ * Question variants: other ways a lead asks the same thing
+ * ------------------------------------------------------------------------------------------ */
+
+/** Mirrors `BRAIN_VARIANT_MAX_LENGTH` in the repository, which this client bundle cannot import. */
+export const KNOWLEDGE_VARIANT_MAX_LENGTH = 500;
+
+export type KnowledgeVariantView = { id: string; entryId: string; variant: string; createdAt: string };
+
+export function narrowKnowledgeVariant(payload: unknown): KnowledgeVariantView {
+  const value = record(payload);
+  const row = record(value.variant);
+  if (!text(row.id) || !text(row.entryId) || !text(row.variant)) throw new OwnerBrainApiError(200, "BRAIN_VARIANT_RECEIPT_INVALID");
+  return { id: text(row.id), entryId: text(row.entryId), variant: text(row.variant), createdAt: text(row.createdAt) };
+}
+
+/* --------------------------------------------------------------------------------------------
+ * Retrieval floor: the similarity below which a ranked answer is a miss
+ * ------------------------------------------------------------------------------------------ */
+
+/**
+ * Mirrors `DEFAULT_RETRIEVAL_SIMILARITY_FLOOR` in `src/lib/brain/retrieval.ts`, which this client
+ * bundle cannot import; `owner-brain-api.test.ts` pins the two to each other.
+ */
+export const DEFAULT_RETRIEVAL_FLOOR = 0.25;
+
+/** The floor a stored payload carries, or null when it carries none or something malformed. */
+export function payloadRetrievalFloor(payload: Readonly<Record<string, unknown>> | null | undefined): number | null {
+  const value = payload?.retrievalFloor;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
+}
+
+/**
+ * What the owner typed, as the number the draft will carry. Empty means "use the code default"
+ * and travels as absent; anything outside [0, 1] is refused here so the draft route never sees it.
+ */
+export function parseRetrievalFloorInput(raw: string): { value: number | null; error: string | null } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { value: null, error: null };
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    return { value: null, error: "The floor is a number between 0 and 1, or blank for the default." };
+  }
+  return { value, error: null };
+}
+
+/* --------------------------------------------------------------------------------------------
  * Client
  * ------------------------------------------------------------------------------------------ */
 
@@ -317,6 +363,14 @@ export function createOwnerBrainApi(fetcher: FetchLike = fetch) {
         { method: "POST", body: JSON.stringify({ reason: input.reason }) },
       );
     },
+    /** Adds one phrasing to an entry. Variants are immutable: there is no edit and no remove. */
+    async addKnowledgeVariant(input: { entryId: string; variant: string }): Promise<KnowledgeVariantView> {
+      return narrowKnowledgeVariant(await request(
+        fetcher,
+        `/api/admin/brain/knowledge/${encodeURIComponent(input.entryId)}/variants`,
+        { method: "POST", body: JSON.stringify({ variant: input.variant }) },
+      ));
+    },
   };
 }
 
@@ -330,6 +384,12 @@ const FAILURE_COPY: Readonly<Record<string, string>> = {
   BRAIN_TEST_TURN_RATE_LIMITED: "Too many test turns for this coach in the last minute. Wait a moment.",
   DRIVER_CONFIGURATION_ERROR: "The model driver is not configured on this deployment.",
   PLATFORM_AGENT_CONTENT_UNAPPROVED_NON_DEMO: "Platform text is not approved yet, so only a test tenant can run a turn.",
+  BRAIN_KNOWLEDGE_ENTRY_NOT_FOUND: "This entry no longer exists. Reload the page.",
+  BRAIN_VARIANT_TEXT_REQUIRED: "Type a phrasing first.",
+  BRAIN_VARIANT_TOO_LONG: `A phrasing is at most ${KNOWLEDGE_VARIANT_MAX_LENGTH} characters.`,
+  BRAIN_VARIANT_MATCHES_QUESTION: "That is the question itself. Add a different way a lead would ask it.",
+  BRAIN_VARIANT_DUPLICATE: "This entry already carries that phrasing.",
+  BRAIN_VARIANT_REFUSED: "The phrasing was not saved. Try again in a moment.",
 };
 
 /** What the screen prints when a route answers with a failure. */

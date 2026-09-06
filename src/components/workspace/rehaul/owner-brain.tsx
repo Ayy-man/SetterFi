@@ -71,8 +71,12 @@ import { ContextEye } from "@/components/workspace/rehaul/context-eye";
 import { Pill, RehaulTabs, StatusDot } from "@/components/workspace/rehaul/_primitives";
 import {
   createOwnerBrainApi,
+  DEFAULT_RETRIEVAL_FLOOR,
   emptyPlatformContent,
+  KNOWLEDGE_VARIANT_MAX_LENGTH,
   ownerBrainApiFailure,
+  parseRetrievalFloorInput,
+  payloadRetrievalFloor,
   TEST_CHANNELS,
   type AssembledPromptView,
   type OwnerBrainApi,
@@ -363,7 +367,11 @@ function initialReview(rows: readonly BrainImportRowView[]): Record<string, Revi
   } satisfies ReviewDecision]));
 }
 
-function draftPayload(state: AdminBrainInitialState) {
+/**
+ * The draft the screen saves. `retrievalFloor` travels only when the owner set one: absent means
+ * the engine's code default, and the route refuses anything outside [0, 1].
+ */
+function draftPayload(state: AdminBrainInitialState, retrievalFloor: number | null = null) {
   const entities = [
     ...state.mission.map((item) => ({ id: item.id, type: "mission", value: { label: item.label, text: item.text } })),
     ...state.qualification.map((item) => ({ id: item.id, type: "qualification_rule", value: { label: item.label, outcome: item.outcome, position: item.position } })),
@@ -380,6 +388,7 @@ function draftPayload(state: AdminBrainInitialState) {
     compiledPlatform,
     platformTokens: Math.ceil(compiledPlatform.length / 4),
     knowledgeMode: state.draft?.payload.knowledgeMode === "retrieved" ? "retrieved" : "inline",
+    ...(retrievalFloor === null ? {} : { retrievalFloor }),
   };
 }
 
@@ -637,6 +646,15 @@ export function OwnerBrain({
   const [knowledgeSheet, setKnowledgeSheet] = useState<KnowledgeRow | null>(null);
   const [objectionSheet, setObjectionSheet] = useState<BrainObjectionView | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // A phrasing being added to the open knowledge entry, and why the last one was refused.
+  const [variantDraft, setVariantDraft] = useState("");
+  const [variantError, setVariantError] = useState<string | null>(null);
+  // The retrieval floor as typed. Blank means the code default; seeded from the saved draft, or
+  // from the live version when there is no draft, so the box shows what the next draft would carry.
+  const [retrievalFloorInput, setRetrievalFloorInput] = useState(() => {
+    const stored = payloadRetrievalFloor(initialState.draft?.payload) ?? payloadRetrievalFloor(initialState.currentSnapshotPayload);
+    return stored === null ? "" : String(stored);
+  });
 
   // Platform content: the sentences the engine reads outside the Brain draft.
   const [platform, setPlatform] = useState<PlatformContentView | null>(null);
@@ -722,6 +740,13 @@ export function OwnerBrain({
   const knowledgeMode = state.draft?.payload.knowledgeMode === "retrieved"
     ? "retrieved"
     : state.snapshots[0]?.knowledgeMode ?? "inline";
+  const retrievalFloor = parseRetrievalFloorInput(retrievalFloorInput);
+  const liveRetrievalFloor = payloadRetrievalFloor(state.currentSnapshotPayload);
+  const draftRetrievalFloor = payloadRetrievalFloor(state.draft?.payload);
+  // The entry the sheet shows, read off state so a phrasing added a moment ago is on it.
+  const knowledgeSheetRow = knowledgeSheet
+    ? state.knowledge.find((row) => row.id === knowledgeSheet.id) ?? knowledgeSheet
+    : null;
 
   const mission = useCallback(
     (label: string) => state.mission.find((item) => item.label === label),
@@ -882,7 +907,8 @@ export function OwnerBrain({
 
   async function createDraft() {
     await runAction("draft", async () => {
-      const payload = await brainApi.createDraft(draftPayload(state));
+      if (retrievalFloor.error) throw new Error(retrievalFloor.error);
+      const payload = await brainApi.createDraft(draftPayload(state, retrievalFloor.value));
       const value = payload as { revision?: { id?: string; contentHash?: string; payload?: Readonly<Record<string, unknown>> } };
       if (!value.revision?.id || !value.revision.contentHash || !value.revision.payload) {
         throw new Error("BRAIN_DRAFT_RECEIPT_INCOMPLETE");
@@ -899,6 +925,29 @@ export function OwnerBrain({
       }));
       setPublishResponse(null);
     });
+  }
+
+  /** Adds a phrasing to the open entry. The row is immutable once written, so there is no undo. */
+  async function addVariant(row: KnowledgeRow) {
+    const variant = variantDraft.trim();
+    if (!variant) return;
+    setBusy("variant");
+    setVariantError(null);
+    try {
+      const added = await ownerApi.addKnowledgeVariant({ entryId: row.id, variant });
+      setState((current) => ({
+        ...current,
+        knowledge: current.knowledge.map((entry) => entry.id === row.id
+          // The same `variants` array the draft entity hashes, so the next saved draft carries it.
+          ? { ...entry, variants: [...entry.variants, { id: added.id, text: added.variant }] }
+          : entry),
+      }));
+      setVariantDraft("");
+    } catch (cause) {
+      setVariantError(ownerBrainApiFailure(cause));
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function runEval() {
@@ -1542,6 +1591,38 @@ export function OwnerBrain({
               <Chip>{knowledgeMode}</Chip>
               <ScopeTag scope="SYSTEM" />
             </ListRow>
+            <ListRow className="flex-wrap">
+              <span className="flex min-w-0 flex-1 basis-[240px] flex-col gap-[2px]">
+                <span className="text-[14px] font-[500] text-[color:var(--ink)]">Retrieval floor</span>
+                <span className="text-[12px] text-[color:var(--muted)]">
+                  How close a stored answer has to be to the lead&apos;s message before the agent may use it. Below the floor the agent has no grounded answer and says so instead of guessing.
+                </span>
+                {retrievalFloor.error ? (
+                  <span className="text-[12px] text-[color:var(--critical-text)]" role="alert">{retrievalFloor.error}</span>
+                ) : (
+                  <span className="text-[12px] text-[color:var(--faint)]">
+                    {retrievalFloor.value === null
+                      ? `Blank uses the code default, ${DEFAULT_RETRIEVAL_FLOOR}.`
+                      : `Saved with the next draft. Live version: ${liveRetrievalFloor ?? `${DEFAULT_RETRIEVAL_FLOOR} (default)`}.`}
+                    {retrievalFloor.value !== draftRetrievalFloor && state.draft ? " The saved draft carries a different value until you save again." : ""}
+                  </span>
+                )}
+              </span>
+              <Input
+                aria-label="Retrieval floor"
+                className="w-[96px]"
+                inputMode="decimal"
+                max={1}
+                min={0}
+                onChange={(event) => setRetrievalFloorInput(event.target.value)}
+                placeholder={String(DEFAULT_RETRIEVAL_FLOOR)}
+                step={0.05}
+                type="number"
+                value={retrievalFloorInput}
+              />
+              <Chip>{retrievalFloor.value === null ? `${DEFAULT_RETRIEVAL_FLOOR} default` : `${retrievalFloor.value} effective`}</Chip>
+              <ScopeTag scope="ALL" />
+            </ListRow>
             <ListRow>
               <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
                 <span className="text-[14px] font-[500] text-[color:var(--ink)]">Platform tokens on the live version</span>
@@ -1552,7 +1633,7 @@ export function OwnerBrain({
             </ListRow>
           </ListCard>
         ) : (
-          <p className="m-0 text-[12px] text-[color:var(--faint)]">Knowledge mode and prompt size. Collapsed because nobody should be touching these weekly.</p>
+          <p className="m-0 text-[12px] text-[color:var(--faint)]">Knowledge mode, retrieval floor and prompt size. Collapsed because nobody should be touching these weekly.</p>
         )}
       </div>
     </>
@@ -2331,7 +2412,9 @@ export function OwnerBrain({
           ? safetyEditor
           : modelsEditor;
   const fullWidth = tab === "review" ? reviewView : tab === "suite" ? suiteView : tab === "prompt" ? promptView : null;
-  const hasDraftControls = tab === "behavior" || tab === "qualification" || tab === "safety";
+  // Models carries the save because its advanced block edits the retrieval floor, which only
+  // reaches an agent through a saved draft.
+  const hasDraftControls = tab === "behavior" || tab === "qualification" || tab === "safety" || tab === "models";
   const saveBar = hasDraftControls ? (
     <div
       className="flex shrink-0 flex-col gap-[8px] border-t border-[var(--line-soft)] bg-[var(--pane)] px-[20px] py-[12px] xl:px-[28px]"
@@ -2465,24 +2548,70 @@ export function OwnerBrain({
       {publishSheet}
 
       <RecordSheet
-        onOpenChange={(open) => { if (!open) setKnowledgeSheet(null); }}
-        open={knowledgeSheet !== null}
-        sections={knowledgeSheet ? [
-          { title: "Lead asks", body: <p className="t-muted m-0">{knowledgeSheet.inboundMessage || "No inbound message was saved."}</p> },
-          { title: "Agent answers", body: <p className="t-muted m-0">{knowledgeSheet.responseTemplate || "No response template was saved."}</p> },
+        onOpenChange={(open) => { if (!open) { setKnowledgeSheet(null); setVariantDraft(""); setVariantError(null); } }}
+        open={knowledgeSheetRow !== null}
+        sections={knowledgeSheetRow ? [
+          { title: "Lead asks", body: <p className="t-muted m-0">{knowledgeSheetRow.inboundMessage || "No inbound message was saved."}</p> },
+          {
+            title: "Other ways leads ask it",
+            aside: knowledgeSheetRow.variants.length ? `${workspaceCountFormat.format(knowledgeSheetRow.variants.length)} ${knowledgeSheetRow.variants.length === 1 ? "phrasing" : "phrasings"}` : undefined,
+            body: (
+              <div className="flex flex-col gap-[10px]" data-slot="knowledge-variants">
+                {knowledgeSheetRow.variants.length ? (
+                  <ul className="m-0 flex list-none flex-wrap gap-[6px] p-0">
+                    {knowledgeSheetRow.variants.map((variant) => (
+                      <li key={variant.id}><Chip>{variant.text}</Chip></li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="t-muted m-0">No other phrasings yet. The agent matches on the question above alone.</p>
+                )}
+                <form
+                  className="flex flex-col gap-[6px]"
+                  onSubmit={(event) => { event.preventDefault(); void addVariant(knowledgeSheetRow); }}
+                >
+                  <div className="flex gap-[8px]">
+                    <Input
+                      aria-label="Add a phrasing"
+                      className="min-w-0 flex-1"
+                      disabled={busy !== null}
+                      maxLength={KNOWLEDGE_VARIANT_MAX_LENGTH}
+                      onChange={(event) => { setVariantDraft(event.target.value); setVariantError(null); }}
+                      placeholder="How else would a lead ask this?"
+                      value={variantDraft}
+                    />
+                    <div className="flex flex-col items-end gap-[2px]">
+                      <Button disabled={!variantDraft.trim() || busy !== null} type="submit" variant="outline">
+                        {busy === "variant" ? "Adding" : "Add phrasing"}
+                      </Button>
+                      <MonoMeta aria-label="Phrasing recorded in the audit log">Logged</MonoMeta>
+                    </div>
+                  </div>
+                  {variantError ? (
+                    <p className="m-0 text-[12px] text-[color:var(--critical-text)]" role="alert">{variantError}</p>
+                  ) : (
+                    <p className="m-0 text-[12px] text-[color:var(--faint)]">
+                      Each phrasing is matched on its own, so a lead who asks it this way lands on this answer. A phrasing cannot be edited once added; it reaches agents at the next publish.
+                    </p>
+                  )}
+                </form>
+              </div>
+            ),
+          },
+          { title: "Agent answers", body: <p className="t-muted m-0">{knowledgeSheetRow.responseTemplate || "No response template was saved."}</p> },
           {
             title: "Publish state",
             fields: [
-              { label: "Status", value: humanize(knowledgeSheet.status) },
-              { label: "Last saved", value: knowledgeSheet.updatedAt ? displayTime(knowledgeSheet.updatedAt) : undefined, absence: "not recorded" },
-              { label: "Published", value: knowledgeSheet.publishedAt ? displayTime(knowledgeSheet.publishedAt) : undefined, absence: "never published" },
+              { label: "Status", value: humanize(knowledgeSheetRow.status) },
+              { label: "Last saved", value: knowledgeSheetRow.updatedAt ? displayTime(knowledgeSheetRow.updatedAt) : undefined, absence: "not recorded" },
+              { label: "Published", value: knowledgeSheetRow.publishedAt ? displayTime(knowledgeSheetRow.publishedAt) : undefined, absence: "never published" },
             ],
           },
         ] : []}
-        state={knowledgeSheet ? { kind: "tag", label: humanize(knowledgeSheet.status), tone: "neutral" } : undefined}
-        subtitle={knowledgeSheet ? humanize(knowledgeSheet.category) : undefined}
-        technical={knowledgeSheet ? [{ label: "Entry ID", value: knowledgeSheet.id }] : undefined}
-        title={knowledgeSheet?.inboundMessage || "Knowledge entry"}
+        state={knowledgeSheetRow ? { kind: "tag", label: humanize(knowledgeSheetRow.status), tone: "neutral" } : undefined}
+        subtitle={knowledgeSheetRow ? humanize(knowledgeSheetRow.category) : undefined}
+        technical={knowledgeSheetRow ? [{ label: "Entry ID", value: knowledgeSheetRow.id }] : undefined}
+        title={knowledgeSheetRow?.inboundMessage || "Knowledge entry"}
       />
 
       <RecordSheet
