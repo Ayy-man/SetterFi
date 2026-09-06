@@ -38,6 +38,12 @@ export type RetrievalArm = {
   entryIdFor(question: string): string | null;
   /** Whether an entry id the pipeline returned exists in the snapshot the arm ranks against. */
   knownEntry(entryId: string): boolean;
+  /**
+   * The similarity floor the pipeline applies for this arm. Absent means the engine default, which
+   * is what a live arm should use so the suite measures the floor production runs with; the fake
+   * arm's lexical embedding needs its own, lower one.
+   */
+  similarityFloor?: number;
 };
 
 export const RETRIEVAL_CASE_OUTCOMES = [
@@ -149,6 +155,7 @@ async function runOne(arm: RetrievalArm, corpus: LoadedRetrievalCorpus, testCase
     offer: corpus.fixture.offer,
     renderSources: corpus.fixture.renderSources,
     limit: RETRIEVAL_PROMPT_CANDIDATES,
+    ...(arm.similarityFloor !== undefined ? { similarityFloor: arm.similarityFloor } : {}),
   }, {
     embeddings: arm.embeddings,
     repository: arm.repository,
@@ -324,6 +331,10 @@ export function createFakeRetrievalArm(corpus: LoadedRetrievalCorpus = loadRetri
             entry_id: entry.entryId,
             category: entry.category,
             response_template: entry.responseTemplate,
+            // The fake arm has no reviewed provenance; the live RPC fills these three.
+            number_bindings: [],
+            rewrite_hash: null,
+            matched_variant: null,
             similarity,
             category_boost: categoryBoost,
             score: similarity + categoryBoost,
@@ -337,6 +348,7 @@ export function createFakeRetrievalArm(corpus: LoadedRetrievalCorpus = loadRetri
   return {
     label: "fake-lexical",
     snapshotId: FAKE_ARM_SNAPSHOT_ID,
+    similarityFloor: FAKE_ARM_SIMILARITY_FLOOR,
     embeddings,
     repository,
     entryIdFor: (question) => byQuestion.get(normalizeEntryQuestion(question)) ?? null,

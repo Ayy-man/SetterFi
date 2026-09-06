@@ -1463,6 +1463,7 @@ export function OwnerBrain({
         right={
           <>
             <Status label={importSummary.label} tone={STATE_TONE_TO_TONE[importSummary.tone]} treatment="bare" />
+            <ExportMenu filename="setterfi-brain-import-batches" label="Export import runs" mode="server" query={{ reason: "", order: "created_desc", columns: ["id", "source", "status", "receivedCount", "normalizedCount", "flaggedCount", "createdAt", "completedAt"] }} resource="brain-import-batches" />
             <ExportMenu filename="setterfi-brain-import-items" label="Export import rows" mode="server" query={{ reason: "", order: "created_desc", columns: ["id", "batchId", "sourceRef", "operation", "decision", "disposition", "flagCount", "decidedAt"] }} resource="brain-import-items" />
             <Button nativeButton={false} render={<Link href={tabHref("knowledge")} />} variant="outline">Back to Knowledge</Button>
           </>
