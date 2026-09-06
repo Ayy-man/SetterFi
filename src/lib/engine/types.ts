@@ -157,7 +157,19 @@ export type RetrievalCitation = {
 
 export type ModelReplyEnvelope = {
   reply: string;
-  citation_entry_id: string;
+  /** Null when the writer declined to cite rather than guess; verified as "nothing declared". */
+  citation_entry_id: string | null;
+};
+
+/**
+ * Recorded when the declared citation did not verify but one rendered entry grounds the reply's
+ * wording, so the turn passed under that entry instead. `declaredEntryId` is what the model said;
+ * the trace's own `declaredEntryId` then carries the corrected id.
+ */
+export type CitationCorrection = {
+  declaredEntryId: string | null;
+  correctedEntryId: string;
+  evidence: string;
 };
 
 /**
@@ -184,6 +196,8 @@ export type EngineTrace = {
   sources: readonly RetrievalCitation[];
   declaredEntryId: string | null;
   declaredEntryVerified: boolean;
+  /** Optional on the type so trace fixtures outside the engine keep compiling; the pipeline always sets it. */
+  citationCorrection?: CitationCorrection | null;
   retrievalTopThree: readonly RetrievalCitation[];
   droppedEntryIds: readonly string[];
   numberAllowlist: readonly NumberSource[];

@@ -10,7 +10,7 @@ import {
   type RetrieveForTurnInput,
   type TurnRetrievalResult,
 } from "@/lib/brain/retrieval";
-import type { ModeratorCall } from "@/lib/engine/moderator";
+import { GROUNDED_REPLY_IN_SCOPE, type ModeratorCall } from "@/lib/engine/moderator";
 import {
   INLINE_KNOWLEDGE_TOKEN_BUDGET,
   NO_GROUNDED_ANSWER_RULE_ID,
@@ -331,6 +331,148 @@ describe("runEngineTurn inline knowledge mode", () => {
     }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-3", 0.9))) });
     expect(result.trace.knowledgeMode).toBe("retrieved");
     expect(deps.model.generate.mock.calls[0][0][0].content).toContain("[B:TURN] RENDERED BRAIN CANDIDATES");
+  });
+});
+
+// The knowledge-mode eval's SCOPE false positive: "where can I check what my credit score is?"
+// answered from the published FAQ "How to check my credit score?" and blocked by a moderator that
+// read the role boundary literally. The verdict model must be told the reply answers a published
+// entry, by that entry's question, and must still never see the entry's answer.
+describe("runEngineTurn tells the moderator which published entry the reply cites", () => {
+  const CHECK_SCORE_TEMPLATE = "You can go to free credit monitoring websites such as Credit Karma or Nerdwallet. Your banking app may show it too.";
+  const checkScoreEntry = () => knowledgeEntry({
+    entryId: "entry-check-score",
+    category: "Credit",
+    question: "How to check my credit score?",
+    responseTemplate: CHECK_SCORE_TEMPLATE,
+    rewriteHash: rewriteHash(CHECK_SCORE_TEMPLATE),
+    sourceRef: "notion:check-score",
+  });
+
+  it("passes the cited entry's question alongside the boundary and never its answer", async () => {
+    const deps = dependencies([reply(
+      "Free credit monitoring sites like Credit Karma or Nerdwallet will show it, and your banking app may too.",
+      "entry-check-score",
+    )]);
+    const result = await runEngineTurn({
+      ...BASE,
+      history: [{ role: "user", content: "where can I check what my credit score is?" }],
+      leadMessage: { id: "lead", body: "where can I check what my credit score is?" },
+      runtimeBundle: bundle({ knowledgeEntries: [knowledgeEntry(), checkScoreEntry()] }),
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-check-score", 0.88))) });
+
+    expect(result.trace.screen.verdict).toBe("continue");
+    expect(deps.moderator.moderate).toHaveBeenCalledTimes(1);
+    const payload = deps.moderator.moderate.mock.calls[0][0];
+    expect(Object.keys(payload).sort()).toEqual([
+      "complianceLexicon", "draft", "leadMessage", "linkWhitelist", "numberAllowlist", "roleBoundary",
+    ]);
+    expect(payload.roleBoundary.startsWith(BASE.roleBoundary)).toBe(true);
+    expect(payload.roleBoundary).toContain('"How to check my credit score?"');
+    expect(payload.roleBoundary).toContain("entry-check-score");
+    expect(payload.roleBoundary).toContain(GROUNDED_REPLY_IN_SCOPE);
+    expect(JSON.stringify(payload)).not.toContain("Your banking app may show it too");
+    expect(JSON.stringify(payload)).not.toContain(TIMING_TEMPLATE);
+    expect(JSON.stringify(payload)).not.toMatch(/tenant_offer|\[B:INLINE\]/);
+  });
+
+  it("sends the bare boundary when the reply cites nothing verifiable", async () => {
+    const deps = dependencies([reply("A grounded published answer.", "entry-timing")]);
+    await runEngineTurn({ ...BASE, runtimeBundle: bundle({ knowledgeEntries: [knowledgeEntry()] }) }, {
+      ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-timing", 0.9))),
+    });
+    expect(deps.moderator.moderate.mock.calls[0][0].roleBoundary).toContain('"How long does funding take?"');
+    const uncited = dependencies(["Plain text with no envelope, so nothing is cited."]);
+    await runEngineTurn({ ...BASE }, uncited);
+    expect(uncited.moderator.moderate.mock.calls[0][0].roleBoundary).toBe(BASE.roleBoundary);
+  });
+});
+
+// The knowledge-mode eval's JUDGE holds: four inline turns whose reply was drawn from a rendered
+// entry but whose declared id did not verify on two attempts. Inline mode renders every entry, so
+// grounding is checked against all of them; a reply another rendered entry grounds passes with
+// the citation corrected and the correction on the trace, and a reply nothing grounds still holds.
+describe("runEngineTurn corrects an unverifiable citation to the rendered entry that grounds the reply", () => {
+  const entries = () => [knowledgeEntry(), feeEntry()];
+
+  it("passes on the first attempt with the citation corrected and the correction traced", async () => {
+    const deps = dependencies([reply(
+      "Yes, there is a readiness review fee of $297, and that is the usual starting point.",
+      "invented-entry",
+    )]);
+    const result = await runEngineTurn({
+      ...BASE,
+      leadMessage: { id: "lead", body: "do I have to pay?" },
+      runtimeBundle: bundle({ knowledgeEntries: entries() }),
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-fee", 0.8))) });
+
+    expect(result.trace.screen.verdict).toBe("continue");
+    expect(deps.model.generate).toHaveBeenCalledTimes(1);
+    expect(result.trace).toMatchObject({
+      attempts: 1,
+      declaredEntryId: "entry-fee",
+      declaredEntryVerified: true,
+      citationCorrection: { declaredEntryId: "invented-entry", correctedEntryId: "entry-fee" },
+    });
+    expect(result.trace.citationCorrection?.evidence).toEqual(expect.any(String));
+    expect(result.trace.rejectedDrafts).toEqual([]);
+    // The moderator is told about the corrected entry, not the invented id.
+    expect(deps.moderator.moderate.mock.calls[0][0].roleBoundary).toContain('"What does it cost?"');
+    expect(deps.moderator.moderate.mock.calls[0][0].roleBoundary).not.toContain("invented-entry");
+  });
+
+  it("accepts a null citation from a writer that declined to guess, and corrects it the same way", async () => {
+    const deps = dependencies([JSON.stringify({
+      reply: "Yes, there is a readiness review fee of $297, and that is the usual starting point.",
+      citation_entry_id: null,
+    })]);
+    const result = await runEngineTurn({
+      ...BASE,
+      runtimeBundle: bundle({ knowledgeEntries: entries() }),
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-fee", 0.8))) });
+    expect(result.trace.screen.verdict).toBe("continue");
+    expect(result.response.reply).toContain("readiness review fee of $297");
+    expect(result.trace).toMatchObject({
+      declaredEntryId: "entry-fee",
+      declaredEntryVerified: true,
+      citationCorrection: { declaredEntryId: null, correctedEntryId: "entry-fee" },
+    });
+  });
+
+  it("leaves a verified citation alone even when another entry also grounds the reply", async () => {
+    const deps = dependencies([reply(
+      "Yes, there is a readiness review fee of $297, and that is the usual starting point.",
+      "entry-timing",
+    )]);
+    const result = await runEngineTurn({
+      ...BASE,
+      runtimeBundle: bundle({ knowledgeEntries: entries() }),
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-fee", 0.8))) });
+    expect(result.trace).toMatchObject({
+      declaredEntryId: "entry-timing", declaredEntryVerified: true, citationCorrection: null,
+    });
+  });
+
+  it("still holds with JUDGE after the regeneration when no rendered entry grounds the reply", async () => {
+    const deps = dependencies([
+      reply("Happy to help with whatever you need today, what are you thinking?", "invented-entry"),
+      reply("Of course, tell me more about what you are after.", "still-invented"),
+    ]);
+    const result = await runEngineTurn({
+      ...BASE,
+      runtimeBundle: bundle({ knowledgeEntries: entries() }),
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-fee", 0.8))) });
+
+    expect(deps.model.generate).toHaveBeenCalledTimes(2);
+    expect(deps.moderator.moderate).not.toHaveBeenCalled();
+    expect(result.response).toEqual({ reply: HELD.JUDGE, state: "needs_human", booking: null });
+    expect(result.trace).toMatchObject({
+      attempts: 2,
+      declaredEntryId: "still-invented",
+      declaredEntryVerified: false,
+      citationCorrection: null,
+    });
+    expect(result.trace.rejectedDrafts).toHaveLength(2);
   });
 });
 

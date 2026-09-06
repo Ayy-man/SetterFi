@@ -66,10 +66,17 @@ export type InlineKnowledgeEntry = {
   content: string;
 };
 
+/**
+ * The citation is verified against the ids above, so a guessed id fails the turn. The writer is
+ * told to name the entry it actually drew on, and that no citation is better than a wrong one:
+ * the pipeline can correct a null against the rendered set, but a confident wrong id reads as a
+ * hallucinated source.
+ */
 function citationInstruction(objectionsPresent: boolean) {
-  return objectionsPresent
-    ? "Return only JSON with exactly reply and citation_entry_id. citation_entry_id must be one entry_id or objection_id above."
-    : "Return only JSON with exactly reply and citation_entry_id. citation_entry_id must be one entry_id above.";
+  const ids = objectionsPresent ? "one entry_id or objection_id above" : "one entry_id above";
+  return `Return only JSON with exactly reply and citation_entry_id. citation_entry_id must be ${ids}. ` +
+    "Cite the entry you actually answered from. If no entry above grounds your reply, " +
+    "set citation_entry_id to null rather than guessing.";
 }
 
 function renderCandidateBlock(

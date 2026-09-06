@@ -37,7 +37,12 @@ import {
   type InboundSafetyPersistence,
 } from "@/lib/engine/inbound-safety";
 import { loadActiveModelPair, type ModelConfigRow } from "@/lib/engine/model-config";
-import { moderateDraft, type ModeratorCall } from "@/lib/engine/moderator";
+import {
+  moderateDraft,
+  moderatorRoleBoundary,
+  type ModeratorCall,
+  type ModeratorCitedEntry,
+} from "@/lib/engine/moderator";
 import {
   assemblePrompt,
   regenerationInstruction,
@@ -45,6 +50,7 @@ import {
 } from "@/lib/engine/prompt";
 import { applyAutomatedExperienceDisclosure } from "@/lib/engine/renderer";
 import {
+  groundingEntryFor,
   retrievePublishedEntries,
   verifyCitationDeclaration,
 } from "@/lib/engine/retrieval";
@@ -285,15 +291,16 @@ function modelReplyEnvelope(value: string): ModelReplyEnvelope | null {
   if (!isRecord(parsed) || Object.keys(parsed).sort().join(",") !== "citation_entry_id,reply") {
     return null;
   }
-  if (
-    typeof parsed.reply !== "string" || !parsed.reply.trim() ||
-    typeof parsed.citation_entry_id !== "string" || !parsed.citation_entry_id.trim()
-  ) return null;
+  if (typeof parsed.reply !== "string" || !parsed.reply.trim()) return null;
+  // A null citation is the writer declining to guess (prompt.ts citationInstruction); it verifies
+  // as "nothing declared", which is exactly what an invented id verifies as, minus the invention.
+  if (parsed.citation_entry_id === null) return { reply: parsed.reply, citation_entry_id: null };
+  if (typeof parsed.citation_entry_id !== "string" || !parsed.citation_entry_id.trim()) return null;
   return { reply: parsed.reply, citation_entry_id: parsed.citation_entry_id };
 }
 
 function citationRegenerationInstruction() {
-  return "Regenerate the reply once as the required JSON object and declare one supplied entry_id. Do not repeat or quote the rejected wording.";
+  return "Regenerate the reply once as the required JSON object. Declare the supplied entry_id you actually answered from, or null if none grounds the reply. Do not repeat or quote the rejected wording.";
 }
 
 export function validateQualificationExtraction(
@@ -575,6 +582,7 @@ function baseTrace(input: EnginePipelineInput): EngineTrace {
     sources: [],
     declaredEntryId: input.declaredEntryId ?? null,
     declaredEntryVerified: false,
+    citationCorrection: null,
     retrievalTopThree: [],
     droppedEntryIds: [],
     numberAllowlist: [],
@@ -834,7 +842,9 @@ async function hardGatedObjectionTurn({
       ),
       complianceLexicon: brain.complianceRules.map((rule) => rule.phrase),
       linkWhitelist: [...input.linkWhitelist],
-      roleBoundary: input.roleBoundary,
+      // A hard-gated response is the published objection answer itself, so the moderator is
+      // told it answers that published objection; the label stands in for a question.
+      roleBoundary: moderatorRoleBoundary(input.roleBoundary, { id: gated.objectionId, question: gated.label }),
     },
     mode: input.mode,
   });
@@ -1156,6 +1166,37 @@ export async function runEngineTurn(
     });
   }
 
+  // What the model was shown and may cite, by id: the question each knowledge entry answers (an
+  // objection's label stands in for one) and the rendered text a reply can be grounded against.
+  // The question reaches the moderator as the cited entry's identity; the rendered text never does.
+  const citableEntries = new Map<string, { question: string; content: string }>();
+  if (inlineKnowledge) {
+    for (const entry of inlineKnowledge.inline) {
+      citableEntries.set(entry.entryId, { question: entry.question, content: entry.content });
+    }
+  } else if (retrieval) {
+    const questions = new Map((input.runtimeBundle?.knowledgeEntries ?? [])
+      .map((entry) => [entry.entryId, entry.question] as const));
+    for (const candidate of citations) {
+      citableEntries.set(candidate.entryId, {
+        question: questions.get(candidate.entryId) ?? `a published ${retrieval.included.find((row) => row.entryId === candidate.entryId)?.category ?? "Brain"} entry`,
+        content: candidate.content,
+      });
+    }
+  } else {
+    for (const entry of brain.entries.filter((candidate) => candidate.published)) {
+      citableEntries.set(entry.id, { question: entry.question, content: entry.answer });
+    }
+  }
+  for (const objection of promptObjections) {
+    citableEntries.set(objection.objectionId, { question: objection.label, content: objection.response });
+  }
+  const renderedEntries = [...citableEntries].map(([entryId, entry]) => ({ entryId, content: entry.content }));
+  const citedEntryFor = (entryId: string | null, verified: boolean): ModeratorCitedEntry | null => {
+    const entry = entryId && verified ? citableEntries.get(entryId) : undefined;
+    return entry && entryId ? { id: entryId, question: entry.question } : null;
+  };
+
   let messages = [...prompt.messages];
   let attempts = 0;
   let regenerationUsed = false;
@@ -1189,6 +1230,26 @@ export async function runEngineTurn(
           [...prompt.promptCandidateIds, ...prompt.promptObjectionIds],
         )
       : Boolean(declaredEntryId && citations.some((entry) => entry.entryId === declaredEntryId));
+    // A declaration that does not verify is not yet a failed turn. The model saw every rendered
+    // entry (all of them in inline mode), so the reply is checked against all of them: when one
+    // entry, and only one, grounds its wording, the citation is corrected to that entry and the
+    // correction is recorded. A reply nothing grounds keeps the regenerate-then-hold ladder.
+    trace = { ...trace, citationCorrection: null };
+    if (input.runtimeBundle && !declaredEntryVerified && envelope) {
+      const grounding = groundingEntryFor(envelope.reply, renderedEntries);
+      if (grounding) {
+        trace = {
+          ...trace,
+          citationCorrection: {
+            declaredEntryId,
+            correctedEntryId: grounding.entryId,
+            evidence: grounding.evidence,
+          },
+        };
+        declaredEntryId = grounding.entryId;
+        declaredEntryVerified = true;
+      }
+    }
     // 10-02 recorded the top-ranked match. With up to three in the prompt the model can answer
     // from the second, and recording the first would name the wrong objection in the usage
     // rollup with nobody ever reconciling it. A citation of a knowledge entry leaves the match
@@ -1347,7 +1408,10 @@ export async function runEngineTurn(
         ),
         complianceLexicon: brain.complianceRules.map((rule) => rule.phrase),
         linkWhitelist: [...input.linkWhitelist],
-        roleBoundary: input.roleBoundary,
+        roleBoundary: moderatorRoleBoundary(
+          input.roleBoundary,
+          citedEntryFor(declaredEntryId, declaredEntryVerified),
+        ),
       },
       mode: input.mode,
     });

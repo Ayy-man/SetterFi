@@ -120,7 +120,7 @@ function dependencies(drafts: readonly string[], moderator: "allow" | "block" | 
 
 function expectCompleteTrace(trace: EngineTrace) {
   expect(Object.keys(trace).sort()).toEqual([
-    "attempts", "brainContentHash", "brainVersion", "checks", "cost", "declaredEntryId", "declaredEntryVerified",
+    "attempts", "brainContentHash", "brainVersion", "checks", "citationCorrection", "cost", "declaredEntryId", "declaredEntryVerified",
     "droppedEntryIds", "knowledgeMode", "latencyMs", "model", "moderator", "moderatorClass", "moderatorModelConfigId", "moderatorReason", "moderatorRuleId", "numberAllowlist",
     "objection", "offerContentHash", "offerVersion", "paramsHash", "promptHash", "rejectedDrafts", "retrievalTopThree",
     "ruleFired", "screen", "sources", "usage", "violations",

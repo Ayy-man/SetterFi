@@ -266,14 +266,60 @@ function echoViolations(draft: string, context: OutputCheckContext) {
     evidence.push(`instruction disclosure at character ${match.index}`);
     break;
   }
-  for (let index = 0; index <= normalizedDraft.length - 40; index += 1) {
-    const span = normalizedDraft.slice(index, index + 40);
+  // A verbatim window of the system message is instruction text leaking unless it is something
+  // the setter was given to say: a published entry (question or answer, both rendered in inline
+  // mode and supplied as exemptions) or a scripted question. A scripted question is recognised
+  // only when the window sits inside a question in both texts, so a guardrail line or a coach
+  // configuration line quoted with a question mark after it still fails.
+  const draftQuestions = questionRanges(normalizedDraft);
+  const systemQuestions = questionRanges(normalizedSystem);
+  for (let index = 0; index <= normalizedDraft.length - ECHO_SPAN_LENGTH; index += 1) {
+    const span = normalizedDraft.slice(index, index + ECHO_SPAN_LENGTH);
     if (!normalizedSystem.includes(span)) continue;
     if (exemptions.some((exemption) => exemption.includes(span))) continue;
+    if (isScriptedQuestionSpan(span, index, normalizedSystem, draftQuestions, systemQuestions)) continue;
     evidence.push(`system span matched at character ${index}`);
     break;
   }
   return evidence;
+}
+
+const ECHO_SPAN_LENGTH = 40;
+
+/**
+ * [start, end) of every sentence ending in "?" in a normalized text. Sentences split on . ! ? a
+ * newline and a colon: a colon is how a script introduces the words to say ("Ask it in these
+ * words: …?"), and the instruction before it must stay outside the question it introduces.
+ */
+function questionRanges(text: string) {
+  const ranges: Array<[number, number]> = [];
+  for (const match of text.matchAll(/[^.!?:\n]*\?/g)) {
+    const start = match.index + (match[0].length - match[0].trimStart().length);
+    ranges.push([start, match.index + match[0].length]);
+  }
+  return ranges;
+}
+
+function insideRange(ranges: readonly [number, number][], start: number, end: number) {
+  return ranges.some(([from, to]) => start >= from && end <= to);
+}
+
+function isScriptedQuestionSpan(
+  span: string,
+  draftIndex: number,
+  normalizedSystem: string,
+  draftQuestions: readonly [number, number][],
+  systemQuestions: readonly [number, number][],
+) {
+  // A window may open on the space before the question; only its non-blank body must lie inside.
+  const lead = span.length - span.trimStart().length;
+  const trail = span.length - span.trimEnd().length;
+  if (lead + trail >= span.length) return false;
+  if (!insideRange(draftQuestions, draftIndex + lead, draftIndex + span.length - trail)) return false;
+  for (let at = normalizedSystem.indexOf(span); at >= 0; at = normalizedSystem.indexOf(span, at + 1)) {
+    if (insideRange(systemQuestions, at + lead, at + span.length - trail)) return true;
+  }
+  return false;
 }
 
 /**

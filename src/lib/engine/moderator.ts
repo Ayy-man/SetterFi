@@ -27,6 +27,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+/** The published entry (knowledge row or objection response) a draft verifiably cites. */
+export type ModeratorCitedEntry = { id: string; question: string };
+
+export const GROUNDED_REPLY_IN_SCOPE =
+  "A reply grounded on a cited, published Brain entry or coach FAQ answers a question the platform " +
+  "already approved for this role, so it is inside the role boundary by definition and is never SCOPE.";
+
+const CITED_QUESTION_MAX_LENGTH = 200;
+
+/**
+ * The boundary the verdict model is sent, composed rather than a seventh payload field so the
+ * payload stays the six named inputs the drivers, corpus and traces already agree on. A verified
+ * citation appends the rule and the cited entry's question, never its answer: the moderator must
+ * see that the draft answers a published FAQ without ever seeing Brain or coach text. The question
+ * is tenant-editable content, so it is flattened to one bounded line inside quotes.
+ */
+export function moderatorRoleBoundary(roleBoundary: string, citedEntry: ModeratorCitedEntry | null) {
+  if (!citedEntry) return roleBoundary;
+  const question = citedEntry.question
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029"]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, CITED_QUESTION_MAX_LENGTH);
+  const id = citedEntry.id.replace(/\s+/g, "");
+  return [
+    roleBoundary,
+    GROUNDED_REPLY_IN_SCOPE,
+    `This draft cites published entry ${id}, whose question is: "${question}". Judge it as an answer to that question.`,
+  ].join("\n");
+}
+
 export function buildModeratorPayload(input: ModeratorPayload): ModeratorPayload {
   return {
     draft: input.draft,
