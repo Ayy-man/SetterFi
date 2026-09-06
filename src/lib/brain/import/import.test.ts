@@ -92,6 +92,26 @@ describe("Brain import normalization", () => {
     expect(item.flags).toEqual([]);
   });
 
+  it("keeps a driver row's sourceId as the reference instead of flagging its shape", () => {
+    // Every FaqSourceDriver (mock, offline, real) emits NotionFaqSourceRow with `sourceId`; the
+    // hosted offline import of the FAQ sheet produced 46 `invalid-row:N` refs and a blocking
+    // source_shape flag on every row, so no batch could ever complete.
+    const { items, counts } = normalizeImport([
+      {
+        sourceId: "offline-markdown-0001",
+        categories: ["General Questions"],
+        inboundMessage: "No $ but good credit",
+        response: "Based on your credit we may still be able to help.",
+        sourceEditedAt: null,
+      },
+    ]);
+
+    expect(items[0].sourceRef).toBe("offline-markdown-0001");
+    expect(items[0].sourceShapeValid).toBe(true);
+    expect(items[0].flags.map((flag) => flag.code)).not.toContain("source_shape");
+    expect(counts).toEqual({ received: 1, normalized: 1, flagged: 0, unchanged: 0 });
+  });
+
   it("flags unsafe shapes with locations and no copied excerpts", () => {
     const result = normalizeImport([
       sourceRow({

@@ -159,8 +159,13 @@ function categoryValues(row: UnknownRecord) {
     : null;
 }
 
+/** Drivers emit `sourceId` (NotionFaqSourceRow); raw Notion pages carry `id`; persisted items `sourceRef`. */
+function rawSourceRef(row: UnknownRecord) {
+  return row.sourceRef ?? row.sourceId ?? row.id;
+}
+
 function sourceRef(row: UnknownRecord, index: number) {
-  const value = typeof row.sourceRef === "string" ? row.sourceRef : row.id;
+  const value = rawSourceRef(row);
   return typeof value === "string" && value.trim() ? value.trim() : `invalid-row:${index + 1}`;
 }
 
@@ -188,7 +193,7 @@ export function normalizeImport(
     const inboundMessage = titleValue(row);
     const response = responseValue(row);
     const categories = categoryValues(row);
-    const validRef = typeof (row.sourceRef ?? row.id) === "string" && String(row.sourceRef ?? row.id).trim().length > 0;
+    const validRef = typeof rawSourceRef(row) === "string" && String(rawSourceRef(row)).trim().length > 0;
     const knownCategories = categories !== null && categories.every((category) =>
       FAQ_CATEGORIES.includes(category as (typeof FAQ_CATEGORIES)[number]),
     );
