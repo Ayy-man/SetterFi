@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { retrieveForTurn } from "@/lib/brain/retrieval";
+import {
+  DEFAULT_RETRIEVAL_SIMILARITY_FLOOR,
+  retrieveForTurn,
+  type TurnRetrievalResult,
+} from "@/lib/brain/retrieval";
+import { rewriteHash } from "@/lib/brain/provenance";
 import type {
   ObjectionCandidate,
   PublishedCoachOffer,
@@ -73,10 +78,18 @@ function row(
     entry_id: entryId,
     category: categoryBoost ? "pricing" : "misfiled",
     response_template: responseTemplate,
+    number_bindings: [],
+    rewrite_hash: null,
+    matched_variant: null,
     similarity: score - categoryBoost,
     category_boost: categoryBoost,
     score,
   };
+}
+
+function grounded(result: TurnRetrievalResult) {
+  if (result.kind !== "grounded") throw new Error(`expected grounded, got ${result.kind}`);
+  return result;
 }
 
 describe("retrieveForTurn", () => {
@@ -347,7 +360,7 @@ describe("retrieveForTurn objection matching", () => {
       objectionsEnabled: () => false,
     });
     expect(matchObjections).not.toHaveBeenCalled();
-    expect(Object.keys(result).sort()).toEqual(["dropped", "included"]);
+    expect(Object.keys(result).sort()).toEqual(["dropped", "included", "kind"]);
   });
 
   it("keeps an objection structurally unassignable to a knowledge candidate", () => {
@@ -366,5 +379,158 @@ describe("retrieveForTurn objection matching", () => {
     // @ts-expect-error an ObjectionCandidate has no entryId and is not a RetrievalCandidate
     const asKnowledge: RetrievalCandidate = objection;
     expect(asKnowledge).toBe(objection);
+  });
+});
+
+// The relevance floor and the typed miss. A miss is a result, not an exception: the pipeline turns
+// it into a held reply, and the trace still shows the closest rows and how far short they fell.
+describe("retrieveForTurn relevance floor", () => {
+  const base = {
+    snapshotId: "snapshot-current",
+    inboundMessage: "Can you write me a poem about credit?",
+    offer: OFFER,
+    renderSources: RENDER_SOURCES,
+  };
+
+  it("reports a typed miss with the closest evidence when every row sits below the default floor", async () => {
+    const result = await retrieveForTurn(base, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: {
+        matchPublished: vi.fn(async () => [row("weak-a", 0.21), row("weak-b", 0.12)]),
+      },
+    });
+    expect(result).toMatchObject({
+      kind: "no_grounded_answer",
+      reason: "below_floor",
+      floor: DEFAULT_RETRIEVAL_SIMILARITY_FLOOR,
+      bestSimilarity: 0.21,
+      included: [],
+    });
+    if (result.kind !== "no_grounded_answer") throw new Error("unreachable");
+    expect(result.ranked.map((candidate) => candidate.entryId)).toEqual(["weak-a", "weak-b"]);
+  });
+
+  it("floors on similarity, so the category boost cannot lift an unrelated entry over it", async () => {
+    // similarity 0.23 + boost 0.05 = score 0.28, above the floor as a score and below it as
+    // similarity. The floor reads similarity.
+    const result = await retrieveForTurn({ ...base, categoryHint: "pricing" }, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: { matchPublished: vi.fn(async () => [row("boosted", 0.28, "Answer.", 0.05)]) },
+    });
+    expect(result.kind).toBe("no_grounded_answer");
+  });
+
+  it("takes a per-snapshot floor override and refuses one outside [0, 1]", async () => {
+    const rows = [row("mid", 0.4)];
+    const strict = await retrieveForTurn({ ...base, similarityFloor: 0.6 }, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: { matchPublished: vi.fn(async () => rows) },
+    });
+    expect(strict.kind).toBe("no_grounded_answer");
+    const lenient = await retrieveForTurn({ ...base, similarityFloor: 0.1 }, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: { matchPublished: vi.fn(async () => rows) },
+    });
+    expect(grounded(lenient).included.map((candidate) => candidate.entryId)).toEqual(["mid"]);
+    await expect(retrieveForTurn({ ...base, similarityFloor: 1.5 }, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: { matchPublished: vi.fn(async () => rows) },
+    })).rejects.toThrow("BRAIN_RETRIEVAL_FLOOR_INVALID");
+  });
+
+  it("keeps rows above the floor and drops the rest before the prompt limit is applied", async () => {
+    const rows = [
+      ...Array.from({ length: 3 }, (_, index) => row(`strong-${index}`, 0.9 - index / 100)),
+      row("weak", 0.1),
+    ];
+    const result = grounded(await retrieveForTurn(base, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: { matchPublished: vi.fn(async () => rows) },
+    }));
+    expect(result.included.map((candidate) => candidate.entryId))
+      .toEqual(["strong-0", "strong-1", "strong-2"]);
+  });
+
+  it("returns a miss rather than throwing when nothing renders for this tenant", async () => {
+    const result = await retrieveForTurn(base, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: {
+        matchPublished: vi.fn(async () => [row("needs-link", 0.95, "Book here: {{booking_link}}")]),
+      },
+    });
+    expect(result).toMatchObject({
+      kind: "no_grounded_answer",
+      reason: "nothing_renderable",
+      bestSimilarity: null,
+      dropped: [{ entryId: "needs-link", dropped: true }],
+    });
+  });
+
+  it("still carries a matched objection through a knowledge miss", async () => {
+    const result = await retrieveForTurn(base, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: {
+        matchPublished: vi.fn(async () => [row("weak", 0.05)]),
+        matchObjections: vi.fn(async () => [objectionRow("objection-a", 1, ["cost"], true)]),
+      },
+      objectionsEnabled: () => true,
+    });
+    expect(result.kind).toBe("no_grounded_answer");
+    expect(result.objection?.objectionId).toBe("objection-a");
+  });
+});
+
+describe("retrieveForTurn provenance columns", () => {
+  it("carries reviewed number bindings, the rewrite hash and the winning variant on each candidate", async () => {
+    const template = "The program costs $297 and needs a 640 score.";
+    const result = grounded(await retrieveForTurn({
+      snapshotId: "snapshot-current",
+      inboundMessage: "how much is it",
+      offer: OFFER,
+      renderSources: RENDER_SOURCES,
+    }, {
+      embeddings: embeddings(embeddingSpy()),
+      repository: {
+        matchPublished: vi.fn(async () => [{
+          ...row("bound", 0.9, template),
+          number_bindings: [
+            { kind: "currency", value: 297, field: "responseTemplate", offset: 18, binding: "offer_prices" },
+            { kind: "score", value: 640, field: "responseTemplate", offset: 39, binding: "credit_min" },
+          ],
+          rewrite_hash: rewriteHash(template),
+          matched_variant: "what is the price",
+        }]),
+      },
+    }));
+    expect(result.included[0]).toMatchObject({
+      entryId: "bound",
+      rewriteHash: rewriteHash(template),
+      matchedVariant: "what is the price",
+      numberBindings: [
+        { kind: "currency", value: 297, binding: "offer_prices", offset: 18 },
+        { kind: "score", value: 640, binding: "credit_min", offset: 39 },
+      ],
+    });
+  });
+
+  it("refuses a row whose provenance columns are missing or malformed", async () => {
+    async function withRow(overrides: Record<string, unknown>) {
+      return retrieveForTurn({
+        snapshotId: "snapshot-current",
+        inboundMessage: "how much is it",
+        offer: OFFER,
+        renderSources: RENDER_SOURCES,
+      }, {
+        embeddings: embeddings(embeddingSpy()),
+        repository: { matchPublished: vi.fn(async () => [{ ...row("bound", 0.9), ...overrides }]) },
+      });
+    }
+    await expect(withRow({ number_bindings: undefined })).rejects.toThrow("BRAIN_NUMBER_BINDINGS_INVALID");
+    await expect(withRow({ number_bindings: [{ kind: "currency", value: "297", binding: "offer_prices" }] }))
+      .rejects.toThrow("BRAIN_NUMBER_BINDINGS_INVALID");
+    await expect(withRow({ number_bindings: [{ kind: "currency", value: 297, binding: "made_up" }] }))
+      .rejects.toThrow("BRAIN_NUMBER_BINDINGS_INVALID");
+    await expect(withRow({ rewrite_hash: undefined })).rejects.toThrow("BRAIN_RETRIEVAL_ROW_INVALID");
+    await expect(withRow({ matched_variant: 4 })).rejects.toThrow("BRAIN_RETRIEVAL_ROW_INVALID");
   });
 });

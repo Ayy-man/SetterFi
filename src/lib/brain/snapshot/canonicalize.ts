@@ -27,6 +27,8 @@ export type BrainDraftPayloadInput = {
   compiledPlatform: string;
   platformTokens: number;
   knowledgeMode: "inline" | "retrieved";
+  /** Optional similarity floor for retrieval, in [0, 1]; absent means the code default. */
+  retrievalFloor?: number;
   sourceHash?: string;
   placeholderSchemaHash?: string;
   placeholderResolutionHash?: string;
@@ -43,6 +45,7 @@ export type CanonicalBrainPayload = {
   compiledPlatform: string;
   platformTokens: number;
   knowledgeMode: "inline" | "retrieved";
+  retrievalFloor?: number;
   sourceHash?: string;
   placeholderSchemaHash?: string;
   placeholderResolutionHash?: string;
@@ -117,6 +120,13 @@ export function canonicalizeBrainDraft(input: BrainDraftPayloadInput): Canonical
     platformTokens: input.platformTokens,
     knowledgeMode: input.knowledgeMode,
   };
+  if (input.retrievalFloor !== undefined) {
+    if (
+      typeof input.retrievalFloor !== "number" || !Number.isFinite(input.retrievalFloor) ||
+      input.retrievalFloor < 0 || input.retrievalFloor > 1
+    ) throw new Error("BRAIN_CANONICAL_RETRIEVAL_FLOOR_INVALID");
+    payload.retrievalFloor = input.retrievalFloor;
+  }
   if (input.sourceHash) payload.sourceHash = input.sourceHash;
   if (input.placeholderSchemaHash) payload.placeholderSchemaHash = input.placeholderSchemaHash;
   if (input.placeholderResolutionHash) {

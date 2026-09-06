@@ -8,9 +8,11 @@
 import {
   type BrainSnapshot,
   type PublishedCoachOffer,
+  type PublishedKnowledgeEntry,
   type PublishedRuntimeBundle,
   type QualificationRule,
 } from "@/lib/brain/contracts";
+import { knowledgeNumberBindings } from "@/lib/brain/provenance";
 import { FUNDING_GOALS, FUNDING_TIMELINES } from "@/lib/domain/qualification";
 import { phase2Live } from "@/lib/env-contract";
 import { createOfferLayerRepository } from "@/lib/repositories/offer-layer";
@@ -37,6 +39,12 @@ export type BrainRuntimeDependencies = {
   loadPublishedOffer(tenantId: string): Promise<unknown | null>;
   loadPrimaryCalendar(tenantId: string): Promise<CalendarRuntimeRow | null>;
   loadDemoQualification(): Promise<readonly QualificationStorageRow[]>;
+  /**
+   * Every entry of one immutable snapshot. Read only when the snapshot is in `inline` mode, where
+   * the whole published Brain goes into the prompt; a retrieved-mode turn never calls it. Optional
+   * so an inline snapshot behind a loader without it degrades to retrieval rather than failing.
+   */
+  loadSnapshotEntries?(snapshotId: string): Promise<readonly unknown[]>;
 };
 
 type RuntimeRecord = Record<string, unknown>;
@@ -181,6 +189,40 @@ function demoQualification(rows: readonly QualificationStorageRow[]): Qualificat
   }));
 }
 
+function retrievalFloor(value: unknown) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new BrainRuntimeReadinessError("RUNTIME_BRAIN_RETRIEVAL_FLOOR_INVALID");
+  }
+  return value;
+}
+
+function nullableString(value: unknown, code: string) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") throw new BrainRuntimeReadinessError(code);
+  return value;
+}
+
+/** One `brain_snapshot_entries` row. Fails closed on any malformed column, like every other read here. */
+function knowledgeEntry(value: unknown): PublishedKnowledgeEntry {
+  const row = record(value, "RUNTIME_BRAIN_ENTRY_INVALID");
+  let numberBindings: PublishedKnowledgeEntry["numberBindings"];
+  try {
+    numberBindings = knowledgeNumberBindings(row.number_bindings);
+  } catch {
+    throw new BrainRuntimeReadinessError("RUNTIME_BRAIN_ENTRY_INVALID");
+  }
+  return {
+    entryId: requiredString(row.entry_id, "RUNTIME_BRAIN_ENTRY_INVALID"),
+    category: requiredString(row.category, "RUNTIME_BRAIN_ENTRY_INVALID"),
+    question: requiredString(row.inbound_message, "RUNTIME_BRAIN_ENTRY_INVALID"),
+    responseTemplate: requiredString(row.response_template, "RUNTIME_BRAIN_ENTRY_INVALID"),
+    numberBindings,
+    rewriteHash: nullableString(row.rewrite_hash, "RUNTIME_BRAIN_ENTRY_INVALID"),
+    sourceRef: nullableString(row.source_ref, "RUNTIME_BRAIN_ENTRY_INVALID"),
+  };
+}
+
 function parseSnapshot(value: unknown) {
   const row = record(value, "RUNTIME_BRAIN_SNAPSHOT_INVALID");
   const payload = record(row.payload, "RUNTIME_BRAIN_PAYLOAD_INVALID");
@@ -188,6 +230,7 @@ function parseSnapshot(value: unknown) {
   if (knowledgeMode !== "inline" && knowledgeMode !== "retrieved") {
     throw new BrainRuntimeReadinessError("RUNTIME_BRAIN_KNOWLEDGE_MODE_INVALID");
   }
+  const floor = retrievalFloor(payload.retrievalFloor);
   const brain: BrainSnapshot = {
     id: requiredString(row.id, "RUNTIME_BRAIN_SNAPSHOT_ID_INVALID"),
     version: positiveVersion(row.version, "RUNTIME_BRAIN_VERSION_INVALID"),
@@ -200,6 +243,7 @@ function parseSnapshot(value: unknown) {
     ),
     platformTokens: Number(row.platform_tokens),
     knowledgeMode,
+    ...(floor === undefined ? {} : { retrievalFloor: floor }),
   };
   if (!Number.isInteger(brain.platformTokens) || brain.platformTokens < 0) {
     throw new BrainRuntimeReadinessError("RUNTIME_BRAIN_TOKEN_COUNT_INVALID");
@@ -262,6 +306,15 @@ function liveDependencies(): BrainRuntimeDependencies {
       return data;
     },
     loadPublishedOffer: (tenantId) => offers.loadOffer({ tenantId, status: "published" }),
+    loadSnapshotEntries: async (snapshotId) => {
+      const { data, error } = await client
+        .from("brain_snapshot_entries")
+        .select("entry_id, category, inbound_message, response_template, number_bindings, rewrite_hash, source_ref")
+        .eq("snapshot_id", snapshotId)
+        .order("entry_id", { ascending: true });
+      if (error) throw new Error(`RUNTIME_BRAIN_ENTRIES_READ_FAILED:${error.message}`);
+      return data ?? [];
+    },
     loadPrimaryCalendar: async (tenantId) => {
       const { data, error } = await client
         .from("calendar_connections")
@@ -333,6 +386,12 @@ export async function loadPublishedRuntimeBundle(
   const qualificationApproved = Boolean(publishedQualification);
   const derived = qualificationSources(qualification);
   const assetUrlsBySlug = Object.fromEntries(offer.assets.map((asset) => [asset.slug, asset.url]));
+  // Inline mode needs the whole published section in hand; retrieved mode reads nothing here and
+  // lets the ranking RPC pick at turn time. The rows come from the same immutable snapshot the
+  // ranking would read, keyed by the id the turn will be traced against.
+  const knowledgeEntries = brain.knowledgeMode === "inline" && dependencies.loadSnapshotEntries
+    ? (await dependencies.loadSnapshotEntries(brain.id)).map(knowledgeEntry)
+    : undefined;
   return {
     brain,
     offer,
@@ -348,5 +407,6 @@ export async function loadPublishedRuntimeBundle(
     brainVersion: brain.version,
     offerVersion: offer.version,
     contentHash: brain.contentHash,
+    ...(knowledgeEntries ? { knowledgeEntries } : {}),
   };
 }

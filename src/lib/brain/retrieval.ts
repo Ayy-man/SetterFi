@@ -8,6 +8,7 @@
 import {
   PLACEHOLDER_REGISTRY,
 } from "@/lib/brain/placeholders";
+import { knowledgeNumberBindings } from "@/lib/brain/provenance";
 import { renderCandidates } from "@/lib/brain/render-placeholders";
 import {
   BRAIN_OBJECTION_CATEGORIES,
@@ -27,6 +28,13 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 const PROMPT_CANDIDATE_LIMIT = 5;
 const RETRIEVAL_CANDIDATE_LIMIT = 50;
 export const OBJECTION_CANDIDATE_LIMIT = 3;
+
+/**
+ * Cosine similarity below which a ranked entry is evidence of a miss, not an answer. The floor is
+ * on similarity rather than score so the 0.05 category boost can never lift an unrelated entry
+ * over it. A snapshot payload may override it under `retrievalFloor` (see `PublishedRuntimeBundle`).
+ */
+export const DEFAULT_RETRIEVAL_SIMILARITY_FLOOR = 0.25;
 
 export type BrainRetrievalRepository = {
   matchPublished(input: {
@@ -56,11 +64,11 @@ export type RetrieveForTurnInput = {
   renderSources: PublishedRuntimeBundle["renderSources"];
   registry?: unknown;
   limit?: number;
+  /** Overrides `DEFAULT_RETRIEVAL_SIMILARITY_FLOOR`; must lie in [0, 1]. */
+  similarityFloor?: number;
 };
 
-export type TurnRetrievalResult = {
-  included: RenderedCandidate[];
-  dropped: DroppedCandidate[];
+type ObjectionKeys = {
   /**
    * Both keys are absent, not null, when the objection flag is off — the returned literal does not
    * grow them at all, so "flag off is byte-identical" is checkable on the shape rather than on a
@@ -70,10 +78,35 @@ export type TurnRetrievalResult = {
   objectionCandidates?: readonly ObjectionCandidate[];
 };
 
+/**
+ * Either a grounded answer set or a typed miss. A miss still carries the strongest renderable
+ * rows under `ranked`, so a trace can show what was closest and how far below the floor it fell;
+ * `included` is empty on a miss so a caller that forgot to branch on `kind` renders nothing
+ * rather than something ungrounded.
+ */
+export type TurnRetrievalResult =
+  | ({
+      kind: "grounded";
+      included: RenderedCandidate[];
+      dropped: DroppedCandidate[];
+    } & ObjectionKeys)
+  | ({
+      kind: "no_grounded_answer";
+      reason: "below_floor" | "nothing_renderable";
+      floor: number;
+      bestSimilarity: number | null;
+      ranked: RenderedCandidate[];
+      included: RenderedCandidate[];
+      dropped: DroppedCandidate[];
+    } & ObjectionKeys);
+
 type CandidateRow = {
   entry_id?: unknown;
   category?: unknown;
   response_template?: unknown;
+  number_bindings?: unknown;
+  rewrite_hash?: unknown;
+  matched_variant?: unknown;
   similarity?: unknown;
   category_boost?: unknown;
   score?: unknown;
@@ -103,10 +136,22 @@ function candidateRow(value: unknown): RetrievalCandidate {
   if (Math.abs(similarity + categoryBoost - score) > 1e-12) {
     throw new Error("BRAIN_RETRIEVAL_SCORE_INVALID");
   }
+  // Provenance columns are required, not defaulted: a row without them came from a database the
+  // provenance migration has not reached, and admitting it would silently disable the number
+  // check for every figure in the answer.
+  if (row.rewrite_hash !== null && typeof row.rewrite_hash !== "string") {
+    throw new Error("BRAIN_RETRIEVAL_ROW_INVALID");
+  }
+  if (row.matched_variant !== null && typeof row.matched_variant !== "string") {
+    throw new Error("BRAIN_RETRIEVAL_ROW_INVALID");
+  }
   return {
     entryId: row.entry_id,
     category: row.category,
     responseTemplate: row.response_template,
+    numberBindings: knowledgeNumberBindings(row.number_bindings),
+    rewriteHash: row.rewrite_hash,
+    matchedVariant: row.matched_variant,
     similarity,
     categoryBoost,
     score,
@@ -219,6 +264,10 @@ export async function retrieveForTurn(
   if (!Number.isInteger(limit) || limit < 1 || limit > PROMPT_CANDIDATE_LIMIT) {
     throw new Error("BRAIN_RETRIEVAL_PROMPT_LIMIT_INVALID");
   }
+  const floor = input.similarityFloor ?? DEFAULT_RETRIEVAL_SIMILARITY_FLOOR;
+  if (typeof floor !== "number" || !Number.isFinite(floor) || floor < 0 || floor > 1) {
+    throw new Error("BRAIN_RETRIEVAL_FLOOR_INVALID");
+  }
   const embeddings = dependencies.embeddings ?? resolveEmbeddingsDriver();
   const embedded = await embeddings.embed([{ id: "current-inbound", text: inboundMessage }]);
   if (embedded.length !== 1 || embedded[0].id !== "current-inbound") {
@@ -259,13 +308,24 @@ export async function retrieveForTurn(
     registry: input.registry ?? PLACEHOLDER_REGISTRY,
     renderSources: input.renderSources,
   });
-  const included = rendered.included.slice(0, limit);
-  if (included.length === 0) throw new Error("BRAIN_RETRIEVAL_NO_RENDERABLE_CANDIDATES");
-  if (!objectionCandidates) return { included, dropped: rendered.dropped };
-  return {
-    included,
-    dropped: rendered.dropped,
-    objection: objectionCandidates[0] ?? null,
-    objectionCandidates,
-  };
+  const objectionKeys: ObjectionKeys = objectionCandidates
+    ? { objection: objectionCandidates[0] ?? null, objectionCandidates }
+    : {};
+  const included = rendered.included
+    .filter((candidate) => candidate.similarity >= floor)
+    .slice(0, limit);
+  if (included.length === 0) {
+    const ranked = rendered.included.slice(0, limit);
+    return {
+      kind: "no_grounded_answer",
+      reason: ranked.length === 0 ? "nothing_renderable" : "below_floor",
+      floor,
+      bestSimilarity: ranked[0]?.similarity ?? null,
+      ranked,
+      included: [],
+      dropped: rendered.dropped,
+      ...objectionKeys,
+    };
+  }
+  return { kind: "grounded", included, dropped: rendered.dropped, ...objectionKeys };
 }

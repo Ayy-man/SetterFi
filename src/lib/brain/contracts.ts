@@ -105,9 +105,46 @@ export type BrainSnapshot = {
   compiledPlatform: string;
   platformTokens: number;
   knowledgeMode: "inline" | "retrieved";
+  /**
+   * Cosine-similarity floor below which a ranked entry is not a grounded answer. Absent means the
+   * code default applies; a snapshot payload may lower or raise it under `retrievalFloor`.
+   */
+  retrievalFloor?: number;
 };
 
 export type QualificationRule = DomainQualificationRule;
+
+/**
+ * One reviewed figure inside a response template and what supplies it. `offset` is where the
+ * import detector found it; the runtime matches on kind and value only, because the rendered
+ * answer has moved every offset by the time a lead reads it.
+ */
+export type KnowledgeNumberBinding = {
+  kind: "currency" | "percentage" | "score";
+  value: number;
+  binding:
+    | "credit_min"
+    | "funding_goal_min_cents"
+    | "funding_goal_max_cents"
+    | "monthly_revenue_min_cents"
+    | "results_timeline_min_days"
+    | "results_timeline_max_days"
+    | "offer_prices"
+    | "booking_horizon_days"
+    | "platform_constant";
+  offset?: number;
+};
+
+/** A published knowledge entry as the runtime reads it from the immutable snapshot. */
+export type PublishedKnowledgeEntry = {
+  entryId: string;
+  category: string;
+  question: string;
+  responseTemplate: string;
+  numberBindings: readonly KnowledgeNumberBinding[];
+  rewriteHash: string | null;
+  sourceRef: string | null;
+};
 
 export type PublishedRuntimeBundle = {
   brain: BrainSnapshot;
@@ -125,12 +162,21 @@ export type PublishedRuntimeBundle = {
   brainVersion: number;
   offerVersion: number;
   contentHash: string;
+  /**
+   * Every published entry of the snapshot, present only when the snapshot's `knowledgeMode` is
+   * `inline`. The engine renders them into the prompt whole and still ranks for the trace.
+   */
+  knowledgeEntries?: readonly PublishedKnowledgeEntry[];
 };
 
 export type RetrievalCandidate = {
   entryId: string;
   category: string;
   responseTemplate: string;
+  numberBindings: readonly KnowledgeNumberBinding[];
+  rewriteHash: string | null;
+  /** The variant phrasing that won the ranking for this entry, or null when its own question did. */
+  matchedVariant: string | null;
   similarity: number;
   categoryBoost: number;
   score: number;

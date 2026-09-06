@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { PublishedRuntimeBundle } from "@/lib/brain/contracts";
+import type { TurnRetrievalResult } from "@/lib/brain/retrieval";
 import type { ModeratorCall } from "@/lib/engine/moderator";
 import { runEngineTurn, type EnginePipelineInput } from "@/lib/engine/pipeline";
 import type { BrainSnapshot, CoachOffer, EngineTrace, ModeratorClass } from "@/lib/engine/types";
@@ -192,13 +193,17 @@ function runtimeBundle(version = 7, offerVersion = 9): PublishedRuntimeBundle {
   };
 }
 
-function retrieved() {
+function retrieved(): TurnRetrievalResult {
   return {
+    kind: "grounded",
     included: [
       {
         entryId: "candidate-a",
         category: "trust",
         responseTemplate: "Synthetic source A",
+        numberBindings: [],
+        rewriteHash: null,
+        matchedVariant: null,
         content: "Synthetic source A",
         similarity: 0.91,
         categoryBoost: 0 as const,
@@ -209,6 +214,9 @@ function retrieved() {
         entryId: "candidate-b",
         category: "trust",
         responseTemplate: "Synthetic source B",
+        numberBindings: [],
+        rewriteHash: null,
+        matchedVariant: null,
         content: "Synthetic source B",
         similarity: 0.85,
         categoryBoost: 0.05 as const,

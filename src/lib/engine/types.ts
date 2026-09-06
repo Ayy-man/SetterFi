@@ -6,6 +6,7 @@
  */
 
 import type {
+  KnowledgeNumberBinding,
   PublishedCoachOffer,
   PublishedOfferAsset,
   PublishedOfferPrice,
@@ -44,12 +45,24 @@ export type PromptMessage = {
   content: string;
 };
 
+/**
+ * What a runtime-backed entry knows about its own figures. `answer` is the tenant-rendered text;
+ * `responseTemplate` is the immutable text the bindings were reviewed against. Absent on the
+ * Phase 1 legacy path, where an entry has no review record and every number in it grounds itself.
+ */
+export type BrainEntryProvenance = {
+  responseTemplate: string;
+  numberBindings: readonly KnowledgeNumberBinding[];
+  rewriteHash: string | null;
+};
+
 export type PublishedBrainEntry = {
   id: string;
   category: string;
   question: string;
   answer: string;
   published: boolean;
+  provenance?: BrainEntryProvenance;
 };
 
 export type BrainSnapshot = {
@@ -61,6 +74,8 @@ export type BrainSnapshot = {
   complianceRules: readonly ComplianceRule[];
   entries: readonly PublishedBrainEntry[];
   knowledgeMode: "inline" | "retrieved";
+  /** Per-snapshot override of the retrieval similarity floor; see `@/lib/brain/retrieval`. */
+  retrievalFloor?: number;
 };
 
 export type OfferPrice = {

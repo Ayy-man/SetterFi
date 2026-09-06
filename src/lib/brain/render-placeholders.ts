@@ -55,40 +55,58 @@ function runtimeDefinition(token: string, registry: PlaceholderRegistry) {
   return registry[token] ?? placeholderDefinition(token);
 }
 
-export const renderCandidates: RenderCandidates = ({ candidates, offer, registry, renderSources }) => {
+export type RenderedTemplate =
+  | { status: "rendered"; content: string }
+  | { status: "dropped"; reason: string };
+
+/**
+ * Resolves one immutable template against one tenant. Shared by retrieval candidates and the
+ * inline knowledge block so the two paths cannot disagree on what a slot renders to or when an
+ * entry is withheld from a tenant.
+ */
+export function renderTemplate(
+  responseTemplate: string,
+  offer: PublishedCoachOffer,
+  renderSources: PublishedRuntimeBundle["renderSources"],
+  registry: unknown = PLACEHOLDER_REGISTRY,
+): RenderedTemplate {
   const definitions = registry && typeof registry === "object"
     ? registry as PlaceholderRegistry
     : PLACEHOLDER_REGISTRY;
+  if (/\bX\b/.test(responseTemplate)) {
+    return { status: "dropped", reason: "unresolved bare placeholder: X" };
+  }
+  let reason: string | null = null;
+  const content = responseTemplate.replace(
+    /\{\{\s*([^{}]+?)\s*\}\}|\[\s*([^\[\]\n]+?)\s*\]/g,
+    (whole, braces, square) => {
+      const token = normalizePlaceholderToken(String(braces ?? square ?? ""));
+      if (!token || !runtimeDefinition(token, definitions)) {
+        reason = `unknown placeholder: ${token ?? whole}`;
+        return whole;
+      }
+      const resolution = resolvePlaceholder(token, placeholderValue(token, offer, renderSources));
+      if (resolution.status === "drop") {
+        reason = resolution.reason;
+        return whole;
+      }
+      return resolution.value;
+    },
+  );
+  return reason ? { status: "dropped", reason } : { status: "rendered", content };
+}
+
+export const renderCandidates: RenderCandidates = ({ candidates, offer, registry, renderSources }) => {
   const included = [];
   const dropped = [];
 
   for (const candidate of candidates) {
-    if (/\bX\b/.test(candidate.responseTemplate)) {
-      dropped.push({ entryId: candidate.entryId, dropped: true as const, reason: "unresolved bare placeholder: X" });
+    const rendered = renderTemplate(candidate.responseTemplate, offer, renderSources, registry);
+    if (rendered.status === "dropped") {
+      dropped.push({ entryId: candidate.entryId, dropped: true as const, reason: rendered.reason });
       continue;
     }
-    let reason: string | null = null;
-    const content = candidate.responseTemplate.replace(
-      /\{\{\s*([^{}]+?)\s*\}\}|\[\s*([^\[\]\n]+?)\s*\]/g,
-      (whole, braces, square) => {
-        const token = normalizePlaceholderToken(String(braces ?? square ?? ""));
-        if (!token || !runtimeDefinition(token, definitions)) {
-          reason = `unknown placeholder: ${token ?? whole}`;
-          return whole;
-        }
-        const resolution = resolvePlaceholder(token, placeholderValue(token, offer, renderSources));
-        if (resolution.status === "drop") {
-          reason = resolution.reason;
-          return whole;
-        }
-        return resolution.value;
-      },
-    );
-    if (reason) {
-      dropped.push({ entryId: candidate.entryId, dropped: true as const, reason });
-      continue;
-    }
-    included.push({ ...candidate, content, dropped: false as const });
+    included.push({ ...candidate, content: rendered.content, dropped: false as const });
   }
 
   return { included, dropped };
