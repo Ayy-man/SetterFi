@@ -7,6 +7,15 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// The draft client is built once at module load with the `fetch` of that moment, so a global stub
+// set inside a test never reaches it. The module is mocked instead; only `createDraft` is observed.
+const brainApiMock = vi.hoisted(() => ({ createDraft: vi.fn<(draft: Record<string, unknown>) => Promise<unknown>>() }));
+vi.mock("@/components/workspace/live/brain-api-client", () => ({
+  createBrainApiClient: () => new Proxy(brainApiMock, {
+    get: (target, key) => key in target ? target[key as keyof typeof target] : vi.fn(async () => ({})),
+  }),
+}));
+
 import {
   OwnerBrain,
   brainSectionRows,
@@ -130,6 +139,7 @@ function fakeApi(overrides: Partial<OwnerBrainApi> = {}): OwnerBrainApi {
     readAssembledPrompt: vi.fn(never),
     acceptImportItem: vi.fn(async () => ({})),
     rejectImportItem: vi.fn(async () => ({})),
+    addKnowledgeVariant: vi.fn(async (input) => ({ id: `variant-${input.variant.length}`, entryId: input.entryId, variant: input.variant, createdAt: "2026-09-07T10:00:00.000Z" })),
     ...overrides,
   };
 }
@@ -411,5 +421,150 @@ describe("OwnerBrain, knowledge and objections", () => {
     expect(screen.getAllByText("Draft").length).toBeGreaterThan(0);
     expect(screen.getByText("Too expensive")).toBeInTheDocument();
     expect(screen.getByText("Hard-gated")).toBeInTheDocument();
+  });
+});
+
+describe("OwnerBrain, question phrasings", () => {
+  function withVariants() {
+    return state({
+      knowledge: [
+        { ...knowledgeRow("entry-1", "published"), variants: [
+          { id: "v-1", text: "how much is it" },
+          { id: "v-2", text: "what's the price" },
+        ] },
+        knowledgeRow("entry-2", "published"),
+      ],
+    });
+  }
+
+  it("shows an entry's phrasings as chips in its sheet, with the count, and states absence in words", async () => {
+    renderBrain({ initialState: withVariants(), tab: "knowledge" });
+
+    fireEvent.click(screen.getByText("What does entry-1 cost?"));
+    await waitFor(() => expect(screen.getByText("Other ways leads ask it")).toBeInTheDocument());
+    expect(screen.getByText("how much is it")).toBeInTheDocument();
+    expect(screen.getByText("what's the price")).toBeInTheDocument();
+    expect(screen.getByText("2 phrasings")).toBeInTheDocument();
+    const add = screen.getByRole("button", { name: "Add phrasing" });
+    expect(add).toBeDisabled();
+    expect(within(add.parentElement!).getByText("Logged")).toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.click(screen.getByText("What does entry-2 cost?"));
+    await waitFor(() => expect(screen.getByText(/No other phrasings yet/)).toBeInTheDocument());
+  });
+
+  it("adds a phrasing through the route and shows the stored row as a new chip", async () => {
+    const api = fakeApi();
+    const initialState = withVariants();
+    const { rerender } = render(<OwnerBrain api={api} coaches={COACHES} initialState={initialState} tab="knowledge" />);
+
+    fireEvent.click(screen.getByText("What does entry-1 cost?"));
+    const input = await screen.findByLabelText("Add a phrasing");
+    fireEvent.change(input, { target: { value: "  Is there a price list?  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Add phrasing" }));
+
+    await waitFor(() => expect(screen.getByText("Is there a price list?")).toBeInTheDocument());
+    expect(api.addKnowledgeVariant).toHaveBeenCalledWith({ entryId: "entry-1", variant: "Is there a price list?" });
+    expect(screen.getByText("3 phrasings")).toBeInTheDocument();
+    expect((screen.getByLabelText("Add a phrasing") as HTMLInputElement).value).toBe("");
+
+    // The added phrasing rides in the next draft's knowledge entity, so the draft hash reflects it.
+    brainApiMock.createDraft.mockReset();
+    brainApiMock.createDraft.mockImplementation(async (draft) => ({
+      state: "draft",
+      revision: { id: "draft-2", contentHash: "b".repeat(64), payload: draft },
+    }));
+    // The tab is owned by the server page, so a tab change is a re-render with the same state.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    rerender(<OwnerBrain api={api} coaches={COACHES} initialState={initialState} tab="behavior" />);
+    fireEvent.click(screen.getByRole("button", { name: /Save draft/ }));
+    await waitFor(() => expect(brainApiMock.createDraft).toHaveBeenCalledTimes(1));
+    const entities = brainApiMock.createDraft.mock.calls[0][0].entities as Array<{ id: string; type: string; value: { variants: Array<{ id: string; text: string }> } }>;
+    const entry = entities.find((entity) => entity.type === "knowledge_entry" && entity.id === "entry-1");
+    expect(entry?.value.variants.map((variant) => variant.text)).toContain("Is there a price list?");
+  });
+
+  it("prints the route's refusal beside the box and keeps what was typed", async () => {
+    const { OwnerBrainApiError } = await import("@/components/workspace/rehaul/owner-brain-api");
+    const api = fakeApi({
+      addKnowledgeVariant: vi.fn(async () => { throw new OwnerBrainApiError(409, "BRAIN_VARIANT_DUPLICATE"); }),
+    });
+    render(<OwnerBrain api={api} coaches={COACHES} initialState={withVariants()} tab="knowledge" />);
+
+    fireEvent.click(screen.getByText("What does entry-1 cost?"));
+    fireEvent.change(await screen.findByLabelText("Add a phrasing"), { target: { value: "how much is it" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add phrasing" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("This entry already carries that phrasing."));
+    expect((screen.getByLabelText("Add a phrasing") as HTMLInputElement).value).toBe("how much is it");
+    expect(screen.getByText("2 phrasings")).toBeInTheDocument();
+  });
+});
+
+describe("OwnerBrain, retrieval floor", () => {
+  function openAdvanced() {
+    fireEvent.click(screen.getByRole("button", { name: /ADVANCED/ }));
+  }
+
+  it("sits in the advanced block beside knowledge mode and shows the code default when nothing is set", () => {
+    renderBrain({ tab: "models" });
+    expect(screen.queryByLabelText("Retrieval floor")).not.toBeInTheDocument();
+    openAdvanced();
+
+    expect(screen.getByText("Knowledge mode")).toBeInTheDocument();
+    expect(screen.getByText("Retrieval floor")).toBeInTheDocument();
+    const input = screen.getByLabelText("Retrieval floor") as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe("0.25");
+    expect(screen.getByText("0.25 default")).toBeInTheDocument();
+    expect(screen.getByText(/Blank uses the code default, 0\.25\./)).toBeInTheDocument();
+  });
+
+  it("seeds the box from the saved draft, and from the live version when there is no draft", () => {
+    const { unmount } = renderBrain({
+      tab: "models",
+      initialState: state({
+        draft: { id: "draft-1", contentHash: "h", payload: { knowledgeMode: "inline", retrievalFloor: 0.4 }, createdAt: "2026-09-06T10:00:00.000Z" },
+        currentSnapshotPayload: { retrievalFloor: 0.3 },
+      }),
+    });
+    openAdvanced();
+    expect((screen.getByLabelText("Retrieval floor") as HTMLInputElement).value).toBe("0.4");
+    expect(screen.getByText("0.4 effective")).toBeInTheDocument();
+    expect(screen.getByText(/Live version: 0\.3\./)).toBeInTheDocument();
+    unmount();
+
+    renderBrain({ tab: "models", initialState: state({ currentSnapshotPayload: { retrievalFloor: 0.3 } }) });
+    openAdvanced();
+    expect((screen.getByLabelText("Retrieval floor") as HTMLInputElement).value).toBe("0.3");
+  });
+
+  it("refuses a value outside [0, 1] before the draft route sees it, and carries a valid one with the draft", async () => {
+    brainApiMock.createDraft.mockReset();
+    brainApiMock.createDraft.mockImplementation(async (draft) => ({
+      state: "draft",
+      revision: { id: "draft-2", contentHash: "b".repeat(64), payload: draft },
+    }));
+    renderBrain({ tab: "models" });
+    openAdvanced();
+    const input = screen.getByLabelText("Retrieval floor");
+
+    fireEvent.change(input, { target: { value: "1.5" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("between 0 and 1");
+    fireEvent.click(screen.getByRole("button", { name: /Save draft/ }));
+    await waitFor(() => expect(screen.getAllByText(/between 0 and 1/).length).toBeGreaterThan(1));
+    expect(brainApiMock.createDraft).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: "0.4" } });
+    expect(screen.getByText("0.4 effective")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Save draft/ }));
+    await waitFor(() => expect(brainApiMock.createDraft).toHaveBeenCalledTimes(1));
+    expect(brainApiMock.createDraft.mock.calls[0][0]).toMatchObject({ knowledgeMode: "inline", retrievalFloor: 0.4 });
+
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Save draft/ }));
+    await waitFor(() => expect(brainApiMock.createDraft).toHaveBeenCalledTimes(2));
+    expect("retrievalFloor" in brainApiMock.createDraft.mock.calls[1][0]).toBe(false);
   });
 });

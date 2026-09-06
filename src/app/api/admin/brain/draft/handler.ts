@@ -30,6 +30,7 @@ function draftPayload(value: unknown): BrainDraftPayloadInput | null {
     "placeholderResolutionHash",
     "placeholderSchemaHash",
     "platformTokens",
+    "retrievalFloor",
     "sourceHash",
   ];
   if (Object.keys(value).some((key) => !allowed.includes(key)) || !Array.isArray(value.entities) ||
@@ -42,6 +43,12 @@ function draftPayload(value: unknown): BrainDraftPayloadInput | null {
   for (const key of ["sourceHash", "placeholderSchemaHash", "placeholderResolutionHash"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "string") return null;
   }
+  // The retrieval floor is optional and, when present, a finite number in [0, 1]. Absent means the
+  // code default; the canonicalizer refuses the same range so a revision cannot store a bad one.
+  if (value.retrievalFloor !== undefined && (
+    typeof value.retrievalFloor !== "number" || !Number.isFinite(value.retrievalFloor) ||
+    value.retrievalFloor < 0 || value.retrievalFloor > 1
+  )) return null;
   return value as unknown as BrainDraftPayloadInput;
 }
 
