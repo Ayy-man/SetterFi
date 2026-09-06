@@ -280,6 +280,25 @@ describe("runEngineTurn inline knowledge mode", () => {
     expect(result.response.state).toBe("agent");
   });
 
+  it("treats a rendered entry's question as Brain text, not leaked instructions, when the reply repeats it", async () => {
+    const question = "Can I use this for personal credit or only for business funding purposes today?";
+    const template = "Both are covered in the review.";
+    const entry = knowledgeEntry({
+      entryId: "entry-personal",
+      question,
+      responseTemplate: template,
+      rewriteHash: rewriteHash(template),
+      sourceRef: "notion:personal",
+    });
+    const deps = dependencies([reply(`${question} ${template}`, "entry-personal")]);
+    const result = await runEngineTurn({
+      ...BASE,
+      runtimeBundle: bundle({ knowledgeEntries: [entry] }),
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-personal", 0.9))) });
+    expect(result.trace.screen).toEqual({ verdict: "continue", reason: null });
+    expect(result.response.state).toBe("agent");
+  });
+
   it("does not hold on a ranking miss, because the model was shown the whole Brain", async () => {
     const deps = dependencies([reply("Most files fund in a few weeks.", "entry-timing")]);
     const result = await runEngineTurn({

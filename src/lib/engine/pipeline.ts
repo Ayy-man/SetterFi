@@ -1139,7 +1139,12 @@ export async function runEngineTurn(
     complianceRules: brain.complianceRules,
     linkWhitelist: input.linkWhitelist,
     systemText: prompt.messages[0].content,
-    echoExemptions: numberBrainEntries.map((entry) => entry.answer),
+    // Inline mode renders each entry as "question\nanswer", so a reply that repeats the question and
+    // then answers it is quoting the Brain, not the instructions. Exempting the rendered pair covers
+    // a span that straddles the boundary; answers alone left exactly that span held as ECHO.
+    echoExemptions: numberBrainEntries.map((entry) =>
+      entry.question ? `${entry.question}\n${entry.answer}` : entry.answer,
+    ),
     roleBoundary: input.roleBoundary,
     channel: input.channel,
   };
