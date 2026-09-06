@@ -276,7 +276,10 @@ function echoViolations(draft: string, context: OutputCheckContext) {
   for (let index = 0; index <= normalizedDraft.length - ECHO_SPAN_LENGTH; index += 1) {
     const span = normalizedDraft.slice(index, index + ECHO_SPAN_LENGTH);
     if (!normalizedSystem.includes(span)) continue;
-    if (exemptions.some((exemption) => exemption.includes(span))) continue;
+    // A window that runs off the end of an exempt line picks up the whitespace after it, which the
+    // exempt text alone does not contain; compare the window's own words, not its padding.
+    const words = span.trim();
+    if (exemptions.some((exemption) => exemption.includes(words))) continue;
     if (isScriptedQuestionSpan(span, index, normalizedSystem, draftQuestions, systemQuestions)) continue;
     evidence.push(`system span matched at character ${index}`);
     break;

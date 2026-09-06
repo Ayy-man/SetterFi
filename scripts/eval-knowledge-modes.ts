@@ -259,6 +259,9 @@ type ArmReport = {
   moderator: EngineTurnResult["trace"]["moderator"];
   moderatorReason: string | null;
   attempts: number;
+  /** Drafts the checks or moderator rejected, with the evidence lines that rejected them, for `--json` debugging. */
+  rejectedDrafts: readonly string[];
+  checkEvidence: readonly string[];
   promptTokens: number | null;
   completionTokens: number | null;
   modelLatencyMs: number | null;
@@ -311,7 +314,7 @@ async function runArm(harness: Harness, arm: Arm, testCase: RetrievalCorpusCase,
     arm, reply: "", held: false, heldClass: null, heldReason: null, verdict: "held" as const,
     knowledgeMode: arm, declaredEntryId: null, declaredEntryVerified: false, promptEntryIds: [],
     topThree: [], citedExpected: null, noMatchOutcome: null, ruleFired: null, moderator: "not_run" as const,
-    moderatorReason: null, attempts: 0, promptTokens: null, completionTokens: null, modelLatencyMs: null, wallMs: 0, cost: null, error: null,
+    moderatorReason: null, attempts: 0, rejectedDrafts: [], checkEvidence: [], promptTokens: null, completionTokens: null, modelLatencyMs: null, wallMs: 0, cost: null, error: null,
   } satisfies ArmReport;
   let result: EngineTurnResult;
   try {
@@ -367,6 +370,8 @@ async function runArm(harness: Harness, arm: Arm, testCase: RetrievalCorpusCase,
     moderator: trace.moderator,
     moderatorReason: trace.moderatorReason,
     attempts: trace.attempts,
+    rejectedDrafts: trace.rejectedDrafts,
+    checkEvidence: trace.checks.filter((check) => !check.passed).map((check) => `${check.class}: ${check.evidence.join("; ")}`),
     promptTokens: trace.usage?.promptTokens ?? null,
     completionTokens: trace.usage?.completionTokens ?? null,
     modelLatencyMs: trace.latencyMs,
