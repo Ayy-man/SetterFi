@@ -12,7 +12,12 @@ import {
   brainSectionRows,
   type OwnerBrainProps,
 } from "@/components/workspace/rehaul/owner-brain";
-import type { OwnerBrainApi, TestTurnResult } from "@/components/workspace/rehaul/owner-brain-api";
+import {
+  emptyPlatformContent,
+  type OwnerBrainApi,
+  type PlatformContentView,
+  type TestTurnResult,
+} from "@/components/workspace/rehaul/owner-brain-api";
 import type { AdminBrainInitialState } from "@/components/workspace/live/brain-view-models";
 import { OWNER_BRAIN_TABS, ownerBrainTab } from "@/lib/console-tabs";
 
@@ -325,6 +330,29 @@ describe("OwnerBrain, full-width views", () => {
     expect(screen.queryByText("Resolved")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Approve to draft/ })).toBeDisabled();
     expect(screen.getByText(/Edit the answer before approving/)).toBeInTheDocument();
+  });
+
+  it("gives every slot that can block approval an editor and names the blockers in words", async () => {
+    const live = { ...emptyPlatformContent(), scopeClosing: "SETTERFI_DEMO_PLACEHOLDER_SCOPE_CLOSING" };
+    const draft = { ...live, platformFrame: "Frame", controlCopy: { STOP: "Unsubscribed.", HELP: "Reply STOP to opt out.", START: "" } };
+    const view: PlatformContentView = {
+      approved: null,
+      live,
+      draft,
+      draftHash: "1".repeat(64),
+      blockers: ["scopeClosing", "heldReplies.NUM", "controlCopy.START"],
+      canApprove: false,
+      mission: "",
+      qualification: "",
+    };
+    renderBrain({ api: fakeApi({ readPlatformContent: vi.fn(async () => view) }), tab: "safety" });
+
+    expect(await screen.findByLabelText("Reply to STOP")).toHaveValue("Unsubscribed.");
+    expect(screen.getByLabelText("Reply to START")).toHaveValue("");
+    expect(screen.getByLabelText("Third off-topic message")).toHaveValue("SETTERFI_DEMO_PLACEHOLDER_SCOPE_CLOSING");
+    expect(screen.getByLabelText("First off-topic message")).toBeInTheDocument();
+    expect(screen.getByText(/Approval is blocked until these are written: third off-topic message, holding message for NUM, START reply\./)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve for every agent" })).toBeDisabled();
   });
 
   it("lists every import row in the master list and shows the selected one", () => {

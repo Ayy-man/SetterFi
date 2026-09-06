@@ -72,6 +72,19 @@ knowledge section. The snapshot records `knowledge_mode`:
 Roughly 250–400 entries at the current average length. The publish screen states which mode the
 snapshot is in, so the switch is visible rather than silent.
 
+**As shipped (2026-09-06).** The snapshot records the mode at publish, and the turn checks it
+again. `planInlineKnowledge` in `src/lib/engine/pipeline.ts` renders every snapshot entry through
+the coach's offer first, estimates the section at three characters per token, and only then
+renders it into `[C]` under `INLINE_KNOWLEDGE_TOKEN_BUDGET` (12,000). If the loader supplied no
+entries, nothing rendered, or the rendered section is over budget, the turn runs as `retrieved`
+and the trace records that reason (`snapshot_retrieved`, `entries_unavailable`,
+`nothing_renderable`, `over_budget`) rather than the mode the snapshot was published with. The
+ranking step is `match_published_brain_entries` over `brain_snapshot_entries` and their question
+variants, not a separate `brain_chunks` table; it applies a similarity floor (0.25 by default,
+`retrievalFloor` on the snapshot) and returns a typed `no_grounded_answer` miss that the pipeline
+holds as SCOPE-002 instead of letting the model answer ungrounded. `scripts/eval-engine.ts --suite
+retrieval` measures the ranking against `evals/corpus/retrieval.json`.
+
 **Retrieval runs in both modes. `knowledge_mode` governs prompt inclusion only** — whether the
 ranked entries are rendered into `[C]` or fetched top-K at request time. It does not govern
 whether the ranking step happens. Read as "static assembly now, retrieval later" without that
@@ -87,10 +100,12 @@ makes the correct answer *unreachable* rather than lower-ranked — a failure th
 because the agent answers confidently from the wrong bucket. Hard filtering becomes right at the
 crossover, when the candidate set is genuinely too large to rank whole.
 
-**Embeddings are computed from day one even though `inline` never reads them.** `brain_chunks`
-gets a row per entry with an embedding over the `question` column only — never `answer`, because
-an answer that mentions credit repair would otherwise surface for a pricing question. Doing this
-now makes the crossover a config flip instead of a backfill.
+**Embeddings are computed from day one even though `inline` never reads them.** Each snapshot
+entry (and each of its question variants) carries an embedding over the `question` column only —
+never `answer`, because an answer that mentions credit repair would otherwise surface for a
+pricing question. Doing this now makes the crossover a config flip instead of a backfill. (The
+original design called this table `brain_chunks`; the shipped rows live on
+`brain_snapshot_entries`.)
 
 Prose sources (`Sales Presentation Doc [TEMPLATE]`, Avatar Maps) keep `BACKEND-SPEC.md` §5's
 heading-aware chunking if they are ever ingested. Both shapes coexist; the row shape ships first.

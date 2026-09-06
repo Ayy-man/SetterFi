@@ -33,6 +33,7 @@ import {
 } from "@/components/kit/atomics";
 import { Callout } from "@/components/kit/callout";
 import { DataState } from "@/components/kit/data-state";
+import { TITLE_PANEL_TITLE_CLASS } from "@/components/kit/deck-panel";
 import { ExportMenu } from "@/components/kit/export-menu";
 import { Field } from "@/components/kit/field";
 import { KeyValue } from "@/components/kit/key-value";
@@ -75,6 +76,7 @@ import {
   TEST_CHANNELS,
   type AssembledPromptView,
   type OwnerBrainApi,
+  PLATFORM_CONTROL_WORDS,
   type PlatformContentFields,
   type PlatformContentView,
   type TestChannel,
@@ -257,6 +259,28 @@ const HELD_REPLY_COPY: Record<ModeratorClass, string> = {
   JUDGE: "The moderator model refused it",
   REVOKE: "The lead withdrew consent",
 };
+
+const CONTROL_WORD_COPY: Record<(typeof PLATFORM_CONTROL_WORDS)[number], string> = {
+  STOP: "Confirms the lead is unsubscribed. Sent once, then nothing else goes out",
+  HELP: "Says who is texting and how to reach a person",
+  START: "Confirms messages are back on after a STOP",
+};
+
+const SCOPE_LADDER_COPY: Array<{ key: "scopeDeflection1" | "scopeDeflection2" | "scopeClosing"; title: string; hint: string }> = [
+  { key: "scopeDeflection1", title: "First off-topic message", hint: "Steers back to the coach\u2019s programme. Sent in place of a reply." },
+  { key: "scopeDeflection2", title: "Second off-topic message", hint: "Steers back once more, plainer." },
+  { key: "scopeClosing", title: "Third off-topic message", hint: "Closes the conversation. The agent stops replying and a person is notified." },
+];
+
+/** Reads a blocker slot from the approval RPC (`controlCopy.STOP`, `heldReplies.NUM`, `scopeClosing`) in words. */
+function blockerLabel(slot: string) {
+  const [group, key] = slot.split(".");
+  if (group === "controlCopy" && key) return `${key} reply`;
+  if (group === "heldReplies" && key) return `holding message for ${key}`;
+  const scope = SCOPE_LADDER_COPY.find((row) => row.key === slot);
+  if (scope) return scope.title.toLowerCase();
+  return humanize(slot).toLowerCase();
+}
 
 const KNOWLEDGE_MODE_COPY: Record<string, string> = {
   inline: "Every published answer is in the prompt",
@@ -1038,11 +1062,11 @@ export function OwnerBrain({
   ) : null;
   const platformBlockerNote = platform && platformDraftPending && !platform.canApprove ? (
     <p className="m-0 text-[12px] text-[color:var(--muted)]" data-slot="platform-blocker">
-      Approval is blocked until these slots are filled: {platform.blockers.join(", ")}. They have no editor here yet.
+      Approval is blocked until these are written: {platform.blockers.map(blockerLabel).join(", ")}. Placeholder text does not count.
     </p>
   ) : null;
 
-  function platformField(key: keyof Omit<PlatformContentFields, "heldReplies">, title: string, hint: string) {
+  function platformField(key: keyof Omit<PlatformContentFields, "heldReplies" | "controlCopy">, title: string, hint: string) {
     if (platformError) {
       return (
         <FieldBlock scope="ALL" title={title}>
@@ -1377,6 +1401,60 @@ export function OwnerBrain({
                   onChange={(event) => updatePlatform({ heldReplies: { ...platformEdit.heldReplies, [cls]: event.target.value } })}
                   rows={2}
                   value={platformEdit.heldReplies[cls]}
+                />
+              </div>
+            ))}
+          </ListCard>
+        )}
+      </div>
+      <div className="flex flex-col gap-[8px]">
+        <Over>WHEN A LEAD KEEPS GOING OFF TOPIC</Over>
+        <p className="m-0 -mt-[4px] text-[12px] text-[color:var(--faint)]">Three fixed replies, sent verbatim in order. Nothing is generated for these turns.</p>
+        {platformError ? (
+          <LockedText>{platformError}</LockedText>
+        ) : !platformEdit ? (
+          <LockedText>Loading the approved text</LockedText>
+        ) : (
+          <ListCard>
+            {SCOPE_LADDER_COPY.map((row, index) => (
+              <div className="flex flex-col gap-[6px] border-b border-[var(--line-soft)] px-[14px] py-[12px] last:border-b-0" key={row.key}>
+                <div className="flex flex-wrap items-center gap-[8px]">
+                  <MonoMeta className="w-[64px] shrink-0 text-[11px] text-[color:var(--faint)]">{index + 1} of 3</MonoMeta>
+                  <span className="min-w-0 flex-1 text-[12px] text-[color:var(--muted)]">{row.title}. {row.hint}</span>
+                  <ScopeTag scope="ALL" />
+                </div>
+                <Textarea
+                  aria-label={row.title}
+                  onChange={(event) => updatePlatform({ [row.key]: event.target.value } as Partial<PlatformContentFields>)}
+                  rows={2}
+                  value={platformEdit[row.key]}
+                />
+              </div>
+            ))}
+          </ListCard>
+        )}
+      </div>
+      <div className="flex flex-col gap-[8px]">
+        <Over>STOP · HELP · START</Over>
+        <p className="m-0 -mt-[4px] text-[12px] text-[color:var(--faint)]">The reply to each control word. Sent even to a lead who has opted out, so it must say nothing else.</p>
+        {platformError ? (
+          <LockedText>{platformError}</LockedText>
+        ) : !platformEdit ? (
+          <LockedText>Loading the approved text</LockedText>
+        ) : (
+          <ListCard>
+            {PLATFORM_CONTROL_WORDS.map((word) => (
+              <div className="flex flex-col gap-[6px] border-b border-[var(--line-soft)] px-[14px] py-[12px] last:border-b-0" key={word}>
+                <div className="flex flex-wrap items-center gap-[8px]">
+                  <MonoMeta className="w-[64px] shrink-0 text-[11px] text-[color:var(--faint)]">{word}</MonoMeta>
+                  <span className="min-w-0 flex-1 text-[12px] text-[color:var(--muted)]">{CONTROL_WORD_COPY[word]}</span>
+                  <ScopeTag scope="ALL" />
+                </div>
+                <Textarea
+                  aria-label={`Reply to ${word}`}
+                  onChange={(event) => updatePlatform({ controlCopy: { ...platformEdit.controlCopy, [word]: event.target.value } })}
+                  rows={2}
+                  value={platformEdit.controlCopy[word]}
                 />
               </div>
             ))}
@@ -2328,7 +2406,7 @@ export function OwnerBrain({
       ) : null}
 
       <div className="flex shrink-0 flex-wrap items-center gap-[12px]">
-        <h1 className="m-0 text-[22px] leading-[1.2] font-[600] tracking-[-0.012em] text-[color:var(--ink)]">
+        <h1 className={`${TITLE_PANEL_TITLE_CLASS} text-[color:var(--ink)]`}>
           The Brain
         </h1>
         {currentVersion ? (

@@ -15,11 +15,17 @@ const HELD = Object.fromEntries(
   ["NUM", "CLAIM", "ECHO", "LINK", "SCOPE", "LEN", "JUDGE", "REVOKE"].map((key) => [key, `Held ${key}`]),
 ) as Record<string, string>;
 
+const CONTROL = { STOP: "You're unsubscribed.", HELP: "Reply STOP to opt out.", START: "You're back on." };
+
 const DRAFT = {
   automatedExperienceDisclosure: "You're chatting with an automated assistant.",
   platformFrame: "Frame",
   roleBoundary: "Boundary",
+  scopeDeflection1: "Let's keep to the programme.",
+  scopeDeflection2: "I can only help with the programme.",
+  scopeClosing: "I'll leave it there; someone will follow up.",
   heldReplies: HELD,
+  controlCopy: CONTROL,
 };
 
 function row(overrides: Partial<PlatformSettingsContentRow> = {}): PlatformSettingsContentRow {
@@ -87,6 +93,13 @@ describe("parsePlatformAgentContentDraft", () => {
     expect(parsePlatformAgentContentDraft({ ...DRAFT, roleBoundary: "   " })).toBeNull();
     expect(parsePlatformAgentContentDraft({ ...DRAFT, platformFrame: "x".repeat(2_001) })).toBeNull();
     expect(parsePlatformAgentContentDraft({ ...DRAFT, heldReplies: { ...HELD, LEN: "x".repeat(601) } })).toBeNull();
+    expect(parsePlatformAgentContentDraft({ ...DRAFT, scopeClosing: "" })).toBeNull();
+    expect(parsePlatformAgentContentDraft({ ...DRAFT, scopeDeflection1: "x".repeat(601) })).toBeNull();
+    expect(parsePlatformAgentContentDraft({ ...DRAFT, controlCopy: { STOP: "s", HELP: "h" } })).toBeNull();
+    expect(parsePlatformAgentContentDraft({ ...DRAFT, controlCopy: { ...CONTROL, START: "  " } })).toBeNull();
+    const { controlCopy: _control, ...withoutControl } = DRAFT;
+    void _control;
+    expect(parsePlatformAgentContentDraft(withoutControl)).toBeNull();
     expect(parsePlatformAgentContentDraft(null)).toBeNull();
     expect(parsePlatformAgentContentDraft([DRAFT])).toBeNull();
   });
@@ -98,6 +111,8 @@ describe("platformAgentContentView", () => {
     expect(view.approved).toBe(false);
     expect(view.live.platformFrame).toBe("[DRAFT] frame");
     expect(view.live.heldReplies.NUM).toBe("[DRAFT] NUM");
+    expect(view.live.controlCopy).toEqual({ STOP: "SETTERFI_DEMO_PLACEHOLDER_STOP_COPY", HELP: "", START: "" });
+    expect(view.live.scopeClosing).toBe("");
     expect(view.brainOwned).toEqual({ mission: "[DRAFT] mission", qualification: "[DRAFT] qualification", source: "brain" });
     expect(view.draft).toBeNull();
     expect(view.approval).toEqual({ blockers: ["platformFrame"], canApprove: false });
@@ -115,7 +130,8 @@ describe("platformAgentContentView", () => {
     const merged = contentForApproval(saved);
     expect(merged.platformFrame).toBe("Frame");
     expect(merged.mission).toBe("[DRAFT] mission");
-    expect(merged.controlCopy).toEqual({ STOP: "SETTERFI_DEMO_PLACEHOLDER_STOP_COPY" });
+    expect(merged.controlCopy).toEqual(CONTROL);
+    expect(merged.scopeClosing).toBe(DRAFT.scopeClosing);
     expect(contentForApproval(row())).toEqual(row().agent_content);
   });
 

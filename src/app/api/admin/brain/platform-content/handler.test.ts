@@ -12,11 +12,16 @@ const admin = { userId: "platform-admin", role: "admin" as const };
 const HELD = Object.fromEntries(
   ["NUM", "CLAIM", "ECHO", "LINK", "SCOPE", "LEN", "JUDGE", "REVOKE"].map((key) => [key, `Held ${key}`]),
 ) as Record<string, string>;
+const CONTROL = { STOP: "You're unsubscribed.", HELP: "Reply STOP to opt out.", START: "You're back on." };
 const draft = {
   automatedExperienceDisclosure: "You're chatting with an automated assistant.",
   platformFrame: "Frame",
   roleBoundary: "Boundary",
+  scopeDeflection1: "Let's keep to the programme.",
+  scopeDeflection2: "I can only help with the programme.",
+  scopeClosing: "I'll leave it there.",
   heldReplies: HELD,
+  controlCopy: CONTROL,
 };
 const view: PlatformAgentContentView = {
   approved: false,
@@ -54,7 +59,7 @@ describe("PUT /api/admin/brain/platform-content", () => {
 
   it("refuses anything but the exact editable shape without touching the repository", async () => {
     const { handle, save } = handler();
-    for (const payload of ["nope", { ...draft, mission: "m" }, { ...draft, heldReplies: { NUM: "x" } }, { draft }]) {
+    for (const payload of ["nope", { ...draft, mission: "m" }, { ...draft, heldReplies: { NUM: "x" } }, { ...draft, controlCopy: { STOP: "s" } }, { draft }]) {
       const response = await handle(json("PUT", payload));
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ state: "refused", code: "PLATFORM_CONTENT_DRAFT_BODY_INVALID" });

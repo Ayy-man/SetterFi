@@ -11,11 +11,23 @@
 import { MODERATOR_CLASSES, type ModeratorClass } from "@/lib/engine/types";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
+/** Prompt texts the compiler reads; bounded by `PLATFORM_CONTENT_LIMITS.text`. */
 export const PLATFORM_CONTENT_EDITABLE_TEXT_FIELDS = [
   "automatedExperienceDisclosure",
   "platformFrame",
   "roleBoundary",
 ] as const;
+
+/**
+ * Replies sent to a lead verbatim when the inbound-safety ladder fires (see
+ * `@/lib/engine/inbound-safety`); bounded like a held reply because they travel the same channels.
+ */
+export const PLATFORM_CONTENT_SCOPE_FIELDS = ["scopeDeflection1", "scopeDeflection2", "scopeClosing"] as const;
+
+/** The control words `@/lib/sends/send-to-lead` answers with the copy stored under each key. */
+export const PLATFORM_CONTENT_CONTROL_WORDS = ["STOP", "HELP", "START"] as const;
+
+export type PlatformContentControlWord = (typeof PLATFORM_CONTENT_CONTROL_WORDS)[number];
 
 export const PLATFORM_CONTENT_LIMITS = { text: 2_000, heldReply: 600, reason: 500 } as const;
 
@@ -26,7 +38,11 @@ export type PlatformAgentContentDraftInput = {
   automatedExperienceDisclosure: string;
   platformFrame: string;
   roleBoundary: string;
+  scopeDeflection1: string;
+  scopeDeflection2: string;
+  scopeClosing: string;
   heldReplies: Record<ModeratorClass, string>;
+  controlCopy: Record<PlatformContentControlWord, string>;
 };
 
 export type PlatformAgentContentAudit = {
@@ -98,32 +114,57 @@ function boundedText(value: unknown, max: number) {
   return text && text.length <= max ? text : null;
 }
 
+/** Every key a draft carries; the shape assertion in the save RPC checks the same list. */
+const DRAFT_KEYS = [
+  ...PLATFORM_CONTENT_EDITABLE_TEXT_FIELDS,
+  ...PLATFORM_CONTENT_SCOPE_FIELDS,
+  "heldReplies",
+  "controlCopy",
+].sort().join(",");
+
+function boundedRecord<K extends string>(
+  value: unknown,
+  keys: readonly K[],
+  max: number,
+): Record<K, string> | null {
+  if (!isRecord(value) || Object.keys(value).sort().join(",") !== [...keys].sort().join(",")) return null;
+  const out = {} as Record<K, string>;
+  for (const key of keys) {
+    const text = boundedText(value[key], max);
+    if (!text) return null;
+    out[key] = text;
+  }
+  return out;
+}
+
 /** Narrows a request body to the exact editable shape; anything extra or blank is refused. */
 export function parsePlatformAgentContentDraft(value: unknown): PlatformAgentContentDraftInput | null {
   if (!isRecord(value)) return null;
-  const expected = [...PLATFORM_CONTENT_EDITABLE_TEXT_FIELDS, "heldReplies"].sort().join(",");
-  if (Object.keys(value).sort().join(",") !== expected) return null;
+  if (Object.keys(value).sort().join(",") !== DRAFT_KEYS) return null;
   const texts: Partial<Record<(typeof PLATFORM_CONTENT_EDITABLE_TEXT_FIELDS)[number], string>> = {};
   for (const field of PLATFORM_CONTENT_EDITABLE_TEXT_FIELDS) {
     const text = boundedText(value[field], PLATFORM_CONTENT_LIMITS.text);
     if (!text) return null;
     texts[field] = text;
   }
-  const held = value.heldReplies;
-  if (!isRecord(held) || Object.keys(held).sort().join(",") !== [...MODERATOR_CLASSES].sort().join(",")) {
-    return null;
-  }
-  const heldReplies = {} as Record<ModeratorClass, string>;
-  for (const checkClass of MODERATOR_CLASSES) {
-    const text = boundedText(held[checkClass], PLATFORM_CONTENT_LIMITS.heldReply);
+  const scope: Partial<Record<(typeof PLATFORM_CONTENT_SCOPE_FIELDS)[number], string>> = {};
+  for (const field of PLATFORM_CONTENT_SCOPE_FIELDS) {
+    const text = boundedText(value[field], PLATFORM_CONTENT_LIMITS.heldReply);
     if (!text) return null;
-    heldReplies[checkClass] = text;
+    scope[field] = text;
   }
+  const heldReplies = boundedRecord(value.heldReplies, MODERATOR_CLASSES, PLATFORM_CONTENT_LIMITS.heldReply);
+  const controlCopy = boundedRecord(value.controlCopy, PLATFORM_CONTENT_CONTROL_WORDS, PLATFORM_CONTENT_LIMITS.heldReply);
+  if (!heldReplies || !controlCopy) return null;
   return {
     automatedExperienceDisclosure: texts.automatedExperienceDisclosure!,
     platformFrame: texts.platformFrame!,
     roleBoundary: texts.roleBoundary!,
+    scopeDeflection1: scope.scopeDeflection1!,
+    scopeDeflection2: scope.scopeDeflection2!,
+    scopeClosing: scope.scopeClosing!,
     heldReplies,
+    controlCopy,
   };
 }
 
@@ -135,13 +176,20 @@ function stringOrBlank(value: unknown) {
 function editableValues(content: unknown): PlatformAgentContentDraftInput {
   const row = isRecord(content) ? content : {};
   const held = isRecord(row.heldReplies) ? row.heldReplies : {};
+  const control = isRecord(row.controlCopy) ? row.controlCopy : {};
   return {
     automatedExperienceDisclosure: stringOrBlank(row.automatedExperienceDisclosure),
     platformFrame: stringOrBlank(row.platformFrame),
     roleBoundary: stringOrBlank(row.roleBoundary),
+    scopeDeflection1: stringOrBlank(row.scopeDeflection1),
+    scopeDeflection2: stringOrBlank(row.scopeDeflection2),
+    scopeClosing: stringOrBlank(row.scopeClosing),
     heldReplies: Object.fromEntries(
       MODERATOR_CLASSES.map((checkClass) => [checkClass, stringOrBlank(held[checkClass])]),
     ) as Record<ModeratorClass, string>,
+    controlCopy: Object.fromEntries(
+      PLATFORM_CONTENT_CONTROL_WORDS.map((word) => [word, stringOrBlank(control[word])]),
+    ) as Record<PlatformContentControlWord, string>,
   };
 }
 

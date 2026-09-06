@@ -192,7 +192,11 @@ self-serve onboarding, and the shared "Meet Your Agent" surface.
    objections and opens **Review imports**, a full-width master-detail queue where a flagged row
    must be edited and re-scanned before it can become shared, can be routed to one coach, or
    dropped with a reason; Safety shows what the system enforces, the never-say guardrails, the
-   compliance phrases and the holding message a lead sees per blocked-reply class; Models shows
+   compliance phrases, the holding message a lead sees per blocked-reply class, the three fixed
+   replies to a lead who keeps going off topic, and the STOP / HELP / START replies. Those
+   lead-facing texts are platform content: **Save platform text** stores a draft nothing sends,
+   and **Approve for every agent** (reason required, logged) arms it, refusing while any slot is
+   still placeholder text and naming the slots; Models shows
    the writer and the moderator and the parked challengers. **Test suite** and **Inspect prompt**
    (the assembled [A0][A][B][C][D] blocks for one coach and revision) take the full width.
    History is a drawer with restore; **Review & publish** is a sheet that lists the changes since

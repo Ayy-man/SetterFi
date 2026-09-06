@@ -136,11 +136,19 @@ export function narrowTestTurn(payload: unknown): TestTurnResult {
  * Platform content: the engine's fixed sentences outside the Brain draft
  * ------------------------------------------------------------------------------------------ */
 
+/** Mirrors `PLATFORM_CONTENT_CONTROL_WORDS` in the repository, which this client bundle cannot import. */
+export const PLATFORM_CONTROL_WORDS = ["STOP", "HELP", "START"] as const;
+export type PlatformControlWord = (typeof PLATFORM_CONTROL_WORDS)[number];
+
 export type PlatformContentFields = {
   automatedExperienceDisclosure: string;
   platformFrame: string;
   roleBoundary: string;
+  scopeDeflection1: string;
+  scopeDeflection2: string;
+  scopeClosing: string;
   heldReplies: Record<ModeratorClass, string>;
+  controlCopy: Record<PlatformControlWord, string>;
 };
 
 export type PlatformContentView = {
@@ -165,7 +173,11 @@ export function emptyPlatformContent(): PlatformContentFields {
     automatedExperienceDisclosure: "",
     platformFrame: "",
     roleBoundary: "",
+    scopeDeflection1: "",
+    scopeDeflection2: "",
+    scopeClosing: "",
     heldReplies: Object.fromEntries(MODERATOR_CLASSES.map((cls) => [cls, ""])) as Record<ModeratorClass, string>,
+    controlCopy: Object.fromEntries(PLATFORM_CONTROL_WORDS.map((word) => [word, ""])) as Record<PlatformControlWord, string>,
   };
 }
 
@@ -173,11 +185,16 @@ function narrowFields(value: unknown): PlatformContentFields | null {
   const row = record(value);
   if (!Object.keys(row).length) return null;
   const held = record(row.heldReplies);
+  const control = record(row.controlCopy);
   return {
     automatedExperienceDisclosure: text(row.automatedExperienceDisclosure),
     platformFrame: text(row.platformFrame),
     roleBoundary: text(row.roleBoundary),
+    scopeDeflection1: text(row.scopeDeflection1),
+    scopeDeflection2: text(row.scopeDeflection2),
+    scopeClosing: text(row.scopeClosing),
     heldReplies: Object.fromEntries(MODERATOR_CLASSES.map((cls) => [cls, text(held[cls])])) as Record<ModeratorClass, string>,
+    controlCopy: Object.fromEntries(PLATFORM_CONTROL_WORDS.map((word) => [word, text(control[word])])) as Record<PlatformControlWord, string>,
   };
 }
 
