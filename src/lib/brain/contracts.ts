@@ -43,7 +43,8 @@ export type ImportFlagCode =
   | "prose_shape"
   | "social_handle"
   | "brand_name"
-  | "proof_claim";
+  | "proof_claim"
+  | "operator_note";
 export type ImportDisposition = "shared" | "tenant_specific" | "needs_rewrite";
 /**
  * A disposition and where it routes. `tenant_specific` is a route, not a quarantine label, so it

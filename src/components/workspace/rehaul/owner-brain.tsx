@@ -255,6 +255,10 @@ const FLAG_COPY: Readonly<Record<string, { title: string; body: string }>> = {
     title: "Makes a results claim",
     body: "The answer claims an outcome nothing published backs. Remove the claim or bind it to a coach field.",
   },
+  operator_note: {
+    title: "Reads as a note about the lead, not a message from one",
+    body: "The question talks about the lead in the third person or records a status, so no lead message would ever retrieve it. Rewrite it as what a lead would type, or send it back for a rewrite.",
+  },
 };
 
 const HELD_REPLY_COPY: Record<ModeratorClass, string> = {
