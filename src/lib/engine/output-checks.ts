@@ -5,7 +5,9 @@
  * published platform rules, structured number sources, and the admin-owned host allowlist.
  */
 
+import { authoritativeBindings } from "@/lib/brain/provenance";
 import type {
+  BrainEntryProvenance,
   CheckResult,
   CheckViolation,
   CoachOffer,
@@ -129,6 +131,26 @@ function sourcesFromText(value: string, sourceType: NumberSource["sourceType"], 
   return extractNumbers(value).map(({ kind, value }) => ({ kind, value, sourceType, sourceId }));
 }
 
+/**
+ * The numbers a reviewed entry may ground. A figure written into the template grounds only when a
+ * binding covers it — a reviewer said which offer field or platform constant it stands for — and
+ * only while the template is still the text that review saw. A figure the template did not contain
+ * was rendered into the answer from this tenant's offer by a placeholder, and the offer is its
+ * source. Anything else in the answer stays off the allowlist, so a model that repeats it fails NUM.
+ */
+function reviewedEntrySources(entry: PublishedBrainEntry & { provenance: BrainEntryProvenance }) {
+  const bindings = authoritativeBindings(entry.provenance);
+  const templateFigures = extractNumbers(entry.provenance.responseTemplate);
+  return extractNumbers(entry.answer)
+    .filter((fact) => {
+      const inTemplate = templateFigures.some((figure) =>
+        figure.kind === fact.kind && figure.value === fact.value);
+      if (!inTemplate) return true;
+      return bindings.some((binding) => binding.kind === fact.kind && binding.value === fact.value);
+    })
+    .map(({ kind, value }) => ({ kind, value, sourceType: "brain_entry" as const, sourceId: entry.id }));
+}
+
 export function buildNumberSources({
   offer,
   brainEntries,
@@ -161,7 +183,11 @@ export function buildNumberSources({
     });
   }
   for (const entry of brainEntries.filter((candidate) => candidate.published)) {
-    sources.push(...sourcesFromText(entry.answer, "brain_entry", entry.id));
+    if (entry.provenance) {
+      sources.push(...reviewedEntrySources({ ...entry, provenance: entry.provenance }));
+    } else {
+      sources.push(...sourcesFromText(entry.answer, "brain_entry", entry.id));
+    }
   }
   // A lead may be reflected their own score or percentage, but a currency amount they typed is
   // never grounding for the reply: repeating it would let a lead launder a price into an offer fact.

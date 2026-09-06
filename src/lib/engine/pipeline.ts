@@ -8,8 +8,10 @@
 import { createHash } from "node:crypto";
 import { ruleSentences } from "@/lib/offer/rules";
 
-import type { PublishedRuntimeBundle } from "@/lib/brain/contracts";
+import type { DroppedCandidate, PublishedRuntimeBundle } from "@/lib/brain/contracts";
+import { renderTemplate } from "@/lib/brain/render-placeholders";
 import {
+  DEFAULT_RETRIEVAL_SIMILARITY_FLOOR,
   retrieveForTurn,
   type RetrieveForTurnInput,
   type TurnRetrievalResult,
@@ -36,7 +38,11 @@ import {
 } from "@/lib/engine/inbound-safety";
 import { loadActiveModelPair, type ModelConfigRow } from "@/lib/engine/model-config";
 import { moderateDraft, type ModeratorCall } from "@/lib/engine/moderator";
-import { assemblePrompt, regenerationInstruction } from "@/lib/engine/prompt";
+import {
+  assemblePrompt,
+  regenerationInstruction,
+  type InlineKnowledgeEntry,
+} from "@/lib/engine/prompt";
 import { applyAutomatedExperienceDisclosure } from "@/lib/engine/renderer";
 import {
   retrievePublishedEntries,
@@ -56,6 +62,7 @@ import {
   type ModeratorClass,
   type ModelReplyEnvelope,
   type PromptMessage,
+  type PublishedBrainEntry,
   type QualificationQuestion,
   type RuntimeQualificationState,
   type QualificationValue,
@@ -89,12 +96,55 @@ export type EnginePipelineInput = {
   inboundSafety?: InboundSafetyInput;
 };
 
+type GroundedRetrieval = Extract<TurnRetrievalResult, { kind: "grounded" }>;
+type LegacyRetrievalCandidate =
+  Omit<GroundedRetrieval["included"][number], "numberBindings" | "rewriteHash" | "matchedVariant">
+  & Partial<Pick<GroundedRetrieval["included"][number], "numberBindings" | "rewriteHash" | "matchedVariant">>;
+
+/**
+ * The pre-provenance retrieval shape, still produced by older test doubles. Accepted so those
+ * doubles keep compiling; `normalizeRetrieval` lifts it into the typed result with no bindings,
+ * which is the strict reading — every figure in such an answer is unreviewed.
+ */
+export type LegacyTurnRetrievalResult = {
+  included: LegacyRetrievalCandidate[];
+  dropped: GroundedRetrieval["dropped"];
+  objection?: GroundedRetrieval["objection"];
+  objectionCandidates?: GroundedRetrieval["objectionCandidates"];
+};
+
 export type EnginePipelineDependencies = {
   model: ModelDriver;
   moderator: { moderate: ModeratorCall };
-  retrieve?: (input: RetrieveForTurnInput) => Promise<TurnRetrievalResult>;
+  retrieve?: (input: RetrieveForTurnInput) => Promise<TurnRetrievalResult | LegacyTurnRetrievalResult>;
   persistInboundSafety?: InboundSafetyPersistence;
 };
+
+function normalizeRetrieval(result: TurnRetrievalResult | LegacyTurnRetrievalResult): TurnRetrievalResult {
+  if ("kind" in result) return result;
+  const objectionKeys = "objectionCandidates" in result
+    ? { objection: result.objection ?? null, objectionCandidates: result.objectionCandidates ?? [] }
+    : {};
+  const included = result.included.map((candidate) => ({
+    ...candidate,
+    numberBindings: candidate.numberBindings ?? [],
+    rewriteHash: candidate.rewriteHash ?? null,
+    matchedVariant: candidate.matchedVariant ?? null,
+  }));
+  if (included.length === 0) {
+    return {
+      kind: "no_grounded_answer",
+      reason: "nothing_renderable",
+      floor: DEFAULT_RETRIEVAL_SIMILARITY_FLOOR,
+      bestSimilarity: null,
+      ranked: [],
+      included: [],
+      dropped: result.dropped,
+      ...objectionKeys,
+    };
+  }
+  return { kind: "grounded", included, dropped: result.dropped, ...objectionKeys };
+}
 
 function paramsHash(params: Record<string, unknown>) {
   return createHash("sha256").update(JSON.stringify(params)).digest("hex");
@@ -153,7 +203,76 @@ export function engineBrainFromRuntimeBundle(bundle: PublishedRuntimeBundle): Br
     complianceRules: publishedComplianceRules(bundle),
     entries: [],
     knowledgeMode: bundle.brain.knowledgeMode,
+    ...(bundle.brain.retrievalFloor === undefined ? {} : { retrievalFloor: bundle.brain.retrievalFloor }),
   };
+}
+
+/** docs/BRAIN-COMPILER.md §2: the knowledge section is rendered whole up to this many tokens. */
+export const INLINE_KNOWLEDGE_TOKEN_BUDGET = 12_000;
+// Deliberately the conservative estimate the embeddings client uses, so the crossover errs towards
+// retrieval rather than towards an over-long prompt nobody measured.
+const CHARACTERS_PER_TOKEN_ESTIMATE = 3;
+
+export type InlineKnowledgePlan =
+  | {
+      mode: "inline";
+      entries: PublishedBrainEntry[];
+      inline: InlineKnowledgeEntry[];
+      dropped: DroppedCandidate[];
+      estimatedTokens: number;
+    }
+  | {
+      mode: "retrieved";
+      reason: "snapshot_retrieved" | "entries_unavailable" | "nothing_renderable" | "over_budget";
+      estimatedTokens: number | null;
+    };
+
+/**
+ * Decides whether this turn renders the whole published section or falls back to ranked
+ * candidates. Inline is only honest when the snapshot says so, the loader supplied the entries,
+ * and the tenant-rendered section fits the budget; every other case is retrieval, and the trace
+ * records the mode the turn actually ran in rather than the one the snapshot was published with.
+ */
+export function planInlineKnowledge(bundle: PublishedRuntimeBundle): InlineKnowledgePlan {
+  if (bundle.brain.knowledgeMode !== "inline") {
+    return { mode: "retrieved", reason: "snapshot_retrieved", estimatedTokens: null };
+  }
+  if (!bundle.knowledgeEntries) {
+    return { mode: "retrieved", reason: "entries_unavailable", estimatedTokens: null };
+  }
+  const entries: PublishedBrainEntry[] = [];
+  const inline: InlineKnowledgeEntry[] = [];
+  const dropped: DroppedCandidate[] = [];
+  for (const entry of bundle.knowledgeEntries) {
+    const rendered = renderTemplate(entry.responseTemplate, bundle.offer, bundle.renderSources);
+    if (rendered.status === "dropped") {
+      dropped.push({ entryId: entry.entryId, dropped: true, reason: rendered.reason });
+      continue;
+    }
+    entries.push({
+      id: entry.entryId,
+      category: entry.category,
+      question: entry.question,
+      answer: rendered.content,
+      published: true,
+      provenance: {
+        responseTemplate: entry.responseTemplate,
+        numberBindings: entry.numberBindings,
+        rewriteHash: entry.rewriteHash,
+      },
+    });
+    inline.push({ entryId: entry.entryId, question: entry.question, content: rendered.content });
+  }
+  const characters = inline.reduce(
+    (total, entry) => total + entry.entryId.length + entry.question.length + entry.content.length + 16,
+    0,
+  );
+  const estimatedTokens = Math.ceil(characters / CHARACTERS_PER_TOKEN_ESTIMATE);
+  if (inline.length === 0) return { mode: "retrieved", reason: "nothing_renderable", estimatedTokens };
+  if (estimatedTokens > INLINE_KNOWLEDGE_TOKEN_BUDGET) {
+    return { mode: "retrieved", reason: "over_budget", estimatedTokens };
+  }
+  return { mode: "inline", entries, inline, dropped, estimatedTokens };
 }
 
 function modelReplyEnvelope(value: string): ModelReplyEnvelope | null {
@@ -493,16 +612,25 @@ function addUsage(
   };
 }
 
+/** The one rule id a knowledge miss fires: SCOPE-001 is the role boundary, this is "nothing grounded to say". */
+export const NO_GROUNDED_ANSWER_RULE_ID = "SCOPE-002";
+
 function heldResult({
   input,
   trace,
   commands,
   checkClass,
+  reason = { transition: "output_check_failed", screen: "output_check_failed" },
 }: {
   input: EnginePipelineInput;
   trace: EngineTrace;
   commands: EngineCommand[];
   checkClass: ModeratorClass;
+  /**
+   * Defaults to the output-check hold. A knowledge miss passes `no_match_threshold`, the
+   * transition reason the conversation tables already know for "the Brain had no answer".
+   */
+  reason?: { transition: "output_check_failed" | "no_match_threshold"; screen: string };
 }): EngineTurnResult {
   const disclosed = applyAutomatedExperienceDisclosure({
     reply: input.heldReplies[checkClass],
@@ -511,7 +639,7 @@ function heldResult({
   });
   const effects: EngineCommand[] = [
     { kind: "send", body: disclosed.reply, approvedInput: true },
-    { kind: "transition", state: "needs_human", reason: "output_check_failed" },
+    { kind: "transition", state: "needs_human", reason: reason.transition },
     { kind: "alert", eventKey: "conversation.needs_human" },
     { kind: "audit", actionKey: "conversation.escalated" },
   ];
@@ -520,7 +648,7 @@ function heldResult({
     commands: [...commands, ...effects],
     trace: {
       ...trace,
-      screen: { verdict: "held", reason: "output_check_failed" },
+      screen: { verdict: "held", reason: reason.screen },
       ruleFired: trace.ruleFired ?? `${checkClass}-001`,
     },
   };
@@ -602,10 +730,10 @@ async function hardGatedObjectionTurn({
   commands,
   brain,
   citations,
+  droppedEntryIds,
   numberSources,
   checkContext,
   prompt,
-  retrieval,
   moderator,
   moderatorModelConfigId,
   qualificationDecision,
@@ -616,10 +744,10 @@ async function hardGatedObjectionTurn({
   commands: EngineCommand[];
   brain: BrainSnapshot;
   citations: EngineTrace["sources"];
+  droppedEntryIds: readonly string[];
   numberSources: EngineTrace["numberAllowlist"];
   checkContext: OutputCheckContext;
   prompt: ReturnType<typeof assemblePrompt>;
-  retrieval: TurnRetrievalResult | null;
   moderator: { moderate: ModeratorCall };
   moderatorModelConfigId: string;
   qualificationDecision: RuntimeQualificationDecision | null;
@@ -637,7 +765,7 @@ async function hardGatedObjectionTurn({
     declaredEntryId: null,
     declaredEntryVerified: false,
     retrievalTopThree: citations.slice(0, 3),
-    droppedEntryIds: retrieval?.dropped.map((entry) => entry.entryId) ?? [],
+    droppedEntryIds,
     numberAllowlist: numberSources,
     attempts: 0,
     latencyMs: null,
@@ -863,20 +991,33 @@ export async function runEngineTurn(
   });
   const brain = input.runtimeBundle ? engineBrainFromRuntimeBundle(input.runtimeBundle) : input.brain;
   const offer = input.runtimeBundle ? engineOfferFromRuntimeBundle(input.runtimeBundle) : input.offer;
+  // Ranking runs in both modes (docs/BRAIN-COMPILER.md §2): in `inline` it is the trace's
+  // evidence of what the Brain held closest, in `retrieved` it is also what the model may answer
+  // from. The floor travels with the snapshot when one was published with it.
   const retrieval = input.runtimeBundle
-    ? await (dependencies.retrieve ?? ((retrievalInput) => retrieveForTurn(retrievalInput)))({
-        snapshotId: input.runtimeBundle.snapshotId,
-        inboundMessage: input.leadMessage.body,
-        categoryHint: null,
-        offer: input.runtimeBundle.offer,
-        renderSources: input.runtimeBundle.renderSources,
-      })
+    ? normalizeRetrieval(
+        await (dependencies.retrieve ?? ((retrievalInput) => retrieveForTurn(retrievalInput)))({
+          snapshotId: input.runtimeBundle.snapshotId,
+          inboundMessage: input.leadMessage.body,
+          categoryHint: null,
+          offer: input.runtimeBundle.offer,
+          renderSources: input.runtimeBundle.renderSources,
+          ...(brain.retrievalFloor === undefined ? {} : { similarityFloor: brain.retrievalFloor }),
+        }),
+      )
     : null;
+  const inlinePlan = input.runtimeBundle ? planInlineKnowledge(input.runtimeBundle) : null;
+  const inlineKnowledge = inlinePlan?.mode === "inline" ? inlinePlan : null;
   // Identity only, and no branch on it. What a hard gate does to the reply is 10-03's deliverable;
   // 10-02 changes what is recorded about a turn and nothing about what the turn says. Every
   // post-retrieval return already spreads `...trace`, so this one assignment is the whole change.
+  // `knowledgeMode` is the mode this turn ran in: a snapshot published as `inline` whose section
+  // no longer fits, or whose entries the loader did not supply, ran retrieved and says so.
   trace = {
     ...trace,
+    knowledgeMode: input.runtimeBundle
+      ? (inlineKnowledge ? "inline" : "retrieved")
+      : trace.knowledgeMode,
     objection: retrieval?.objection
       ? {
           snapshotId: retrieval.objection.snapshotId,
@@ -885,25 +1026,44 @@ export async function runEngineTurn(
         }
       : null,
   };
-  const citations = retrieval
-    ? retrieval.included.map((candidate) => ({
-        entryId: candidate.entryId,
-        content: candidate.content,
-        similarity: candidate.similarity,
-        categoryBoost: candidate.categoryBoost as 0 | 0.05,
-        score: candidate.score,
-        categoryAgreement: candidate.categoryBoost === 0.05,
-      }))
+  const toCitation = (candidate: TurnRetrievalResult["included"][number]) => ({
+    entryId: candidate.entryId,
+    content: candidate.content,
+    similarity: candidate.similarity,
+    categoryBoost: candidate.categoryBoost as 0 | 0.05,
+    score: candidate.score,
+    categoryAgreement: candidate.categoryBoost === 0.05,
+  });
+  // What the ranking found, grounded or not. On a miss this is the closest rows and their
+  // sub-floor similarity, which is exactly what a reviewer needs to see for "why did it hold".
+  const rankingEvidence = retrieval
+    ? (retrieval.kind === "grounded" ? retrieval.included : retrieval.ranked).map(toCitation)
     : retrievePublishedEntries({ query: input.leadMessage.body, entries: brain.entries });
-  const numberBrainEntries = retrieval
-    ? citations.map((citation) => ({
-        id: citation.entryId,
-        category: "retrieved",
-        question: "",
-        answer: citation.content,
-        published: true,
-      }))
-    : brain.entries;
+  // What the model may answer from. Retrieved mode: only rows above the floor. Inline mode: the
+  // model sees every entry, so the citation set is the inline set and the ranking is evidence only.
+  const citations = retrieval && retrieval.kind !== "grounded" ? [] : rankingEvidence;
+  const topThree = rankingEvidence.slice(0, 3);
+  const knowledgeGrounded = !retrieval || inlineKnowledge !== null || retrieval.kind === "grounded";
+  const droppedEntryIds = [...new Set([
+    ...(retrieval?.dropped ?? []).map((entry) => entry.entryId),
+    ...(inlineKnowledge?.dropped ?? []).map((entry) => entry.entryId),
+  ])];
+  const numberBrainEntries: readonly PublishedBrainEntry[] = inlineKnowledge
+    ? inlineKnowledge.entries
+    : retrieval
+      ? (retrieval.kind === "grounded" ? retrieval.included : []).map((candidate) => ({
+          id: candidate.entryId,
+          category: candidate.category,
+          question: "",
+          answer: candidate.content,
+          published: true,
+          provenance: {
+            responseTemplate: candidate.responseTemplate,
+            numberBindings: candidate.numberBindings,
+            rewriteHash: candidate.rewriteHash,
+          },
+        }))
+      : brain.entries;
   const numberSources = buildNumberSources({
     offer,
     brainEntries: numberBrainEntries,
@@ -928,6 +1088,29 @@ export async function runEngineTurn(
           : 0,
       }
     : input.conversation;
+  // A hard gate is answered from the snapshot whether or not knowledge ranked, so it is decided
+  // before the miss is. Nothing else may reach the model on a knowledge miss unless a published
+  // objection response is there to be cited: the held reply is the honest turn, and the
+  // conversation transitions under `no_match_threshold`, the reason the tables already carry.
+  const gated = retrieval?.objection && retrieval.objection.hardGate ? retrieval.objection : null;
+  if (!knowledgeGrounded && !gated && promptObjections.length === 0 && retrieval) {
+    return heldResult({
+      input,
+      commands: qualification,
+      checkClass: "SCOPE",
+      reason: { transition: "no_match_threshold", screen: "no_grounded_answer" },
+      trace: {
+        ...trace,
+        ruleFired: NO_GROUNDED_ANSWER_RULE_ID,
+        sources: [],
+        declaredEntryId: null,
+        declaredEntryVerified: false,
+        retrievalTopThree: topThree,
+        droppedEntryIds,
+        numberAllowlist: numberSources,
+      },
+    });
+  }
   const prompt = assemblePrompt({
     brain,
     offer,
@@ -935,7 +1118,7 @@ export async function runEngineTurn(
     history: input.history,
     tagSecret: input.tagSecret,
     automatedExperienceDisclosure: input.automatedExperienceDisclosure,
-    ...(retrieval ? { candidates: citations } : {}),
+    ...(inlineKnowledge ? { inlineEntries: inlineKnowledge.inline } : retrieval ? { candidates: citations } : {}),
     ...(promptObjections.length ? { objections: promptObjections } : {}),
   });
   // Loop-invariant: every field is fixed before the first attempt, and the loop reassigns
@@ -955,7 +1138,6 @@ export async function runEngineTurn(
   // never an env read: `retrieveForTurn` populates `objection` only when the objection flag is on,
   // so a flag-off turn cannot reach this branch and this module stays free of flag reads.
   const models = loadActiveModelPair(input.modelConfigs);
-  const gated = retrieval?.objection && retrieval.objection.hardGate ? retrieval.objection : null;
   if (gated) {
     return hardGatedObjectionTurn({
       input,
@@ -963,11 +1145,11 @@ export async function runEngineTurn(
       trace,
       commands: qualification,
       brain,
-      citations,
+      citations: rankingEvidence,
+      droppedEntryIds,
       numberSources,
       checkContext,
       prompt,
-      retrieval,
       moderator: dependencies.moderator,
       moderatorModelConfigId: models.moderator.id,
       qualificationDecision: runtimeQualification?.decision ?? null,
@@ -1065,8 +1247,8 @@ export async function runEngineTurn(
           sources: citations,
           declaredEntryId,
           declaredEntryVerified,
-          retrievalTopThree: citations.slice(0, 3),
-          droppedEntryIds: retrieval?.dropped.map((entry) => entry.entryId) ?? [],
+          retrievalTopThree: topThree,
+          droppedEntryIds,
           numberAllowlist: numberSources,
           checks: allChecks,
           violations: allViolations,
@@ -1098,8 +1280,8 @@ export async function runEngineTurn(
           sources: citations,
           declaredEntryId,
           declaredEntryVerified: false,
-          retrievalTopThree: citations.slice(0, 3),
-          droppedEntryIds: retrieval?.dropped.map((entry) => entry.entryId) ?? [],
+          retrievalTopThree: topThree,
+          droppedEntryIds,
           numberAllowlist: numberSources,
           checks: allChecks,
           violations: allViolations,
@@ -1136,8 +1318,8 @@ export async function runEngineTurn(
           sources: citations,
           declaredEntryId,
           declaredEntryVerified: false,
-          retrievalTopThree: citations.slice(0, 3),
-          droppedEntryIds: retrieval?.dropped.map((entry) => entry.entryId) ?? [],
+          retrievalTopThree: topThree,
+          droppedEntryIds,
           numberAllowlist: numberSources,
           checks: allChecks,
           violations: allViolations,
@@ -1200,8 +1382,8 @@ export async function runEngineTurn(
           sources: citations,
           declaredEntryId,
           declaredEntryVerified,
-          retrievalTopThree: citations.slice(0, 3),
-          droppedEntryIds: retrieval?.dropped.map((entry) => entry.entryId) ?? [],
+          retrievalTopThree: topThree,
+          droppedEntryIds,
           numberAllowlist: numberSources,
           checks: allChecks,
           violations: allViolations,
@@ -1235,8 +1417,8 @@ export async function runEngineTurn(
           sources: citations,
           declaredEntryId,
           declaredEntryVerified: false,
-          retrievalTopThree: citations.slice(0, 3),
-          droppedEntryIds: retrieval?.dropped.map((entry) => entry.entryId) ?? [],
+          retrievalTopThree: topThree,
+          droppedEntryIds,
           numberAllowlist: numberSources,
           checks: allChecks,
           violations: allViolations,
@@ -1305,8 +1487,8 @@ export async function runEngineTurn(
       sources: citations,
       declaredEntryId,
       declaredEntryVerified,
-      retrievalTopThree: citations.slice(0, 3),
-      droppedEntryIds: retrieval?.dropped.map((entry) => entry.entryId) ?? [],
+      retrievalTopThree: topThree,
+      droppedEntryIds,
       numberAllowlist: numberSources,
       checks: allChecks,
       violations: allViolations,

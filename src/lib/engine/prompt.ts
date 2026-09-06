@@ -56,17 +56,50 @@ export type PromptObjection = {
   response: string;
 };
 
+/**
+ * One published entry rendered whole for an `inline` snapshot: the question it answers and the
+ * tenant-rendered answer, under the id the model must cite.
+ */
+export type InlineKnowledgeEntry = {
+  entryId: string;
+  question: string;
+  content: string;
+};
+
+function citationInstruction(objectionsPresent: boolean) {
+  return objectionsPresent
+    ? "Return only JSON with exactly reply and citation_entry_id. citation_entry_id must be one entry_id or objection_id above."
+    : "Return only JSON with exactly reply and citation_entry_id. citation_entry_id must be one entry_id above.";
+}
+
 function renderCandidateBlock(
   candidates: readonly RetrievalCitation[],
   objectionsPresent: boolean,
 ) {
-  if (candidates.length === 0) throw new Error("PROMPT_CANDIDATES_REQUIRED");
+  // An empty list renders an empty block. Whether a turn with nothing grounded may reach the model
+  // is the pipeline's decision: it holds before assembling unless a published objection response
+  // is there to be cited, and a hard-gated turn still needs this prompt for its hash and echo check.
   return [
     "[B:TURN] RENDERED BRAIN CANDIDATES",
     ...candidates.map((candidate) => `[entry_id:${candidate.entryId}] ${candidate.content}`),
-    objectionsPresent
-      ? "Return only JSON with exactly reply and citation_entry_id. citation_entry_id must be one entry_id or objection_id above."
-      : "Return only JSON with exactly reply and citation_entry_id. citation_entry_id must be one entry_id above.",
+    citationInstruction(objectionsPresent),
+  ].join("\n");
+}
+
+/**
+ * The whole published knowledge section, for a snapshot whose `knowledgeMode` is `inline`. The
+ * entries are tenant-rendered, so this block sits with `[C]` in cache terms — keyed on brain
+ * version, tenant and offer — and never inside the platform prefix.
+ */
+function renderInlineBlock(
+  entries: readonly InlineKnowledgeEntry[],
+  objectionsPresent: boolean,
+) {
+  if (entries.length === 0) throw new Error("PROMPT_INLINE_ENTRIES_REQUIRED");
+  return [
+    "[B:INLINE] THE BRAIN, EVERY PUBLISHED ENTRY",
+    ...entries.map((entry) => `[entry_id:${entry.entryId}] ${entry.question}\n${entry.content}`),
+    citationInstruction(objectionsPresent),
   ].join("\n");
 }
 
@@ -95,6 +128,7 @@ export function assemblePrompt({
   tagSecret,
   automatedExperienceDisclosure,
   candidates,
+  inlineEntries,
   objections,
 }: {
   brain: BrainSnapshot;
@@ -103,7 +137,10 @@ export function assemblePrompt({
   history: readonly PromptMessage[];
   tagSecret: string;
   automatedExperienceDisclosure: string;
+  /** Retrieved-mode candidates. Exactly one of `candidates` and `inlineEntries` is supplied on a runtime-backed turn. */
   candidates?: readonly RetrievalCitation[];
+  /** Inline-mode entries: every published entry, rendered for this tenant. */
+  inlineEntries?: readonly InlineKnowledgeEntry[];
   objections?: readonly PromptObjection[];
 }) {
   if (!automatedExperienceDisclosure.trim()) {
@@ -112,14 +149,19 @@ export function assemblePrompt({
   if (history.some((message) => message.role === "system")) {
     throw new Error("Recent conversation history may contain only user and assistant messages");
   }
+  if (candidates !== undefined && inlineEntries !== undefined) {
+    throw new Error("PROMPT_KNOWLEDGE_MODE_AMBIGUOUS");
+  }
   const coach = renderCoachBlock(offer, tagSecret);
-  const prefix = renderPublishedPrefix(brain, candidates !== undefined);
+  const runtimeBacked = candidates !== undefined || inlineEntries !== undefined;
+  const prefix = renderPublishedPrefix(brain, runtimeBacked);
   // Absent or empty leaves every byte and therefore every pre-Phase-10 prompt hash untouched,
   // which is what makes the objection flag being off provably a no-op at this layer.
   const objectionsPresent = Boolean(objections?.length);
   const system = [
     prefix,
     ...(candidates ? [renderCandidateBlock(candidates, objectionsPresent)] : []),
+    ...(inlineEntries ? [renderInlineBlock(inlineEntries, objectionsPresent)] : []),
     ...(objectionsPresent && objections ? [renderObjectionBlock(objections)] : []),
     "[C] COACH DATA",
     coach.content,
@@ -137,7 +179,9 @@ export function assemblePrompt({
     hash: hashPrompt(messages),
     cacheablePrefix: prefix,
     coachTag: coach.tag,
-    promptCandidateIds: candidates?.map((candidate) => candidate.entryId) ?? [],
+    promptCandidateIds: candidates?.map((candidate) => candidate.entryId)
+      ?? inlineEntries?.map((entry) => entry.entryId)
+      ?? [],
     // Deliberately a second list rather than folded into promptCandidateIds: a knowledge entry id
     // and an objection id name rows in different tables and must never be confused by a reader.
     promptObjectionIds: objections?.map((objection) => objection.objectionId) ?? [],
