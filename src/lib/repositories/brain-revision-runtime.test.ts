@@ -147,9 +147,9 @@ describe("loadRevisionRuntime", () => {
 
 describe("draft retrieval", () => {
   const rows: DraftKnowledgeRow[] = [
-    { id: "b", category: "trust", responseTemplate: "Answer B", embedding: vectorOf([0.6, 0.8, 0]) },
-    { id: "a", category: "pricing", responseTemplate: "Answer A", embedding: vectorOf([0.6, 0.8, 0]) },
-    { id: "c", category: "trust", responseTemplate: "Answer C", embedding: vectorOf([1, 0, 0]) },
+    { id: "b", category: "trust", responseTemplate: "Answer B", embedding: vectorOf([0.6, 0.8, 0]), numberBindings: [], rewriteHash: null },
+    { id: "a", category: "pricing", responseTemplate: "Answer A", embedding: vectorOf([0.6, 0.8, 0]), numberBindings: [], rewriteHash: null },
+    { id: "c", category: "trust", responseTemplate: "Answer C", embedding: vectorOf([1, 0, 0]), numberBindings: [], rewriteHash: null },
   ];
 
   it("ranks by cosine similarity plus the exact 0.05 category boost, ties broken by entry id", () => {
@@ -165,8 +165,8 @@ describe("draft retrieval", () => {
   it("renders the ranked rows against the tenant offer and drops what it cannot resolve", async () => {
     const retrieve = createDraftRetriever({
       loadDraftKnowledge: async () => [
-        { id: "r1", category: "trust", responseTemplate: "The {{niche}} program starts with a review.", embedding: vectorOf([1, 0, 0]) },
-        { id: "r2", category: "trust", responseTemplate: "Book here: {{booking_link}}", embedding: vectorOf([0.9, 0.1, 0]) },
+        { id: "r1", category: "trust", responseTemplate: "The {{niche}} program starts with a review.", embedding: vectorOf([1, 0, 0]), numberBindings: [], rewriteHash: null },
+        { id: "r2", category: "trust", responseTemplate: "Book here: {{booking_link}}", embedding: vectorOf([0.9, 0.1, 0]), numberBindings: [], rewriteHash: null },
       ],
       embeddings: () => embeddings,
     });
@@ -187,6 +187,12 @@ describe("draft retrieval", () => {
     const retrieve = createDraftRetriever({ loadDraftKnowledge: async () => [], embeddings: () => embeddings });
     const base = { snapshotId: DRAFT.id, offer: offer(), renderSources: { bookingUrl: null, qualificationSummary: "", qualificationInputs: [], assetUrlsBySlug: {} } };
     await expect(retrieve({ ...base, inboundMessage: "  " })).rejects.toThrow("BRAIN_RETRIEVAL_INBOUND_REQUIRED");
-    await expect(retrieve({ ...base, inboundMessage: "hello" })).rejects.toThrow("BRAIN_RETRIEVAL_NO_RENDERABLE_CANDIDATES");
+    // Nothing renderable is a typed miss, the same shape the published path returns, so the
+    // pipeline holds the turn on SCOPE instead of surfacing a thrown string.
+    await expect(retrieve({ ...base, inboundMessage: "hello" })).resolves.toMatchObject({
+      kind: "no_grounded_answer",
+      reason: "nothing_renderable",
+      included: [],
+    });
   });
 });

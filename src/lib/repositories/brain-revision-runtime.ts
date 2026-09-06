@@ -14,10 +14,15 @@
  * be indistinguishable from a miss.
  */
 
-import type { PublishedRuntimeBundle, RetrievalCandidate } from "@/lib/brain/contracts";
+import type { KnowledgeNumberBinding, PublishedRuntimeBundle, RetrievalCandidate } from "@/lib/brain/contracts";
 import { PLACEHOLDER_REGISTRY } from "@/lib/brain/placeholders";
+import { knowledgeNumberBindings, rewriteHash } from "@/lib/brain/provenance";
 import { renderCandidates } from "@/lib/brain/render-placeholders";
-import type { RetrieveForTurnInput, TurnRetrievalResult } from "@/lib/brain/retrieval";
+import {
+  DEFAULT_RETRIEVAL_SIMILARITY_FLOOR,
+  type RetrieveForTurnInput,
+  type TurnRetrievalResult,
+} from "@/lib/brain/retrieval";
 import { resolveEmbeddingsDriver } from "@/lib/integrations/embeddings/selector";
 import type { EmbeddingsDriver } from "@/lib/integrations/embeddings/types";
 import type { BrainDraftRevision } from "@/lib/repositories/brain-publish";
@@ -48,6 +53,10 @@ export type DraftKnowledgeRow = {
   category: string;
   responseTemplate: string;
   embedding: readonly number[];
+  /** Reviewed figure bindings, as the accept step recorded them; empty for a legacy row. */
+  numberBindings: readonly KnowledgeNumberBinding[];
+  /** sha256 of the reviewed text, or null when the row predates provenance. */
+  rewriteHash: string | null;
 };
 
 export type BrainRevisionDependencies = {
@@ -116,6 +125,10 @@ export function rankDraftCandidates(input: {
       entryId: row.id,
       category: row.category,
       responseTemplate: row.responseTemplate,
+      numberBindings: row.numberBindings,
+      rewriteHash: row.rewriteHash,
+      // Draft rows are ranked on their own question only; variants are copied at publish.
+      matchedVariant: null,
       similarity,
       categoryBoost,
       score: similarity + categoryBoost,
@@ -151,9 +164,26 @@ export function createDraftRetriever(dependencies: {
       registry: input.registry ?? PLACEHOLDER_REGISTRY,
       renderSources: input.renderSources,
     });
-    const included = rendered.included.slice(0, limit);
-    if (included.length === 0) throw new Error("BRAIN_RETRIEVAL_NO_RENDERABLE_CANDIDATES");
-    return { included, dropped: rendered.dropped };
+    // The same floor and the same typed miss as the published path, so a draft test turn holds
+    // on a no-match exactly where a live turn would.
+    const floor = input.similarityFloor ?? DEFAULT_RETRIEVAL_SIMILARITY_FLOOR;
+    if (typeof floor !== "number" || !Number.isFinite(floor) || floor < 0 || floor > 1) {
+      throw new Error("BRAIN_RETRIEVAL_FLOOR_INVALID");
+    }
+    const included = rendered.included.filter((candidate) => candidate.similarity >= floor).slice(0, limit);
+    if (included.length === 0) {
+      const ranked = rendered.included.slice(0, limit);
+      return {
+        kind: "no_grounded_answer",
+        reason: ranked.length === 0 ? "nothing_renderable" : "below_floor",
+        floor,
+        bestSimilarity: ranked[0]?.similarity ?? null,
+        ranked,
+        included: [],
+        dropped: rendered.dropped,
+      };
+    }
+    return { kind: "grounded", included, dropped: rendered.dropped };
   };
 }
 
@@ -214,7 +244,7 @@ export function liveBrainRevisionDependencies(): BrainRevisionDependencies {
     // The same predicate `publish_brain_draft` uses to fill `brain_snapshot_entries`.
     loadDraftKnowledge: async () => {
       const { data, error } = await client.from("brain_knowledge_entries")
-        .select("id,category,response_template,embedding")
+        .select("id,category,response_template,embedding,number_bindings,rewrite_hash")
         .eq("disposition", "shared")
         .eq("status", "draft")
         .not("embedding", "is", null)
@@ -223,7 +253,14 @@ export function liveBrainRevisionDependencies(): BrainRevisionDependencies {
       return (data ?? []).flatMap((row) => {
         const embedding = parseEmbedding(row.embedding);
         return embedding && typeof row.response_template === "string" && row.response_template.trim()
-          ? [{ id: String(row.id), category: String(row.category), responseTemplate: row.response_template, embedding }]
+          ? [{
+              id: String(row.id),
+              category: String(row.category),
+              responseTemplate: row.response_template,
+              embedding,
+              numberBindings: knowledgeNumberBindings(row.number_bindings),
+              rewriteHash: typeof row.rewrite_hash === "string" ? row.rewrite_hash : rewriteHash(row.response_template),
+            }]
           : [];
       });
     },

@@ -133,7 +133,7 @@ describe("loadPromptInspection", () => {
     revision: "draft",
     bundle: bundle("[A] PLATFORM FRAME\nframe\n[B] THE BRAIN\nbrain"),
     retrievalMode: "draft_in_process",
-    retrieve: async () => ({ included: [], dropped: [] }),
+    retrieve: async () => ({ kind: "grounded" as const, included: [], dropped: [] }),
     draftId: "draft-1",
   };
 

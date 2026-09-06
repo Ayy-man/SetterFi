@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 
 import type { PublishedRuntimeBundle } from "@/lib/brain/contracts";
+import { PLATFORM_GUARDRAILS } from "@/lib/engine/guardrails";
 import { engineBrainFromRuntimeBundle, engineOfferFromRuntimeBundle } from "@/lib/engine/pipeline";
 import { assemblePrompt, hashPrompt } from "@/lib/engine/prompt";
 import type { ConversationPromptState, PromptMessage } from "@/lib/engine/types";
@@ -95,7 +96,11 @@ export function splitPromptBlocks(system: string): PromptBlock[] {
       };
       continue;
     }
-    if (!current) {
+    // Text with no header of its own, either before the first header or straight after the
+    // complete platform invariants, is the compiled platform (today a JSON string) and gets one
+    // Brain block rather than being folded into the invariants.
+    if (!current || (current.label === "[A0]" && current.text === PLATFORM_GUARDRAILS)) {
+      if (current) blocks.push(current);
       current = { label: "[B]", title: "Compiled platform", source: "brain", text: line };
       continue;
     }

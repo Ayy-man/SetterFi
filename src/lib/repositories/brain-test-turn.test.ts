@@ -92,10 +92,14 @@ function bundle(): PublishedRuntimeBundle {
 
 function retrieved() {
   return {
+    kind: "grounded" as const,
     included: [{
       entryId: "candidate-a",
       category: "trust",
       responseTemplate: "Synthetic source A",
+      numberBindings: [],
+      rewriteHash: null,
+      matchedVariant: null,
       content: "Synthetic source A",
       similarity: 0.91,
       categoryBoost: 0 as const,
