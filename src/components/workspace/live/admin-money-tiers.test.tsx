@@ -107,6 +107,26 @@ describe("AdminMoneyTiers", () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
+  it("does not collapse a legacy demo Growth plan into the contract Growth plan", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("billing-tiers")) return jsonResponse([
+        { ...tierRows[0], priceCents: 59700, callAllowance: 75 },
+        { ...tierRows[0], id: "legacy-demo", name: "Growth (demo)", active: false, priceCents: 49700, callAllowance: 25 },
+      ]);
+      if (String(input).includes("platform-billing")) return jsonResponse([]);
+      return new Response(null, { status: 404 });
+    }));
+    render(<AdminMoneyTiers actorRole="admin" authorized enabled surface="tiers"
+      stripeReadinessReceipt={null} stripeActionHref="https://dashboard.stripe.com/settings/account"
+      tierImpactById={null} clientPricingByTenantId={null} />);
+    const plans = await screen.findByRole("region", { name: "Plans" });
+    expect(within(plans).getByText("Growth", { exact: true })).toBeInTheDocument();
+    const demo = within(plans).getByText("Growth (demo)", { exact: true }).closest("tr")!;
+    expect(demo).not.toHaveAttribute("data-nested");
+    expect(within(demo).getByText("Inactive")).toBeInTheDocument();
+    expect(within(plans).queryByText("Retired")).toBeNull();
+  });
+
   it("renders the plans body without page chrome when embedded", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

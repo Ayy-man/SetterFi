@@ -7,6 +7,7 @@ import { WorkspaceEnvProvider } from "@/components/workspace/workspace-env";
 import { loadCapabilityActor, loadPlatformActor } from "@/lib/auth/actors";
 import { authMode } from "@/lib/auth/mode";
 import { demoLoginsEnabled } from "@/lib/env-contract";
+import { phaseProviderReadiness } from "@/lib/operations/phase-provider-readiness";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { loadImpersonationSessionBanner } from "@/lib/impersonation-session";
 import { demoViewTargetsFor, navigationEnvironment } from "@/lib/workspace-navigation";
@@ -110,6 +111,7 @@ export default async function WorkspaceLayout({ children }: { children: ReactNod
       mode={authMode()}
       navEnvironment={navigationEnvironment()}
       platformRole={platformRole}
+      providerReadiness={phaseProviderReadiness()}
     >
       {/*
         The impersonation band, resolved once here rather than per page.

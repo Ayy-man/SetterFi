@@ -29,6 +29,12 @@ import { REFERRAL_QUERY_PARAM } from "@/lib/affiliates/referral-attribution";
 vi.mock("@/lib/env-contract", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/env-contract")>()),
   phase5Live: () => true,
+  accountTermsLive: () => true,
+}));
+
+vi.mock("@/lib/account/terms", () => ({
+  loadCurrentAccountTerms: vi.fn(async () => ({ state: "published", versionKey: "v1",
+    contentHash: "a".repeat(64), publishedAt: "2026-08-30T00:00:00Z", termsBody: "Terms", privacyBody: "Privacy" })),
 }));
 
 vi.mock("@/app/api/onboarding/signup/route", () => ({
@@ -62,6 +68,7 @@ function fillRequiredFields() {
   type(/^password/i, "correct horse battery");
   type(/business timezone/i, "America/Chicago");
   fireEvent.click(screen.getByRole("radio", { name: "Growth" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /I accept the SetterFi terms/i }));
 }
 
 function stubSignupEndpoint() {
@@ -74,6 +81,13 @@ function stubSignupEndpoint() {
 }
 
 describe("the affiliate referral link", () => {
+  it("shows why signup is unavailable when account terms have not been published", async () => {
+    const { loadCurrentAccountTerms } = await import("@/lib/account/terms");
+    vi.mocked(loadCurrentAccountTerms).mockResolvedValueOnce({ state: "none_published" });
+    await renderSignupPage(REF);
+    expect(screen.getByText("Signup is unavailable until the account terms are published and acceptance is enabled.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create my account/i })).toBeNull();
+  });
   it("carries its code from the URL into the field and on into the submitted signup", async () => {
     const fetchMock = stubSignupEndpoint();
     await renderSignupPage(REF);

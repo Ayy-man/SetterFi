@@ -44,7 +44,7 @@ export const COACH_NAMES = Object.freeze([
 export const DEMO_TIER_LADDER = Object.freeze([
   Object.freeze({
     id: "86000000-0000-4000-8000-000000000001",
-    name: "Starter (demo)",
+    name: "Starter",
     priceCents: 29_700,
     callAllowance: 25,
     fairUseCap: 30,
@@ -52,7 +52,7 @@ export const DEMO_TIER_LADDER = Object.freeze([
   }),
   Object.freeze({
     id: "86000000-0000-4000-8000-000000000002",
-    name: "Growth (demo)",
+    name: "Growth",
     priceCents: 59_700,
     callAllowance: 75,
     fairUseCap: 90,
@@ -60,7 +60,7 @@ export const DEMO_TIER_LADDER = Object.freeze([
   }),
   Object.freeze({
     id: "86000000-0000-4000-8000-000000000003",
-    name: "Scale (demo)",
+    name: "Scale",
     priceCents: 99_700,
     // The threshold the tier begins at, never a cap -- see `isUncapped` above. `fairUseCap` is null
     // for the same reason: a plan sold with no ceiling may not carry one under another name.

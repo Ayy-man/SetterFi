@@ -191,17 +191,17 @@ export function createSignupHandler(dependencies: SignupDependencies) {
         ? await dependencies.currentTerms()
         : { state: "none_published" as const };
       const published = terms.state === "published" ? terms : null;
-      if (published) {
-        if (input.acceptedTermsVersionKey !== published.versionKey) {
-          return Response.json(
-            { error: "The current account terms must be accepted to continue." },
-            { status: 400, headers: NO_STORE },
-          );
-        }
-      } else if (input.acceptedTermsVersionKey !== null) {
-        // Accepting a version the server cannot produce would be recorded nowhere, so the request
-        // is refused rather than silently dropping the field it sent.
-        return Response.json({ error: "Signup details are invalid." }, { status: 400, headers: NO_STORE });
+      if (!published) {
+        return Response.json(
+          { error: "Signup is unavailable until the account terms are published and acceptance is enabled." },
+          { status: 503, headers: NO_STORE },
+        );
+      }
+      if (input.acceptedTermsVersionKey !== published.versionKey) {
+        return Response.json(
+          { error: "The current account terms must be accepted to continue." },
+          { status: 400, headers: NO_STORE },
+        );
       }
 
       const callbackUrl = new URL(SIGNUP_CONFIRMATION_CALLBACK, request.url).toString();

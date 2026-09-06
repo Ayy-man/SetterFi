@@ -4,6 +4,7 @@ import { createContext, useContext, type ReactNode } from "react";
 
 import type { UserRole } from "@/lib/auth/claims";
 import type { EnvironmentSource } from "@/lib/env-contract";
+import type { PhaseProviderReadiness } from "@/lib/operations/phase-provider-readiness";
 import {
   demoReviewPersonas,
   demoViewTargets,
@@ -16,6 +17,7 @@ export type DemoReviewPersona = (typeof demoReviewPersonas)[number];
 export type WorkspaceAuthMode = "open" | "password" | "supabase";
 
 type WorkspaceEnv = {
+  providerReadiness?: readonly PhaseProviderReadiness[];
   mode: WorkspaceAuthMode;
   demoViews: readonly DemoViewTarget[];
   demoAccountSwitching: boolean;
@@ -66,6 +68,7 @@ export function WorkspaceEnvProvider({
   demoViews,
   demoAccountSwitching,
   platformRole,
+  providerReadiness,
   navEnvironment,
   children,
 }: WorkspaceEnv & { navEnvironment?: EnvironmentSource; children: ReactNode }) {
@@ -76,7 +79,7 @@ export function WorkspaceEnvProvider({
 
   return (
     <WorkspaceEnvContext.Provider
-      value={{ account, mode, demoViews, demoAccountSwitching, platformRole }}
+      value={{ account, mode, demoViews, demoAccountSwitching, platformRole, providerReadiness }}
     >
       {children}
     </WorkspaceEnvContext.Provider>

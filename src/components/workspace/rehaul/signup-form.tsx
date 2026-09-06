@@ -46,11 +46,13 @@ export function RehaulSignupForm({
   referralCode = null,
   terms = null,
   tiers,
+  unavailableReason,
 }: {
   enabled: boolean;
   referralCode?: string | null;
   terms?: SignupAccountTerms | null;
   tiers: readonly SignupTierChoice[];
+  unavailableReason?: string;
 }) {
   const [timezone, setTimezone] = useState("");
   // Never pre-ticked: the server records this against an immutable content hash, so it has to be
@@ -139,9 +141,9 @@ export function RehaulSignupForm({
     return (
       <AuthCard title="Account setup is not available yet">
         <Prose className="text-[16px] leading-[1.55] text-[color:var(--muted)]">
-          {descriptor.enabled
+          {unavailableReason ?? (descriptor.enabled
             ? "No named plan is available, so signup stays disabled instead of choosing one for you."
-            : "Self-serve onboarding is currently off. No account or provider work has started."}
+            : "Self-serve onboarding is currently off. No account or provider work has started.")}
         </Prose>
       </AuthCard>
     );

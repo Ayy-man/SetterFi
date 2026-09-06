@@ -347,7 +347,8 @@ function planLines(tiers: readonly TierRow[]): readonly PlanLine[] {
   const order: string[] = [];
   const groups = new Map<string, TierRow[]>();
   for (const tier of tiers) {
-    const key = displayName(tier.name).toLowerCase();
+    // A demo fixture is not a historical price version of a contract plan with the same name.
+    const key = tier.name.trim().toLowerCase();
     const bucket = groups.get(key);
     if (bucket) bucket.push(tier);
     else {
@@ -439,7 +440,7 @@ function PlansTable({
           </thead>
           <tbody>
             {lines.map((line) => {
-              const name = displayName(line.tier.name);
+              const name = line.tier.name;
               const count = countFor(line.tier.id);
               return (
                 <tr data-nested={line.nested ? "" : undefined} data-slot="tiers-plan-row" key={line.tier.id}>

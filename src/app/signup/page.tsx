@@ -119,6 +119,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   }
 
   return (
-    <RehaulSignupForm enabled={enabled} referralCode={referralCode} terms={terms} tiers={tiers} />
+    <RehaulSignupForm enabled={enabled && terms !== null} referralCode={referralCode} terms={terms} tiers={tiers}
+      unavailableReason={enabled && terms === null
+        ? "Signup is unavailable until the account terms are published and acceptance is enabled."
+        : undefined} />
   );
 }

@@ -16,6 +16,7 @@ const input = {
   timezone: "America/New_York",
   referralCode: null,
   affiliateOptIn: false,
+  acceptedTermsVersionKey: "2026-08-account-v1",
 };
 
 const referralNone = {
@@ -44,9 +45,15 @@ function dependencies(result: SignupOrchestrationResult) {
       refreshSession: vi.fn().mockResolvedValue(true),
     }),
     complete: vi.fn().mockResolvedValue(result),
-    // Terms default to unpublished, which is the state every existing case was written under.
-    currentTerms: vi.fn().mockResolvedValue({ state: "none_published" as const }),
-    termsRequired: vi.fn().mockReturnValue(false),
+    currentTerms: vi.fn().mockResolvedValue({
+      state: "published" as const,
+      versionKey: input.acceptedTermsVersionKey,
+      contentHash: "a".repeat(64),
+      publishedAt: "2026-08-30T00:00:00.000Z",
+      termsBody: "terms",
+      privacyBody: "privacy",
+    }),
+    termsRequired: vi.fn().mockReturnValue(true),
     recordTermsAcceptance: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -133,7 +140,7 @@ describe("POST /api/onboarding/signup", () => {
       expect.objectContaining({ user: { id: "auth-1", email: input.email } }),
       expect.not.objectContaining({ password: expect.anything() }),
       expect.any(Function),
-      undefined,
+      expect.any(Function),
     );
   });
 
@@ -201,7 +208,7 @@ describe("POST /api/onboarding/signup", () => {
       const deps = dependencies(confirmed());
       deps.termsRequired = vi.fn().mockReturnValue(true);
       deps.currentTerms = vi.fn().mockResolvedValue(published);
-      const response = await createSignupHandler(deps)(request());
+      const response = await createSignupHandler(deps)(request({ ...input, acceptedTermsVersionKey: null }));
       expect(response.status).toBe(400);
       await expect(response.json()).resolves.toEqual({
         error: "The current account terms must be accepted to continue.",
@@ -241,22 +248,37 @@ describe("POST /api/onboarding/signup", () => {
       expect(Object.values(recorded.requestContext)).not.toContain(input.email);
     });
 
-    it("records nothing and accepts nothing while the gate is off", async () => {
+    it("refuses signup while terms acceptance is switched off", async () => {
       const deps = dependencies(confirmed());
+      deps.termsRequired.mockReturnValue(false);
       const response = await createSignupHandler(deps)(request());
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(503);
       expect(deps.currentTerms).not.toHaveBeenCalled();
-      expect(deps.complete.mock.calls[0][3]).toBeUndefined();
+      expect(deps.signUp).not.toHaveBeenCalled();
+      expect(deps.complete).not.toHaveBeenCalled();
       expect(deps.recordTermsAcceptance).not.toHaveBeenCalled();
     });
 
-    it("refuses an acceptance it could never record rather than dropping the field", async () => {
+    it.each([null, "2026-08-account-v1"])("refuses unpublished terms before creating an identity (%s)", async (acceptedTermsVersionKey) => {
       const deps = dependencies(confirmed());
+      deps.currentTerms.mockResolvedValue({ state: "none_published" });
       const response = await createSignupHandler(deps)(
-        request({ ...input, acceptedTermsVersionKey: "2026-08-account-v1" }),
+        request({ ...input, acceptedTermsVersionKey }),
       );
+      expect(response.status).toBe(503);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(deps.signUp).not.toHaveBeenCalled();
+      expect(deps.complete).not.toHaveBeenCalled();
+      expect(deps.recordTermsAcceptance).not.toHaveBeenCalled();
+    });
+
+    it("does not create an identity when the terms read fails", async () => {
+      const deps = dependencies(confirmed());
+      deps.currentTerms.mockRejectedValue(new Error("private database detail"));
+      const response = await createSignupHandler(deps)(request());
       expect(response.status).toBe(400);
       expect(deps.signUp).not.toHaveBeenCalled();
+      expect(JSON.stringify(await response.json())).not.toContain("private database detail");
     });
   });
 });

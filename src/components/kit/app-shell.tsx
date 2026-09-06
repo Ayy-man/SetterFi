@@ -24,6 +24,7 @@ import {
   type WorkspaceNavCounts,
 } from "@/lib/workspace-navigation";
 import { useWorkspaceEnv } from "@/components/workspace/workspace-env";
+import { PhaseProviderNotice } from "@/components/workspace/phase-provider-notice";
 
 export type { Crumb, NavGroup, NavItem, SidebarAttention, SidebarFleetHealth };
 
@@ -432,7 +433,7 @@ export function AppShell({
   platformRole,
   role,
 }: AppShellProps) {
-  const { account, platformRole: sessionPlatformRole } = useWorkspaceEnv();
+  const { account, platformRole: sessionPlatformRole, providerReadiness } = useWorkspaceEnv();
   /*
    * The fleet card is owner-console chrome and nothing else. Reading `role` here rather than
    * trusting the caller is what makes that structural: these are cross-tenant counts, the rail
@@ -599,6 +600,7 @@ export function AppShell({
             id="main"
             tabIndex={-1}
           >
+            <PhaseProviderNotice path={activePath} readiness={providerReadiness} technical={role === "admin"} />
             {/*
               The coach pill bar used to mount here, as the first child of `<main>`. Every coach
               artboard draws it inside the 76px bar instead, centred between the lockup and the

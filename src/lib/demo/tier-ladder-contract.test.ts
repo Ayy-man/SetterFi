@@ -56,6 +56,16 @@ function intakePricing(): { dollars: number[]; calls: number[] } {
 }
 
 describe("the seeded plan ladder is the client's contracted price list", () => {
+  it("renames only the contract ladder without rewriting prices or allowances", () => {
+    const migration = readFileSync(join(process.cwd(), "supabase/migrations/20261014000001_contract_tier_names.sql"), "utf8");
+    expect(migration).toContain("set name = names.name");
+    expect(migration).toContain("tier.id = names.id and tier.name = names.old_name");
+    for (const rung of ladder) expect(migration).toContain(rung.id);
+    expect(migration).not.toMatch(/\b(?:price_cents|call_allowance|fair_use_cap|stripe_price_id|active)\s*=/u);
+    expect(migration).not.toContain(RETIRED_DEMO_TIER_IDS.gaps);
+    expect(migration).not.toContain(RETIRED_DEMO_TIER_IDS.phase5);
+  });
+
   it("prices every rung at what the client's own intake says", () => {
     const { dollars } = intakePricing();
 
@@ -80,11 +90,11 @@ describe("the seeded plan ladder is the client's contracted price list", () => {
   it("holds exactly the three tiers the client sells", () => {
     expect(ladder).toHaveLength(3);
     expect(ladder.map((rung) => rung.name)).toEqual([
-      "Starter (demo)",
-      "Growth (demo)",
-      "Scale (demo)",
+      "Starter",
+      "Growth",
+      "Scale",
     ]);
-    expect(ladder.every((rung) => rung.name.endsWith("(demo)"))).toBe(true);
+    expect(ladder.every((rung) => !rung.name.endsWith("(demo)"))).toBe(true);
   });
 
   /**
