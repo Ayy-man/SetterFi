@@ -103,7 +103,8 @@ phrasing and on a reply that repeats an inline entry's question before answering
 holds on a citation the model declared wrongly while the reply was grounded in another rendered
 entry); those are fixed in code and the platform role boundary now states that answers grounded
 in the published FAQ are in scope by definition. After the fixes the same run cites the expected
-row on 43 of 45 matched cases inline against 32 retrieved, and holds 3 inline turns against 9.
+row on 43 of 45 matched cases inline against 30 retrieved, holds no inline turn against 11
+retrieved, and answers all seven off-topic messages where retrieval still holds them.
 
 **Retrieval runs in both modes. `knowledge_mode` governs prompt inclusion only** — whether the
 ranked entries are rendered into `[C]` or fetched top-K at request time. It does not govern
