@@ -18,7 +18,7 @@ const PHASE8_FUNCTIONS = [
   "append_support_message(uuid,uuid,uuid,text,boolean)",
   "apply_resend_delivery_receipt(text,text,text,timestamp with time zone)",
   "claim_notification_deliveries(uuid,integer,integer,timestamp with time zone)",
-  "create_support_thread(uuid,uuid,text,text)",
+  "create_support_thread(uuid,uuid,text,text,uuid)",
   "finish_notification_delivery_attempt(uuid,uuid,integer,text,text,text,text,timestamp with time zone,timestamp with time zone)",
   "finish_platform_export(uuid,bigint,bigint,bigint,text,uuid)",
   "reassign_success_owner(uuid,uuid,uuid,text)",

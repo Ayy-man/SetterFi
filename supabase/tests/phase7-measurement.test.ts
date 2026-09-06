@@ -468,8 +468,9 @@ describe("measurement readers", () => {
       "allowance","funnel","keywordConversationTotal","keywords","metrics","pipeline","responses",
       "tenantId","timezone","window","windowEnd","windowStart",
     ].sort());
+    // 20 metrics plus the two active-lead buckets 20261012000006 split out of coach.active_leads.
     const metrics = result.rows[0].snapshot.metrics as Array<{ metricKey: string }>;
-    expect(metrics).toHaveLength(20);
+    expect(metrics).toHaveLength(22);
     expect((result.rows[0].snapshot.responses as Array<{ stepKey: string }>))
       .toEqual([expect.objectContaining({ stepKey: "q2" })]);
     await expect(db.query(`select public.read_coach_measurement($1,'1m',null,null,now())`,[TENANT_B]))
@@ -537,9 +538,11 @@ describe("measurement readers", () => {
     const result = await db.query<{ snapshot: Record<string, unknown> }>(
       `select public.read_platform_measurement(now()) snapshot`,
     );
+    // activeSubscriptionsByPeriod and revenueByPeriod are set by read_platform_measurement_for_actor
+    // (20261009000005), not by the JWT reader; the actor seam asserts them below.
     expect(Object.keys(result.rows[0].snapshot).sort()).toEqual([
-      "activeSubscriptionsByPeriod","asOf","followupPerformance","guardrailRules","history",
-      "metrics","provisioningPerformance","revenueByPeriod","subscriptions","tenantPerformance",
+      "asOf","followupPerformance","guardrailRules","history",
+      "metrics","provisioningPerformance","subscriptions","tenantPerformance",
     ].sort());
     const metrics = result.rows[0].snapshot.metrics as Array<{ metricKey: string; state: string }>;
     expect(metrics.map((metric) => metric.metricKey).sort()).toEqual(PLATFORM_METRICS);
@@ -1004,10 +1007,14 @@ describe("coach lead composition", () => {
     status = "scheduled",
   ) {
     return db.query<{ id: string; is_test: boolean }>(
+      // appointments_cancel_shape_chk: a canceled row carries canceled_at and cancel_source.
       `insert into public.appointments
-         (tenant_id,contact_id,provider,external_id,start_at,end_at,timezone,status,created_at)
+         (tenant_id,contact_id,provider,external_id,start_at,end_at,timezone,status,created_at,
+          canceled_at,cancel_source)
        values ($1,$2,'ghl',$3,$4::timestamptz + interval '1 day',
-         $4::timestamptz + interval '1 day 30 minutes','America/New_York',$5,$4)
+         $4::timestamptz + interval '1 day 30 minutes','America/New_York',$5::appointment_status,$4,
+         case when $5::text = 'canceled' then $4::timestamptz + interval '2 hours' end,
+         case when $5::text = 'canceled' then 'lead' end)
        returning id,is_test`,
       [tenantId, contactId, `composition-${suffix}`, createdAt, status],
     );
@@ -1207,7 +1214,7 @@ describe("measurement reader actor seam", () => {
       "responses","tenantId","timezone","window","windowEnd","windowStart",
     ].sort());
     expect(result.rows[0].snapshot.tenantId).toBe(TENANT_A);
-    expect(result.rows[0].snapshot.metrics as unknown[]).toHaveLength(20);
+    expect(result.rows[0].snapshot.metrics as unknown[]).toHaveLength(22);
     expect(result.rows[0].snapshot.responses as Array<{ stepKey: string }>)
       .toEqual([expect.objectContaining({ stepKey: "q2" })]);
   });
@@ -1263,8 +1270,8 @@ describe("measurement reader actor seam", () => {
     const result = await db.query<{
       snapshot: {
         history: Array<{ periodStart: string; periodEnd: string; value: number; state: string }>;
-        activeSubscriptionsByPeriod: Array<{ value: number; state: string }>;
-        revenueByPeriod: Array<{ value: number; state: string }>;
+        activeSubscriptionsByPeriod: Array<{ periodStart: string; periodEnd: string; value: number; state: string }>;
+        revenueByPeriod: Array<{ periodStart: string; periodEnd: string; value: number; state: string }>;
       };
     }>(`select public.read_platform_measurement_for_actor($1,now()) snapshot`, [OWNER]);
     const snapshot = result.rows[0].snapshot;
@@ -1272,9 +1279,13 @@ describe("measurement reader actor seam", () => {
     expect(snapshot.history).toHaveLength(12);
     expect(snapshot.activeSubscriptionsByPeriod).toHaveLength(12);
     expect(snapshot.revenueByPeriod).toHaveLength(12);
-    expect(snapshot.activeSubscriptionsByPeriod.at(-1)).toEqual({ value: 1, state: "available" });
-    expect(snapshot.revenueByPeriod.at(-1)).toEqual({ value: 12000, state: "available" });
+    expect(snapshot.activeSubscriptionsByPeriod.at(-1)).toMatchObject({ value: 1, state: "available" });
+    expect(snapshot.revenueByPeriod.at(-1)).toMatchObject({ value: 12000, state: "available" });
     expect(snapshot.activeSubscriptionsByPeriod.every((row) => row.state === "available")).toBe(true);
+    // Each money period carries its own bounds (20261009000005) so the console can label the bar.
+    for (const row of [...snapshot.activeSubscriptionsByPeriod, ...snapshot.revenueByPeriod]) {
+      expect(new Date(row.periodStart).getTime()).toBeLessThan(new Date(row.periodEnd).getTime());
+    }
     expect(snapshot.revenueByPeriod.at(-2)?.state).toBe("needs_more_history");
   });
 
@@ -1287,8 +1298,8 @@ describe("measurement reader actor seam", () => {
       occurredAt: string,
     ) => {
       const notification = await db.query<{ id: string }>(
-        `insert into public.notifications (tenant_id,kind,title,is_test,created_at)
-         values ($1,'synthetic.delivery','Synthetic delivery',$2,$3) returning id`,
+        `insert into public.notifications (tenant_id,kind,title,is_test,created_at,recipient_email)
+         values ($1,'synthetic.delivery','Synthetic delivery',$2,$3,'delivery@synthetic.test') returning id`,
         [tenantId, isTest, occurredAt],
       );
       const delivered = outcome === "delivered";
@@ -1327,11 +1338,14 @@ describe("measurement reader actor seam", () => {
     await writeDelivery(TENANT_A, true, "delivered", "2026-10-18T02:00:00.000Z");
     await writeDelivery(TENANT_DEMO, false, "delivered", "2026-10-18T03:00:00.000Z");
     await db.query(
-      `insert into public.provisioning_steps (tenant_id,step_key,state,external_ref)
-       values ($1,'sms_live','awaiting_provider','{}'),
-         ($1,'a2p_campaign','awaiting_provider',$2::jsonb),
-         ($3,'sms_live','done','{}'),
-         ($3,'a2p_campaign','done',$2::jsonb)`,
+      // Honest rows: the idempotency key is tenant:step, an awaiting_provider step names the
+      // party it waits on, and a done step carries its completion time.
+      `insert into public.provisioning_steps
+         (tenant_id,step_key,state,external_ref,awaiting_party,completed_at,idempotency_key)
+       values ($1::uuid,'sms_live','awaiting_provider','{}','carrier',null,$1::text || ':sms_live'),
+         ($1::uuid,'a2p_campaign','awaiting_provider',$2::jsonb,'carrier',null,$1::text || ':a2p_campaign'),
+         ($3::uuid,'sms_live','done','{}',null,now(),$3::text || ':sms_live'),
+         ($3::uuid,'a2p_campaign','done',$2::jsonb,null,now(),$3::text || ':a2p_campaign')`,
       [TENANT_A, JSON.stringify({ submittedAt: "2026-10-16T12:00:00.000Z" }), TENANT_DEMO],
     );
 
@@ -1535,7 +1549,7 @@ describe("measurement reader actor seam", () => {
     const audit = await db.query<{ action: string; count: string }>(`
       select action, count(*)::text count from public.audit_log
       where tenant_id=$1 and action in ('coach.question_order.saved','coach.question.enabled.changed')
-      group by action order by action
+      group by action order by action collate "C"
     `, [TENANT_A]);
     expect(audit.rows).toEqual([
       { action: "coach.question.enabled.changed", count: "1" },

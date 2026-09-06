@@ -148,7 +148,7 @@ describe("Phase 6 financial RLS", () => {
       "booked_count", "call_allowance", "subscription_state", "invoice_state",
       "account_state", "pending_tier_name", "pending_price_cents",
       "pending_effective_at", "notices", "correction_candidates", "outcome_prompts",
-      "is_demo",
+      "settled_attendance", "is_demo",
     ]);
     expect(own.rows).toHaveLength(1);
     expect(own.rows[0]).toMatchObject({
