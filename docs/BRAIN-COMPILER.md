@@ -85,6 +85,24 @@ variants, not a separate `brain_chunks` table; it applies a similarity floor (0.
 holds as SCOPE-002 instead of letting the model answer ungrounded. `scripts/eval-engine.ts --suite
 retrieval` measures the ranking against `evals/corpus/retrieval.json`.
 
+**Measured, not assumed (2026-09-07).** With the real Prospect FAQ Sheet imported (46 rows, ~3,500
+tokens rendered for the demo coach), `scripts/eval-knowledge-modes.ts` ran the 52-case retrieval
+corpus through the real writer and moderator twice, once with every row inlined into `[C]` and once
+retrieved per turn at the 0.25 floor. Inline cited the expected row on 31 of the 38 renderable
+cases against 22 for retrieval, held 21% of turns against 29%, answered all seven off-topic
+messages where retrieval held six of them as `no_grounded_answer` misses, and cost less in total
+despite a prompt three times the size, because the retrieved arm pays an embedding call per turn
+and writes longer, more hedged replies. Retrieval was not losing on ranking: the right row ranked
+first in nearly every case, and the gap was the writer citing a neighbouring candidate out of the
+top five. The decision that follows: the platform publishes in `inline` mode until the corpus
+crosses the budget, question variants and the retrieval floor are tuning knobs for that later
+day, and the eval that measures the shipped behaviour is the engine corpus plus this
+comparison, not `--suite retrieval`. The eval also surfaced three checker miscalibrations
+(a moderator SCOPE hold on a published-FAQ answer, an ECHO false positive on question-shaped
+phrasing, and JUDGE holds on a citation the model declared wrongly while the reply was grounded
+in another rendered entry); those are fixed in code and the platform role boundary now states
+that answers grounded in the published FAQ are in scope by definition.
+
 **Retrieval runs in both modes. `knowledge_mode` governs prompt inclusion only** — whether the
 ranked entries are rendered into `[C]` or fetched top-K at request time. It does not govern
 whether the ranking step happens. Read as "static assembly now, retrieval later" without that
