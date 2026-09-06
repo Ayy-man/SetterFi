@@ -10,6 +10,11 @@ import {
   brainObjectionDraftEntity,
 } from "@/lib/brain/contracts";
 import { diffBrainPayloads } from "@/lib/brain/snapshot/diff";
+import {
+  BRAIN_KNOWLEDGE_ENTITY_TYPE,
+  BRAIN_KNOWLEDGE_PAYLOAD_KEYS,
+  brainKnowledgeDraftEntity,
+} from "@/lib/brain/snapshot/knowledge-entity";
 import { previewBrainPublish } from "@/lib/brain/snapshot/publish";
 
 function draft(value = "Original", extras: Parameters<typeof canonicalizeBrainDraft>[0]["entities"] = []) {
@@ -192,5 +197,132 @@ describe("objection entities in the canonical draft payload", () => {
       .toThrow(/BRAIN_OBJECTION_RESPONSE_REQUIRED/);
     expect(() => brainObjectionDraftEntity({ ...valid, category: "trust" }))
       .toThrow(/BRAIN_OBJECTION_CATEGORY_INVALID/);
+  });
+});
+
+// Provenance and question variants ride inside the `knowledge_entry` entity value. Before this
+// suite existed, editing an entry's `number_bindings` or adding a variant left the draft hash
+// untouched, so a draft that looked unchanged could publish different retrieval behaviour and the
+// diff had nothing to show for it. These cases pin both to the hash and to the per-entity diff.
+function knowledgeDraft(overrides: Partial<Parameters<typeof brainKnowledgeDraftEntity>[0]> = {}) {
+  return canonicalizeBrainDraft({
+    entities: [
+      brainKnowledgeDraftEntity({
+        id: "91000000-0000-4000-8000-000000000001",
+        category: "pricing",
+        inboundMessage: "What does the program cost?",
+        responseTemplate: "The program is $297 with a 700 credit floor.",
+        status: "draft",
+        numberBindings: [
+          { kind: "score", value: 700, binding: "credit_min", offset: 30 },
+          { kind: "currency", value: 297, binding: "offer_prices", offset: 16 },
+        ],
+        rewriteHash: "e".repeat(64),
+        variants: [
+          { id: "92000000-0000-4000-8000-000000000002", text: "how much is it" },
+          { id: "92000000-0000-4000-8000-000000000001", text: "price?" },
+        ],
+        ...overrides,
+      }),
+    ],
+    compiledPlatform: "Platform",
+    platformTokens: 4,
+    knowledgeMode: "retrieved",
+  });
+}
+
+describe("knowledge entities in the canonical draft payload", () => {
+  it("changes the content hash when a number binding changes", () => {
+    const base = contentHashForPayload(knowledgeDraft());
+    const rebound = contentHashForPayload(knowledgeDraft({
+      numberBindings: [
+        { kind: "score", value: 700, binding: "credit_min", offset: 30 },
+        { kind: "currency", value: 297, binding: "platform_constant", offset: 16 },
+      ],
+    }));
+    const unbound = contentHashForPayload(knowledgeDraft({ numberBindings: [] }));
+    const rereviewed = contentHashForPayload(knowledgeDraft({ rewriteHash: null }));
+    expect(new Set([base, rebound, unbound, rereviewed]).size).toBe(4);
+  });
+
+  it("changes the content hash when a variant is added", () => {
+    const base = contentHashForPayload(knowledgeDraft());
+    const added = contentHashForPayload(knowledgeDraft({
+      variants: [
+        { id: "92000000-0000-4000-8000-000000000002", text: "how much is it" },
+        { id: "92000000-0000-4000-8000-000000000001", text: "price?" },
+        { id: "92000000-0000-4000-8000-000000000003", text: "what is the cost" },
+      ],
+    }));
+    const none = contentHashForPayload(knowledgeDraft({ variants: [] }));
+    expect(new Set([base, added, none]).size).toBe(3);
+  });
+
+  it("hashes reordered bindings and variants identically", () => {
+    const base = contentHashForPayload(knowledgeDraft());
+    expect(contentHashForPayload(knowledgeDraft({
+      numberBindings: [
+        { kind: "currency", value: 297, binding: "offer_prices", offset: 16 },
+        { kind: "score", value: 700, binding: "credit_min", offset: 30 },
+      ],
+      variants: [
+        { id: "92000000-0000-4000-8000-000000000001", text: "price?" },
+        { id: "92000000-0000-4000-8000-000000000002", text: "how much is it" },
+      ],
+    }))).toBe(base);
+  });
+
+  it("shows a binding edit and an added variant as a changed entity in the diff", () => {
+    const current = knowledgeDraft();
+    const bindingEdit = diffBrainPayloads(current, knowledgeDraft({ numberBindings: [] }));
+    expect(bindingEdit.status).toBe("changed");
+    if (bindingEdit.status !== "changed") throw new Error("expected changed diff");
+    expect(bindingEdit.changes.map(({ kind, entityType, entityId }) => ({ kind, entityType, entityId }))).toEqual([
+      { kind: "changed", entityType: BRAIN_KNOWLEDGE_ENTITY_TYPE, entityId: "91000000-0000-4000-8000-000000000001" },
+    ]);
+    expect(bindingEdit.changes[0]?.before?.numberBindings).toHaveLength(2);
+    expect(bindingEdit.changes[0]?.after?.numberBindings).toEqual([]);
+
+    const variantAdd = diffBrainPayloads(current, knowledgeDraft({
+      variants: [
+        { id: "92000000-0000-4000-8000-000000000001", text: "price?" },
+        { id: "92000000-0000-4000-8000-000000000002", text: "how much is it" },
+        { id: "92000000-0000-4000-8000-000000000003", text: "what is the cost" },
+      ],
+    }));
+    expect(variantAdd.status).toBe("changed");
+    if (variantAdd.status !== "changed") throw new Error("expected changed diff");
+    expect(variantAdd.changes).toHaveLength(1);
+    expect(variantAdd.changes[0]?.after?.variants).toEqual([
+      { id: "92000000-0000-4000-8000-000000000002", text: "how much is it" },
+      { id: "92000000-0000-4000-8000-000000000001", text: "price?" },
+      { id: "92000000-0000-4000-8000-000000000003", text: "what is the cost" },
+    ]);
+  });
+
+  it("writes every key into the value so a builder cannot drop one silently", () => {
+    const entity = brainKnowledgeDraftEntity({
+      id: "91000000-0000-4000-8000-000000000009",
+      category: "pricing",
+      inboundMessage: "Q",
+      responseTemplate: "A",
+      status: "draft",
+      numberBindings: [],
+      rewriteHash: null,
+      variants: [],
+    });
+    expect(entity.type).toBe(BRAIN_KNOWLEDGE_ENTITY_TYPE);
+    expect(Object.keys(entity.value).sort()).toEqual([...BRAIN_KNOWLEDGE_PAYLOAD_KEYS].sort());
+  });
+
+  it("refuses a malformed binding or a blank variant instead of hashing it", () => {
+    expect(() => knowledgeDraft({
+      numberBindings: [{ kind: "currency", value: 1, binding: "nope" } as never],
+    })).toThrow(/BRAIN_NUMBER_BINDINGS_INVALID/);
+    expect(() => knowledgeDraft({ variants: [{ id: "x", text: "   " }] }))
+      .toThrow(/BRAIN_KNOWLEDGE_VARIANT_INVALID/);
+    expect(() => knowledgeDraft({ variants: [
+      { id: "same", text: "a" }, { id: "same", text: "b" },
+    ] })).toThrow(/BRAIN_KNOWLEDGE_VARIANT_DUPLICATE/);
   });
 });

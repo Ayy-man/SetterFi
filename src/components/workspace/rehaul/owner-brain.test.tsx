@@ -34,6 +34,9 @@ function knowledgeRow(id: string, status: "published" | "draft") {
     inboundMessage: `What does ${id} cost?`,
     responseTemplate: `Response ${id}`,
     status,
+    numberBindings: [],
+    rewriteHash: null,
+    variants: [],
     updatedAt: "2026-08-27T09:00:00.000Z",
     publishedAt: status === "published" ? "2026-08-27T10:00:00.000Z" : null,
   };
