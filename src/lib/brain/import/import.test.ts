@@ -284,6 +284,51 @@ describe("Brain import content detectors", () => {
     }
   });
 
+  it("flags contracted and common first-person forms the way it flags the plain ones", () => {
+    for (const phrase of [
+      "Sounds like you're on track! Feel free to contact me when ready, and I'll be more than happy to assist you.",
+      "I've been in this industry for the past 5 years and running this particular company for 3 years now",
+      "I pride myself on being the face of the company, see the testimonials and screenshots on my website or the content on my Youtube",
+      "There is no hard minimum, but I do still recommend to have good credit",
+      "You would need that to get funding but it's no worries I can help you set that up.",
+      "I see you in the system. Unfortunately, you didn't qualify due to your credit.",
+      "I'd suggest starting with the application.",
+      "I'm here if anything is unclear.",
+      "Check my YouTube channel or my company page for details.",
+    ]) {
+      expect(codes(phrase), phrase).toContain("first_person_pii");
+    }
+  });
+
+  it("leaves the platform's own we-voice alone", () => {
+    for (const plain of [
+      "We are here to help. Our team reviews every application and we will reach out within two business days.",
+      "Yes, you can apply without an LLC; we walk you through the setup and our calendar is open this week.",
+      "Let us know when you're ready and we'll book the call.",
+    ]) {
+      expect(codes(plain), plain).not.toContain("first_person_pii");
+    }
+  });
+
+  it("flags an inbound message that reads as an operator's note about the lead instead of a lead's message", () => {
+    for (const note of [
+      "Not sure if lead needs help with funding",
+      "Not qualified-poor credit on application",
+      "Complaining that application didnt approve them",
+      "They don't have an LLC yet",
+    ]) {
+      const { flags } = flagImportRow({ ...flaggable("Synthetic response"), inboundMessage: note });
+      const operator = flags.filter((flag) => flag.code === "operator_note");
+      expect(operator, note).toHaveLength(1);
+      expect(operator[0], note).toMatchObject({ field: "inboundMessage", severity: "blocking", resolved: false });
+      expect(JSON.stringify(flags), note).not.toContain("LLC");
+    }
+    for (const question of ["Do I need tax returns?", "How long is the process", "Calls on the weekend"]) {
+      const { flags } = flagImportRow({ ...flaggable("Synthetic response"), inboundMessage: question });
+      expect(flags.map((flag) => flag.code), question).not.toContain("operator_note");
+    }
+  });
+
   it("points every content flag at the response field with an offset and never copies text", () => {
     const { flags } = flagImportRow(flaggable("Our clients got funded. Ask @legacy_strong at Legacy Strong."));
     const content = flags.filter((flag) => ["proof_claim", "social_handle", "brand_name"].includes(flag.code));

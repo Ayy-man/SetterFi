@@ -88,8 +88,35 @@ function matches(value: string, patterns: readonly RegExp[]) {
   });
 }
 
+/**
+ * A coach speaking as one person. The platform voice is "we", so "we/our/us" stay allowed; what
+ * gets flagged is the singular: "I" with its contractions and the verbs the FAQ sheet actually
+ * uses ("I do still recommend", "I can help", "I see you in the system", "I pride myself"), the
+ * lead being pointed at the coach personally ("contact me"), the coach's own channels and company
+ * ("my website", "my YouTube", "running this particular company"), and tenure claims ("for the
+ * past 5 years"). The `I` group is case-sensitive so a lowercase "i" inside a token never trips it.
+ */
 const FIRST_PERSON_PATTERNS = [
-  /\b(?:i\s+(?:am|live|have|started|run)|i['’]m|my\s+(?:company|business|team)|we\s+(?:are|have)|our\s+(?:company|business|team))\b/gi,
+  /\bI(?:['’](?:ve|ll|d|m)|\s+(?:am|do|can|see|pride|live|have|had|started|run|will|would|could|recommend|suggest|personally|work|help|offer|only|also|was|think|believe|know|want|need|use|prefer))\b/g,
+  /\b(?:contact|call|text|message|email|dm|reach|ask|tell)\s+me\b/gi,
+  /\bmy\s+(?:company|business|team|website|site|page|youtube|channel|instagram|tiktok|facebook|linkedin|content|clients?|students?|program(?:me)?s?|calendar|link|office|experience)\b/gi,
+  /\b(?:running|run|own|started|founded|building|built)\s+this(?:\s+particular)?\s+(?:company|business)\b/gi,
+  /\bthis\s+particular\s+(?:company|business)\b/gi,
+  /\bfor\s+the\s+past\s+\d+\+?\s+(?:years?|months?)\b/gi,
+  /\bin\s+this\s+industry\b/gi,
+] as const;
+
+/**
+ * An inbound message that is a reviewer's label rather than something a lead would type: it talks
+ * about the lead in the third person ("lead needs help", "they don't have an LLC", "the client")
+ * or reads as an internal status ("not qualified", "complaining", "on application"). Such a row
+ * can never be retrieved by a real lead message, so it blocks until a human rewrites or routes it.
+ */
+const OPERATOR_NOTE_PATTERNS = [
+  /\b(?:the|this|new|a)\s+(?:lead|client|prospect)\b/gi,
+  /\b(?:lead|client|prospect)\s+(?:needs?|wants?|is|was|has|had|said|says|asked|asks|did|does|doesn['’]?t|didn['’]?t|isn['’]?t|wasn['’]?t|hasn['’]?t|already|still|just)\b/gi,
+  /\b(?:they|their|theirs|them|themselves)\b/gi,
+  /\b(?:not|un)\s*qualified\b|\bdisqualified\b|\bcomplaining\b|\bcomplained\b|\bon\s+application\b|\bno[- ]show\b|\bghosted\b|\bfollow[- ]?up\s+(?:needed|required|sent)\b/gi,
 ] as const;
 const PII_PATTERNS = [
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
@@ -184,6 +211,9 @@ export function flagImportRow(
   for (const offset of matches(row.responseTemplate, [...FIRST_PERSON_PATTERNS, ...PII_PATTERNS])) {
     flags.push(flag("first_person_pii", "responseTemplate", offset));
   }
+  // One flag per row: the verdict is about the whole message, so it points at the earliest cue.
+  const noteOffsets = matches(row.inboundMessage, OPERATOR_NOTE_PATTERNS);
+  if (noteOffsets.length > 0) flags.push(flag("operator_note", "inboundMessage", Math.min(...noteOffsets)));
   for (const offset of matches(row.responseTemplate, SOCIAL_HANDLE_PATTERNS)) {
     flags.push(flag("social_handle", "responseTemplate", offset));
   }
