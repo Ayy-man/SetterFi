@@ -106,6 +106,20 @@ in the published FAQ are in scope by definition. After the fixes the same run ci
 row on 43 of 45 matched cases inline against 30 retrieved, holds no inline turn against 11
 retrieved, and answers all seven off-topic messages where retrieval still holds them.
 
+**The funnel is measured separately (2026-09-07).** `scripts/eval-setter.ts` plays five lead
+personas (skeptic, price shopper, tire-kicker with no business, ready buyer, burned by a previous
+consultant) against the published demo setter through `runEngineTurn`, replaying the production
+state machine in memory: qualification commands, the calendar offer on BOOK, the confirmed booking
+on a slot id. It scores outcome against each persona's expectation and a rubric judge. The first
+passes found four production defects the single-turn evals could not see: answers in prose never
+advanced the script ("around 720 last I checked" was asked again three times), the writer was
+never told the funnel stage in words, the booking invite was held as JUDGE for citing no entry, and
+a citation tail after the reply went out to the lead as raw JSON. All four are fixed in the engine.
+With the fixes and the v10 voice, the active pair meets 4 of 5 persona expectations with no holds
+(judge 3.2 of 5); gpt-5.6-sol matches it at twelve times the cost. The consistent miss is the
+skeptic's "are you lenders or brokers, is there an upfront fee?", which the FAQ does not answer
+and the setter can only defer; that is a content gap, not a checker one.
+
 **Retrieval runs in both modes. `knowledge_mode` governs prompt inclusion only** — whether the
 ranked entries are rendered into `[C]` or fetched top-K at request time. It does not govern
 whether the ranking step happens. Read as "static assembly now, retrieval later" without that
