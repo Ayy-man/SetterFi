@@ -21,8 +21,10 @@
  *      [--generator <openrouter model>] [--only <persona-substring>] [--max-turns <n>] [--json <path>]'
  *
  * `--generator` picks the generator row in model_configs for that model (lowest reasoning effort
- * when several exist); the active pair is used when omitted. The lead and judge models are fixed
- * so two generator runs differ only in the setter. Exit code 1 when any conversation errored,
+ * when several exist); the active pair is used when omitted. `--lead` picks the model that plays
+ * the lead (default anthropic/claude-sonnet-5); the judge is fixed. The per-turn messiness dice are
+ * seeded by persona and turn, so two lead models get the same "one word this time" cues and differ
+ * only in how they play them. Exit code 1 when any conversation errored,
  * 2 on a configuration error. Credential values are never printed.
  */
 
@@ -58,7 +60,8 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { loadApprovedPlatformAgentContent } from "@/lib/webhooks/live-preview";
 import { withBookingSlotOffer } from "@/lib/webhooks/process-inbound";
 
-const LEAD_MODEL = { model: "anthropic/claude-sonnet-5", params: { temperature: 0.8 } } as const;
+const DEFAULT_LEAD_MODEL = "anthropic/claude-sonnet-5";
+const LEAD_PARAMS = { temperature: 0.9 } as const;
 const JUDGE_MODEL = { model: "anthropic/claude-sonnet-5", params: { temperature: 0 } } as const;
 const DEFAULT_MAX_TURNS = 10;
 
@@ -88,6 +91,7 @@ function requireEnvironment() {
 
 function parseArguments(argv: readonly string[]) {
   let generator: string | null = null;
+  let lead = DEFAULT_LEAD_MODEL;
   let only: string | null = null;
   let maxTurns = DEFAULT_MAX_TURNS;
   let json: string | null = null;
@@ -96,6 +100,10 @@ function parseArguments(argv: readonly string[]) {
     if (argument === "--generator") {
       generator = argv[index + 1] ?? null;
       if (!generator || !generator.includes("/")) throw new Error("SETTER_EVAL_GENERATOR_INVALID");
+      index += 1;
+    } else if (argument === "--lead") {
+      lead = argv[index + 1] ?? "";
+      if (!lead.includes("/")) throw new Error("SETTER_EVAL_LEAD_INVALID");
       index += 1;
     } else if (argument === "--only") {
       only = argv[index + 1] ?? null;
@@ -113,7 +121,7 @@ function parseArguments(argv: readonly string[]) {
       throw new Error(`SETTER_EVAL_UNKNOWN_ARGUMENT:${argument}`);
     }
   }
-  return { generator, only, maxTurns, json };
+  return { generator, lead, only, maxTurns, json };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -145,9 +153,9 @@ const PERSONAS: readonly Persona[] = [
     opening: "saw your ad. how do i know this isn't a scam? everyone online promises funding",
     brief: [
       "You are suspicious and a little rude at first. You ask whether they are lenders, whether there are upfront fees,",
-      "and whether this is a credit repair scheme. You warm up only if the answers are straight and you are not being sold to.",
-      "You will not book until at least two of your doubts have been answered plainly. If a reply feels salesy or dodges,",
-      "say so. You do want funding, so if the setter is honest and asks sensible questions you will answer and eventually book.",
+      "and whether this is a credit repair scheme, but not all at once and not in tidy sentences. You warm up only if",
+      "the answers are straight and you are not being sold to. If a reply feels salesy or dodges, say so briefly or go",
+      "quiet; you do not lecture. You do want funding, so if the setter is honest you will answer and eventually book.",
     ].join(" "),
     facts: {
       "credit score": "about 705 as of last month",
@@ -204,9 +212,10 @@ const PERSONAS: readonly Persona[] = [
     label: "Ready buyer who wants to get on the calendar",
     opening: "Hi, I run a small logistics business and need working capital. What's the process to get started?",
     brief: [
-      "You are decisive and polite. You answer every question in one short message, in natural language (never a bare",
-      "number). You want to book as soon as it is offered. If offered times, you pick the first one that is not the",
-      "very first slot and reply with its exact slot id. If given a link, say you will book now. You do not raise objections.",
+      "You are decisive and polite but busy. You answer in natural language (never a bare number) and you want to",
+      "book as soon as it is offered. If offered times, pick one that suits you and reply with its exact slot id, maybe",
+      "with a word or two. If given a link, say you will book now. You do not raise objections, but you may ask one",
+      "practical question about the call (how long, who with).",
     ].join(" "),
     facts: {
       "credit score": "740, checked it last week",
@@ -246,7 +255,46 @@ const PERSONAS: readonly Persona[] = [
 
 type LeadTurn = { message: string; done: boolean; leaving: boolean; bookIntent: boolean; slotId: string | null };
 
-function leadSystemPrompt(persona: Persona, offeredSlotIds: readonly string[]) {
+/**
+ * Real leads are messier than a well-briefed actor: they send one word, mistype, wander off topic,
+ * answer the question they wish they had been asked, and leave without saying so. The cues below
+ * are rolled per turn from a seed (persona + turn) so both lead models face the same script of
+ * moods and differ only in how they play them.
+ */
+const STYLE_CUES = [
+  "Reply in one to three words only.",
+  "Reply normally.",
+  "Reply normally, but include one realistic typo or a missing apostrophe.",
+  "Reply normally.",
+  "Answer only part of what was asked and add an unrelated question or aside (your day, another provider you saw, a delay in replying).",
+  "Reply normally, lowercase, no punctuation at the end.",
+  "Reply normally.",
+  "Be short and a bit impatient.",
+  "Reply normally, but misremember or round a number you were told about yourself, or say you're not sure.",
+  "Reply normally.",
+] as const;
+
+function seeded(key: string) {
+  let hash = 2166136261;
+  for (const char of key) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
+
+function styleCue(persona: Persona, turn: number) {
+  return STYLE_CUES[Math.floor(seeded(`${persona.key}:${turn}`) * STYLE_CUES.length)];
+}
+
+/** After the setter dodged a direct question, a real lead sometimes just stops replying. */
+function dropOutCue(persona: Persona, turn: number) {
+  return seeded(`${persona.key}:drop:${turn}`) < 0.2
+    ? "If the setter's last message dodged something you asked directly, or repeated itself, this is a natural point to stop replying: set leaving to true with a short sign-off or no message beyond a word."
+    : "";
+}
+
+function leadSystemPrompt(persona: Persona, offeredSlotIds: readonly string[], turn: number) {
   const facts = Object.entries(persona.facts).map(([key, value]) => `- ${key}: ${value}`).join("\n");
   return [
     `You are role-playing a lead messaging a business-funding coach's team over ${persona.channel}. Stay in character.`,
@@ -254,8 +302,12 @@ function leadSystemPrompt(persona: Persona, offeredSlotIds: readonly string[]) {
     persona.brief,
     "What you know about yourself (reveal only when asked, in your own words, never as a bare number):",
     facts,
-    "Style: write like a real person on a phone, one to three sentences, casual punctuation, no bullet points, no",
-    "narration or stage directions. Never mention that you are playing a role or that this is a test.",
+    "Style: you are typing on a phone between other things. Mostly one or two short sentences, sometimes one word.",
+    "Casual punctuation, lowercase is fine, occasional typos are fine, no bullet points, no narration, no stage",
+    "directions. Do not write 'ok noted' or 'fair enough' as a reflex; vary how you start. You are not obliged to",
+    "answer every question, and you do not explain your reasoning to the setter. Never mention that you are playing a",
+    "role or that this is a test.",
+    `For this reply: ${styleCue(persona, turn)} ${dropOutCue(persona, turn)}`.trim(),
     offeredSlotIds.length
       ? `You were just offered appointment times with these slot ids: ${offeredSlotIds.join(", ")}. If you want to book, reply with one exact slot id.`
       : "",
@@ -297,19 +349,21 @@ function parseLeadTurn(raw: string): LeadTurn {
 
 async function nextLeadTurn(
   lead: ModelDriver,
+  leadModel: string,
   persona: Persona,
   transcript: readonly PromptMessage[],
   offeredSlotIds: readonly string[],
+  turn: number,
 ): Promise<{ turn: LeadTurn; cost: number | null }> {
   // The lead's own lines are the assistant role in its transcript, the setter's are the user role.
   const messages: PromptMessage[] = [
-    { role: "system", content: leadSystemPrompt(persona, offeredSlotIds) },
+    { role: "system", content: leadSystemPrompt(persona, offeredSlotIds, turn) },
     ...transcript.map((message): PromptMessage => ({
       role: message.role === "user" ? "assistant" : "user",
       content: message.content,
     })),
   ];
-  const generated = await lead.generate(messages, { model: LEAD_MODEL.model, params: { ...LEAD_MODEL.params } });
+  const generated = await lead.generate(messages, { model: leadModel, params: { ...LEAD_PARAMS } });
   return { turn: parseLeadTurn(generated.draft), cost: generated.provider.cost };
 }
 
@@ -404,6 +458,7 @@ type Harness = {
   modelConfigs: EnginePipelineInput["modelConfigs"];
   drivers: { model: ModelDriver; moderator: ModeratorDriver };
   lead: ModelDriver;
+  leadModel: string;
   judge: ModelDriver;
   tagSecret: string;
   linkWhitelist: readonly string[];
@@ -563,7 +618,7 @@ async function runConversation(harness: Harness, persona: Persona): Promise<Conv
       if (held) { outcome = "held"; break; }
       if (state.status === "nurture" && turn >= 2) { outcome = "nurture"; break; }
       if (turn === harness.maxTurns) break;
-      const lead = await nextLeadTurn(harness.lead, persona, transcript, state.offeredSlotIds);
+      const lead = await nextLeadTurn(harness.lead, harness.leadModel, persona, transcript, state.offeredSlotIds, turn);
       leadCost += lead.cost ?? 0;
       if (lead.turn.leaving) {
         outcome = "lead_left";
@@ -792,6 +847,7 @@ async function main() {
     modelConfigs,
     drivers,
     lead: realDriver,
+    leadModel: args.lead,
     judge: realDriver,
     tagSecret,
     linkWhitelist: publishedLinkWhitelist(bundle),
@@ -802,12 +858,12 @@ async function main() {
     `tenant ${tenant.slug}, snapshot v${bundle.brainVersion} (${bundle.brain.knowledgeMode}), offer v${bundle.offerVersion} ` +
     `(${bundle.offer.bookingMode} booking, rules: ${bundle.renderSources.qualificationSummary}), ` +
     `generator ${generator?.model ?? "?"} ${JSON.stringify(generator?.params ?? {})}, moderator ${moderator?.model ?? "?"}, ` +
-    `lead ${LEAD_MODEL.model}, judge ${JUDGE_MODEL.model}, ${selected.length} personas, max ${args.maxTurns} turns\n`,
+    `lead ${args.lead}, judge ${JUDGE_MODEL.model}, ${selected.length} personas, max ${args.maxTurns} turns\n`,
   );
   const reports = await Promise.all(selected.map((persona) => runConversation(harness, persona)));
   const summary = printReport(reports, generator?.model ?? "?");
   if (args.json) {
-    writeFileSync(args.json, JSON.stringify({ generator: generator?.model ?? null, moderator: moderator?.model ?? null, lead: LEAD_MODEL.model, judge: JUDGE_MODEL.model, summary, reports }, null, 2));
+    writeFileSync(args.json, JSON.stringify({ generator: generator?.model ?? null, moderator: moderator?.model ?? null, lead: args.lead, judge: JUDGE_MODEL.model, summary, reports }, null, 2));
     process.stderr.write(`wrote ${args.json}\n`);
   }
   process.exitCode = summary.errors > 0 ? 1 : 0;
