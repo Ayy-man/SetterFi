@@ -57,6 +57,7 @@ import {
 import {
   MODERATOR_CLASSES,
   type BookingResponse,
+  type ConversationPromptState,
   type CheckResult,
   type CheckViolation,
   type BrainSnapshot,
@@ -442,46 +443,105 @@ function parseMoneyAmount(body: string) {
   return Number.isSafeInteger(cents) && cents >= 0 ? cents : null;
 }
 
+const CREDIT_WORD_BANDS: readonly [RegExp, CreditRange][] = [
+  [/\b(?:below|under|less than|sub)\s*600\b|\b(?:low|mid|high|upper)\s*500s?\b|\b5\d\ds\b/iu, "below 600"],
+  [/\blow\s*600s?\b|\bearly\s*600s?\b/iu, "600–640"],
+  [/\bmid\s*600s?\b/iu, "640–680"],
+  [/\b(?:high|upper|late)\s*600s?\b/iu, "680–700"],
+  [/\b700s?\s*(?:plus|\+)|\b(?:low|mid|high|upper|early|late)\s*7\d\ds?\b|\b(?:over|above|north of|more than)\s*7\d\d\b|\b8\d\ds?\b/iu, "700+"],
+];
+
+/**
+ * A three-digit credit score anywhere in the lead's words, preferring one next to "score" or
+ * "credit" when the message carries several numbers, and never one that reads as money, a
+ * percentage or a year.
+ */
+function creditScoreIn(body: string): number | null {
+  const candidates = [...body.matchAll(/(?<![\d$.,])(\d{3})(?!\d|s\b|,\d{3}|\.\d|\s*(?:k|m|%)\b)/giu)]
+    .map((match) => ({ score: Number(match[1]), index: match.index ?? 0 }))
+    .filter(({ score }) => score >= 300 && score <= 850);
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0].score;
+  const near = candidates.find(({ index }) => /\b(?:score|credit|fico|scores?)\b/iu.test(body.slice(Math.max(0, index - 30), index + 12)));
+  return near?.score ?? candidates[0].score;
+}
+
+/** Money anywhere in the lead's words; a monthly figure is annualised, "nothing yet" is zero. */
+function moneyIn(body: string): number | null {
+  const lower = body.toLowerCase();
+  if (/\b(?:no|zero|0|nothing|none|not making any|pre-?revenue|haven'?t (?:made|launched)|not (?:launched|open|trading))\b/u.test(lower)
+    && !/\d{2,}/u.test(lower.replace(/\b0\b/u, ""))) {
+    return 0;
+  }
+  const match = lower.match(/\$?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?\s*(k|m|thousand|million|grand)?\b/u);
+  if (!match) return null;
+  const base = Number(match[1].replaceAll(",", "")) + Number(`0.${match[2] ?? "0"}`);
+  const unit = match[3];
+  const multiplier = unit === "m" || unit === "million" ? 1_000_000
+    : unit === "k" || unit === "thousand" || unit === "grand" ? 1_000 : 1;
+  const amount = base * multiplier;
+  const monthly = /\b(?:a|per|each|every)\s*month|monthly|\/\s*mo(?:nth)?\b/u.test(lower);
+  const cents = Math.round(amount * (monthly ? 12 : 1) * 100);
+  return Number.isSafeInteger(cents) && cents >= 0 ? cents : null;
+}
+
+/**
+ * Reads the answer to the current qualification question out of the lead's own words. A lead
+ * types "around 720 last I checked", not "720", and a script that only advanced on the bare
+ * number asked the same question three times and never reached the coach's BOOK rule. Each
+ * reader is bounded to its field (a score is 300–850, money needs a unit or a plain figure), so
+ * a number from another topic in the same message is not mistaken for the answer.
+ */
 export function extractRuntimeQualification(
   question: QualificationQuestion,
   body: string,
 ): QualificationValue | null {
   const normalized = body.trim().replaceAll("-", "–");
+  const lower = normalized.toLowerCase();
   if (question.type === "credit_range") {
-    const canonical = CREDIT_RANGES.find((value) => value.toLowerCase() === normalized.toLowerCase());
-    if (canonical) return { field: "credit", value: canonical };
-    const numeric = normalized.match(/^(?:my (?:credit )?score is\s*)?(\d{3})\+?$/iu);
-    const range = numeric ? creditRangeForScore(Number(numeric[1])) : null;
-    return range ? { field: "credit", value: range } : null;
+    const canonical = CREDIT_RANGES.find((value) => lower === value.toLowerCase() || lower.includes(`${value.toLowerCase()} `) || lower.endsWith(value.toLowerCase()));
+    if (canonical && canonical !== "unknown") return { field: "credit", value: canonical };
+    const score = creditScoreIn(normalized);
+    const range = score === null ? null : creditRangeForScore(score);
+    if (range) return { field: "credit", value: range };
+    const worded = CREDIT_WORD_BANDS.find(([pattern]) => pattern.test(normalized));
+    if (worded) return { field: "credit", value: worded[1] };
+    if (/\b(?:don'?t|do not|no idea|not sure|never checked|unsure)\b.*\b(?:score|credit|know)\b|\b(?:no idea|not sure|never checked)\b/iu.test(lower)) {
+      return { field: "credit", value: "unknown" };
+    }
+    return null;
   }
   if (question.type === "funding_goal") {
-    const canonical = FUNDING_GOALS.find((value) => value.toLowerCase() === normalized.toLowerCase());
+    const canonical = FUNDING_GOALS.find((value) => lower === value.toLowerCase());
     if (canonical) return { field: "goal", value: canonical };
-    const cents = parseMoneyAmount(normalized.replace(/^(?:my )?(?:funding )?goal is\s*/iu, ""));
-    if (cents === null) return null;
+    const cents = moneyIn(normalized.replace(/^(?:my )?(?:funding )?goal is\s*/iu, ""));
+    if (cents === null || cents === 0) return null;
     if (cents < 5_000_000) return { field: "goal", value: "<$50K" };
     if (cents < 10_000_000) return { field: "goal", value: "$50K–100K" };
     if (cents < 15_000_000) return { field: "goal", value: "$100K–150K" };
     return { field: "goal", value: "$150K+" };
   }
   if (question.type === "funding_timeline") {
-    const aliases: Record<string, (typeof FUNDING_TIMELINES)[number]> = {
-      "asap": "ASAP–30d", "asap–30d": "ASAP–30d", "within 30 days": "ASAP–30d",
-      "1–3mo": "1–3mo", "1 to 3 months": "1–3mo", "1–3 months": "1–3mo",
-      "3–6mo": "3–6mo", "3 to 6 months": "3–6mo", "3–6 months": "3–6mo",
-      "exploring": "exploring", "just exploring": "exploring",
-    };
-    const timeline = aliases[normalized.toLowerCase()];
-    return timeline ? { field: "timeline", value: timeline } : null;
+    const patterns: readonly [RegExp, (typeof FUNDING_TIMELINES)[number]][] = [
+      [/exploring|just looking|no rush|not (?:in a )?(?:hurry|rush)|someday|eventually|no timeline|researching|gathering info|down the (?:line|road)|next year/iu, "exploring"],
+      [/\basap\b|as soon as possible|right away|immediately|this (?:week|month)|within (?:a|the next|30) (?:days?|week|weeks|month)|\bnow\b|urgent|yesterday|next (?:week|few days)/iu, "ASAP–30d"],
+      [/\b1\s*(?:–|to)\s*3\s*(?:mo|months?)|\b(?:a|one|1|two|2|couple(?: of)?|few)\s*months?\b|next (?:month|quarter)|\b(?:6|six|8|eight|10|ten|12|twelve) weeks?\b/iu, "1–3mo"],
+      [/\b3\s*(?:–|to)\s*6\s*(?:mo|months?)|\b(?:3|three|4|four|5|five|6|six)\s*months?\b|later this year|by (?:the )?(?:summer|fall|autumn|winter|spring|end of (?:the )?year)/iu, "3–6mo"],
+    ];
+    const timeline = patterns.find(([pattern]) => pattern.test(lower));
+    return timeline ? { field: "timeline", value: timeline[1] } : null;
   }
   if (question.type === "business_stage") {
-    const stage = normalized.toLowerCase();
-    return stage === "startup" || stage === "operating" || stage === "unknown"
-      ? { field: "businessStage", value: stage }
-      : null;
+    if (lower === "unknown") return { field: "businessStage", value: "unknown" };
+    if (/\b(?:start-?up|just (?:started|starting|launched|getting started|opened)|pre-?revenue|idea|planning|about to (?:start|launch|open)|haven'?t (?:started|launched)|no business yet|not (?:yet )?(?:started|launched|registered)|opening|new (?:business|llc|company)|getting (?:my|the) (?:llc|ein)|brand new)\b/iu.test(lower)) {
+      return { field: "businessStage", value: "startup" };
+    }
+    if (/\b(?:operating|established|running|been (?:in business|open|operating|running)|(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\+? years?|since \d{4}|up and running|have (?:an? )?(?:llc|customers|clients|employees|staff)|trading|in business)\b/iu.test(lower)) {
+      return { field: "businessStage", value: "operating" };
+    }
+    return null;
   }
-  const revenueBody = normalized.replace(/^(?:my )?(?:annual )?revenue is\s*/iu, "");
-  const cents = parseMoneyAmount(revenueBody);
+  const cents = moneyIn(normalized.replace(/^(?:my )?(?:annual )?revenue is\s*/iu, ""));
   return cents === null ? null : { field: "annualRevenue", value: cents };
 }
 
@@ -1089,13 +1149,17 @@ export async function runEngineTurn(
   const promptObjections = (retrieval?.objectionCandidates ?? [])
     .filter((candidate) => !candidate.hardGate)
     .map(({ objectionId, label, response }) => ({ objectionId, label, response }));
-  const promptState = runtimeQualification
+  const promptState: ConversationPromptState = runtimeQualification
     ? {
         ...input.conversation,
         currentStep: runtimeQualification.currentQuestion?.id ?? null,
         currentStepAsks: input.conversation.currentStep === runtimeQualification.currentQuestion?.id
           ? input.conversation.currentStepAsks
           : 0,
+        qualificationDecision: runtimeQualification.decision?.outcome === "BOOK" || runtimeQualification.decision?.outcome === "SOFT_DQ"
+          ? runtimeQualification.decision.outcome
+          : null,
+        bookingMode: input.runtimeBundle?.offer.bookingMode,
       }
     : input.conversation;
   // A hard gate is answered from the snapshot whether or not knowledge ranked, so it is decided

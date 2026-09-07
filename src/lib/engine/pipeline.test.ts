@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { PublishedRuntimeBundle } from "@/lib/brain/contracts";
 import type { TurnRetrievalResult } from "@/lib/brain/retrieval";
 import type { ModeratorCall } from "@/lib/engine/moderator";
-import { runEngineTurn, type EnginePipelineInput } from "@/lib/engine/pipeline";
+import { runEngineTurn, type EnginePipelineInput,
+  extractRuntimeQualification,
+} from "@/lib/engine/pipeline";
 import type { BrainSnapshot, CoachOffer, EngineTrace, ModeratorClass } from "@/lib/engine/types";
 import type { ModelDriver } from "@/lib/integrations/types";
 
@@ -1049,5 +1051,55 @@ describe("runEngineTurn", () => {
     expect(system).toContain(SECOND_RESPONSE);
     expect(system).not.toContain(GATED_RESPONSE);
     expect(system).not.toContain(OBJECTION_ID);
+  });
+});
+
+describe("extractRuntimeQualification reads answers the way leads actually type them", () => {
+  const credit = { id: "qualification:credit", field: "credit", type: "credit_range" } as const;
+  const revenue = { id: "qualification:annualRevenue", field: "annualRevenue", type: "annual_revenue_cents" } as const;
+  const goal = { id: "qualification:goal", field: "goal", type: "funding_goal" } as const;
+  const timeline = { id: "qualification:timeline", field: "timeline", type: "funding_timeline" } as const;
+  const stage = { id: "qualification:businessStage", field: "businessStage", type: "business_stage" } as const;
+
+  it("finds a credit score inside a sentence and bands it", () => {
+    expect(extractRuntimeQualification(credit, "around 720 last I checked")).toEqual({ field: "credit", value: "700+" });
+    expect(extractRuntimeQualification(credit, "It's 655 on Credit Karma, is that ok?")).toEqual({ field: "credit", value: "640–680" });
+    expect(extractRuntimeQualification(credit, "my score is 700")).toEqual({ field: "credit", value: "700+" });
+    expect(extractRuntimeQualification(credit, "580")).toEqual({ field: "credit", value: "below 600" });
+    expect(extractRuntimeQualification(credit, "Sure, my credit score is 740, checked it last week.")).toEqual({ field: "credit", value: "700+" });
+    expect(extractRuntimeQualification(credit, "we made 740,000 last year")).toBeNull();
+    expect(extractRuntimeQualification(credit, "mid 600s I think")).toEqual({ field: "credit", value: "640–680" });
+    expect(extractRuntimeQualification(credit, "low 700s")).toEqual({ field: "credit", value: "700+" });
+  });
+
+  it("prefers the number beside the word score when the message has several, and ignores money", () => {
+    expect(extractRuntimeQualification(credit, "I have 500 followers but my score is 690")).toEqual({ field: "credit", value: "680–700" });
+    expect(extractRuntimeQualification(credit, "I need $500 by friday")).toBeNull();
+    expect(extractRuntimeQualification(credit, "pretty good I think")).toBeNull();
+  });
+
+  it("records an admitted unknown so the script can move on", () => {
+    expect(extractRuntimeQualification(credit, "honestly no idea, never checked")).toEqual({ field: "credit", value: "unknown" });
+  });
+
+  it("reads revenue as a figure with a unit, annualises monthly, and takes nothing-yet as zero", () => {
+    expect(extractRuntimeQualification(revenue, "we do about 150k a year")).toEqual({ field: "annualRevenue", value: 15_000_000 });
+    expect(extractRuntimeQualification(revenue, "$8k a month")).toEqual({ field: "annualRevenue", value: 9_600_000 });
+    expect(extractRuntimeQualification(revenue, "revenue is 120,000")).toEqual({ field: "annualRevenue", value: 12_000_000 });
+    expect(extractRuntimeQualification(revenue, "nothing yet, we're pre-revenue")).toEqual({ field: "annualRevenue", value: 0 });
+    expect(extractRuntimeQualification(revenue, "why do you need that")).toBeNull();
+  });
+
+  it("bands a funding goal said in prose", () => {
+    expect(extractRuntimeQualification(goal, "looking for about 75k")).toEqual({ field: "goal", value: "$50K–100K" });
+    expect(extractRuntimeQualification(goal, "$150K+")).toEqual({ field: "goal", value: "$150K+" });
+  });
+
+  it("maps timelines and business stage from ordinary phrasing", () => {
+    expect(extractRuntimeQualification(timeline, "as soon as possible honestly")).toEqual({ field: "timeline", value: "ASAP–30d" });
+    expect(extractRuntimeQualification(timeline, "in a couple of months")).toEqual({ field: "timeline", value: "1–3mo" });
+    expect(extractRuntimeQualification(timeline, "just looking for now")).toEqual({ field: "timeline", value: "exploring" });
+    expect(extractRuntimeQualification(stage, "been running my shop 3 years")).toEqual({ field: "businessStage", value: "operating" });
+    expect(extractRuntimeQualification(stage, "just getting my LLC set up")).toEqual({ field: "businessStage", value: "startup" });
   });
 });

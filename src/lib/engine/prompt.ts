@@ -127,6 +127,37 @@ export function hashPrompt(messages: readonly PromptMessage[]) {
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
+/** The platform, not the writer, prepends the automated-experience disclosure; measured live, the writer wrote a second one. */
+export const DISCLOSURE_NOTE = "The platform prepends the automated-assistant disclosure to this reply; do not write your own.";
+
+const QUALIFICATION_QUESTION_WORDING: Readonly<Record<string, string>> = {
+  "qualification:credit": "Ask for the lead's approximate personal credit score, as a number or a range (for example 640 to 680). Answer whatever they asked first, then ask this in one short sentence.",
+  "qualification:annualRevenue": "Ask roughly what the business makes in revenue per year (a figure is fine, and 'nothing yet' is a valid answer). Answer whatever they asked first, then ask this in one short sentence.",
+  "qualification:businessStage": "Ask whether the business is already operating or still getting started. Answer whatever they asked first, then ask this in one short sentence.",
+  "qualification:goal": "Ask roughly how much funding the lead is looking for. Answer whatever they asked first, then ask this in one short sentence.",
+  "qualification:timeline": "Ask how soon the lead wants the funding in place. Answer whatever they asked first, then ask this in one short sentence.",
+};
+
+/**
+ * The funnel stage in words. The step id alone ("qualification:credit") left the writer to guess
+ * what to ask and, once the rules matched, that it was time to book; measured over persona
+ * conversations, that guess is where calls were lost.
+ */
+export function nextActionFor(state: ConversationPromptState): string | null {
+  if (state.qualificationDecision === "BOOK") {
+    return state.bookingMode === "link"
+      ? "The lead meets the coach's qualification rules. Invite them to book the call now and give the booking link from the Brain if one is published; ask nothing else."
+      : "The lead meets the coach's qualification rules. Tell them the next step is a short call and that available times follow this message; ask them to pick one. Do not ask further qualification questions.";
+  }
+  if (state.qualificationDecision === "SOFT_DQ") {
+    return "The lead does not meet the coach's rules right now. Be warm and honest about that, say what would need to change, and do not push a booking.";
+  }
+  if (state.currentStep && state.currentStepAsks >= 2) {
+    return `${QUALIFICATION_QUESTION_WORDING[state.currentStep] ?? ""} You have asked twice already; if they will not answer, acknowledge it and move on rather than asking a third time.`.trim();
+  }
+  return state.currentStep ? QUALIFICATION_QUESTION_WORDING[state.currentStep] ?? null : null;
+}
+
 export function assemblePrompt({
   brain,
   offer,
@@ -160,6 +191,7 @@ export function assemblePrompt({
     throw new Error("PROMPT_KNOWLEDGE_MODE_AMBIGUOUS");
   }
   const coach = renderCoachBlock(offer, tagSecret);
+  const nextAction = nextActionFor(state);
   const runtimeBacked = candidates !== undefined || inlineEntries !== undefined;
   const prefix = renderPublishedPrefix(brain, runtimeBacked);
   // Absent or empty leaves every byte and therefore every pre-Phase-10 prompt hash untouched,
@@ -178,6 +210,8 @@ export function assemblePrompt({
       current_step: state.currentStep,
       current_step_asks: state.currentStepAsks,
       disclosure_pending: state.disclosurePending,
+      ...(state.disclosurePending ? { disclosure_note: DISCLOSURE_NOTE } : {}),
+      ...(nextAction ? { next_action: nextAction } : {}),
     }),
   ].join("\n");
   const messages: PromptMessage[] = [{ role: "system", content: system }, ...history];

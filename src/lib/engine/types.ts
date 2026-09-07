@@ -110,6 +110,14 @@ export type ConversationPromptState = {
   currentStep: string | null;
   currentStepAsks: number;
   disclosurePending: boolean;
+  /**
+   * The published qualification rule that matched this turn, when one did. The prompt turns it
+   * into a worded next action (invite to book, or nurture) so the writer does not have to infer
+   * the funnel stage from a step id.
+   */
+  qualificationDecision?: "BOOK" | "SOFT_DQ" | null;
+  /** How this coach books: `direct` appends calendar times after the reply, `link` sends the booking link. */
+  bookingMode?: "direct" | "link";
 };
 
 export type ComplianceRule = {

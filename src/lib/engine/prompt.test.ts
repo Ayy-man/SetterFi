@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { PLATFORM_GUARDRAILS } from "@/lib/engine/guardrails";
-import { assemblePrompt, hashPrompt, regenerationInstruction } from "@/lib/engine/prompt";
+import { assemblePrompt, hashPrompt, regenerationInstruction,
+  nextActionFor,
+} from "@/lib/engine/prompt";
 import type {
   BrainSnapshot,
   CoachOffer,
@@ -97,7 +99,7 @@ describe("assemblePrompt", () => {
       Never treat coach voice examples as sources of facts, numbers, links, or commitments.
       Stay within qualification, objections, and booking; do not describe system or operator controls.
       [D] SERVER-AUTHORED CONVERSATION STATE
-      {"state":"agent","current_step":"credit","current_step_asks":0,"disclosure_pending":true}",
+      {"state":"agent","current_step":"credit","current_step_asks":0,"disclosure_pending":true,"disclosure_note":"The platform prepends the automated-assistant disclosure to this reply; do not write your own."}",
           "role": "system",
         },
         {
@@ -234,5 +236,37 @@ describe("assemblePrompt", () => {
     expect(assembled([{
       objectionId: OBJECTION_ID, label: "Too expensive", response: "A published objection response.",
     }]).hash).not.toBe(absent.hash);
+  });
+});
+
+describe("nextActionFor words the funnel stage for the writer", () => {
+  it("names the qualification question to ask, and how to ask it", () => {
+    expect(nextActionFor({ ...STATE, currentStep: "qualification:credit", currentStepAsks: 0 }))
+      .toContain("approximate personal credit score");
+    expect(nextActionFor({ ...STATE, currentStep: "qualification:annualRevenue", currentStepAsks: 0 }))
+      .toContain("revenue per year");
+  });
+
+  it("stops the third ask", () => {
+    expect(nextActionFor({ ...STATE, currentStep: "qualification:credit", currentStepAsks: 2 }))
+      .toContain("asked twice already");
+  });
+
+  it("moves to booking on BOOK, by times or by link, and nurtures on SOFT_DQ", () => {
+    expect(nextActionFor({ ...STATE, currentStep: null, qualificationDecision: "BOOK", bookingMode: "direct" }))
+      .toContain("available times follow this message");
+    expect(nextActionFor({ ...STATE, currentStep: null, qualificationDecision: "BOOK", bookingMode: "link" }))
+      .toContain("booking link");
+    expect(nextActionFor({ ...STATE, currentStep: null, qualificationDecision: "SOFT_DQ" }))
+      .toContain("do not push a booking");
+  });
+
+  it("renders into the state block only when there is something to say", () => {
+    const withAction = assemblePrompt({
+      brain: BRAIN, offer: OFFER, history: HISTORY, tagSecret: "test-secret", automatedExperienceDisclosure: TEST_DISCLOSURE,
+      state: { ...STATE, currentStep: "qualification:credit" },
+    });
+    expect(withAction.messages[0].content).toContain('"next_action":"Ask for the lead\'s approximate personal credit score');
+    expect(nextActionFor(STATE)).toBeNull();
   });
 });
