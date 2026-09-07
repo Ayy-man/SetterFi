@@ -74,6 +74,23 @@ children retain narrower release authority; consider retiring the parents only a
 and caller review. FIRST_CUSTOMER_ENFORCE is temporary build-policy debt, but removing its
 current setting alone would re-arm the build failure, so it is explicitly untouched here.
 
+## Release Closeout — September 7, 2026
+
+Cleanup commit `e7dbabf144f12b1508931e026e425fc33397e1e6` was pushed to `main`.
+[GitHub Actions run 34067470692](https://github.com/Ayy-man/SetterFi/actions/runs/34067470692)
+completed successfully for that exact commit: verification covered tests, UI contracts, typecheck,
+lint, build and mock-provider checks; the RLS job passed both fresh database application/replay runs.
+
+Vercel deployment `dpl_APYuHdw1LMGuYkFHXNCAuKquZ83Y` reached Ready for the cleanup commit.
+The subsequent deployment `dpl_3yTV6BsfHFofQZJkB8iPEZC838zA` also reached Ready at
+`bbbc44b6bb32c66fd1ba14974888bb206c214229`, which changed only `docs/BRAIN-COMPILER.md`
+and retained the cleanup. A public production `/signup` HTTP read confirmed:
+“Signup is unavailable until the account terms are published and acceptance is enabled.”
+
+These are the cleanup release's verification records, not a claim that later Brain changes or
+the documentation-only closeout revision have received the same checks. Authenticated production
+visual acceptance remains unverified for the reasons below.
+
 ## Verification Limits
 
 Full suite: 617 test files passed, four skipped; 7,434 tests passed, 13 skipped. Typecheck and
