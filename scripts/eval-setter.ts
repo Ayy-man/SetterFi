@@ -443,7 +443,8 @@ type ConversationReport = {
   label: string;
   channel: TestTurnChannel;
   expectation: Persona["expectation"];
-  outcome: "booked" | "book_offered" | "nurture" | "hard_dq" | "held" | "lead_left" | "max_turns" | "error";
+  /** `booked_link`: the coach books by link and the lead said they used it; the engine cannot see that booking. */
+  outcome: "booked" | "booked_link" | "book_offered" | "nurture" | "hard_dq" | "held" | "lead_left" | "max_turns" | "error";
   metExpectation: boolean;
   turns: number;
   turnsToBook: number | null;
@@ -572,6 +573,11 @@ async function runConversation(harness: Harness, persona: Persona): Promise<Conv
       leadMessage = lead.turn.slotId && state.offeredSlotIds.includes(lead.turn.slotId)
         ? lead.turn.slotId
         : lead.turn.message;
+      if (lead.turn.bookIntent && state.offeredSlotIds.length === 0 && /https?:\/\//u.test(transcript[transcript.length - 1].content)) {
+        outcome = "booked_link";
+        records.push({ ...records[records.length - 1], turn: turn + 1, lead: leadMessage, setter: "", held: false, heldClass: null, heldReason: null, ruleFired: null, attempts: 0, currentStepBefore: state.currentStep, commands: [], questionMarks: 0, cost: null, wallMs: 0 });
+        break;
+      }
       if (lead.turn.done && !lead.turn.bookIntent && !lead.turn.slotId) {
         outcome = state.status === "nurture" ? "nurture" : "lead_left";
         records.push({ ...records[records.length - 1], turn: turn + 1, lead: leadMessage, setter: "", held: false, heldClass: null, heldReason: null, ruleFired: null, attempts: 0, currentStepBefore: state.currentStep, commands: [], questionMarks: 0, cost: null, wallMs: 0 });
@@ -585,7 +591,7 @@ async function runConversation(harness: Harness, persona: Persona): Promise<Conv
   }
   const setterReplies = records.filter((record) => record.setter);
   const metExpectation = persona.expectation === "book"
-    ? outcome === "booked" || outcome === "book_offered"
+    ? outcome === "booked" || outcome === "booked_link" || outcome === "book_offered"
     : persona.expectation === "nurture"
       ? outcome === "nurture" || (outcome === "lead_left" && state.qualification.outcome !== "BOOK")
       : outcome === "hard_dq";
@@ -744,7 +750,7 @@ function printReport(reports: readonly ConversationReport[], generator: string) 
   const summary = {
     conversations: reports.length,
     metExpectation: reports.filter((report) => report.metExpectation).length,
-    booked: reports.filter((report) => report.outcome === "booked").length,
+    booked: reports.filter((report) => report.outcome === "booked" || report.outcome === "booked_link").length,
     bookRuleReached: reports.filter((report) => report.turnsToBook !== null).length,
     meanTurnsToBook: mean(reports.flatMap((report) => report.turnsToBook === null ? [] : [report.turnsToBook])),
     holds: reports.reduce((sum, report) => sum + report.holds, 0),
