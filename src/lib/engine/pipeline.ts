@@ -466,22 +466,35 @@ function creditScoreIn(body: string): number | null {
   return near?.score ?? candidates[0].score;
 }
 
-/** Money anywhere in the lead's words; a monthly figure is annualised, "nothing yet" is zero. */
+/**
+ * Money anywhere in the lead's words. A figure counts as money when it carries a currency sign,
+ * a k/m/thousand/million unit, or four or more digits; "5 years" and "two locations" do not. With
+ * several figures, the one nearest a revenue word wins, then the largest. A monthly figure is
+ * annualised and "nothing yet" is zero.
+ */
 function moneyIn(body: string): number | null {
   const lower = body.toLowerCase();
-  if (/\b(?:no|zero|0|nothing|none|not making any|pre-?revenue|haven'?t (?:made|launched)|not (?:launched|open|trading))\b/u.test(lower)
-    && !/\d{2,}/u.test(lower.replace(/\b0\b/u, ""))) {
-    return 0;
+  const pattern = /(\$)?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?\s*(k|m|thousand|million|grand)?\b(?!\s*(?:years?|yrs?|months?|weeks?|days?|locations?|shops?|stores?|employees?|staff|people|clients?|customers?|trucks?|vehicles?|%|percent))/gu;
+  const candidates = [...lower.matchAll(pattern)].flatMap((match) => {
+    const [, sign, whole, fraction, unit] = match;
+    const base = Number(whole.replaceAll(",", "")) + Number(`0.${fraction ?? "0"}`);
+    const multiplier = unit === "m" || unit === "million" ? 1_000_000
+      : unit === "k" || unit === "thousand" || unit === "grand" ? 1_000 : 1;
+    const money = Boolean(sign) || Boolean(unit) || whole.replaceAll(",", "").length >= 4;
+    if (!money) return [];
+    const index = match.index ?? 0;
+    const context = lower.slice(Math.max(0, index - 40), index + whole.length + 24);
+    const nearRevenue = /\b(?:revenue|make|making|made|doing|do about|bring|brings|gross|sales|turnover|a year|per year|annual|annually|a month|per month|monthly|last year|this year)\b/u.test(context);
+    return [{ amount: base * multiplier, nearRevenue, index }];
+  });
+  if (candidates.length === 0) {
+    if (/\b(?:no|zero|nothing|none|not making any|pre-?revenue|haven'?t (?:made|launched)|not (?:launched|open|trading))\b/u.test(lower)) return 0;
+    return null;
   }
-  const match = lower.match(/\$?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?\s*(k|m|thousand|million|grand)?\b/u);
-  if (!match) return null;
-  const base = Number(match[1].replaceAll(",", "")) + Number(`0.${match[2] ?? "0"}`);
-  const unit = match[3];
-  const multiplier = unit === "m" || unit === "million" ? 1_000_000
-    : unit === "k" || unit === "thousand" || unit === "grand" ? 1_000 : 1;
-  const amount = base * multiplier;
+  const chosen = candidates.find((candidate) => candidate.nearRevenue)
+    ?? candidates.reduce((best, candidate) => candidate.amount > best.amount ? candidate : best);
   const monthly = /\b(?:a|per|each|every)\s*month|monthly|\/\s*mo(?:nth)?\b/u.test(lower);
-  const cents = Math.round(amount * (monthly ? 12 : 1) * 100);
+  const cents = Math.round(chosen.amount * (monthly ? 12 : 1) * 100);
   return Number.isSafeInteger(cents) && cents >= 0 ? cents : null;
 }
 

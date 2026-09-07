@@ -1088,6 +1088,9 @@ describe("extractRuntimeQualification reads answers the way leads actually type 
     expect(extractRuntimeQualification(revenue, "revenue is 120,000")).toEqual({ field: "annualRevenue", value: 12_000_000 });
     expect(extractRuntimeQualification(revenue, "nothing yet, we're pre-revenue")).toEqual({ field: "annualRevenue", value: 0 });
     expect(extractRuntimeQualification(revenue, "why do you need that")).toBeNull();
+    expect(extractRuntimeQualification(revenue, "two location barbershop open 5 years doing about 220k a year")).toEqual({ field: "annualRevenue", value: 22_000_000 });
+    expect(extractRuntimeQualification(revenue, "revenue's about 220k, I want 80k to open a third location")).toEqual({ field: "annualRevenue", value: 22_000_000 });
+    expect(extractRuntimeQualification(revenue, "3 employees, 2 locations")).toBeNull();
   });
 
   it("bands a funding goal said in prose", () => {
