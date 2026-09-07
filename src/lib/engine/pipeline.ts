@@ -1162,6 +1162,15 @@ export async function runEngineTurn(
         bookingMode: input.runtimeBundle?.offer.bookingMode,
       }
     : input.conversation;
+  // A script turn is one the platform itself scripted: a qualification question is pending, or
+  // the coach's rules just matched and the next line is the booking invite or the nurture. Those
+  // lines are grounded in the platform, not in a Brain entry, so a reply that cites nothing
+  // (null, as the prompt asks when no entry applies) is not an invented answer. The deterministic checks and the moderator still run on it; only the
+  // "cite an entry or be held" ladder is waived. Measured over persona conversations before this
+  // waiver, every booking-invite turn was held as JUDGE.
+  const scriptTurn = Boolean(promptState.currentStep)
+    || promptState.qualificationDecision === "BOOK"
+    || promptState.qualificationDecision === "SOFT_DQ";
   // A hard gate is answered from the snapshot whether or not knowledge ranked, so it is decided
   // before the miss is. Nothing else may reach the model on a knowledge miss unless a published
   // objection response is there to be cited: the held reply is the honest turn, and the
@@ -1429,7 +1438,13 @@ export async function runEngineTurn(
       }
     }
 
-    if (input.runtimeBundle && !declaredEntryVerified) {
+    // The waiver is for a null citation only: a writer that names an entry which is not there
+    // is guessing, and a guess keeps the regenerate-then-hold ladder even on a script turn.
+    const scriptGrounded = scriptTurn && declaredEntryId === null;
+    if (input.runtimeBundle && !declaredEntryVerified && scriptGrounded) {
+      trace = { ...trace, scriptGrounded: true };
+    }
+    if (input.runtimeBundle && !declaredEntryVerified && !scriptGrounded) {
       if (!regenerationUsed) {
         rejectedDrafts = [...rejectedDrafts, candidate];
         regenerationUsed = true;

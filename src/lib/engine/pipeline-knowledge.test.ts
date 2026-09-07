@@ -214,7 +214,7 @@ function dependencies(drafts: readonly string[]) {
   };
 }
 
-function reply(text: string, citation: string) {
+function reply(text: string, citation: string | null) {
   return JSON.stringify({ reply: text, citation_entry_id: citation });
 }
 
@@ -470,6 +470,21 @@ describe("runEngineTurn corrects an unverifiable citation to the rendered entry 
     expect(result.trace).toMatchObject({
       declaredEntryId: "entry-timing", declaredEntryVerified: true, citationCorrection: null,
     });
+  });
+
+  it("accepts an uncited reply on a script turn, because the platform scripted that line, not the Brain", async () => {
+    const deps = dependencies([reply("Thanks. Roughly what's your personal credit score?", null)]);
+    const result = await runEngineTurn({
+      ...BASE,
+      leadMessage: { id: "lead-1", body: "hi, looking for funding" },
+      history: [{ role: "user", content: "hi, looking for funding" }],
+      runtimeBundle: bundle({ knowledgeEntries: entries() }),
+      conversation: { ...BASE.conversation, currentStep: "qualification:credit", currentStepAsks: 0 },
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-fee", 0.8))) });
+    expect(deps.model.generate).toHaveBeenCalledTimes(1);
+    expect(result.response.state).toBe("agent");
+    expect(result.trace).toMatchObject({ declaredEntryVerified: false, scriptGrounded: true });
+    expect(deps.moderator.moderate).toHaveBeenCalledTimes(1);
   });
 
   it("still holds with JUDGE after the regeneration when no rendered entry grounds the reply", async () => {

@@ -76,7 +76,8 @@ function citationInstruction(objectionsPresent: boolean) {
   const ids = objectionsPresent ? "one entry_id or objection_id above" : "one entry_id above";
   return `Return only JSON with exactly reply and citation_entry_id. citation_entry_id must be ${ids}. ` +
     "Cite the entry you actually answered from. If no entry above grounds your reply, " +
-    "set citation_entry_id to null rather than guessing.";
+    "set citation_entry_id to null rather than guessing; a qualification question or a booking " +
+    "invite on its own needs no citation.";
 }
 
 function renderCandidateBlock(

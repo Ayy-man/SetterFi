@@ -206,6 +206,8 @@ export type EngineTrace = {
   declaredEntryVerified: boolean;
   /** Optional on the type so trace fixtures outside the engine keep compiling; the pipeline always sets it. */
   citationCorrection?: CitationCorrection | null;
+  /** True when an uncited reply was accepted because the turn was a platform-scripted one (a pending qualification question, or the booking invite / nurture after the rules matched). */
+  scriptGrounded?: boolean;
   retrievalTopThree: readonly RetrievalCitation[];
   droppedEntryIds: readonly string[];
   numberAllowlist: readonly NumberSource[];
