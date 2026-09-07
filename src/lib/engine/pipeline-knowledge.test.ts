@@ -487,6 +487,38 @@ describe("runEngineTurn corrects an unverifiable citation to the rendered entry 
     expect(deps.moderator.moderate).toHaveBeenCalledTimes(1);
   });
 
+  it("reads a prose reply with a bare citation tail as the envelope, so the tail never reaches the lead", async () => {
+    const deps = dependencies([
+      "Roughly what does the business make per year, if anything?\n{\"citation_entry_id\":\"entry-fee\"}",
+    ]);
+    const result = await runEngineTurn({
+      ...BASE,
+      runtimeBundle: bundle({ knowledgeEntries: entries() }),
+      conversation: { ...BASE.conversation, currentStep: "qualification:credit", currentStepAsks: 0 },
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-fee", 0.8))) });
+    expect(result.response.reply).toBe("Roughly what does the business make per year, if anything?");
+    expect(result.trace.declaredEntryId).toBe("entry-fee");
+  });
+
+  it("reads a fenced envelope, and cuts an unreadable brace tail off the prose", async () => {
+    const deps = dependencies([
+      "```json\n{\"reply\":\"Fenced but fine.\",\"citation_entry_id\":null}\n```",
+      "Plain line.\n{not json",
+    ]);
+    const first = await runEngineTurn({
+      ...BASE,
+      runtimeBundle: bundle({ knowledgeEntries: entries() }),
+      conversation: { ...BASE.conversation, currentStep: "qualification:credit", currentStepAsks: 0 },
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-fee", 0.8))) });
+    expect(first.response.reply).toBe("Fenced but fine.");
+    const second = await runEngineTurn({
+      ...BASE,
+      runtimeBundle: bundle({ knowledgeEntries: entries() }),
+      conversation: { ...BASE.conversation, currentStep: "qualification:credit", currentStepAsks: 0 },
+    }, { ...deps, retrieve: vi.fn(async () => grounded(candidate("entry-fee", 0.8))) });
+    expect(second.response.reply).toBe("Plain line.");
+  });
+
   it("still holds with JUDGE after the regeneration when no rendered entry grounds the reply", async () => {
     const deps = dependencies([
       reply("Happy to help with whatever you need today, what are you thinking?", "invented-entry"),

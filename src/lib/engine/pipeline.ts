@@ -282,7 +282,36 @@ export function planInlineKnowledge(bundle: PublishedRuntimeBundle): InlineKnowl
   return { mode: "inline", entries, inline, dropped, estimatedTokens };
 }
 
+/**
+ * The writer is asked for one JSON object with reply and citation_entry_id. Live models also
+ * produce two near-misses that must never reach a lead as raw text: the object wrapped in a code
+ * fence, and the reply as prose followed by a bare `{"citation_entry_id": …}` tail (seen on
+ * gpt-5.6-luna in the persona eval, where the tail was sent to the lead). Both are read as the
+ * envelope they meant; any other trailing brace block is cut off and the citation is null.
+ */
 function modelReplyEnvelope(value: string): ModelReplyEnvelope | null {
+  const unfenced = value.trim().replace(/^```(?:json)?\s*/iu, "").replace(/\s*```$/u, "").trim();
+  const envelope = parseEnvelopeObject(unfenced);
+  if (envelope) return envelope;
+  const tailStart = unfenced.lastIndexOf("\n{");
+  if (tailStart <= 0) return null;
+  const prose = unfenced.slice(0, tailStart).trim();
+  if (!prose) return null;
+  let tail: unknown = null;
+  try {
+    tail = JSON.parse(unfenced.slice(tailStart + 1));
+  } catch {
+    tail = null;
+  }
+  if (isRecord(tail) && !("reply" in tail) && "citation_entry_id" in tail) {
+    const citation = tail.citation_entry_id;
+    if (citation === null) return { reply: prose, citation_entry_id: null };
+    if (typeof citation === "string" && citation.trim()) return { reply: prose, citation_entry_id: citation };
+  }
+  return { reply: prose, citation_entry_id: null };
+}
+
+function parseEnvelopeObject(value: string): ModelReplyEnvelope | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
